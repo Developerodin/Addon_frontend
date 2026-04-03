@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { PickItem } from "../types";
+import type { PickListOrderWiseResponse } from "../types";
 import type { PickListFilters, PickListPagination } from "../pickPackApi";
 import PickTable from "./PickTable";
 
 interface PickListDashboardProps {
-  items: PickItem[];
+  orderWiseData?: PickListOrderWiseResponse | null;
   onSavePickupQty: (itemId: string, pickupQty: number) => void;
   onAlert?: (message: string) => void;
   onFilterChange?: (filters: PickListFilters) => void;
@@ -19,9 +19,8 @@ interface PickListDashboardProps {
 const DEBOUNCE_MS = 400;
 
 const PickListDashboard: React.FC<PickListDashboardProps> = ({
-  items,
+  orderWiseData,
   onSavePickupQty,
-  onAlert,
   onFilterChange,
   onPageChange,
   onRefresh,
@@ -69,13 +68,10 @@ const PickListDashboard: React.FC<PickListDashboardProps> = ({
     };
   }, []);
 
-  const stats = useMemo(() => {
-    const total = pagination?.totalResults ?? items.length;
-    const pending = items.filter((i) => i.status === "pending").length;
-    const partial = items.filter((i) => i.status === "partial").length;
-    const picked = items.filter((i) => i.status === "picked").length;
-    return { total, pending, partial, picked };
-  }, [items, pagination]);
+  const summary = useMemo(() => {
+    if (orderWiseData?.summary) return orderWiseData.summary;
+    return { total: 0, pending: 0, partial: 0, picked: 0 };
+  }, [orderWiseData]);
 
   const totalPages = pagination?.totalPages ?? 1;
   const currentPage = pagination?.page ?? 1;
@@ -89,7 +85,7 @@ const PickListDashboard: React.FC<PickListDashboardProps> = ({
             <div className="w-[3px] h-5 bg-purple-600 rounded-full" />
             <h1 className="text-sm font-bold text-gray-800">Pick List</h1>
             <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
-              {stats.total}
+              {summary.total}
             </span>
           </div>
 
@@ -114,8 +110,6 @@ const PickListDashboard: React.FC<PickListDashboardProps> = ({
                 <option value="pending">Pending</option>
                 <option value="partial">Partial</option>
                 <option value="picked">Picked</option>
-                <option value="verified">Verified</option>
-                <option value="skipped">Skipped</option>
               </select>
               <i className="ri-arrow-down-s-line absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none" />
             </div>
@@ -133,23 +127,23 @@ const PickListDashboard: React.FC<PickListDashboardProps> = ({
           </div>
         </div>
 
-        {/* Stat cards */}
+        {/* Stat cards from summary */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4">
           <div className="bg-sky-50 border border-sky-100 rounded p-2 flex items-center justify-between">
             <span className="text-[10px] font-bold text-sky-800 uppercase tracking-wide">Total</span>
-            <span className="text-sm font-bold text-sky-950">{stats.total}</span>
+            <span className="text-sm font-bold text-sky-950">{summary.total}</span>
           </div>
           <div className="bg-amber-50 border border-amber-100 rounded p-2 flex items-center justify-between">
             <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wide">Pending</span>
-            <span className="text-sm font-bold text-amber-950">{stats.pending}</span>
+            <span className="text-sm font-bold text-amber-950">{summary.pending}</span>
           </div>
           <div className="bg-orange-50 border border-orange-100 rounded p-2 flex items-center justify-between">
             <span className="text-[10px] font-bold text-orange-800 uppercase tracking-wide">Partial</span>
-            <span className="text-sm font-bold text-orange-950">{stats.partial}</span>
+            <span className="text-sm font-bold text-orange-950">{summary.partial}</span>
           </div>
           <div className="bg-emerald-50 border border-emerald-100 rounded p-2 flex items-center justify-between">
             <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wide">Picked</span>
-            <span className="text-sm font-bold text-emerald-950">{stats.picked}</span>
+            <span className="text-sm font-bold text-emerald-950">{summary.picked}</span>
           </div>
         </div>
 
@@ -160,8 +154,6 @@ const PickListDashboard: React.FC<PickListDashboardProps> = ({
             { id: "pending", label: "Pending" },
             { id: "partial", label: "Partial" },
             { id: "picked", label: "Picked" },
-            { id: "verified", label: "Verified" },
-            { id: "skipped", label: "Skipped" },
           ].map(({ id, label }) => (
             <button
               key={id}
@@ -187,7 +179,10 @@ const PickListDashboard: React.FC<PickListDashboardProps> = ({
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Loading Data</span>
           </div>
         ) : (
-          <PickTable items={items} onSave={onSavePickupQty} />
+          <PickTable
+            orderGroups={orderWiseData?.results ?? []}
+            onSave={onSavePickupQty}
+          />
         )}
       </div>
 
@@ -198,7 +193,7 @@ const PickListDashboard: React.FC<PickListDashboardProps> = ({
             Page <span>{currentPage}</span> of <span>{totalPages}</span>
             {pagination && (
               <span className="ml-2 opacity-50">
-                ({pagination.totalResults} entries)
+                ({pagination.totalResults} {pagination.totalResults === 1 ? "order" : "orders"})
               </span>
             )}
           </div>

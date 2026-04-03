@@ -475,9 +475,52 @@ export interface WhmsPickListEntryPatchBody {
   status?: string;
 }
 
+export interface WhmsPickListOrderWiseItem {
+  id: string;
+  skuCode: string;
+  styleCode: string;
+  shade: string;
+  size: string;
+  quantity: number;
+  pickupQuantity: number;
+  status: string;
+}
+
+export interface WhmsPickListOrderGroup {
+  orderId: string;
+  orderNumber: string;
+  order?: Record<string, unknown>;
+  items: WhmsPickListOrderWiseItem[];
+  totalQuantity: number;
+  totalPickupQuantity: number;
+  totalItems: number;
+  pendingCount: number;
+  partialCount: number;
+  pickedCount: number;
+  overallStatus: string;
+}
+
+export interface WhmsPickListOrderWiseSummary {
+  total: number;
+  pending: number;
+  partial: number;
+  picked: number;
+}
+
+export interface WhmsPickListOrderWiseResponse {
+  results: WhmsPickListOrderGroup[];
+  summary: WhmsPickListOrderWiseSummary;
+  page: number;
+  limit: number;
+  totalPages: number;
+  totalResults: number;
+}
+
 export const whmsPickListApi = {
   list: (params?: Record<string, string | number | undefined>) =>
     request<WhmsPaginated<WhmsPickListEntry>>(`/pick-list${qs(params || {})}`),
+  orderWise: (params?: Record<string, string | number | undefined>) =>
+    request<WhmsPickListOrderWiseResponse>(`/pick-list/order-wise${qs(params || {})}`),
   getByOrder: (orderId: string) =>
     request<WhmsPickListEntry[]>(`/pick-list/order/${encodeURIComponent(orderId)}`),
   deleteByOrder: (orderId: string) =>

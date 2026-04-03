@@ -125,5 +125,46 @@ export interface BarcodeGenerateResult {
   previewText: string;
 }
 
+// ─── Order-wise pick list types ──────────────────────────────────────────────
 
+export interface PickListOrderItem {
+  id: string;
+  skuCode: string;
+  styleCode: string;
+  shade: string;
+  size: string;
+  quantity: number;
+  pickupQuantity: number;
+  status: 'pending' | 'partial' | 'picked';
+}
+
+export interface PickListOrderGroup {
+  orderId: string;
+  orderNumber: string;
+  order?: Record<string, unknown>;
+  items: PickListOrderItem[];
+  totalQuantity: number;
+  totalPickupQuantity: number;
+  totalItems: number;
+  pendingCount: number;
+  partialCount: number;
+  pickedCount: number;
+  overallStatus: 'pending' | 'partial' | 'picked';
+}
+
+export interface PickListOrderWiseSummary {
+  total: number;
+  pending: number;
+  partial: number;
+  picked: number;
+}
+
+export interface PickListOrderWiseResponse {
+  results: PickListOrderGroup[];
+  summary: PickListOrderWiseSummary;
+  page: number;
+  limit: number;
+  totalPages: number;
+  totalResults: number;
+}
 

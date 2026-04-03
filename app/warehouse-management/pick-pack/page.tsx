@@ -5,14 +5,14 @@ import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import PickListDashboard from "./components/PickListDashboard";
 import PackListDashboard from "./components/PackListDashboard";
-import type { PackBatch, PickItem, PackItem, PackOrder, PackOrderStatus, PickList, PackList } from "./types";
+import type { PackBatch, PickItem, PackItem, PackOrder, PackOrderStatus, PackList, PickListOrderWiseResponse } from "./types";
 import { pickPackApi } from "./pickPackApi";
 import type { PickListFilters, PickListPagination } from "./pickPackApi";
 
 const PickPackPage = () => {
   const [activeTab, setActiveTab] = useState<"pick" | "pack">("pick");
   const [loading, setLoading] = useState(true);
-  const [pickList, setPickList] = useState<PickList | null>(null);
+  const [pickOrderWise, setPickOrderWise] = useState<PickListOrderWiseResponse | null>(null);
   const [packList, setPackList] = useState<PackList | null>(null);
   const [pickPagination, setPickPagination] = useState<PickListPagination | null>(null);
   const [pickFilters, setPickFilters] = useState<PickListFilters>({});
@@ -30,12 +30,17 @@ const PickPackPage = () => {
 
   const loadPickList = useCallback(async (filters?: PickListFilters) => {
     setPickLoading(true);
-    const result = await pickPackApi.fetchPickList(filters);
-    if (result) {
-      setPickList(result.pickList);
-      setPickPagination(result.pagination);
+    const owResult = await pickPackApi.fetchPickListOrderWise(filters);
+    if (owResult) {
+      setPickOrderWise(owResult);
+      setPickPagination({
+        page: owResult.page,
+        limit: owResult.limit,
+        totalPages: owResult.totalPages,
+        totalResults: owResult.totalResults,
+      });
     } else {
-      setPickList(null);
+      setPickOrderWise(null);
       setPickPagination(null);
     }
     setPickLoading(false);
@@ -45,14 +50,19 @@ const PickPackPage = () => {
     let mounted = true;
     (async () => {
       setLoading(true);
-      const [pickResult, pkl] = await Promise.all([
-        pickPackApi.fetchPickList(),
+      const [owResult, pkl] = await Promise.all([
+        pickPackApi.fetchPickListOrderWise(),
         pickPackApi.fetchPackList(),
       ]);
       if (!mounted) return;
-      if (pickResult) {
-        setPickList(pickResult.pickList);
-        setPickPagination(pickResult.pagination);
+      if (owResult) {
+        setPickOrderWise(owResult);
+        setPickPagination({
+          page: owResult.page,
+          limit: owResult.limit,
+          totalPages: owResult.totalPages,
+          totalResults: owResult.totalResults,
+        });
       }
       setPackList(pkl);
       setLoading(false);
@@ -62,16 +72,9 @@ const PickPackPage = () => {
     };
   }, []);
 
-  const pickItems = pickList?.items ?? [];
   const packBatches = packList?.batches ?? [];
 
   const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
-
-  const computePickStatus = (requiredQty: number, pickedQty: number): PickItem["status"] => {
-    if (pickedQty <= 0) return "pending";
-    if (pickedQty < requiredQty) return "partial";
-    return "picked";
-  };
 
   const computePackItemStatus = (pickedQty: number, packedQty: number): PackItem["status"] => {
     if (packedQty <= 0) return "pending";
@@ -189,30 +192,70 @@ const PickPackPage = () => {
 
   // ── Pick action: save pickup quantity (PATCH /v1/whms/pick-list/:id) ──
 
+  const findOrderWiseItem = (itemId: string) => {
+    if (!pickOrderWise) return null;
+    for (const group of pickOrderWise.results) {
+      const found = group.items.find((i) => i.id === itemId);
+      if (found) return { group, item: found };
+    }
+    return null;
+  };
+
+  const computeOrderWiseItemStatus = (qty: number, requiredQty: number): "pending" | "partial" | "picked" => {
+    if (qty <= 0) return "pending";
+    if (qty < requiredQty) return "partial";
+    return "picked";
+  };
+
+  const computeOverallStatus = (items: { status: string }[]): "pending" | "partial" | "picked" => {
+    const allPicked = items.every((i) => i.status === "picked");
+    const anyPartialOrPicked = items.some((i) => i.status === "partial" || i.status === "picked");
+    if (allPicked) return "picked";
+    if (anyPartialOrPicked) return "partial";
+    return "pending";
+  };
+
   const savePickupQty = async (itemId: string, pickupQty: number) => {
-    const item = pickItems.find((i) => i.id === itemId);
-    if (!item) return;
-    const nextQty = clamp(pickupQty, 0, item.requiredQty);
+    const match = findOrderWiseItem(itemId);
+    if (!match) return;
+    const { item } = match;
+    const nextQty = clamp(pickupQty, 0, item.quantity);
 
     try {
       await pickPackApi.updatePickEntry(itemId, { pickupQuantity: nextQty });
 
-      setPickList((prev) => {
+      setPickOrderWise((prev) => {
         if (!prev) return prev;
-        const items = prev.items.map((it) => {
-          if (it.id !== itemId) return it;
-          return { ...it, pickedQty: nextQty, status: computePickStatus(it.requiredQty, nextQty) };
+        const results = prev.results.map((group) => {
+          const hasItem = group.items.some((i) => i.id === itemId);
+          if (!hasItem) return group;
+          const updatedItems = group.items.map((i) => {
+            if (i.id !== itemId) return i;
+            return { ...i, pickupQuantity: nextQty, status: computeOrderWiseItemStatus(nextQty, i.quantity) };
+          });
+          const totalPickupQuantity = updatedItems.reduce((sum, i) => sum + i.pickupQuantity, 0);
+          const pendingCount = updatedItems.filter((i) => i.status === "pending").length;
+          const partialCount = updatedItems.filter((i) => i.status === "partial").length;
+          const pickedCount = updatedItems.filter((i) => i.status === "picked").length;
+          return {
+            ...group,
+            items: updatedItems,
+            totalPickupQuantity,
+            pendingCount,
+            partialCount,
+            pickedCount,
+            overallStatus: computeOverallStatus(updatedItems),
+          };
         });
-        return { ...prev, items };
+        return { ...prev, results };
       });
 
-      if (nextQty >= item.requiredQty) {
-        notify(`Pickup saved: ${item.sku} (${nextQty}/${item.requiredQty})`, "success");
-        movePickedItemToPackQueue({ ...item, pickedQty: nextQty, status: "picked" });
+      if (nextQty >= item.quantity) {
+        notify(`Pickup saved: ${item.skuCode} (${nextQty}/${item.quantity})`, "success");
       } else if (nextQty > 0) {
-        notify(`Partial pickup saved: ${item.sku} (${nextQty}/${item.requiredQty})`, "warning");
+        notify(`Partial pickup saved: ${item.skuCode} (${nextQty}/${item.quantity})`, "warning");
       } else {
-        notify(`Pickup quantity reset: ${item.sku}`, "info");
+        notify(`Pickup quantity reset: ${item.skuCode}`, "info");
       }
     } catch {
       notify("Failed to save pickup quantity", "error");
@@ -431,7 +474,7 @@ const PickPackPage = () => {
               {/* Tab Content */}
               {!loading && activeTab === "pick" && (
                 <PickListDashboard
-                  items={pickItems}
+                  orderWiseData={pickOrderWise}
                   onSavePickupQty={savePickupQty}
                   onAlert={(msg) => notify(msg, "error")}
                   onFilterChange={handlePickFilterChange}

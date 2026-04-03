@@ -23,6 +23,7 @@ import type {
   PackItem,
   PackCarton,
   BarcodeGenerateRequest,
+  PickListOrderWiseResponse,
 } from "./types";
 
 // ─── Pick-list entry → PickItem mapping ────────────────────────────────────────
@@ -144,12 +145,14 @@ export interface PickListPagination {
 
 export interface PickListFilters {
   orderId?: string;
+  orderNumber?: string;
   skuCode?: string;
   styleCode?: string;
   status?: string;
   q?: string;
   page?: number;
   limit?: number;
+  sortBy?: string;
 }
 
 // ─── API ─────────────────────────────────────────────────────────────────────
@@ -220,6 +223,56 @@ export const pickPackApi = {
 
   async deletePickOrderEntries(orderId: string): Promise<void> {
     await whmsPickListApi.deleteByOrder(orderId);
+  },
+
+  async fetchPickListOrderWise(
+    filters?: PickListFilters,
+  ): Promise<PickListOrderWiseResponse | null> {
+    try {
+      const params: Record<string, string | number | undefined> = {
+        page: filters?.page ?? 1,
+        limit: filters?.limit ?? 10,
+        orderId: filters?.orderId || undefined,
+        orderNumber: filters?.orderNumber || undefined,
+        skuCode: filters?.skuCode || undefined,
+        styleCode: filters?.styleCode || undefined,
+        status: filters?.status || undefined,
+        q: filters?.q || undefined,
+        sortBy: filters?.sortBy || undefined,
+      };
+      const data = await whmsPickListApi.orderWise(params);
+      return {
+        results: (data.results ?? []).map((group) => ({
+          orderId: group.orderId,
+          orderNumber: group.orderNumber,
+          order: group.order,
+          items: (group.items ?? []).map((item) => ({
+            id: item.id,
+            skuCode: item.skuCode,
+            styleCode: item.styleCode,
+            shade: item.shade ?? "",
+            size: item.size ?? "",
+            quantity: item.quantity ?? 0,
+            pickupQuantity: item.pickupQuantity ?? 0,
+            status: (["pending", "partial", "picked"].includes(item.status) ? item.status : "pending") as "pending" | "partial" | "picked",
+          })),
+          totalQuantity: group.totalQuantity ?? 0,
+          totalPickupQuantity: group.totalPickupQuantity ?? 0,
+          totalItems: group.totalItems ?? 0,
+          pendingCount: group.pendingCount ?? 0,
+          partialCount: group.partialCount ?? 0,
+          pickedCount: group.pickedCount ?? 0,
+          overallStatus: (["pending", "partial", "picked"].includes(group.overallStatus) ? group.overallStatus : "pending") as "pending" | "partial" | "picked",
+        })),
+        summary: data.summary ?? { total: 0, pending: 0, partial: 0, picked: 0 },
+        page: data.page ?? 1,
+        limit: data.limit ?? 10,
+        totalPages: data.totalPages ?? 1,
+        totalResults: data.totalResults ?? 0,
+      };
+    } catch {
+      return null;
+    }
   },
 
   // ── Pack List (uses /v1/whms/pick-pack — unchanged) ──────────────────────
