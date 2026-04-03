@@ -7,7 +7,7 @@ import { toast, Toaster } from "react-hot-toast"
 import Seo from "@/shared/layout-components/seo/seo"
 import { styleCodePairsService } from "@/shared/services/styleCodePairsService"
 import { RawMaterialBomTable, RawMaterialBomItem } from "@/app/catalog/items/components/RawMaterialBomTable"
-import { StyleCodeMultiSelect } from "../../components/StyleCodeMultiSelect"
+import { StyleCodeMultiSelect, SelectedStyleCode } from "../../components/StyleCodeMultiSelect"
 
 type Status = "active" | "inactive"
 
@@ -30,9 +30,7 @@ const EditStyleCodePairPage = () => {
     pack: "",
     status: "active",
   })
-  const [selectedStyleCodes, setSelectedStyleCodes] = useState<
-    Array<{ id: string; styleCode?: string; eanCode?: string }>
-  >([])
+  const [selectedStyleCodes, setSelectedStyleCodes] = useState<SelectedStyleCode[]>([])
   const [bomItems, setBomItems] = useState<RawMaterialBomItem[]>([])
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
@@ -54,12 +52,15 @@ const EditStyleCodePairPage = () => {
         status: data.status,
       })
       const sc = data.styleCodes || []
+      let uidCounter = 0
       setSelectedStyleCodes(
         sc.map((s) => {
+          const uid = `load_${Date.now()}_${++uidCounter}`
           if (typeof s === "string") {
-            return { id: s, styleCode: undefined, eanCode: undefined }
+            return { uid, id: s, styleCode: undefined, eanCode: undefined }
           }
           return {
+            uid,
             id: (s as { id?: string }).id || (s as { _id?: string })._id || "",
             styleCode: (s as { styleCode?: string }).styleCode,
             eanCode: (s as { eanCode?: string }).eanCode,

@@ -80,6 +80,7 @@ const StyleCodePairsPage = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [isImporting, setIsImporting] = useState(false)
   const [isBomImporting, setIsBomImporting] = useState(false)
+  const [isDeletingAll, setIsDeletingAll] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
   const bomImportInputRef = useRef<HTMLInputElement>(null)
 
@@ -127,6 +128,46 @@ const StyleCodePairsPage = () => {
       toast.error("Failed to delete")
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  const handleDeleteAll = async () => {
+    if (!window.confirm("Are you sure you want to delete ALL style code pairs? This action cannot be undone.")) return
+    try {
+      setIsDeletingAll(true)
+
+      const allIds: string[] = []
+      let currentPage = 1
+      let lastPage = 1
+      do {
+        const resp = await styleCodePairsService.list({ limit: 100, page: currentPage })
+        lastPage = resp.totalPages || 1
+        for (const row of resp.results || []) {
+          const id = getPairId(row)
+          if (id) allIds.push(id)
+        }
+        currentPage++
+      } while (currentPage <= lastPage)
+
+      let deleted = 0
+      let failed = 0
+      for (const id of allIds) {
+        try {
+          await styleCodePairsService.remove(id)
+          deleted++
+        } catch {
+          failed++
+        }
+      }
+
+      toast.success(`Deleted ${deleted} pair(s)${failed > 0 ? `, ${failed} failed` : ""}`)
+      setPage(1)
+      await fetchPairs()
+    } catch (error) {
+      console.error("Delete all failed", error)
+      toast.error("Failed to delete all pairs")
+    } finally {
+      setIsDeletingAll(false)
     }
   }
 
@@ -465,6 +506,19 @@ const StyleCodePairsPage = () => {
                 className="hidden"
                 onChange={handleBomImport}
               />
+              {/* <button
+                type="button"
+                onClick={handleDeleteAll}
+                disabled={isDeletingAll || isImporting || isBomImporting || rows.length === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-[11px] font-bold rounded hover:bg-red-700 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isDeletingAll ? (
+                  <i className="ri-loader-4-line text-xs animate-spin" />
+                ) : (
+                  <i className="ri-delete-bin-2-line text-xs" />
+                )}
+                Delete All
+              </button> */}
               <Link
                 href="/catalog/style-code-pairs/add"
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"

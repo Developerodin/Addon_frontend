@@ -7,7 +7,7 @@ import { toast, Toaster } from "react-hot-toast"
 import Seo from "@/shared/layout-components/seo/seo"
 import { styleCodePairsService } from "@/shared/services/styleCodePairsService"
 import { RawMaterialBomTable, RawMaterialBomItem } from "@/app/catalog/items/components/RawMaterialBomTable"
-import { StyleCodeMultiSelect } from "../components/StyleCodeMultiSelect"
+import { StyleCodeMultiSelect, SelectedStyleCode } from "../components/StyleCodeMultiSelect"
 
 type Status = "active" | "inactive"
 
@@ -28,9 +28,7 @@ const AddStyleCodePairPage = () => {
     pack: "",
     status: "active",
   })
-  const [selectedStyleCodes, setSelectedStyleCodes] = useState<
-    Array<{ id: string; styleCode?: string; eanCode?: string }>
-  >([])
+  const [selectedStyleCodes, setSelectedStyleCodes] = useState<SelectedStyleCode[]>([])
   const [bomItems, setBomItems] = useState<RawMaterialBomItem[]>([])
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)

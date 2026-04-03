@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useState, useCallback } from "react"
 import { styleCodeService, StyleCode } from "@/shared/services/styleCodeService"
 
 const formatMoney = (value?: number) => {
@@ -8,9 +8,19 @@ const formatMoney = (value?: number) => {
   return value.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 
+let _uidCounter = 0
+const nextUid = () => `sc_${Date.now()}_${++_uidCounter}`
+
+export interface SelectedStyleCode {
+  uid: string
+  id: string
+  styleCode?: string
+  eanCode?: string
+}
+
 interface StyleCodeMultiSelectProps {
-  selected: Array<{ id: string; styleCode?: string; eanCode?: string }>
-  onChange: (items: Array<{ id: string; styleCode?: string; eanCode?: string }>) => void
+  selected: SelectedStyleCode[]
+  onChange: (items: SelectedStyleCode[]) => void
   disabled?: boolean
 }
 
@@ -71,21 +81,26 @@ export const StyleCodeMultiSelect = ({
     }
   }, [modalOpen])
 
-  const isSelected = (id: string) => selected.some((s) => s.id === id)
+  const countForId = useCallback(
+    (id: string) => selected.filter((s) => s.id === id).length,
+    [selected]
+  )
 
-  const toggleSelect = (row: StyleCode) => {
-    if (isSelected(row.id)) {
-      onChange(selected.filter((s) => s.id !== row.id))
-    } else {
-      onChange([
-        ...selected,
-        { id: row.id, styleCode: row.styleCode, eanCode: row.eanCode },
-      ])
-    }
+  const addStyleCode = (row: StyleCode) => {
+    onChange([
+      ...selected,
+      { uid: nextUid(), id: row.id, styleCode: row.styleCode, eanCode: row.eanCode },
+    ])
   }
 
-  const removeSelected = (id: string) => {
-    onChange(selected.filter((s) => s.id !== id))
+  const removeOneById = (styleCodeId: string) => {
+    const idx = selected.findIndex((s) => s.id === styleCodeId)
+    if (idx === -1) return
+    onChange(selected.filter((_, i) => i !== idx))
+  }
+
+  const removeByUid = (uid: string) => {
+    onChange(selected.filter((s) => s.uid !== uid))
   }
 
   if (!modalOpen) {
@@ -114,13 +129,13 @@ export const StyleCodeMultiSelect = ({
           <div className="flex flex-wrap gap-2 p-3 bg-gray-50/50 border border-gray-200 rounded">
             {selected.map((s) => (
               <span
-                key={s.id}
+                key={s.uid}
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium bg-purple-50 text-purple-800 border border-purple-100 rounded"
               >
                 {s.styleCode || s.eanCode || s.id}
                 <button
                   type="button"
-                  onClick={() => removeSelected(s.id)}
+                  onClick={() => removeByUid(s.uid)}
                   disabled={disabled}
                   className="hover:text-red-600 hover:bg-red-50 rounded p-0.5 transition-colors"
                 >
@@ -178,7 +193,9 @@ export const StyleCodeMultiSelect = ({
                 <table className="w-full border-collapse border border-gray-200 text-left">
                   <thead className="bg-gray-50/80">
                     <tr>
-                      <th className="px-2 py-2 w-8" />
+                      <th className="px-2 py-2 text-[11px] font-bold text-gray-600 uppercase border border-gray-200 text-center w-16">
+                        Qty
+                      </th>
                       <th className="px-2 py-2 text-[11px] font-bold text-gray-600 uppercase border border-gray-200">
                         Style Code
                       </th>
@@ -200,61 +217,63 @@ export const StyleCodeMultiSelect = ({
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row) => (
-                      <tr
-                        key={row.id}
-                        className={`hover:bg-gray-50/50 border-b border-gray-100 ${
-                          isSelected(row.id) ? "bg-purple-50/50" : ""
-                        }`}
-                      >
-                        <td className="px-2 py-2 border border-gray-200">
-                          <input
-                            type="checkbox"
-                            checked={isSelected(row.id)}
-                            onChange={() => toggleSelect(row)}
-                            className="rounded border-gray-300 text-purple-600"
-                          />
-                        </td>
-                        <td className="px-2 py-2 text-[12px] font-medium text-gray-900 border border-gray-200">
-                          {row.styleCode}
-                        </td>
-                        <td className="px-2 py-2 text-[12px] text-gray-700 border border-gray-200">
-                          {row.eanCode}
-                        </td>
-                        <td className="px-2 py-2 text-[12px] text-gray-700 border border-gray-200">
-                          {formatMoney(row.mrp)}
-                        </td>
-                        <td className="px-2 py-2 text-[12px] text-gray-700 border border-gray-200">
-                          {row.brand || "-"}
-                        </td>
-                        <td className="px-2 py-2 text-[12px] text-gray-700 border border-gray-200">
-                          {row.pack || "-"}
-                        </td>
-                        <td className="px-2 py-2 border border-gray-200">
-                          <button
-                            type="button"
-                            onClick={() => toggleSelect(row)}
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded transition-colors ${
-                              isSelected(row.id)
-                                ? "bg-red-50 text-red-600 border border-red-100 hover:bg-red-100"
-                                : "bg-purple-50 text-purple-700 border border-purple-100 hover:bg-purple-100"
-                            }`}
-                          >
-                            {isSelected(row.id) ? (
-                              <>
-                                <i className="ri-close-line" />
-                                Remove
-                              </>
+                    {rows.map((row) => {
+                      const count = countForId(row.id)
+                      return (
+                        <tr
+                          key={row.id}
+                          className={`hover:bg-gray-50/50 border-b border-gray-100 ${
+                            count > 0 ? "bg-purple-50/50" : ""
+                          }`}
+                        >
+                          <td className="px-2 py-2 border border-gray-200 text-center">
+                            {count > 0 ? (
+                              <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[10px] font-bold bg-purple-600 text-white rounded-full">
+                                {count}
+                              </span>
                             ) : (
-                              <>
+                              <span className="text-[11px] text-gray-300">0</span>
+                            )}
+                          </td>
+                          <td className="px-2 py-2 text-[12px] font-medium text-gray-900 border border-gray-200">
+                            {row.styleCode}
+                          </td>
+                          <td className="px-2 py-2 text-[12px] text-gray-700 border border-gray-200">
+                            {row.eanCode}
+                          </td>
+                          <td className="px-2 py-2 text-[12px] text-gray-700 border border-gray-200">
+                            {formatMoney(row.mrp)}
+                          </td>
+                          <td className="px-2 py-2 text-[12px] text-gray-700 border border-gray-200">
+                            {row.brand || "-"}
+                          </td>
+                          <td className="px-2 py-2 text-[12px] text-gray-700 border border-gray-200">
+                            {row.pack || "-"}
+                          </td>
+                          <td className="px-2 py-2 border border-gray-200">
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => addStyleCode(row)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded transition-colors bg-purple-50 text-purple-700 border border-purple-100 hover:bg-purple-100"
+                              >
                                 <i className="ri-add-line" />
                                 Add
-                              </>
-                            )}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                              </button>
+                              {count > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeOneById(row.id)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded transition-colors bg-red-50 text-red-600 border border-red-100 hover:bg-red-100"
+                                >
+                                  <i className="ri-subtract-line" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
