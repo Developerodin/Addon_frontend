@@ -23,6 +23,7 @@ import WarehouseOrderClientPicker from "./WarehouseOrderClientPicker";
 import {
   mapStyleCodePairToMultiRow,
   mapStyleCodeToSingleRow,
+  fetchArticleAttrsForStyleCode,
 } from "./warehouseOrderCatalogMaps";
 import { validateWarehouseOrderBeforeSubmit } from "./warehouseOrderSubmitValidation";
 
@@ -464,23 +465,44 @@ export default function WarehouseOrderForm({
         onSelect={async (sc) => {
           const idx = styleCodeModalIdx;
           if (idx === null) return;
+          let fullSc = sc;
           try {
-            const full = await styleCodeService.get(sc.id);
-            setS((p) => ({
-              ...p,
-              single: p.single.map((row, i) =>
-                i === idx ? mapStyleCodeToSingleRow(full, row.quantity) : row,
-              ),
-            }));
+            fullSc = await styleCodeService.get(sc.id);
           } catch {
-            setS((p) => ({
-              ...p,
-              single: p.single.map((row, i) =>
-                i === idx ? mapStyleCodeToSingleRow(sc, row.quantity) : row,
-              ),
-            }));
+            /* use partial sc */
           }
+
+          setS((p) => ({
+            ...p,
+            single: p.single.map((row, i) =>
+              i === idx ? mapStyleCodeToSingleRow(fullSc, row.quantity) : row,
+            ),
+          }));
           setStyleCodeModalIdx(null);
+
+          console.log('[WarehouseOrderForm] fetching article attrs for styleCode:', fullSc.styleCode, 'id:', fullSc.id);
+          fetchArticleAttrsForStyleCode(fullSc.id, fullSc.styleCode).then(
+            (attrs) => {
+              console.log('[WarehouseOrderForm] article attrs resolved:', attrs);
+              if (!attrs.colour && !attrs.pattern) {
+                console.log('[WarehouseOrderForm] no colour/pattern to populate');
+                return;
+              }
+              console.log('[WarehouseOrderForm] auto-populating row', idx, '— colour:', attrs.colour, 'pattern:', attrs.pattern);
+              setS((p) => ({
+                ...p,
+                single: p.single.map((row, i) =>
+                  i === idx
+                    ? {
+                        ...row,
+                        colour: attrs.colour || row.colour,
+                        pattern: attrs.pattern || row.pattern,
+                      }
+                    : row,
+                ),
+              }));
+            },
+          );
         }}
       />
 

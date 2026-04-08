@@ -251,6 +251,126 @@ export async function getStyleCodesByVendorCode(
   return request<StyleCodesByVendorCodeResponse>(url, { method: 'GET' });
 }
 
+/** Full product as returned by GET /v1/products?search=... (includes attributes + styleCodes). */
+export interface ProductWithAttributes {
+  id?: string;
+  _id?: string;
+  name?: string;
+  attributes?: Record<string, string>;
+  styleCodes?: Array<{
+    styleCodeId?: string;
+    id?: string;
+    _id?: string;
+    styleCode?: string;
+    [key: string]: unknown;
+  }>;
+  [key: string]: unknown;
+}
+
+/**
+ * Find the product/article that has a given style-code linked in its `styleCodes` array.
+ * Uses `GET /v1/products?search=<styleCodeStr>&limit=100` then verifies by styleCodeId.
+ */
+export async function findProductByStyleCodeId(
+  styleCodeId: string,
+  styleCodeStr: string
+): Promise<ProductWithAttributes | null> {
+  console.log('[findProductByStyleCodeId] searching for styleCodeId:', styleCodeId, 'styleCodeStr:', styleCodeStr);
+  if (!styleCodeId && !styleCodeStr) return null;
+  try {
+    const searchTerm = styleCodeStr || styleCodeId;
+    const url = `${API_BASE_URL}/products?search=${encodeURIComponent(searchTerm)}&limit=100`;
+    console.log('[findProductByStyleCodeId] fetching:', url);
+    const data = await request<{ results: ProductWithAttributes[] }>(url, { method: 'GET' });
+    const products = data.results || [];
+    console.log('[findProductByStyleCodeId] products returned:', products.length, products.map(p => ({ id: p.id, name: p.name, styleCodes: p.styleCodes })));
+
+    for (const product of products) {
+      const scs = product.styleCodes || [];
+      for (const sc of scs) {
+        const scId =
+          typeof sc === 'string'
+            ? sc
+            : String(sc.styleCodeId ?? sc.id ?? sc._id ?? '').trim();
+        if (scId === String(styleCodeId).trim()) {
+          console.log('[findProductByStyleCodeId] MATCH found — product:', product.name, 'id:', product.id, 'attributes:', product.attributes);
+          return product;
+        }
+      }
+    }
+    console.log('[findProductByStyleCodeId] NO matching product found');
+    return null;
+  } catch (err) {
+    console.error('[findProductByStyleCodeId] ERROR:', err);
+    return null;
+  }
+}
+
+export interface ProductAttributeCategory {
+  id: string;
+  name: string;
+  optionValues: Array<{ _id?: string; id?: string; name: string }>;
+}
+
+/**
+ * Fetch product-attribute definitions and build a reverse lookup: valueId → valueName.
+ */
+export async function fetchAttributeValueLookup(): Promise<Record<string, string>> {
+  try {
+    const url = `${API_BASE_URL}/product-attributes?page=1&limit=200`;
+    const data = await request<{ results: ProductAttributeCategory[] }>(url, { method: 'GET' });
+    const lookup: Record<string, string> = {};
+    for (const cat of data.results || []) {
+      for (const val of cat.optionValues || []) {
+        const id = val._id || val.id;
+        if (id) lookup[String(id)] = val.name || '';
+      }
+    }
+    return lookup;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Given a style-code ID/string, find the linked article and return resolved Colour + Pattern.
+ */
+export async function resolveArticleColourPattern(
+  styleCodeId: string,
+  styleCodeStr: string
+): Promise<{ colour: string; pattern: string }> {
+  console.log('[resolveArticleColourPattern] START — styleCodeId:', styleCodeId, 'styleCodeStr:', styleCodeStr);
+  const product = await findProductByStyleCodeId(styleCodeId, styleCodeStr);
+  if (!product?.attributes) {
+    console.log('[resolveArticleColourPattern] no product or no attributes found');
+    return { colour: '', pattern: '' };
+  }
+
+  const attrs = product.attributes;
+  console.log('[resolveArticleColourPattern] product attributes:', attrs);
+  const colourKey = Object.keys(attrs).find((k) => /^colou?r$/i.test(k));
+  const patternKey = Object.keys(attrs).find((k) => /^pattern$/i.test(k));
+  console.log('[resolveArticleColourPattern] colourKey:', colourKey, 'patternKey:', patternKey);
+  if (!colourKey && !patternKey) {
+    console.log('[resolveArticleColourPattern] no Color/Pattern attributes on this article');
+    return { colour: '', pattern: '' };
+  }
+
+  const colourRaw = colourKey ? attrs[colourKey] : '';
+  const patternRaw = patternKey ? attrs[patternKey] : '';
+  console.log('[resolveArticleColourPattern] raw values — colour:', colourRaw, 'pattern:', patternRaw);
+
+  const lookup = await fetchAttributeValueLookup();
+  console.log('[resolveArticleColourPattern] attribute value lookup (sample):', Object.entries(lookup).slice(0, 10));
+
+  const result = {
+    colour: lookup[colourRaw] || colourRaw || '',
+    pattern: lookup[patternRaw] || patternRaw || '',
+  };
+  console.log('[resolveArticleColourPattern] RESOLVED — colour:', result.colour, 'pattern:', result.pattern);
+  return result;
+}
+
 export const productService = {
   list: listProducts,
   getById: getProductById,
@@ -259,6 +379,9 @@ export const productService = {
   getByFactoryCodes: getProductsByFactoryCodes,
   getByCode: getProductByCode,
   getStyleCodesByVendorCode,
+  findByStyleCodeId: findProductByStyleCodeId,
+  resolveArticleColourPattern,
+  fetchAttributeValueLookup,
 };
 
 export default productService;

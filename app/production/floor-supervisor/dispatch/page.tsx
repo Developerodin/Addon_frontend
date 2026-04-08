@@ -90,6 +90,10 @@ const DispatchFloorSupervisorPage = () => {
   const [updateContainerNextFloor, setUpdateContainerNextFloor] = useState("Warehouse");
   const [updateContainerSubmitting, setUpdateContainerSubmitting] = useState(false);
 
+  // Print modal state
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printCategoryLabel, setPrintCategoryLabel] = useState("CORE & COLLECTION MIX");
+
   // Load final checking floor orders from API
   const loadOrders = async () => {
     setIsLoading(true);
@@ -751,7 +755,7 @@ const DispatchFloorSupervisorPage = () => {
     return priorityClasses[priority as keyof typeof priorityClasses] || 'bg-gray-100 text-gray-800';
   };
 
-  const handlePrintList = async () => {
+  const handlePrintList = async (categoryLabel: string) => {
     const escapeHtml = (value: string) =>
       value
         .replaceAll("&", "&amp;")
@@ -844,7 +848,8 @@ const DispatchFloorSupervisorPage = () => {
         .replace("{{STN_DATE}}", printDate)
         .replace("{{TOTAL_ROWS}}", String(tableRows.length))
         .replace("{{ARTICLE_ROWS}}", rowsHtml)
-        .replace("{{TOTAL_QTY}}", String(totalQty));
+        .replace("{{TOTAL_QTY}}", String(totalQty))
+        .replace("{{CATEGORY_LABEL}}", escapeHtml(categoryLabel.trim() || "CORE & COLLECTION MIX"));
 
       const printWindow = window.open("", "_blank");
       if (printWindow) {
@@ -905,7 +910,7 @@ const DispatchFloorSupervisorPage = () => {
               <button
                 type="button"
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
-                onClick={handlePrintList}
+                onClick={() => { setPrintCategoryLabel(""); setShowPrintModal(true); }}
                 title="Print List"
               >
                 <i className="ri-printer-line text-xs"></i> Print List
@@ -1977,6 +1982,54 @@ const DispatchFloorSupervisorPage = () => {
         </div>
         );
       })()}
+
+      {/* Print Category Label Modal */}
+      {showPrintModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowPrintModal(false)}>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b bg-gray-50">
+              <h3 className="text-sm font-semibold text-gray-800">
+                <i className="ri-printer-line mr-1.5"></i>Print Stock Transfer Note
+              </h3>
+              <button onClick={() => setShowPrintModal(false)} className="text-gray-400 hover:text-gray-600">
+                <i className="ri-close-line text-lg"></i>
+              </button>
+            </div>
+            <div className="px-5 py-4">
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Category Label</label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
+                placeholder="e.g. CORE, COLLECTION MIX, CORE & COLLECTION MIX"
+                value={printCategoryLabel}
+                onChange={(e) => setPrintCategoryLabel(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    setShowPrintModal(false);
+                    handlePrintList(printCategoryLabel);
+                  }
+                }}
+                autoFocus
+              />
+              <p className="text-[10px] text-gray-400 mt-1">This label appears at the top of the product table in the printout.</p>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-3 border-t bg-gray-50">
+              <button
+                onClick={() => setShowPrintModal(false)}
+                className="px-4 py-1.5 text-xs font-semibold text-gray-600 border border-gray-300 rounded hover:bg-gray-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { setShowPrintModal(false); handlePrintList(printCategoryLabel); }}
+                className="px-4 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
+              >
+                <i className="ri-printer-line mr-1"></i>Print
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
