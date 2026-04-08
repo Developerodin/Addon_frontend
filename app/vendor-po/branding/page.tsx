@@ -10,7 +10,9 @@ import vendorProductionFlowService, {
   type VendorProductionFlow,
 } from "@/shared/services/vendorProductionFlowService";
 import { formatTransferredRowLabel } from "../utils/transferredStyleRows";
+import { productionFlowListParams } from "../utils/vendorPoProductionFlowList";
 import { VendorBrandingProcessDrawer } from "./components/VendorBrandingProcessDrawer";
+import { VendorScanContainerDrawer } from "../components/VendorScanContainerDrawer";
 
 const BrandingPage = () => {
   const [flows, setFlows] = useState<VendorProductionFlow[]>([]);
@@ -18,16 +20,22 @@ const BrandingPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedFlow, setSelectedFlow] = useState<VendorProductionFlow | null>(null);
+  const [selectedFlow, setSelectedFlow] = useState<VendorProductionFlow | null>(
+    null,
+  );
   const [isProcessing, setIsProcessing] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
 
   const loadFlows = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await vendorProductionFlowService.list({ limit: 100 });
+      const data = await vendorProductionFlowService.list(
+        productionFlowListParams("branding"),
+      );
       setFlows(data.results || []);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to load branding flows";
+      const msg =
+        err instanceof Error ? err.message : "Failed to load branding flows";
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -42,29 +50,52 @@ const BrandingPage = () => {
     return flows.filter((f) => {
       const q = searchQuery.trim().toLowerCase();
       const refCode = f.referenceCode?.toLowerCase() || "";
-      const vendorName = typeof f.vendor === "object" ? f.vendor?.header?.vendorName?.toLowerCase() || "" : "";
+      const vendorName =
+        typeof f.vendor === "object"
+          ? f.vendor?.header?.vendorName?.toLowerCase() || ""
+          : "";
       const poNumber =
-        typeof f.vendorPurchaseOrder === "object" ? f.vendorPurchaseOrder?.vpoNumber?.toLowerCase() || "" : "";
-      return !q || refCode.includes(q) || vendorName.includes(q) || poNumber.includes(q);
+        typeof f.vendorPurchaseOrder === "object"
+          ? f.vendorPurchaseOrder?.vpoNumber?.toLowerCase() || ""
+          : "";
+      return (
+        !q ||
+        refCode.includes(q) ||
+        vendorName.includes(q) ||
+        poNumber.includes(q)
+      );
     });
   }, [flows, searchQuery]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredFlows.length / itemsPerPage));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredFlows.length / itemsPerPage),
+  );
   const paginatedFlows = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
     return filteredFlows.slice(start, start + itemsPerPage);
   }, [filteredFlows, currentPage, itemsPerPage]);
 
   const handleOpenProcess = (flow: VendorProductionFlow) => {
+    /** Scan drawer is z-[61]; process drawer is z-50 — close scan or Save clicks hit the wrong layer. */
+    setScanOpen(false);
     setSelectedFlow(flow);
     setIsProcessing(true);
   };
 
   const handleBrandingSaved = useCallback((updated: VendorProductionFlow) => {
     setFlows((prev) =>
-      prev.map((f) => (f.id === updated.id ? mergeProductionFlowPreservePopulatedRefs(f, updated) : f))
+      prev.map((f) =>
+        f.id === updated.id
+          ? mergeProductionFlowPreservePopulatedRefs(f, updated)
+          : f,
+      ),
     );
-    setSelectedFlow((prev) => (prev && prev.id === updated.id ? mergeProductionFlowPreservePopulatedRefs(prev, updated) : prev));
+    setSelectedFlow((prev) =>
+      prev && prev.id === updated.id
+        ? mergeProductionFlowPreservePopulatedRefs(prev, updated)
+        : prev,
+    );
   }, []);
 
   if (loading) {
@@ -88,13 +119,25 @@ const BrandingPage = () => {
           <h1 className={CRM.pageTitle}>Branding Stage</h1>
           <HelpIcon
             title="Branding Supervisor"
-            content="Record completed quantity and style/brand breakdown for transfers toward final checking (PATCH branding floor with transferredData)."
+            content="Pipeline: secondaryChecking → branding → finalChecking → dispatch. In Process: save style breakdown (transferredData); completed is server-calculated. Optionally enter a container barcode to stage transferItems to Final Checking (then scan there to receive)."
           />
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={loadFlows} className={CRM.btnSecondary}>
+          <button
+            type="button"
+            onClick={loadFlows}
+            className={CRM.btnSecondary}
+          >
             <i className="ri-refresh-line" />
             Refresh
+          </button>
+          <button
+            type="button"
+            onClick={() => setScanOpen(true)}
+            className={CRM.btnSecondary}
+          >
+            <i className="ri-qr-scan-2-line" />
+            Scan container
           </button>
         </div>
       </div>
@@ -115,7 +158,11 @@ const BrandingPage = () => {
 
             <div className="flex items-center gap-2">
               <label className={`${CRM.label} mb-0`}>Show:</label>
-              <select className={`${CRM.select} w-20`} value={itemsPerPage} onChange={(e) => setItemsPerPage(Number(e.target.value))}>
+              <select
+                className={`${CRM.select} w-20`}
+                value={itemsPerPage}
+                onChange={(e) => setItemsPerPage(Number(e.target.value))}
+              >
                 <option value={10}>10</option>
                 <option value={25}>25</option>
                 <option value={50}>50</option>
@@ -138,32 +185,58 @@ const BrandingPage = () => {
               <tbody>
                 {paginatedFlows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className={`${CRM.emptyWrap} py-20 text-center`}>
+                    <td
+                      colSpan={6}
+                      className={`${CRM.emptyWrap} py-20 text-center`}
+                    >
                       No branding tasks found
                     </td>
                   </tr>
                 ) : (
                   paginatedFlows.map((flow) => {
                     const br = flow.floorQuantities.branding;
-                    const vendorName = typeof flow.vendor === "object" ? flow.vendor?.header?.vendorName : "Unknown";
-                    const poNumber = typeof flow.vendorPurchaseOrder === "object" ? flow.vendorPurchaseOrder?.vpoNumber : "N/A";
+                    const vendorName =
+                      typeof flow.vendor === "object"
+                        ? flow.vendor?.header?.vendorName
+                        : "Unknown";
+                    const poNumber =
+                      typeof flow.vendorPurchaseOrder === "object"
+                        ? flow.vendorPurchaseOrder?.vpoNumber
+                        : "N/A";
                     return (
                       <tr key={flow.id} className={CRM.tbodyTr}>
                         <td className={CRM.td}>
-                          <div className="font-bold text-gray-900 text-[12px]">{flow.referenceCode || "—"}</div>
-                          <div className="text-[10px] text-gray-400 uppercase font-medium leading-none">Flow: {flow.id.slice(-6)}</div>
+                          <div className="font-bold text-gray-900 text-[12px]">
+                            {flow.referenceCode || "—"}
+                          </div>
+                          <div className="text-[10px] text-gray-400 uppercase font-medium leading-none">
+                            Flow: {flow.id.slice(-6)}
+                          </div>
                         </td>
                         <td className={CRM.td}>
-                          <div className="font-bold text-purple-600 underline decoration-purple-200 underline-offset-2">{vendorName}</div>
-                          <div className="text-[10px] text-gray-500 font-bold mt-0.5">VPO: {poNumber}</div>
+                          <div className="font-bold text-purple-600 underline decoration-purple-200 underline-offset-2">
+                            {vendorName}
+                          </div>
+                          <div className="text-[10px] text-gray-500 font-bold mt-0.5">
+                            VPO: {poNumber}
+                          </div>
                         </td>
-                        <td className={`${CRM.td} text-right font-medium`}>{br.received.toLocaleString()}</td>
-                        <td className={`${CRM.td} text-right font-bold text-emerald-600`}>{br.completed.toLocaleString()}</td>
+                        <td className={`${CRM.td} text-right font-medium`}>
+                          {br.received.toLocaleString()}
+                        </td>
+                        <td
+                          className={`${CRM.td} text-right font-bold text-emerald-600`}
+                        >
+                          {br.completed.toLocaleString()}
+                        </td>
                         <td className={CRM.td}>
                           <div className="text-[10px] flex flex-wrap gap-1">
                             {br.transferredData?.length ? (
                               br.transferredData.map((row, i) => (
-                                <span key={i} className="bg-gray-50 border border-gray-100 px-1 py-0.5 rounded">
+                                <span
+                                  key={i}
+                                  className="bg-gray-50 border border-gray-100 px-1 py-0.5 rounded"
+                                >
                                   {formatTransferredRowLabel(row)}
                                 </span>
                               ))
@@ -174,7 +247,11 @@ const BrandingPage = () => {
                         </td>
                         <td className={CRM.td}>
                           <div className={CRM.rowActions}>
-                            <button type="button" onClick={() => handleOpenProcess(flow)} className={CRM.btnPrimarySm}>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenProcess(flow)}
+                              className={CRM.btnPrimarySm}
+                            >
                               Process
                             </button>
                           </div>
@@ -189,7 +266,8 @@ const BrandingPage = () => {
 
           <div className={CRM.paginationBar}>
             <p className={CRM.paginationSummary}>
-              Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredFlows.length)} of{" "}
+              Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
+              {Math.min(currentPage * itemsPerPage, filteredFlows.length)} of{" "}
               {filteredFlows.length} batches
             </p>
             <div className="flex gap-1">
@@ -220,6 +298,14 @@ const BrandingPage = () => {
         onClose={() => setIsProcessing(false)}
         onSaved={handleBrandingSaved}
       />
+
+      <VendorScanContainerDrawer
+        open={scanOpen}
+        onClose={() => setScanOpen(false)}
+        expectedFloorName="Branding"
+        onAccepted={loadFlows}
+      />
+
     </div>
   );
 };

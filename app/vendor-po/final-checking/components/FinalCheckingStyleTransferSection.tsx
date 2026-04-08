@@ -9,7 +9,8 @@ type Props = {
   sectionIndex: string;
   rows: TransferredStyleRowDraft[];
   styleOptions: StyleCodeByVendorRow[];
-  transferCap: number;
+  /** When set (e.g. from receivedData), only these style ids appear in the dropdown. */
+  allowedStyleCodeIds?: Set<string>;
   loadingStyles: boolean;
   saving: boolean;
   transferLoading: boolean;
@@ -24,7 +25,7 @@ export function FinalCheckingStyleTransferSection({
   sectionIndex,
   rows,
   styleOptions,
-  transferCap,
+  allowedStyleCodeIds,
   loadingStyles,
   saving,
   transferLoading,
@@ -33,6 +34,14 @@ export function FinalCheckingStyleTransferSection({
   onStyleSelect,
   onQtyChange,
 }: Props) {
+  const filteredOptions =
+    allowedStyleCodeIds && allowedStyleCodeIds.size > 0
+      ? styleOptions.filter((s) => {
+          const sid = styleOptionId(s);
+          return sid && allowedStyleCodeIds.has(sid);
+        })
+      : styleOptions;
+
   return (
     <div className={CRM.drawerSection}>
       <div className={CRM.drawerSectionHead}>
@@ -40,13 +49,19 @@ export function FinalCheckingStyleTransferSection({
       </div>
       <div className="p-3 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 items-center mb-2">
         <p className="text-[10px] text-gray-600 leading-relaxed">
-          Each row maps to <code className="text-[10px]">transferredData</code>. Here <code className="text-[10px]">transferred</code>{" "}
-          is M1 line qty for that style (used to derive floor <code className="text-[10px]">completed</code> when omitted).
+          Each row maps to <code className="text-[10px]">transferredData</code>. Row qty is M1 pass for that style (≤ inbound
+          received for that style when listed above).
         </p>
         <button type="button" className={CRM.btnSecondary} onClick={onAddRow} disabled={saving || transferLoading}>
           <i className="ri-add-line" /> Row
         </button>
       </div>
+      {allowedStyleCodeIds && allowedStyleCodeIds.size > 0 && filteredOptions.length === 0 && (
+        <p className="px-3 pb-0 text-[10px] text-amber-700">
+          Inbound style ids don&apos;t match the product catalog for this vendor — refresh styles or check style codes on the
+          flow.
+        </p>
+      )}
       <div className="p-3 space-y-3 pt-0">
         {rows.map((row, index) => (
           <div
@@ -62,7 +77,7 @@ export function FinalCheckingStyleTransferSection({
                 disabled={saving || transferLoading || loadingStyles}
               >
                 <option value="">Unspecified</option>
-                {styleOptions.map((s) => {
+                {filteredOptions.map((s) => {
                   const sid = styleOptionId(s);
                   if (!sid) return null;
                   return (
@@ -81,7 +96,6 @@ export function FinalCheckingStyleTransferSection({
               <input
                 type="number"
                 min={0}
-                max={transferCap}
                 className={CRM.input}
                 value={row.transferred}
                 onChange={(e) => onQtyChange(index, Number(e.target.value))}

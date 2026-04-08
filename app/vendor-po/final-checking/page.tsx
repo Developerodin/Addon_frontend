@@ -6,11 +6,12 @@ import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { CRM } from "../vendor-list/crmUiClasses";
 import vendorProductionFlowService, {
-  type FinalCheckingM2TransferToFloorKey,
   VendorProductionFlow,
 } from "@/shared/services/vendorProductionFlowService";
 import { formatTransferredRowLabel } from "../utils/transferredStyleRows";
 import { VendorFinalCheckingProcessDrawer } from "./components/VendorFinalCheckingProcessDrawer";
+import { VendorScanContainerDrawer } from "../components/VendorScanContainerDrawer";
+import { productionFlowListParams } from "../utils/vendorPoProductionFlowList";
 
 const FinalCheckingPage = () => {
   const [flows, setFlows] = useState<VendorProductionFlow[]>([]);
@@ -18,18 +19,25 @@ const FinalCheckingPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedFlow, setSelectedFlow] = useState<VendorProductionFlow | null>(null);
+  const [selectedFlow, setSelectedFlow] = useState<VendorProductionFlow | null>(
+    null,
+  );
   const [isProcessing, setIsProcessing] = useState(false);
-  const [transferLoading, setTransferLoading] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [scanOpen, setScanOpen] = useState(false);
 
   const loadFlows = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await vendorProductionFlowService.list({ limit: 100 });
+      const data = await vendorProductionFlowService.list(
+        productionFlowListParams("finalChecking"),
+      );
       setFlows(data.results || []);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to load final checking flows";
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Failed to load final checking flows";
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -44,13 +52,19 @@ const FinalCheckingPage = () => {
     return flows.filter((f) => {
       const q = searchQuery.trim().toLowerCase();
       const refCode = f.referenceCode?.toLowerCase() || "";
-      const vendorName = typeof f.vendor === "object" ? f.vendor?.header?.vendorName?.toLowerCase() || "" : "";
+      const vendorName =
+        typeof f.vendor === "object"
+          ? f.vendor?.header?.vendorName?.toLowerCase() || ""
+          : "";
 
       return !q || refCode.includes(q) || vendorName.includes(q);
     });
   }, [flows, searchQuery]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredFlows.length / itemsPerPage));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredFlows.length / itemsPerPage),
+  );
   const paginatedFlows = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
     return filteredFlows.slice(start, start + itemsPerPage);
@@ -67,35 +81,17 @@ const FinalCheckingPage = () => {
     setIsProcessing(false);
   }, []);
 
-  const handleTransferM2 = useCallback(
-    async (toFloorKey: FinalCheckingM2TransferToFloorKey, quantity: number) => {
-      if (!selectedFlow) return;
-      setTransferLoading(true);
-      try {
-        const updated = await vendorProductionFlowService.transferFinalCheckingM2(selectedFlow.id, {
-          toFloorKey,
-          quantity,
-        });
-        toast.success(`Transferred M2 ${quantity.toLocaleString()} -> ${toFloorKey}`);
-        setSelectedFlow(updated);
-        setFlows((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "M2 transfer failed";
-        toast.error(msg);
-      } finally {
-        setTransferLoading(false);
-      }
-    },
-    [selectedFlow]
-  );
-
   const handleConfirmFinalQuality = async (id: string) => {
     const flow = flows.find((f) => f.id === id);
     const final = flow?.floorQuantities?.finalChecking;
-    const effectiveCompleted =
-      (final?.completed ?? 0) + (final?.m1Quantity ?? 0) + (final?.m2Quantity ?? 0) + (final?.m4Quantity ?? 0);
-    if (effectiveCompleted <= 0) {
-      toast.error("Cannot confirm: final checking has no QC quantities yet");
+    const pendingToDispatch = Math.max(
+      0,
+      (final?.completed ?? 0) - (final?.transferred ?? 0),
+    );
+    if (pendingToDispatch <= 0) {
+      toast.error(
+        "Nothing pending to dispatch. Ensure final checking 'completed' is set above 'transferred'.",
+      );
       return;
     }
     setConfirmingId(id);
@@ -118,7 +114,9 @@ const FinalCheckingPage = () => {
       <div className="main-content !p-[10px]">
         <div className="flex flex-col items-center justify-center py-20">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50"></div>
-          <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading Data</p>
+          <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">
+            Loading Data
+          </p>
         </div>
       </div>
     );
@@ -133,10 +131,12 @@ const FinalCheckingPage = () => {
           <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
             <div className="flex items-center gap-2">
               <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
-              <h1 className="text-sm font-bold text-gray-800">Final Quality Verification</h1>
+              <h1 className="text-sm font-bold text-gray-800">
+                Final Quality Verification
+              </h1>
               <HelpIcon
                 title="Final QC"
-                content="Conduct final inspection before dispatch. Style breakdown uses the same transferredData + style-codes-by-vendor-code flow as branding."
+                content="Process: M1 by style, optional container to stage toward Dispatch. Use Scan container on the toolbar to accept inbound bags. Confirm batch moves completed work to dispatch per API."
               />
             </div>
             <div className="flex items-center gap-2">
@@ -147,6 +147,14 @@ const FinalCheckingPage = () => {
               >
                 <i className="ri-refresh-line text-xs" />
                 Refresh
+              </button>
+              <button
+                type="button"
+                onClick={() => setScanOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-600 text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm"
+              >
+                <i className="ri-qr-scan-2-line text-xs" />
+                Scan container
               </button>
             </div>
           </div>
@@ -163,7 +171,9 @@ const FinalCheckingPage = () => {
               <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-xs" />
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-[11px] font-medium text-[#495057] mb-0">Show:</label>
+              <label className="text-[11px] font-medium text-[#495057] mb-0">
+                Show:
+              </label>
               <select
                 className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-2 py-1.5 pr-7 focus:ring-0 focus:border-gray-300 appearance-none cursor-pointer w-20"
                 value={itemsPerPage}
@@ -179,98 +189,156 @@ const FinalCheckingPage = () => {
 
         <div className="overflow-x-auto min-h-[300px]">
           <table className="w-full border-collapse border border-gray-200">
-              <thead>
-                <tr className="bg-gray-50/30">
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Batch Ref</th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Vendor</th>
-                  <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">QC In</th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">M1/M2/M4</th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Style breakdown</th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Confirmation</th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Action</th>
+            <thead>
+              <tr className="bg-gray-50/30">
+                <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                  Batch Ref
+                </th>
+                <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                  Vendor
+                </th>
+                <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                  QC In
+                </th>
+                <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                  M1/M2/M4
+                </th>
+                <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                  Style breakdown
+                </th>
+                <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                  Confirmation
+                </th>
+                <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                  Action
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedFlows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-1.5 py-20 text-center text-gray-400 text-xs font-bold uppercase tracking-widest border border-gray-200"
+                  >
+                    No QC tasks found
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {paginatedFlows.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-1.5 py-20 text-center text-gray-400 text-xs font-bold uppercase tracking-widest border border-gray-200">
-                      No QC tasks found
-                    </td>
-                  </tr>
-                ) : (
-                  paginatedFlows.map((flow) => {
-                    const fc = flow.floorQuantities.finalChecking;
-                    const vendorName = typeof flow.vendor === "object" ? flow.vendor?.header?.vendorName : "Unknown";
-                    return (
-                      <tr key={flow.id} className="hover:bg-gray-50/50 transition-colors group">
-                        <td className="px-1.5 py-2.5 border border-gray-200">
-                          <div className="font-bold text-[12px]">{flow.referenceCode || "—"}</div>
-                          <div className="text-[10px] text-gray-400">BATCH ID: {flow.id.slice(-6)}</div>
-                        </td>
-                        <td className="px-1.5 py-2.5 border border-gray-200">
-                          <div className="font-bold text-purple-600 underline decoration-purple-200 underline-offset-1">{vendorName}</div>
-                        </td>
-                        <td className="px-1.5 py-2.5 text-right font-medium text-[12px] text-gray-700 border border-gray-200">{fc.received.toLocaleString()}</td>
-                        <td className="px-1.5 py-2.5 border border-gray-200">
-                          <div className="flex gap-1.5 flex-wrap">
-                            <span className="text-emerald-700 font-bold text-[10px] bg-emerald-50 px-1 py-0.5 rounded">M1: {fc.m1Quantity}</span>
-                            <span className="text-amber-700 font-bold text-[10px] bg-amber-50 px-1 py-0.5 rounded">M2: {fc.m2Quantity}</span>
-                            <span className="text-red-700 font-bold text-[10px] bg-red-50 px-1 py-0.5 rounded">M4: {fc.m4Quantity}</span>
-                          </div>
-                        </td>
-                        <td className="px-1.5 py-2.5 border border-gray-200">
-                          <div className="text-[10px] flex flex-wrap gap-1 max-w-[220px]">
-                            {fc.transferredData?.length ? (
-                              fc.transferredData.map((t, i) => (
-                                <span key={i} className="bg-gray-50 border border-gray-100 px-1 py-0.5 rounded">
-                                  {formatTransferredRowLabel(t)}
-                                </span>
-                              ))
-                            ) : (
-                              <span className="text-gray-400">—</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-1.5 py-2.5 border border-gray-200">
-                          <span className={flow.finalQualityConfirmed
-                            ? "inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight bg-green-100 text-green-800"
-                            : "inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight bg-red-100 text-red-800"}>
-                            {flow.finalQualityConfirmed ? "CONFIRMED" : "PENDING"}
+              ) : (
+                paginatedFlows.map((flow) => {
+                  const fc = flow.floorQuantities.finalChecking;
+                  const vendorName =
+                    typeof flow.vendor === "object"
+                      ? flow.vendor?.header?.vendorName
+                      : "Unknown";
+                  return (
+                    <tr
+                      key={flow.id}
+                      className="hover:bg-gray-50/50 transition-colors group"
+                    >
+                      <td className="px-1.5 py-2.5 border border-gray-200">
+                        <div className="font-bold text-[12px]">
+                          {flow.referenceCode || "—"}
+                        </div>
+                        <div className="text-[10px] text-gray-400">
+                          BATCH ID: {flow.id.slice(-6)}
+                        </div>
+                      </td>
+                      <td className="px-1.5 py-2.5 border border-gray-200">
+                        <div className="font-bold text-purple-600 underline decoration-purple-200 underline-offset-1">
+                          {vendorName}
+                        </div>
+                      </td>
+                      <td className="px-1.5 py-2.5 text-right font-medium text-[12px] text-gray-700 border border-gray-200">
+                        {fc.received.toLocaleString()}
+                      </td>
+                      <td className="px-1.5 py-2.5 border border-gray-200">
+                        <div className="flex gap-1.5 flex-wrap">
+                          <span className="text-emerald-700 font-bold text-[10px] bg-emerald-50 px-1 py-0.5 rounded">
+                            M1: {fc.m1Quantity}
                           </span>
-                        </td>
-                        <td className="px-1.5 py-2.5 border border-gray-200">
-                          <div className="flex items-center gap-2">
+                          <span className="text-amber-700 font-bold text-[10px] bg-amber-50 px-1 py-0.5 rounded">
+                            M2: {fc.m2Quantity}
+                          </span>
+                          <span className="text-red-700 font-bold text-[10px] bg-red-50 px-1 py-0.5 rounded">
+                            M4: {fc.m4Quantity}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-1.5 py-2.5 border border-gray-200">
+                        <div className="text-[10px] flex flex-wrap gap-1 max-w-[220px]">
+                          {fc.transferredData?.length ? (
+                            fc.transferredData.map((t, i) => (
+                              <span
+                                key={i}
+                                className="bg-gray-50 border border-gray-100 px-1 py-0.5 rounded"
+                              >
+                                {formatTransferredRowLabel(t)}
+                              </span>
+                            ))
+                          ) : fc.receivedData?.length ? (
+                            fc.receivedData.map((t, i) => (
+                              <span
+                                key={i}
+                                className="bg-emerald-50/80 border border-emerald-100 px-1 py-0.5 rounded"
+                                title="Inbound from container (receivedData)"
+                              >
+                                {formatTransferredRowLabel(t)}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-1.5 py-2.5 border border-gray-200">
+                        <span
+                          className={
+                            flow.finalQualityConfirmed
+                              ? "inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight bg-green-100 text-green-800"
+                              : "inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight bg-red-100 text-red-800"
+                          }
+                        >
+                          {flow.finalQualityConfirmed ? "CONFIRMED" : "PENDING"}
+                        </span>
+                      </td>
+                      <td className="px-1.5 py-2.5 border border-gray-200">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenProcess(flow)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
+                          >
+                            <i className="ri-edit-line" />
+                            Process
+                          </button>
+                          {!flow.finalQualityConfirmed && (
                             <button
                               type="button"
-                              onClick={() => handleOpenProcess(flow)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
+                              onClick={() => handleConfirmFinalQuality(flow.id)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors disabled:opacity-50"
+                              disabled={confirmingId === flow.id}
                             >
-                              <i className="ri-edit-line" />
-                              Process
+                              {confirmingId === flow.id
+                                ? "..."
+                                : "Confirm Batch"}
                             </button>
-                            {!flow.finalQualityConfirmed && (
-                              <button
-                                type="button"
-                                onClick={() => handleConfirmFinalQuality(flow.id)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors disabled:opacity-50"
-                                disabled={confirmingId === flow.id}
-                              >
-                                {confirmingId === flow.id ? "..." : "Confirm Batch"}
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
 
         <div className="p-[10px] pt-4 flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 bg-white">
           <p className="text-[11px] font-medium text-[#495057] tracking-tight">
-            Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredFlows.length)} of {filteredFlows.length} entries
+            Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
+            {Math.min(currentPage * itemsPerPage, filteredFlows.length)} of{" "}
+            {filteredFlows.length} entries
           </p>
           <div className="flex items-center gap-1">
             <button
@@ -300,8 +368,13 @@ const FinalCheckingPage = () => {
         flow={selectedFlow}
         onClose={() => setIsProcessing(false)}
         onSaved={handleFinalSaved}
-        onTransferM2={handleTransferM2}
-        transferLoading={transferLoading}
+      />
+
+      <VendorScanContainerDrawer
+        open={scanOpen}
+        onClose={() => setScanOpen(false)}
+        expectedFloorName="Final Checking"
+        onAccepted={loadFlows}
       />
     </div>
   );

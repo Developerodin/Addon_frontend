@@ -1,4 +1,7 @@
-import type { TransferredDataRow } from "@/shared/services/vendorProductionFlowService";
+import type {
+  TransferredDataRow,
+  VendorTransferItem,
+} from "@/shared/services/vendorProductionFlowService";
 import type { StyleCodeByVendorRow } from "@/shared/services/productService";
 
 /** Draft row for style + qty lines (PATCH stores StyleCode id in `styleCode`). */
@@ -15,7 +18,9 @@ export function styleOptionId(s: StyleCodeByVendorRow): string {
   return String(raw).trim();
 }
 
-export function rowsFromTransferredApi(data: TransferredDataRow[] | undefined): TransferredStyleRowDraft[] {
+export function rowsFromTransferredApi(
+  data: TransferredDataRow[] | undefined,
+): TransferredStyleRowDraft[] {
   if (!data?.length) return [{ styleCodeId: "", brand: "", transferred: 0 }];
   return data.map((r) => ({
     styleCodeId: (r.styleCode ?? "").trim(),
@@ -26,7 +31,7 @@ export function rowsFromTransferredApi(data: TransferredDataRow[] | undefined): 
 
 export function toTransferredPayloadRows(
   rows: TransferredStyleRowDraft[],
-  styleOptions: StyleCodeByVendorRow[]
+  styleOptions: StyleCodeByVendorRow[],
 ): TransferredDataRow[] {
   return rows.map((r) => {
     let styleCode = r.styleCodeId.trim();
@@ -41,6 +46,31 @@ export function toTransferredPayloadRows(
       brand,
     };
   });
+}
+
+/**
+ * Build `transferItems` for `PATCH .../transfer` (branding → finalChecking).
+ * Prefer human `styleCode` + `brand` from catalog when available; otherwise fall back to draft ids.
+ */
+export function toVendorTransferItems(
+  rows: TransferredStyleRowDraft[],
+  styleOptions: StyleCodeByVendorRow[],
+): VendorTransferItem[] {
+  return rows
+    .filter((r) => (Number(r.transferred) || 0) > 0)
+    .map((r) => {
+      const sid = r.styleCodeId.trim();
+      const opt = sid
+        ? styleOptions.find((o) => styleOptionId(o) === sid)
+        : undefined;
+      const styleCode = (opt?.styleCode ?? r.styleCodeId).trim();
+      const brand = (r.brand.trim() || opt?.brand?.trim() || "").trim();
+      return {
+        transferred: Math.max(0, Number(r.transferred) || 0),
+        styleCode,
+        brand,
+      };
+    });
 }
 
 /** List cell / chip label — `styleCode` field is often an ObjectId. */

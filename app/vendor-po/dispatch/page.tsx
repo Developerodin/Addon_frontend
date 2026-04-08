@@ -4,7 +4,12 @@ import Seo from "@/shared/layout-components/seo/seo";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { toast } from "react-hot-toast";
 import { CRM } from "../vendor-list/crmUiClasses";
-import vendorProductionFlowService, { VendorProductionFlow } from "@/shared/services/vendorProductionFlowService";
+import vendorProductionFlowService, {
+  VendorProductionFlow,
+} from "@/shared/services/vendorProductionFlowService";
+import { formatTransferredRowLabel } from "../utils/transferredStyleRows";
+import { VendorScanContainerDrawer } from "../components/VendorScanContainerDrawer";
+import { productionFlowListParams } from "../utils/vendorPoProductionFlowList";
 
 const DispatchPage = () => {
   const [flows, setFlows] = useState<VendorProductionFlow[]>([]);
@@ -12,11 +17,14 @@ const DispatchPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
+  const [scanOpen, setScanOpen] = useState(false);
 
   const loadFlows = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await vendorProductionFlowService.list({ limit: 100 });
+      const data = await vendorProductionFlowService.list(
+        productionFlowListParams("dispatch"),
+      );
       setFlows(data.results || []);
     } catch (err: any) {
       toast.error(err.message || "Failed to load dispatch batches");
@@ -33,13 +41,27 @@ const DispatchPage = () => {
     return flows.filter((f) => {
       const q = searchQuery.trim().toLowerCase();
       const refCode = f.referenceCode?.toLowerCase() || "";
-      const vendorName = typeof f.vendor === "object" ? f.vendor?.header?.vendorName?.toLowerCase() || "" : "";
-      const poNumber = typeof f.vendorPurchaseOrder === "object" ? f.vendorPurchaseOrder?.vpoNumber?.toLowerCase() || "" : "";
-      return !q || refCode.includes(q) || vendorName.includes(q) || poNumber.includes(q);
+      const vendorName =
+        typeof f.vendor === "object"
+          ? f.vendor?.header?.vendorName?.toLowerCase() || ""
+          : "";
+      const poNumber =
+        typeof f.vendorPurchaseOrder === "object"
+          ? f.vendorPurchaseOrder?.vpoNumber?.toLowerCase() || ""
+          : "";
+      return (
+        !q ||
+        refCode.includes(q) ||
+        vendorName.includes(q) ||
+        poNumber.includes(q)
+      );
     });
   }, [flows, searchQuery]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredFlows.length / itemsPerPage));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredFlows.length / itemsPerPage),
+  );
   const paginatedFlows = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
     return filteredFlows.slice(start, start + itemsPerPage);
@@ -64,12 +86,25 @@ const DispatchPage = () => {
         <div className={CRM.titleWithAccent}>
           <div className={CRM.titleAccent} />
           <h1 className={CRM.pageTitle}>Dispatch Stage</h1>
-          <HelpIcon title="Dispatch" content="Dispatch-ready vendor PO batches after final checking confirmation." />
+          <HelpIcon
+            title="Dispatch"
+            content="Scan a container staged from Final Checking: accept updates dispatch.received. Table shows FC intake vs dispatch intake and style lines from receivedData."
+          />
         </div>
-        <button type="button" onClick={loadFlows} className={CRM.btnSecondary}>
-          <i className="ri-refresh-line text-xs" />
-          Refresh
-        </button>
+        <div className="flex gap-2">
+          <button type="button" onClick={loadFlows} className={CRM.btnSecondary}>
+            <i className="ri-refresh-line text-xs" />
+            Refresh
+          </button>
+          <button
+            type="button"
+            onClick={() => setScanOpen(true)}
+            className={CRM.btnSecondary}
+          >
+            <i className="ri-qr-scan-2-line text-xs" />
+            Scan container
+          </button>
+        </div>
       </div>
 
       <div className={CRM.card}>
@@ -87,7 +122,11 @@ const DispatchPage = () => {
             </div>
             <div className="flex items-center gap-2">
               <label className={`${CRM.label} mb-0`}>Show:</label>
-              <select className={`${CRM.select} w-20`} value={itemsPerPage} onChange={(e) => setItemsPerPage(Number(e.target.value))}>
+              <select
+                className={`${CRM.select} w-20`}
+                value={itemsPerPage}
+                onChange={(e) => setItemsPerPage(Number(e.target.value))}
+              >
                 <option value={10}>10</option>
                 <option value={25}>25</option>
                 <option value={50}>50</option>
@@ -101,8 +140,9 @@ const DispatchPage = () => {
                 <tr className={CRM.theadTr}>
                   <th className={CRM.th}>Batch / Reference</th>
                   <th className={CRM.th}>Vendor &amp; PO</th>
-                  <th className={CRM.thRight}>Final Check In</th>
-                  <th className={CRM.thRight}>M1 Passed</th>
+                  <th className={CRM.thRight}>FC received</th>
+                  <th className={CRM.thRight}>Dispatch received</th>
+                  <th className={CRM.th}>Style lines (FC / dispatch)</th>
                   <th className={CRM.th}>Confirmation</th>
                   <th className={CRM.th}>Dispatch status</th>
                 </tr>
@@ -110,34 +150,101 @@ const DispatchPage = () => {
               <tbody>
                 {paginatedFlows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-10 text-center text-gray-400 text-xs font-bold uppercase tracking-widest">
+                    <td
+                      colSpan={7}
+                      className="py-10 text-center text-gray-400 text-xs font-bold uppercase tracking-widest"
+                    >
                       No dispatch batches found
                     </td>
                   </tr>
                 ) : (
                   paginatedFlows.map((flow) => {
                     const final = flow.floorQuantities.finalChecking;
-                    const vendorName = typeof flow.vendor === "object" ? flow.vendor?.header?.vendorName : "Unknown";
-                    const poNumber = typeof flow.vendorPurchaseOrder === "object" ? flow.vendorPurchaseOrder?.vpoNumber : "N/A";
+                    const disp = flow.floorQuantities.dispatch;
+                    const dispRows = disp?.receivedData?.length
+                      ? disp.receivedData
+                      : final?.receivedData ?? [];
+                    const vendorName =
+                      typeof flow.vendor === "object"
+                        ? flow.vendor?.header?.vendorName
+                        : "Unknown";
+                    const poNumber =
+                      typeof flow.vendorPurchaseOrder === "object"
+                        ? flow.vendorPurchaseOrder?.vpoNumber
+                        : "N/A";
                     return (
                       <tr key={flow.id} className={CRM.tbodyTr}>
                         <td className={CRM.td}>
-                          <div className="font-bold text-gray-900 text-[12px]">{flow.referenceCode || "—"}</div>
-                          <div className="text-[10px] text-gray-400 font-medium uppercase leading-none">ID: {flow.id.slice(-6)}</div>
+                          <div className="font-bold text-gray-900 text-[12px]">
+                            {flow.referenceCode || "—"}
+                          </div>
+                          <div className="text-[10px] text-gray-400 font-medium uppercase leading-none">
+                            ID: {flow.id.slice(-6)}
+                          </div>
                         </td>
                         <td className={CRM.td}>
-                          <div className="font-bold text-purple-600 underline underline-offset-2 decoration-purple-200">{vendorName}</div>
-                          <div className="text-[10px] text-gray-500 font-bold mt-0.5">VPO: {poNumber}</div>
+                          <div className="font-bold text-purple-600 underline underline-offset-2 decoration-purple-200">
+                            {vendorName}
+                          </div>
+                          <div className="text-[10px] text-gray-500 font-bold mt-0.5">
+                            VPO: {poNumber}
+                          </div>
                         </td>
-                        <td className={`${CRM.td} text-right font-medium`}>{(final.received ?? 0).toLocaleString()}</td>
-                        <td className={`${CRM.td} text-right font-bold text-emerald-600`}>{(final.m1Quantity ?? 0).toLocaleString()}</td>
+                        <td className={`${CRM.td} text-right font-medium`}>
+                          {(final.received ?? 0).toLocaleString()}
+                        </td>
+                        <td
+                          className={`${CRM.td} text-right font-bold text-emerald-700`}
+                          title="Total accepted on Dispatch (container scans)"
+                        >
+                          {(disp?.received ?? 0).toLocaleString()}
+                        </td>
                         <td className={CRM.td}>
-                          <span className={flow.finalQualityConfirmed ? CRM.badgeActive : CRM.badgeInactive}>
-                            {flow.finalQualityConfirmed ? "CONFIRMED" : "PENDING"}
+                          <div className="flex flex-wrap gap-1 max-w-[240px]">
+                            {dispRows.length ? (
+                              dispRows.map((row, i) => (
+                                <span
+                                  key={i}
+                                  className={`text-[10px] px-1 py-0.5 rounded border ${
+                                    disp?.receivedData?.length
+                                      ? "bg-emerald-50/80 border-emerald-100"
+                                      : "bg-gray-50 border-gray-100"
+                                  }`}
+                                  title={
+                                    disp?.receivedData?.length
+                                      ? "dispatch.receivedData"
+                                      : "finalChecking.receivedData (from FC)"
+                                  }
+                                >
+                                  {formatTransferredRowLabel(row)}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-gray-400 text-[10px]">—</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className={CRM.td}>
+                          <span
+                            className={
+                              flow.finalQualityConfirmed
+                                ? CRM.badgeActive
+                                : CRM.badgeInactive
+                            }
+                          >
+                            {flow.finalQualityConfirmed
+                              ? "CONFIRMED"
+                              : "PENDING"}
                           </span>
                         </td>
                         <td className={CRM.td}>
-                          <span className={flow.finalQualityConfirmed ? CRM.badgeActive : CRM.badgeInactive}>
+                          <span
+                            className={
+                              flow.finalQualityConfirmed
+                                ? CRM.badgeActive
+                                : CRM.badgeInactive
+                            }
+                          >
                             {flow.finalQualityConfirmed ? "READY" : "WAITING"}
                           </span>
                         </td>
@@ -151,11 +258,17 @@ const DispatchPage = () => {
 
           <div className={CRM.paginationBar}>
             <p className={CRM.paginationSummary}>
-              Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredFlows.length)} of{" "}
+              Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
+              {Math.min(currentPage * itemsPerPage, filteredFlows.length)} of{" "}
               {filteredFlows.length} batches
             </p>
             <div className="flex gap-1">
-              <button type="button" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)} className={CRM.pageNavBtn}>
+              <button
+                type="button"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((p) => p - 1)}
+                className={CRM.pageNavBtn}
+              >
                 Previous
               </button>
               <button
@@ -170,6 +283,13 @@ const DispatchPage = () => {
           </div>
         </div>
       </div>
+
+      <VendorScanContainerDrawer
+        open={scanOpen}
+        onClose={() => setScanOpen(false)}
+        expectedFloorName="Dispatch"
+        onAccepted={loadFlows}
+      />
     </div>
   );
 };

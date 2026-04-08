@@ -1,36 +1,31 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "react-hot-toast";
 import { CRM } from "../../vendor-list/crmUiClasses";
 import { VendorFloorBatchSummary } from "../../components/VendorFloorBatchSummary";
 import vendorProductionFlowService, {
-  type FinalCheckingM2TransferToFloorKey,
   type FinalCheckingFloorQuantity,
-  type RepairStatus,
   type VendorProductionFlow,
 } from "@/shared/services/vendorProductionFlowService";
 import { getStyleCodesByVendorCode, type StyleCodeByVendorRow } from "@/shared/services/productService";
 import { resolveVendorCodeForStyleLookup } from "../../branding/brandingFloorUtils";
 import {
-  rowsFromTransferredApi,
   styleOptionId,
   toTransferredPayloadRows,
+  toVendorTransferItems,
   type TransferredStyleRowDraft,
 } from "../../utils/transferredStyleRows";
+import { FinalCheckingInboundReceived } from "./FinalCheckingInboundReceived";
 import { FinalCheckingStyleTransferSection } from "./FinalCheckingStyleTransferSection";
-
-const M2_TRANSFER_DEST_OPTIONS: { value: FinalCheckingM2TransferToFloorKey; label: string }[] = [
-  { value: "washing", label: "Washing" },
-  { value: "boarding", label: "Boarding" },
-  { value: "branding", label: "Branding" },
-];
+import {
+  allowedStyleCodeIdsFromInbound,
+  initialFinalCheckingStyleRows,
+} from "../finalCheckingInboundAggregates";
 
 function m1AvailableToTransfer(fc: FinalCheckingFloorQuantity): number {
   return Math.max(0, (fc.m1Quantity ?? 0) - (fc.m1Transferred ?? 0));
-}
-function m2AvailableToTransfer(fc: FinalCheckingFloorQuantity): number {
-  return Math.max(0, (fc.m2Quantity ?? 0) - (fc.m2Transferred ?? 0));
 }
 
 type Props = {
@@ -38,55 +33,55 @@ type Props = {
   flow: VendorProductionFlow | null;
   onClose: () => void;
   onSaved: (updated: VendorProductionFlow) => void;
-  onTransferM2: (toFloorKey: FinalCheckingM2TransferToFloorKey, quantity: number) => void | Promise<void>;
-  transferLoading: boolean;
 };
 
-/**
- * Final QC drawer: M1/M2/M4 + repair + editable `transferredData` (style + qty, same as branding).
- * PATCH uses `mode: "replace"` for `transferredData`; rebind from response via `onSaved`.
- */
+/** Final QC drawer: M1/M2/M4 counts, style `transferredData`, optional dispatch container. */
 export function VendorFinalCheckingProcessDrawer({
   open,
   flow,
   onClose,
   onSaved,
-  onTransferM2,
-  transferLoading,
 }: Props) {
   const [m2Quantity, setM2Quantity] = useState(0);
   const [m4Quantity, setM4Quantity] = useState(0);
-  const [repairStatus, setRepairStatus] = useState<RepairStatus>("NOT_REQUIRED");
-  const [repairRemarks, setRepairRemarks] = useState("");
   const [rows, setRows] = useState<TransferredStyleRowDraft[]>([{ styleCodeId: "", brand: "", transferred: 0 }]);
   const [styleOptions, setStyleOptions] = useState<StyleCodeByVendorRow[]>([]);
   const [loadingStyles, setLoadingStyles] = useState(false);
   const [saving, setSaving] = useState(false);
   const [vendorCodeResolved, setVendorCodeResolved] = useState<string | null>(null);
-  const [m2TransferTo, setM2TransferTo] = useState<FinalCheckingM2TransferToFloorKey>("washing");
-  const [m2TransferQty, setM2TransferQty] = useState("");
+  /** Existing bag to stage FC → dispatch (same contract as branding → final: PATCH + auto-transfer). */
+  const [stagingContainerBarcode, setStagingContainerBarcode] = useState("");
+  /** Render in `document.body` so parent layout/stacking cannot block footer clicks (same as branding drawer). */
+  const [portalEl, setPortalEl] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setPortalEl(document.body);
+  }, []);
 
   const finalLive = flow?.floorQuantities.finalChecking;
   const receivedQty = finalLive?.received ?? 0;
   const remainingQty = finalLive?.remaining ?? 0;
-  const transferCap = Math.max(0, Number(m1Quantity) || 0);
+  const receivedData = finalLive?.receivedData ?? [];
+  const allowedStyleCodeIds = useMemo(
+    () => allowedStyleCodeIdsFromInbound(receivedData),
+    [receivedData],
+  );
+  /** Pool for M1 style rows: cannot exceed QC received from containers. */
+  const transferCap = Math.max(0, receivedQty);
   const totalTransferred = useMemo(
     () => rows.reduce((sum, r) => sum + Math.max(0, Number(r.transferred) || 0), 0),
-    [rows]
+    [rows],
   );
   const m1Quantity = totalTransferred;
 
   const m1Avail = useMemo(() => (finalLive ? m1AvailableToTransfer(finalLive) : 0), [finalLive]);
-  const m2Avail = useMemo(() => (finalLive ? m2AvailableToTransfer(finalLive) : 0), [finalLive]);
 
   useEffect(() => {
     if (!open || !flow) return;
     const fc = flow.floorQuantities.finalChecking;
     setM2Quantity(fc.m2Quantity ?? 0);
     setM4Quantity(fc.m4Quantity ?? 0);
-    setRepairStatus(fc.repairStatus ?? "NOT_REQUIRED");
-    setRepairRemarks(fc.repairRemarks ?? "");
-    setRows(rowsFromTransferredApi(fc.transferredData));
+    setRows(initialFinalCheckingStyleRows(fc));
+    setStagingContainerBarcode("");
   }, [open, flow?.id]);
 
   const loadStyles = useCallback(async () => {
@@ -133,13 +128,6 @@ export function VendorFinalCheckingProcessDrawer({
     });
   }, [open, styleOptions]);
 
-  useEffect(() => {
-    if (open && flow) {
-      setM2TransferTo("washing");
-      setM2TransferQty("");
-    }
-  }, [open, flow?.id]);
-
   const updateRow = (index: number, patch: Partial<TransferredStyleRowDraft>) => {
     setRows((prev) => {
       const next = [...prev];
@@ -174,22 +162,45 @@ export function VendorFinalCheckingProcessDrawer({
 
   const handleSave = async () => {
     if (!flow) return;
-    if (totalTransferred > transferCap) {
-      toast.error(`M1 style total cannot exceed M1 qty (${transferCap.toLocaleString()}). Reduce line quantities.`);
-      return;
+    const bar = stagingContainerBarcode.trim();
+    if (bar) {
+      const items = toVendorTransferItems(rows, styleOptions);
+      const sum = items.reduce((s, i) => s + i.transferred, 0);
+      if (sum <= 0) {
+        toast.error("Enter M1 style line quantities > 0 before staging on a container.");
+        return;
+      }
     }
     setSaving(true);
     try {
-      const updated = await vendorProductionFlowService.updateFloor(flow.id, "finalChecking", {
+      const fcPersist = flow.floorQuantities.finalChecking;
+      const patchPayload: Parameters<
+        typeof vendorProductionFlowService.updateFloor
+      >[2] = {
         mode: "replace",
         transferredData: toTransferredPayloadRows(rows, styleOptions),
         m1Quantity: Math.max(0, Number(m1Quantity) || 0),
         m2Quantity: Math.max(0, Number(m2Quantity) || 0),
         m4Quantity: Math.max(0, Number(m4Quantity) || 0),
-        repairStatus,
-        repairRemarks: repairRemarks.trim(),
-      });
-      toast.success("Final quality details saved");
+        repairStatus: fcPersist.repairStatus ?? "NOT_REQUIRED",
+        repairRemarks: (fcPersist.repairRemarks ?? "").trim(),
+      };
+      if (bar) {
+        patchPayload.existingContainerBarcode = bar;
+        patchPayload.autoTransferToNextFloor = true;
+      }
+      const updated = await vendorProductionFlowService.updateFloor(
+        flow.id,
+        "finalChecking",
+        patchPayload,
+      );
+      if (!bar) {
+        toast.success("Final quality details saved");
+      } else {
+        toast.success(
+          "Saved + staged on container — scan on Dispatch when the flow moves there to receive.",
+        );
+      }
       onSaved(updated);
       onClose();
     } catch (e: unknown) {
@@ -200,54 +211,47 @@ export function VendorFinalCheckingProcessDrawer({
     }
   };
 
-  const submitM2Transfer = async () => {
-    const n = Number(String(m2TransferQty).trim());
-    if (!Number.isFinite(n) || n <= 0) {
-      toast.error("Enter a quantity greater than 0");
-      return;
-    }
-    if (n > m2Avail) {
-      toast.error(`Cannot exceed M2 available (${m2Avail})`);
-      return;
-    }
-    await onTransferM2(m2TransferTo, n);
-    setM2TransferQty("");
-  };
-
   if (!open || !flow || !finalLive) return null;
+  if (!portalEl) return null;
 
   const sec = {
+    inbound: "1",
     qc: "2",
     transfer: "3",
-    m2: "4",
-    repair: "5",
+    container: "4",
   };
 
-  return (
+  const drawer = (
     <>
       <div
-        className={CRM.drawerBackdrop}
+        className="fixed inset-0 bg-black/50"
+        style={{ zIndex: 1400 }}
         onClick={() => {
-          if (!transferLoading && !saving) onClose();
+          if (!saving) onClose();
         }}
         aria-hidden
       />
-      <div className={CRM.drawerShellLg} role="dialog" aria-modal="true" aria-labelledby="vendor-final-process-title">
+      <div
+        className="fixed inset-y-0 right-0 w-full max-w-4xl bg-white shadow-xl flex flex-col min-h-0 overflow-hidden animate-slide-in-right border-l-2 border-gray-300"
+        style={{ zIndex: 1401 }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="vendor-final-process-title"
+      >
         <div className={CRM.drawerHeaderBar}>
           <h2 id="vendor-final-process-title" className={CRM.drawerTitle}>
             Final QC — {flow.referenceCode || flow.id.slice(-6)}
           </h2>
-          <button type="button" onClick={onClose} className={CRM.drawerCloseBtn} aria-label="Close" disabled={transferLoading || saving}>
+          <button type="button" onClick={onClose} className={CRM.drawerCloseBtn} aria-label="Close" disabled={saving}>
             <i className="ri-close-line text-lg" />
           </button>
         </div>
 
-        <div className={CRM.drawerBodyScroll}>
+        <div className={`${CRM.drawerBodyScroll} min-h-0`}>
           <p className={CRM.drawerHint}>
-            <strong>Final checking:</strong> M1–M4 + repair. Use style rows as <strong>M1 completed breakdown</strong> (same
-            payload shape as branding). PATCH uses <code className="text-[10px]">mode: replace</code> for{" "}
-            <code className="text-[10px]">transferredData</code>; backend derives <code className="text-[10px]">completed</code>{" "}
-            from row sums when omitted.
+            <strong>Final QC:</strong> M1 rows ≤ inbound <code className="text-[10px]">receivedData</code>. Container field (optional) =
+            branding-style <code className="text-[10px]">existingContainerBarcode</code> + <code className="text-[10px]">autoTransferToNextFloor</code>{" "}
+            toward Dispatch.
           </p>
 
           <VendorFloorBatchSummary
@@ -256,7 +260,7 @@ export function VendorFinalCheckingProcessDrawer({
               <>
                 Received: <strong>{receivedQty.toLocaleString()}</strong> · Remaining:{" "}
                 <strong>{remainingQty.toLocaleString()}</strong> · M1 cap:{" "}
-                <strong className="text-purple-700">{transferCap.toLocaleString()}</strong> · Selected:{" "}
+                <strong className="text-purple-700">{transferCap.toLocaleString()}</strong> (received) · M1 row sum:{" "}
                 <strong className={totalTransferred > transferCap ? "text-red-600" : "text-emerald-700"}>
                   {totalTransferred.toLocaleString()}
                 </strong>
@@ -271,6 +275,12 @@ export function VendorFinalCheckingProcessDrawer({
             </p>
           )}
 
+          <FinalCheckingInboundReceived
+            sectionIndex={sec.inbound}
+            receivedData={receivedData}
+            styleOptions={styleOptions}
+          />
+
           <div className={CRM.drawerSection}>
             <div className={CRM.drawerSectionHead}>
               {sec.qc}. Quality counts (M1 / M2 / M4)
@@ -283,7 +293,7 @@ export function VendorFinalCheckingProcessDrawer({
                   className={`${CRM.input} border-amber-200 focus:border-amber-500`}
                   value={m2Quantity}
                   onChange={(e) => setM2Quantity(Number(e.target.value))}
-                  disabled={saving || transferLoading}
+                  disabled={saving}
                 />
               </div>
               <div>
@@ -293,7 +303,7 @@ export function VendorFinalCheckingProcessDrawer({
                   className={`${CRM.input} border-red-200 focus:border-red-500`}
                   value={m4Quantity}
                   onChange={(e) => setM4Quantity(Number(e.target.value))}
-                  disabled={saving || transferLoading}
+                  disabled={saving}
                 />
               </div>
             </div>
@@ -310,10 +320,12 @@ export function VendorFinalCheckingProcessDrawer({
             sectionIndex={sec.transfer}
             rows={rows}
             styleOptions={styleOptions}
-            transferCap={transferCap}
+            allowedStyleCodeIds={
+              allowedStyleCodeIds.size > 0 ? allowedStyleCodeIds : undefined
+            }
             loadingStyles={loadingStyles}
             saving={saving}
-            transferLoading={transferLoading}
+            transferLoading={false}
             onAddRow={addRow}
             onRemoveRow={removeRow}
             onStyleSelect={onStyleSelect}
@@ -321,94 +333,53 @@ export function VendorFinalCheckingProcessDrawer({
           />
 
           <div className={CRM.drawerSection}>
-            <div className={CRM.drawerSectionHead}>{sec.m2}. M2 reroute (rework floor)</div>
-            <div className="p-3 grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-              <div>
-                <label className={CRM.label}>Destination</label>
-                <select
-                  className={CRM.select}
-                  value={m2TransferTo}
-                  onChange={(e) => setM2TransferTo(e.target.value as FinalCheckingM2TransferToFloorKey)}
-                  disabled={transferLoading}
-                >
-                  {M2_TRANSFER_DEST_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className={CRM.label}>Quantity</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={m2Avail || undefined}
-                  className={CRM.input}
-                  value={m2TransferQty}
-                  placeholder={m2Avail ? `Max ${m2Avail}` : "0"}
-                  onChange={(e) => setM2TransferQty(e.target.value)}
-                  disabled={transferLoading || m2Avail <= 0}
-                />
-              </div>
-              <div>
-                <button
-                  type="button"
-                  className={`${CRM.btnSuccess} w-full sm:w-auto`}
-                  disabled={transferLoading || m2Avail <= 0}
-                  onClick={() => void submitM2Transfer()}
-                >
-                  {transferLoading ? "…" : (
-                    <>
-                      <i className="ri-arrow-right-up-line" /> Transfer M2
-                    </>
-                  )}
-                </button>
-              </div>
+            <div className={CRM.drawerSectionHead}>
+              {sec.container}. Container for Dispatch (optional)
             </div>
-          </div>
-
-          <div className={CRM.drawerSection}>
-            <div className={CRM.drawerSectionHead}>{sec.repair}. Repair details</div>
-            <div className="p-3 space-y-3">
-              <div>
-                <label className={CRM.label}>Repair status</label>
-                <select
-                  className={CRM.select}
-                  value={repairStatus}
-                  onChange={(e) => setRepairStatus(e.target.value as RepairStatus)}
-                  disabled={saving || transferLoading}
-                >
-                  <option value="NOT_REQUIRED">Not required</option>
-                  <option value="REQUIRED">Required</option>
-                  <option value="IN_PROGRESS">In progress</option>
-                  <option value="REPAIRED">Repaired</option>
-                </select>
-              </div>
-              <textarea
-                className={`${CRM.input} h-24 resize-none`}
-                placeholder="Notes about repair items..."
-                value={repairRemarks}
-                onChange={(e) => setRepairRemarks(e.target.value)}
-                disabled={saving || transferLoading}
+            <div className="p-3 space-y-2">
+              <p className="text-[10px] text-gray-600 leading-snug">
+                Filled = PATCH includes <code className="text-[10px]">existingContainerBarcode</code> + staging flag (like branding). Empty = save QC only.
+              </p>
+              <label className={CRM.label}>Existing container barcode / id</label>
+              <input
+                type="text"
+                className={`${CRM.input} font-mono border-purple-200 focus:border-purple-500`}
+                placeholder="Scan or paste — only if staging toward Dispatch now"
+                value={stagingContainerBarcode}
+                onChange={(e) => setStagingContainerBarcode(e.target.value)}
+                disabled={saving}
               />
             </div>
           </div>
         </div>
 
-        <div className={CRM.drawerFooterBar}>
-          <button type="button" onClick={onClose} className={CRM.btnDrawerCancel} disabled={transferLoading || saving}>
-            Cancel
-          </button>
-          <button type="button" onClick={() => void handleSave()} className={CRM.btnPrimary} disabled={transferLoading || saving}>
-            {saving ? "…" : (
-              <>
-                <i className="ri-save-line text-xs" /> Save only
-              </>
-            )}
-          </button>
+        <div className="relative z-10 shrink-0 pointer-events-auto flex flex-col gap-1 p-3 border-t-2 border-gray-300 bg-gray-50">
+          <div className="flex justify-end gap-2 flex-wrap">
+            <button type="button" onClick={onClose} className={CRM.btnDrawerCancel} disabled={saving}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void handleSave();
+              }}
+              className={CRM.btnPrimary}
+              disabled={saving}
+            >
+              {saving ? "…" : (
+                <>
+                  <i className="ri-save-line text-xs" />{" "}
+                  {stagingContainerBarcode.trim() ? "Save & stage to Dispatch" : "Save only"}
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </>
   );
+
+  return createPortal(drawer, portalEl);
 }

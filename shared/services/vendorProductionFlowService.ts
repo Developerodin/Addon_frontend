@@ -58,6 +58,9 @@ export type BrandingFloorPatchPayload =
       mode?: "replace";
       transferredData?: TransferredDataRow[];
       receivedData?: ReceivedDataRow[];
+      /** Required on the same PATCH when `autoTransferToNextFloor` stages to final checking (see §2.A.1 vendor doc). */
+      existingContainerBarcode?: string;
+      autoTransferToNextFloor?: boolean;
     }
   | { mode: "increment"; completedDelta: number; autoTransferToNextFloor?: boolean };
 
@@ -99,6 +102,8 @@ export interface VendorProductionFlow {
     boarding: BaseFloorQuantity;
     branding: BrandingFloorQuantity;
     finalChecking: FinalCheckingFloorQuantity;
+    /** Present when API returns dispatch floor; increments on container accept at Dispatch. */
+    dispatch?: BaseFloorQuantity;
   };
   createdAt?: string;
   updatedAt?: string;
@@ -117,19 +122,35 @@ export interface UpdateFloorPayload {
   [key: string]: any;
 }
 
-/** Destinations allowed by PATCH .../transfer when moving out of a checking floor */
-export type VendorTransferToFloorKey = "washing" | "boarding" | "branding" | "finalChecking";
+export type VendorTransferFromFloorKey =
+  | "secondaryChecking"
+  | "branding"
+  | "finalChecking";
+export type VendorTransferToFloorKey = "branding" | "finalChecking" | "dispatch";
 
+export type VendorTransferItem = {
+  transferred: number;
+  styleCode?: string;
+  brand?: string;
+};
+
+/**
+ * PATCH `${baseUrl}/:vendorProductionFlowId/transfer`
+ *
+ * Doc contract:
+ * - required: fromFloorKey, toFloorKey, quantity
+ * - secondary → branding & branding → finalChecking: send `existingContainerBarcode` (barcode or 24-char id)
+ * - branding → finalChecking additionally requires `transferItems` (style-wise breakdown) whose sum = quantity
+ * - finalChecking → dispatch: `transferItems` + `existingContainerBarcode` when staging to dispatch on a bag (if backend supports this leg)
+ * - response may include `vendorTransferContainer` for scanning on destination
+ */
 export interface TransferProductionFlowPayload {
-  fromFloorKey: "secondaryChecking" | "finalChecking";
+  fromFloorKey: VendorTransferFromFloorKey;
   toFloorKey: VendorTransferToFloorKey;
-  /**
-   * Prefer `mode: "increment"` with `quantityDelta` (additive, idempotent counters).
-   * `quantity` is kept for backward compatibility with older backend versions.
-   */
-  mode?: "increment";
-  quantityDelta?: number;
-  quantity?: number;
+  quantity: number;
+  /** Reuse an existing `containers_masters` row (barcode or Mongo `_id`). Required for secondary→branding / branding→finalChecking. */
+  existingContainerBarcode?: string;
+  transferItems?: VendorTransferItem[];
 }
 
 export type FinalCheckingM2TransferToFloorKey = "washing" | "boarding" | "branding";
@@ -137,6 +158,7 @@ export type FinalCheckingM2TransferToFloorKey = "washing" | "boarding" | "brandi
 export interface FinalCheckingM2TransferPayload {
   toFloorKey: FinalCheckingM2TransferToFloorKey;
   quantity: number;
+  remarks?: string;
 }
 
 export interface ConfirmFinalQualityPayload {
@@ -204,9 +226,21 @@ async function requestJson<T>(url: string, options: RequestInit = {}): Promise<T
 const baseUrl = `${API_BASE_URL}/vendor-management/production-flow`;
 
 export const vendorProductionFlowService = {
-  list: async (params: { vendor?: string; page?: number; limit?: number } = {}): Promise<{ results: VendorProductionFlow[]; totalResults: number }> => {
+  list: async (
+    params: {
+      vendor?: string;
+      vendorPurchaseOrder?: string;
+      product?: string;
+      currentFloorKey?: VendorFloorKey;
+      page?: number;
+      limit?: number;
+    } = {}
+  ): Promise<{ results: VendorProductionFlow[]; totalResults: number }> => {
     const sp = new URLSearchParams();
     if (params.vendor) sp.set("vendor", params.vendor);
+    if (params.vendorPurchaseOrder) sp.set("vendorPurchaseOrder", params.vendorPurchaseOrder);
+    if (params.product) sp.set("product", params.product);
+    if (params.currentFloorKey) sp.set("currentFloorKey", params.currentFloorKey);
     if (params.page) sp.set("page", String(params.page));
     if (params.limit) sp.set("limit", String(params.limit));
     return requestJson(`${baseUrl}?${sp.toString()}`, { method: "GET" });
@@ -231,8 +265,12 @@ export const vendorProductionFlowService = {
   },
 
   /**
-   * Move quantity from a checking floor’s M1 pool (m1Quantity − m1Transferred) to the next floor.
-   * Updates transferred / m1Transferred / remaining on source and received / remaining on destination; sets currentFloorKey.
+   * Transfer quantity forward in the vendor pipeline.
+   *
+   * NOTE (container legs):
+   * - Secondary → branding and branding → finalChecking stage a container.
+   * - Destination `received` updates only after barcode accept on destination floor.
+   * - `currentFloorKey` stays on the sending floor until the container is accepted.
    */
   transfer: async (flowId: string, payload: TransferProductionFlowPayload): Promise<VendorProductionFlow> => {
     return requestJson(`${baseUrl}/${flowId}/transfer`, {

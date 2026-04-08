@@ -53,7 +53,7 @@ export function FinalCheckingInboundReceived({ receivedData, styleOptions, secti
     }
 
     const rows = Array.from(byKey.values()).map((r) => {
-      if (!r.styleCodeId) return { ...r, label: "Unassigned" };
+      if (!r.styleCodeId) return { ...r, label: "Unassigned" as const };
       const opt = styleOptions.find((o) => styleOptionId(o) === r.styleCodeId);
       if (opt) return { ...r, label: `${opt.styleCode} — ${opt.brand}` };
       const fallbackBrand = r.brand ? ` — ${r.brand}` : "";
@@ -85,7 +85,7 @@ export function FinalCheckingInboundReceived({ receivedData, styleOptions, secti
                 key={s.key}
                 className="text-[10px] text-gray-700 bg-white border border-gray-100 rounded px-2 py-1.5 flex flex-wrap justify-between gap-2"
               >
-                <span className="font-medium">{(s as any).label}</span>
+                <span className="font-medium">{s.label}</span>
                 <span className="text-gray-500">
                   lines {s.lines.toLocaleString()}
                   {s.transferredSum > 0 ? ` · line transferred ${s.transferredSum.toLocaleString()}` : ""}
