@@ -8,6 +8,7 @@ import OrderViewModal from "../../../shared/components/production/OrderViewModal
 import OrderLogsModal from "../../../shared/components/production/OrderLogsModal";
 import ArticleLogsModal from "../../../shared/components/production/ArticleLogsModal";
 import { productionService, OrderFilters, ArticleWiseReportArticle, ArticleWiseReportResponse } from "@/shared/services/productionService";
+import YarnEstimationTab from "../../../shared/components/production/YarnEstimationTab";
 
 interface ProductionOrder {
   id: string;
@@ -32,7 +33,7 @@ interface FloorQuantity {
 }
 
 
-type SupervisorTab = 'orders' | 'article-view';
+type SupervisorTab = 'orders' | 'article-view' | 'yarn-estimation';
 
 const ProductionSupervisorPage = () => {
   const [activeTab, setActiveTab] = useState<SupervisorTab>('orders');
@@ -463,12 +464,23 @@ const ProductionSupervisorPage = () => {
             >
               Article view
             </button>
+            <button
+              type="button"
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${
+                activeTab === 'yarn-estimation' ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setActiveTab('yarn-estimation')}
+            >
+              Yarn Estimation
+            </button>
           </div>
         </div>
 
         {/* Content */}
         <div className="min-h-[300px]">
-              {activeTab === 'article-view' ? (
+              {activeTab === 'yarn-estimation' ? (
+                <YarnEstimationTab />
+              ) : activeTab === 'article-view' ? (
                 <>
                   <div className="p-[10px] mb-2 flex flex-wrap items-center gap-2">
                     <input
