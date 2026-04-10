@@ -1808,12 +1808,27 @@ const ProductListPage = () => {
           const data = new Uint8Array(e.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array' });
 
-          // Parse BOM Sheet
-          const bomSheet = workbook.Sheets['BOM'];
-          if (!bomSheet) {
-            throw new Error('BOM sheet not found in the Excel file');
+          // Parse BOM Sheet — try exact match, then case-insensitive, then fall back to first sheet
+          const sheetNames = workbook.SheetNames;
+          if (sheetNames.length === 0) {
+            throw new Error('The Excel file contains no sheets');
           }
-          const bomData = XLSX.utils.sheet_to_json<any>(bomSheet);
+
+          let bomSheetName = sheetNames.find((name: string) => name === 'BOM')
+            || sheetNames.find((name: string) => name.toLowerCase() === 'bom')
+            || sheetNames[0];
+
+          const bomSheet = workbook.Sheets[bomSheetName];
+          const rawBomData = XLSX.utils.sheet_to_json<any>(bomSheet);
+
+          // Normalize column headers by trimming whitespace
+          const bomData = rawBomData.map((row: any) => {
+            const normalized: any = {};
+            Object.keys(row).forEach((key) => {
+              normalized[key.trim()] = row[key];
+            });
+            return normalized;
+          });
           console.log('Parsed BOM data:', bomData);
 
           // Filter out rows without required fields
