@@ -12,6 +12,10 @@ import vendorProductionFlowService, {
 import { formatTransferredRowLabel } from "../utils/transferredStyleRows";
 import { productionFlowListParams } from "../utils/vendorPoProductionFlowList";
 import { VendorBrandingProcessDrawer } from "./components/VendorBrandingProcessDrawer";
+import {
+  VendorBrandingStagingModal,
+  type PendingBrandingStagingPatch,
+} from "./components/VendorBrandingStagingModal";
 import { VendorScanContainerDrawer } from "../components/VendorScanContainerDrawer";
 
 const BrandingPage = () => {
@@ -25,6 +29,11 @@ const BrandingPage = () => {
   );
   const [isProcessing, setIsProcessing] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
+  const [brandingStagingOpen, setBrandingStagingOpen] = useState(false);
+  const [brandingStagingFlow, setBrandingStagingFlow] =
+    useState<VendorProductionFlow | null>(null);
+  const [brandingStagingPatch, setBrandingStagingPatch] =
+    useState<PendingBrandingStagingPatch | null>(null);
 
   const loadFlows = useCallback(async () => {
     setLoading(true);
@@ -98,6 +107,25 @@ const BrandingPage = () => {
     );
   }, []);
 
+  const handleBrandingStagingRequested = useCallback(
+    (ctx: {
+      flow: VendorProductionFlow;
+      patch: PendingBrandingStagingPatch;
+    }) => {
+      setBrandingStagingFlow(ctx.flow);
+      setBrandingStagingPatch(ctx.patch);
+      setIsProcessing(false);
+      queueMicrotask(() => setBrandingStagingOpen(true));
+    },
+    [],
+  );
+
+  const closeBrandingStagingModal = useCallback(() => {
+    setBrandingStagingOpen(false);
+    setBrandingStagingFlow(null);
+    setBrandingStagingPatch(null);
+  }, []);
+
   if (loading) {
     return (
       <div className={CRM.mainContent}>
@@ -119,7 +147,7 @@ const BrandingPage = () => {
           <h1 className={CRM.pageTitle}>Branding Stage</h1>
           <HelpIcon
             title="Branding Supervisor"
-            content="Pipeline: secondaryChecking → branding → finalChecking → dispatch. In Process: save style breakdown (transferredData); completed is server-calculated. Optionally enter a container barcode to stage transferItems to Final Checking (then scan there to receive)."
+            content="Table shows API received, completed, remaining, and scalar transferred (handoff to next floor), plus style lines. In Process: Save sends delta transferredData; counters stay server-side. Save & stage opens the container modal; PATCH adds existingContainerBarcode + autoTransferToNextFloor."
           />
         </div>
         <div className="flex items-center gap-2">
@@ -177,7 +205,18 @@ const BrandingPage = () => {
                   <th className={CRM.th}>Batch / Reference</th>
                   <th className={CRM.th}>Vendor &amp; PO</th>
                   <th className={CRM.thRight}>Received</th>
-                  <th className={CRM.thRight}>Branded</th>
+                  <th className={CRM.thRight} title="Line-attributed completed (from API)">
+                    Completed
+                  </th>
+                  <th className={CRM.thRight} title="API remaining on branding floor">
+                    Remaining
+                  </th>
+                  <th
+                    className={CRM.thRight}
+                    title="Scalar handed off toward next floor (not line breakdown)"
+                  >
+                    Transferred
+                  </th>
                   <th className={CRM.th}>Style breakdown</th>
                   <th className={CRM.th}>Action</th>
                 </tr>
@@ -186,7 +225,7 @@ const BrandingPage = () => {
                 {paginatedFlows.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={8}
                       className={`${CRM.emptyWrap} py-20 text-center`}
                     >
                       No branding tasks found
@@ -222,12 +261,22 @@ const BrandingPage = () => {
                           </div>
                         </td>
                         <td className={`${CRM.td} text-right font-medium`}>
-                          {br.received.toLocaleString()}
+                          {(br.received ?? 0).toLocaleString()}
                         </td>
                         <td
                           className={`${CRM.td} text-right font-bold text-emerald-600`}
                         >
-                          {br.completed.toLocaleString()}
+                          {(br.completed ?? 0).toLocaleString()}
+                        </td>
+                        <td
+                          className={`${CRM.td} text-right font-medium text-amber-900`}
+                        >
+                          {(br.remaining ?? 0).toLocaleString()}
+                        </td>
+                        <td
+                          className={`${CRM.td} text-right font-medium text-purple-800`}
+                        >
+                          {(br.transferred ?? 0).toLocaleString()}
                         </td>
                         <td className={CRM.td}>
                           <div className="text-[10px] flex flex-wrap gap-1">
@@ -297,6 +346,15 @@ const BrandingPage = () => {
         flow={selectedFlow}
         onClose={() => setIsProcessing(false)}
         onSaved={handleBrandingSaved}
+        onStagingRequested={handleBrandingStagingRequested}
+      />
+
+      <VendorBrandingStagingModal
+        open={brandingStagingOpen}
+        baselineFlow={brandingStagingFlow}
+        pendingPatch={brandingStagingPatch}
+        onClose={closeBrandingStagingModal}
+        onFloorUpdated={handleBrandingSaved}
       />
 
       <VendorScanContainerDrawer

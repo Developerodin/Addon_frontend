@@ -23,6 +23,7 @@ import {
   allowedStyleCodeIdsFromInbound,
   initialFinalCheckingStyleRows,
 } from "../finalCheckingInboundAggregates";
+import type { PendingFinalCheckingStagingPatch } from "./VendorFinalCheckingDispatchStagingModal";
 
 function m1AvailableToTransfer(fc: FinalCheckingFloorQuantity): number {
   return Math.max(0, (fc.m1Quantity ?? 0) - (fc.m1Transferred ?? 0));
@@ -33,14 +34,20 @@ type Props = {
   flow: VendorProductionFlow | null;
   onClose: () => void;
   onSaved: (updated: VendorProductionFlow) => void;
+  /** Close drawer and open dispatch staging modal (container scan), like branding / secondary M1. */
+  onStagingRequested: (ctx: {
+    flow: VendorProductionFlow;
+    patch: PendingFinalCheckingStagingPatch;
+  }) => void;
 };
 
-/** Final QC drawer: M1/M2/M4 counts, style `transferredData`, optional dispatch container. */
+/** Final QC drawer: M1/M2/M4 counts, style `transferredData`; dispatch staging opens a container-scan modal (parent). */
 export function VendorFinalCheckingProcessDrawer({
   open,
   flow,
   onClose,
   onSaved,
+  onStagingRequested,
 }: Props) {
   const [m2Quantity, setM2Quantity] = useState(0);
   const [m4Quantity, setM4Quantity] = useState(0);
@@ -49,8 +56,6 @@ export function VendorFinalCheckingProcessDrawer({
   const [loadingStyles, setLoadingStyles] = useState(false);
   const [saving, setSaving] = useState(false);
   const [vendorCodeResolved, setVendorCodeResolved] = useState<string | null>(null);
-  /** Existing bag to stage FC → dispatch (same contract as branding → final: PATCH + auto-transfer). */
-  const [stagingContainerBarcode, setStagingContainerBarcode] = useState("");
   /** Render in `document.body` so parent layout/stacking cannot block footer clicks (same as branding drawer). */
   const [portalEl, setPortalEl] = useState<HTMLElement | null>(null);
   useEffect(() => {
@@ -81,7 +86,6 @@ export function VendorFinalCheckingProcessDrawer({
     setM2Quantity(fc.m2Quantity ?? 0);
     setM4Quantity(fc.m4Quantity ?? 0);
     setRows(initialFinalCheckingStyleRows(fc));
-    setStagingContainerBarcode("");
   }, [open, flow?.id]);
 
   const loadStyles = useCallback(async () => {
@@ -160,47 +164,29 @@ export function VendorFinalCheckingProcessDrawer({
     setRows((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
   };
 
-  const handleSave = async () => {
+  const buildBasePatch = (f: VendorProductionFlow): PendingFinalCheckingStagingPatch => {
+    const fcPersist = f.floorQuantities.finalChecking;
+    return {
+      mode: "replace",
+      transferredData: toTransferredPayloadRows(rows, styleOptions),
+      m1Quantity: Math.max(0, Number(m1Quantity) || 0),
+      m2Quantity: Math.max(0, Number(m2Quantity) || 0),
+      m4Quantity: Math.max(0, Number(m4Quantity) || 0),
+      repairStatus: fcPersist.repairStatus ?? "NOT_REQUIRED",
+      repairRemarks: (fcPersist.repairRemarks ?? "").trim(),
+    };
+  };
+
+  const handleSaveOnly = async () => {
     if (!flow) return;
-    const bar = stagingContainerBarcode.trim();
-    if (bar) {
-      const items = toVendorTransferItems(rows, styleOptions);
-      const sum = items.reduce((s, i) => s + i.transferred, 0);
-      if (sum <= 0) {
-        toast.error("Enter M1 style line quantities > 0 before staging on a container.");
-        return;
-      }
-    }
     setSaving(true);
     try {
-      const fcPersist = flow.floorQuantities.finalChecking;
-      const patchPayload: Parameters<
-        typeof vendorProductionFlowService.updateFloor
-      >[2] = {
-        mode: "replace",
-        transferredData: toTransferredPayloadRows(rows, styleOptions),
-        m1Quantity: Math.max(0, Number(m1Quantity) || 0),
-        m2Quantity: Math.max(0, Number(m2Quantity) || 0),
-        m4Quantity: Math.max(0, Number(m4Quantity) || 0),
-        repairStatus: fcPersist.repairStatus ?? "NOT_REQUIRED",
-        repairRemarks: (fcPersist.repairRemarks ?? "").trim(),
-      };
-      if (bar) {
-        patchPayload.existingContainerBarcode = bar;
-        patchPayload.autoTransferToNextFloor = true;
-      }
       const updated = await vendorProductionFlowService.updateFloor(
         flow.id,
         "finalChecking",
-        patchPayload,
+        buildBasePatch(flow),
       );
-      if (!bar) {
-        toast.success("Final quality details saved");
-      } else {
-        toast.success(
-          "Saved + staged on container — scan on Dispatch when the flow moves there to receive.",
-        );
-      }
+      toast.success("Final quality details saved");
       onSaved(updated);
       onClose();
     } catch (e: unknown) {
@@ -211,6 +197,24 @@ export function VendorFinalCheckingProcessDrawer({
     }
   };
 
+  /** Validates M1 lines, then parent closes drawer and opens container scan modal. */
+  const handleSaveAndStage = () => {
+    if (!flow) return;
+    if (totalTransferred > transferCap) {
+      toast.error(
+        `M1 row total cannot exceed inbound received (${transferCap.toLocaleString()}).`,
+      );
+      return;
+    }
+    const items = toVendorTransferItems(rows, styleOptions);
+    const sum = items.reduce((s, i) => s + i.transferred, 0);
+    if (sum <= 0) {
+      toast.error("Enter M1 style line quantities > 0 before staging on a container.");
+      return;
+    }
+    onStagingRequested({ flow, patch: buildBasePatch(flow) });
+  };
+
   if (!open || !flow || !finalLive) return null;
   if (!portalEl) return null;
 
@@ -218,7 +222,6 @@ export function VendorFinalCheckingProcessDrawer({
     inbound: "1",
     qc: "2",
     transfer: "3",
-    container: "4",
   };
 
   const drawer = (
@@ -249,9 +252,9 @@ export function VendorFinalCheckingProcessDrawer({
 
         <div className={`${CRM.drawerBodyScroll} min-h-0`}>
           <p className={CRM.drawerHint}>
-            <strong>Final QC:</strong> M1 rows ≤ inbound <code className="text-[10px]">receivedData</code>. Container field (optional) =
-            branding-style <code className="text-[10px]">existingContainerBarcode</code> + <code className="text-[10px]">autoTransferToNextFloor</code>{" "}
-            toward Dispatch.
+            <strong>Final QC:</strong> M1 rows ≤ inbound <code className="text-[10px]">receivedData</code>.{" "}
+            <strong>Save</strong> updates QC only. <strong>Save &amp; stage to Dispatch</strong> closes this drawer and opens the{" "}
+            <strong>container scan</strong> modal (empty bag + PATCH with <code className="text-[10px]">autoTransferToNextFloor</code>), same pattern as secondary checking M1.
           </p>
 
           <VendorFloorBatchSummary
@@ -331,51 +334,58 @@ export function VendorFinalCheckingProcessDrawer({
             onStyleSelect={onStyleSelect}
             onQtyChange={(index, value) => updateRow(index, { transferred: value })}
           />
-
-          <div className={CRM.drawerSection}>
-            <div className={CRM.drawerSectionHead}>
-              {sec.container}. Container for Dispatch (optional)
-            </div>
-            <div className="p-3 space-y-2">
-              <p className="text-[10px] text-gray-600 leading-snug">
-                Filled = PATCH includes <code className="text-[10px]">existingContainerBarcode</code> + staging flag (like branding). Empty = save QC only.
-              </p>
-              <label className={CRM.label}>Existing container barcode / id</label>
-              <input
-                type="text"
-                className={`${CRM.input} font-mono border-purple-200 focus:border-purple-500`}
-                placeholder="Scan or paste — only if staging toward Dispatch now"
-                value={stagingContainerBarcode}
-                onChange={(e) => setStagingContainerBarcode(e.target.value)}
-                disabled={saving}
-              />
-            </div>
-          </div>
         </div>
 
-        <div className="relative z-10 shrink-0 pointer-events-auto flex flex-col gap-1 p-3 border-t-2 border-gray-300 bg-gray-50">
-          <div className="flex justify-end gap-2 flex-wrap">
-            <button type="button" onClick={onClose} className={CRM.btnDrawerCancel} disabled={saving}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                void handleSave();
-              }}
-              className={CRM.btnPrimary}
-              disabled={saving}
-            >
-              {saving ? "…" : (
-                <>
-                  <i className="ri-save-line text-xs" />{" "}
-                  {stagingContainerBarcode.trim() ? "Save & stage to Dispatch" : "Save only"}
-                </>
-              )}
-            </button>
-          </div>
+        <div
+          className={`${CRM.drawerFooterBar} flex-wrap relative z-10 shrink-0 pointer-events-auto`}
+        >
+          <button type="button" onClick={onClose} className={CRM.btnDrawerCancel} disabled={saving}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              void handleSaveOnly();
+            }}
+            className={CRM.btnSecondary}
+            disabled={saving || totalTransferred > transferCap}
+            title={
+              totalTransferred > transferCap
+                ? "M1 row total cannot exceed inbound received"
+                : undefined
+            }
+          >
+            {saving ? "…" : (
+              <>
+                <i className="ri-save-line text-xs" /> Save
+              </>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleSaveAndStage();
+            }}
+            className={CRM.btnPrimary}
+            disabled={
+              saving ||
+              totalTransferred > transferCap ||
+              totalTransferred <= 0
+            }
+            title={
+              totalTransferred > transferCap
+                ? "M1 row total cannot exceed inbound received"
+                : totalTransferred <= 0
+                  ? "Enter M1 quantities on style rows to stage"
+                  : undefined
+            }
+          >
+            <i className="ri-inbox-archive-line text-xs" /> Save &amp; stage to Dispatch
+          </button>
         </div>
       </div>
     </>
