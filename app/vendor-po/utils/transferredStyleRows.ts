@@ -9,6 +9,8 @@ export type TransferredStyleRowDraft = {
   styleCodeId: string;
   brand: string;
   transferred: number;
+  /** Populated for rows loaded from API `transferredData` (branding drawer: read-only). */
+  fromServer?: boolean;
 };
 
 /** Backend may return `id` or `_id` for StyleCode — must match `<option value>` and PATCH `styleCode`. */
@@ -20,13 +22,41 @@ export function styleOptionId(s: StyleCodeByVendorRow): string {
 
 export function rowsFromTransferredApi(
   data: TransferredDataRow[] | undefined,
+  opts?: { markRowsFromServer?: boolean },
 ): TransferredStyleRowDraft[] {
   if (!data?.length) return [{ styleCodeId: "", brand: "", transferred: 0 }];
+  const mark = opts?.markRowsFromServer ?? false;
   return data.map((r) => ({
     styleCodeId: (r.styleCode ?? "").trim(),
     brand: (r.brand ?? "").trim(),
     transferred: Math.max(0, Number(r.transferred) || 0),
+    ...(mark ? { fromServer: true as const } : {}),
   }));
+}
+
+/** New (non-server) row with qty or style chosen — exclude blank spacer rows from PATCH. */
+export function isMeaningfulEditableTransferredRow(
+  r: TransferredStyleRowDraft,
+): boolean {
+  const t = Math.max(0, Number(r.transferred) || 0);
+  if (t > 0) return true;
+  return Boolean(r.styleCodeId.trim());
+}
+
+/**
+ * Branding PATCH: send only new (non-server) lines with qty &gt; 0. Server merges into
+ * existing `transferredData` by trimmed styleCode + brand (see vendor branding floor API).
+ */
+export function brandingDeltaTransferredRows(
+  rows: TransferredStyleRowDraft[],
+  styleOptions: StyleCodeByVendorRow[],
+): TransferredDataRow[] {
+  const editable = rows.filter(
+    (r) => !r.fromServer && isMeaningfulEditableTransferredRow(r),
+  );
+  return toTransferredPayloadRows(editable, styleOptions).filter(
+    (row) => (Number(row.transferred) || 0) > 0,
+  );
 }
 
 export function toTransferredPayloadRows(

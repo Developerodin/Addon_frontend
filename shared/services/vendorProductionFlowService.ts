@@ -49,8 +49,10 @@ export type BoardingFloorPatchPayload =
   | { mode: "increment"; completedDelta: number; autoTransferToNextFloor?: boolean };
 
 /**
- * Branding floor: counters + optional `transferredData` breakdown (style id + brand per row).
- * Prefer `mode: "replace"` when sending full `transferredData` (replaces the array server-side).
+ * Branding floor: send `transferredData` as **delta** lines only (qty &gt; 0). Server merges
+ * by trimmed styleCode + brand, recalculates completed/transferred/remaining; do not send
+ * completed / transferred / remaining (or *Delta) when patching lines.
+ * Optional `mode: "replace"` only if the backend still supports full-array replace.
  */
 export type BrandingFloorPatchPayload =
   | {
@@ -58,7 +60,7 @@ export type BrandingFloorPatchPayload =
       mode?: "replace";
       transferredData?: TransferredDataRow[];
       receivedData?: ReceivedDataRow[];
-      /** Required on the same PATCH when `autoTransferToNextFloor` stages to final checking (see §2.A.1 vendor doc). */
+      /** Same PATCH as `autoTransferToNextFloor` when staging branding → final checking. */
       existingContainerBarcode?: string;
       autoTransferToNextFloor?: boolean;
     }

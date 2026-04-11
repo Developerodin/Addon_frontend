@@ -6,10 +6,15 @@ import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { CRM } from "../vendor-list/crmUiClasses";
 import vendorProductionFlowService, {
+  mergeProductionFlowPreservePopulatedRefs,
   VendorProductionFlow,
 } from "@/shared/services/vendorProductionFlowService";
 import { formatTransferredRowLabel } from "../utils/transferredStyleRows";
 import { VendorFinalCheckingProcessDrawer } from "./components/VendorFinalCheckingProcessDrawer";
+import {
+  VendorFinalCheckingDispatchStagingModal,
+  type PendingFinalCheckingStagingPatch,
+} from "./components/VendorFinalCheckingDispatchStagingModal";
 import { VendorScanContainerDrawer } from "../components/VendorScanContainerDrawer";
 import { productionFlowListParams } from "../utils/vendorPoProductionFlowList";
 
@@ -25,6 +30,11 @@ const FinalCheckingPage = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [scanOpen, setScanOpen] = useState(false);
+  const [finalStagingOpen, setFinalStagingOpen] = useState(false);
+  const [finalStagingFlow, setFinalStagingFlow] =
+    useState<VendorProductionFlow | null>(null);
+  const [finalStagingPatch, setFinalStagingPatch] =
+    useState<PendingFinalCheckingStagingPatch | null>(null);
 
   const loadFlows = useCallback(async () => {
     setLoading(true);
@@ -71,14 +81,54 @@ const FinalCheckingPage = () => {
   }, [filteredFlows, currentPage, itemsPerPage]);
 
   const handleOpenProcess = (flow: VendorProductionFlow) => {
+    setScanOpen(false);
+    setFinalStagingOpen(false);
+    setFinalStagingFlow(null);
+    setFinalStagingPatch(null);
     setSelectedFlow(flow);
     setIsProcessing(true);
   };
 
-  const handleFinalSaved = useCallback((updated: VendorProductionFlow) => {
-    setFlows((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
-    setSelectedFlow(updated);
-    setIsProcessing(false);
+  const mergeFinalFlowInState = useCallback((updated: VendorProductionFlow) => {
+    setFlows((prev) =>
+      prev.map((f) =>
+        f.id === updated.id
+          ? mergeProductionFlowPreservePopulatedRefs(f, updated)
+          : f,
+      ),
+    );
+    setSelectedFlow((prev) =>
+      prev && prev.id === updated.id
+        ? mergeProductionFlowPreservePopulatedRefs(prev, updated)
+        : prev,
+    );
+  }, []);
+
+  const handleFinalSaved = useCallback(
+    (updated: VendorProductionFlow) => {
+      mergeFinalFlowInState(updated);
+      setIsProcessing(false);
+    },
+    [mergeFinalFlowInState],
+  );
+
+  const handleFinalStagingRequested = useCallback(
+    (ctx: {
+      flow: VendorProductionFlow;
+      patch: PendingFinalCheckingStagingPatch;
+    }) => {
+      setFinalStagingFlow(ctx.flow);
+      setFinalStagingPatch(ctx.patch);
+      setIsProcessing(false);
+      queueMicrotask(() => setFinalStagingOpen(true));
+    },
+    [],
+  );
+
+  const closeFinalStagingModal = useCallback(() => {
+    setFinalStagingOpen(false);
+    setFinalStagingFlow(null);
+    setFinalStagingPatch(null);
   }, []);
 
   const handleConfirmFinalQuality = async (id: string) => {
@@ -364,10 +414,19 @@ const FinalCheckingPage = () => {
         </div>
       </div>
       <VendorFinalCheckingProcessDrawer
-        open={isProcessing}
+        open={isProcessing && !!selectedFlow}
         flow={selectedFlow}
         onClose={() => setIsProcessing(false)}
         onSaved={handleFinalSaved}
+        onStagingRequested={handleFinalStagingRequested}
+      />
+
+      <VendorFinalCheckingDispatchStagingModal
+        open={finalStagingOpen}
+        baselineFlow={finalStagingFlow}
+        pendingPatch={finalStagingPatch}
+        onClose={closeFinalStagingModal}
+        onFloorUpdated={mergeFinalFlowInState}
       />
 
       <VendorScanContainerDrawer

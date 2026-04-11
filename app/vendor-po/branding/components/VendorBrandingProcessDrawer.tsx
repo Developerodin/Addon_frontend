@@ -14,12 +14,14 @@ import {
 } from "@/shared/services/productService";
 import { resolveVendorCodeForStyleLookup } from "../brandingFloorUtils";
 import {
+  brandingDeltaTransferredRows,
+  isMeaningfulEditableTransferredRow,
   rowsFromTransferredApi,
   styleOptionId,
-  toTransferredPayloadRows,
   toVendorTransferItems,
   type TransferredStyleRowDraft,
 } from "../../utils/transferredStyleRows";
+import type { PendingBrandingStagingPatch } from "./VendorBrandingStagingModal";
 export type BrandingRowDraft = TransferredStyleRowDraft;
 
 type Props = {
@@ -27,6 +29,11 @@ type Props = {
   flow: VendorProductionFlow | null;
   onClose: () => void;
   onSaved: (updated: VendorProductionFlow) => void;
+  /** Opens container modal (secondary-checking style); parent closes this drawer. */
+  onStagingRequested: (ctx: {
+    flow: VendorProductionFlow;
+    patch: PendingBrandingStagingPatch;
+  }) => void;
 };
 /** Branding: floor PATCH + optional transfer to Final (container + transferItems). */
 export function VendorBrandingProcessDrawer({
@@ -34,6 +41,7 @@ export function VendorBrandingProcessDrawer({
   flow,
   onClose,
   onSaved,
+  onStagingRequested,
 }: Props) {
   const [rows, setRows] = useState<TransferredStyleRowDraft[]>([
     { styleCodeId: "", brand: "", transferred: 0 },
@@ -44,8 +52,6 @@ export function VendorBrandingProcessDrawer({
   const [vendorCodeResolved, setVendorCodeResolved] = useState<string | null>(
     null,
   );
-  /** If set, after floor save we call `PATCH …/transfer` with `transferItems` + this barcode. */
-  const [stagingContainerBarcode, setStagingContainerBarcode] = useState("");
   /** Render drawer in `document.body` so layout `overflow` / stacking contexts cannot block clicks. */
   const [portalEl, setPortalEl] = useState<HTMLElement | null>(null);
   useEffect(() => {
@@ -53,25 +59,36 @@ export function VendorBrandingProcessDrawer({
   }, []);
   const receivedQty = flow?.floorQuantities.branding.received ?? 0;
   const remainingQty = flow?.floorQuantities.branding.remaining ?? 0;
-  /** Server-derived `completed`; used for line caps only (not sent on PATCH). */
+  const scalarTransferredOut =
+    flow?.floorQuantities.branding.transferred ?? 0;
+  /** Server-derived `completed` — shown in summary only; line cap follows received (API: lineSum ≤ received). */
   const completedFromServer = flow?.floorQuantities.branding.completed ?? 0;
-  const transferCap = useMemo(() => {
-    const r = Math.max(0, receivedQty);
-    const c = Math.max(0, Math.floor(completedFromServer));
-    if (c === 0) return r;
-    return Math.min(r, c);
-  }, [receivedQty, completedFromServer]);
+  const lineSumMax = useMemo(() => Math.max(0, receivedQty), [receivedQty]);
   const totalTransferred = useMemo(
     () =>
       rows.reduce((sum, r) => sum + Math.max(0, Number(r.transferred) || 0), 0),
+    [rows],
+  );
+  /** Qty on new (editable) lines only — staging requires this > 0. */
+  const newRowsTransferredTotal = useMemo(
+    () =>
+      rows
+        .filter(
+          (r) => !r.fromServer && isMeaningfulEditableTransferredRow(r),
+        )
+        .reduce(
+          (sum, r) => sum + Math.max(0, Number(r.transferred) || 0),
+          0,
+        ),
     [rows],
   );
 
   useEffect(() => {
     if (!open || !flow) return;
     const br = flow.floorQuantities.branding;
-    setRows(rowsFromTransferredApi(br.transferredData));
-    setStagingContainerBarcode("");
+    setRows(
+      rowsFromTransferredApi(br.transferredData, { markRowsFromServer: true }),
+    );
   }, [open, flow?.id]);
 
   const loadStyles = useCallback(async () => {
@@ -102,11 +119,19 @@ export function VendorBrandingProcessDrawer({
     if (open && flow) void loadStyles();
   }, [open, flow?.id, loadStyles]);
 
+  /** PATCH body: new rows with qty &gt; 0 only; server merges into stored breakdown. */
+  const deltaTransferredPayload = useMemo(
+    () => brandingDeltaTransferredRows(rows, styleOptions),
+    [rows, styleOptions],
+  );
+  const lineSumOverReceived = totalTransferred > lineSumMax;
+
   useEffect(() => {
     if (!open || !styleOptions.length) return;
     setRows((prev) => {
       let changed = false;
       const next = prev.map((r) => {
+        if (r.fromServer) return r;
         const sid = r.styleCodeId.trim();
         if (!sid || r.brand.trim()) return r;
         const opt = styleOptions.find((o) => styleOptionId(o) === sid);
@@ -125,6 +150,7 @@ export function VendorBrandingProcessDrawer({
     patch: Partial<TransferredStyleRowDraft>,
   ) => {
     setRows((prev) => {
+      if (!prev[index] || prev[index].fromServer) return prev;
       const next = [...prev];
       next[index] = {
         ...next[index],
@@ -158,9 +184,11 @@ export function VendorBrandingProcessDrawer({
   };
 
   const removeRow = (index: number) => {
-    setRows((prev) =>
-      prev.length <= 1 ? prev : prev.filter((_, i) => i !== index),
-    );
+    setRows((prev) => {
+      if (!prev[index] || prev[index].fromServer) return prev;
+      if (prev.length <= 1) return prev;
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   const handleSave = async () => {
@@ -168,48 +196,28 @@ export function VendorBrandingProcessDrawer({
       toast.error("Batch not loaded — close and open Process again.");
       return;
     }
-    if (totalTransferred > transferCap) {
+    if (lineSumOverReceived) {
       toast.error(
-        `Transfer qty cannot exceed available (${transferCap.toLocaleString()}). Reduce line quantities.`,
+        `Line total cannot exceed received (${lineSumMax.toLocaleString()}). Reduce quantities.`,
       );
       return;
     }
-    const bar = stagingContainerBarcode.trim();
-    if (bar) {
-      const preItems = toVendorTransferItems(rows, styleOptions);
-      const preSum = preItems.reduce((s, i) => s + i.transferred, 0);
-      if (preSum <= 0) {
-        toast.error(
-          "Enter style line quantities > 0 before staging on a container.",
-        );
-        return;
-      }
+    if (!deltaTransferredPayload.length) {
+      toast.error(
+        "Add a new row with quantity > 0 — Save sends delta lines only; recorded rows are not re-posted.",
+      );
+      return;
     }
     setSaving(true);
     try {
-      /** Backend auto-transfer (branding→final) requires container on this PATCH, not only on `/transfer`. */
-      const patchPayload: Parameters<
-        typeof vendorProductionFlowService.updateFloor
-      >[2] = {
-        mode: "replace",
-        transferredData: toTransferredPayloadRows(rows, styleOptions),
-      };
-      if (bar) {
-        patchPayload.existingContainerBarcode = bar;
-        patchPayload.autoTransferToNextFloor = true;
-      }
       const updated = await vendorProductionFlowService.updateFloor(
         flow.id,
         "branding",
-        patchPayload,
+        {
+          transferredData: deltaTransferredPayload,
+        },
       );
-      if (!bar) {
-        toast.success("Branding updated");
-      } else {
-        toast.success(
-          "Saved + staged on container — scan on Final Checking to receive.",
-        );
-      }
+      toast.success("Branding updated");
       onSaved(updated);
       onClose();
     } catch (e: unknown) {
@@ -218,6 +226,41 @@ export function VendorBrandingProcessDrawer({
     } finally {
       setSaving(false);
     }
+  };
+
+  /** Close drawer and open staging modal (container scan runs there, like secondary checking M1). */
+  const handleSaveAndStage = () => {
+    if (!flow) {
+      toast.error("Batch not loaded — close and open Process again.");
+      return;
+    }
+    if (lineSumOverReceived) {
+      toast.error(
+        `Line total cannot exceed received (${lineSumMax.toLocaleString()}). Reduce quantities.`,
+      );
+      return;
+    }
+    if (!deltaTransferredPayload.length) {
+      toast.error(
+        "Add a new row with quantity > 0 before staging — payload is delta transferredData only.",
+      );
+      return;
+    }
+    const newEditableRows = rows.filter(
+      (r) => !r.fromServer && isMeaningfulEditableTransferredRow(r),
+    );
+    const preItems = toVendorTransferItems(newEditableRows, styleOptions);
+    const preSum = preItems.reduce((s, i) => s + i.transferred, 0);
+    if (preSum <= 0) {
+      toast.error(
+        "Add a new row with quantity > 0 to stage — recorded lines are read-only.",
+      );
+      return;
+    }
+    const patch: PendingBrandingStagingPatch = {
+      transferredData: deltaTransferredPayload,
+    };
+    onStagingRequested({ flow, patch });
   };
 
   if (!open || !flow) return null;
@@ -255,42 +298,51 @@ export function VendorBrandingProcessDrawer({
 
         <div className={`${CRM.drawerBodyScroll} min-h-0`}>
           <p className={CRM.drawerHint}>
-            <strong>Save</strong> sends <code className="text-[10px]">transferredData</code>;{" "}
-            <code className="text-[10px]">completed</code> is server-side. If you enter a container below, the same{" "}
-            <code className="text-[10px]">PATCH …/floors/branding</code> also sends{" "}
-            <code className="text-[10px]">existingContainerBarcode</code> +{" "}
-            <code className="text-[10px]">autoTransferToNextFloor</code> (required to stage to Final Checking).{" "}
+            <strong>Save</strong> sends <strong>delta</strong>{" "}
+            <code className="text-[10px]">transferredData</code> (new rows with qty &gt; 0 only); the
+            server merges by style + brand and sets{" "}
+            <code className="text-[10px]">completed</code> / counters — do not send those scalars.
+            Recorded lines are <strong>read-only</strong>; use <strong>Row</strong> for new qty.{" "}
+            <strong>Save &amp; stage to Final FC</strong> opens the container modal: the same PATCH
+            adds <code className="text-[10px]">existingContainerBarcode</code> +{" "}
+            <code className="text-[10px]">autoTransferToNextFloor</code> with that delta.{" "}
             <span className="text-gray-600">
-              <code className="text-[10px]">receivedData[].transferred</code> = inbound line
-              qty, not floor outbound <code className="text-[10px]">transferred</code>.
+              <code className="text-[10px]">receivedData[].transferred</code> = inbound line qty, not
+              floor outbound <code className="text-[10px]">transferred</code>.
             </span>
           </p>
           <VendorFloorBatchSummary
             flow={flow}
             footerInfo={
               <>
-                Received: <strong>{receivedQty.toLocaleString()}</strong> · Remaining (derived):{" "}
-                <strong>{remainingQty.toLocaleString()}</strong> · Forward pool
-                (completed − transferred):{" "}
+                Received: <strong>{receivedQty.toLocaleString()}</strong> · Completed:{" "}
+                <strong className="text-emerald-700">
+                  {completedFromServer.toLocaleString()}
+                </strong>{" "}
+                · Remaining:{" "}
+                <strong className="text-amber-900">
+                  {remainingQty.toLocaleString()}
+                </strong>{" "}
+                · Transferred (handoff):{" "}
+                <strong className="text-purple-800">
+                  {scalarTransferredOut.toLocaleString()}
+                </strong>{" "}
+                · Forward pool (completed − handoff):{" "}
                 <strong className="text-purple-700">
                   {Math.max(
                     0,
-                    (flow.floorQuantities.branding.completed ?? 0) -
-                      (flow.floorQuantities.branding.transferred ?? 0),
+                    completedFromServer - scalarTransferredOut,
                   ).toLocaleString()}
                 </strong>{" "}
                 · Breakdown line total:{" "}
                 <strong
                   className={
-                    totalTransferred > transferCap
-                      ? "text-red-600"
-                      : "text-emerald-700"
+                    lineSumOverReceived ? "text-red-600" : "text-emerald-700"
                   }
                 >
                   {totalTransferred.toLocaleString()}
                 </strong>{" "}
-                (line cap: received
-                {completedFromServer > 0 ? ", min with server completed" : ""})
+                (max line sum = received {lineSumMax.toLocaleString()})
               </>
             }
           />
@@ -325,31 +377,51 @@ export function VendorBrandingProcessDrawer({
               {rows.map((row, index) => (
                 <div
                   key={index}
-                  className="grid grid-cols-1 sm:grid-cols-[1fr_minmax(0,120px)_auto] gap-2 items-end border border-gray-100 rounded-lg p-2 bg-gray-50/80"
+                  className={`grid grid-cols-1 sm:grid-cols-[1fr_minmax(0,120px)_auto] gap-2 items-end border rounded-lg p-2 ${
+                    row.fromServer
+                      ? "border-gray-200 bg-gray-100/90"
+                      : "border-gray-100 bg-gray-50/80"
+                  }`}
                 >
                   <div>
                     <label className={CRM.label}>Style / brand</label>
-                    <select
-                      className={CRM.select}
-                      value={row.styleCodeId}
-                      onChange={(e) => onStyleSelect(index, e.target.value)}
-                      disabled={saving || loadingStyles}
-                    >
-                      <option value="">Unspecified</option>
-                      {styleOptions.map((s) => {
-                        const sid = styleOptionId(s);
-                        if (!sid) return null;
-                        return (
-                          <option key={sid} value={sid}>
-                            {s.styleCode} — {s.brand}
-                          </option>
-                        );
-                      })}
-                    </select>
-                    {row.styleCodeId && row.brand && (
-                      <p className="text-[10px] text-gray-500 mt-0.5">
-                        Brand sent: {row.brand}
+                    {row.fromServer ? (
+                      <p className="text-[11px] font-medium text-gray-800 py-2 px-1">
+                        {row.styleCodeId
+                          ? styleOptions.find(
+                              (o) => styleOptionId(o) === row.styleCodeId,
+                            )?.styleCode ?? row.styleCodeId
+                          : "—"}{" "}
+                        — {row.brand || "—"}{" "}
+                        <span className="text-[10px] font-normal text-gray-500">
+                          (recorded)
+                        </span>
                       </p>
+                    ) : (
+                      <>
+                        <select
+                          className={CRM.select}
+                          value={row.styleCodeId}
+                          onChange={(e) => onStyleSelect(index, e.target.value)}
+                          disabled={saving || loadingStyles}
+                        >
+                          <option value="">Unspecified</option>
+                          {styleOptions.map((s) => {
+                            const sid = styleOptionId(s);
+                            if (!sid) return null;
+                            return (
+                              <option key={sid} value={sid}>
+                                {s.styleCode} — {s.brand}
+                              </option>
+                            );
+                          })}
+                        </select>
+                        {row.styleCodeId && row.brand ? (
+                          <p className="text-[10px] text-gray-500 mt-0.5">
+                            Brand sent: {row.brand}
+                          </p>
+                        ) : null}
+                      </>
                     )}
                   </div>
                   <div>
@@ -357,7 +429,7 @@ export function VendorBrandingProcessDrawer({
                     <input
                       type="number"
                       min={0}
-                      max={transferCap}
+                      max={lineSumMax}
                       className={CRM.input}
                       value={row.transferred}
                       onChange={(e) =>
@@ -365,7 +437,7 @@ export function VendorBrandingProcessDrawer({
                           transferred: Number(e.target.value),
                         })
                       }
-                      disabled={saving}
+                      disabled={saving || row.fromServer}
                     />
                   </div>
                   <div className="flex justify-end sm:justify-center pb-0.5">
@@ -373,7 +445,9 @@ export function VendorBrandingProcessDrawer({
                       type="button"
                       className={CRM.iconDanger}
                       onClick={() => removeRow(index)}
-                      disabled={saving || rows.length <= 1}
+                      disabled={
+                        saving || rows.length <= 1 || Boolean(row.fromServer)
+                      }
                       title="Remove row"
                     >
                       <i className="ri-delete-bin-line" />
@@ -383,33 +457,10 @@ export function VendorBrandingProcessDrawer({
               ))}
             </div>
           </div>
-
-          <div className={CRM.drawerSection}>
-            <div className={CRM.drawerSectionHead}>
-              2. Container for Final Checking (optional)
-            </div>
-            <div className="p-3 space-y-2">
-              <p className="text-[10px] text-gray-600 leading-snug">
-                If you fill this, <strong>Save</strong> includes it on the branding PATCH (with{" "}
-                <code className="text-[10px]">autoTransferToNextFloor</code>) so the backend can stage
-                the same style lines on this bag for Final Checking. Leave empty to update{" "}
-                <code className="text-[10px]">transferredData</code> only (no staging).
-              </p>
-              <label className={CRM.label}>Existing container barcode / id</label>
-              <input
-                type="text"
-                className={`${CRM.input} font-mono border-purple-200 focus:border-purple-500`}
-                placeholder="Scan or paste — only if staging to Final FC now"
-                value={stagingContainerBarcode}
-                onChange={(e) => setStagingContainerBarcode(e.target.value)}
-                disabled={saving}
-              />
-            </div>
-          </div>
         </div>
 
         <div
-          className={`${CRM.drawerFooterBar} relative z-10 shrink-0 pointer-events-auto`}
+          className={`${CRM.drawerFooterBar} flex-wrap relative z-10 shrink-0 pointer-events-auto`}
         >
           <button
             type="button"
@@ -426,22 +477,53 @@ export function VendorBrandingProcessDrawer({
               e.stopPropagation();
               void handleSave();
             }}
-            className={CRM.btnPrimary}
-            disabled={saving || totalTransferred > transferCap}
+            className={CRM.btnSecondary}
+            disabled={
+              saving ||
+              lineSumOverReceived ||
+              deltaTransferredPayload.length === 0
+            }
             title={
-              totalTransferred > transferCap
-                ? "Reduce line totals to the allowed cap first"
-                : undefined
+              lineSumOverReceived
+                ? "Line total cannot exceed received"
+                : deltaTransferredPayload.length === 0
+                  ? "Add a new row with quantity > 0 (delta payload)"
+                  : undefined
             }
           >
             {saving ? (
               "…"
             ) : (
               <>
-                <i className="ri-save-line text-xs" />{" "}
-                {stagingContainerBarcode.trim() ? "Save & stage to Final FC" : "Save"}
+                <i className="ri-save-line text-xs" /> Save
               </>
             )}
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleSaveAndStage();
+            }}
+            className={CRM.btnPrimary}
+            disabled={
+              saving ||
+              lineSumOverReceived ||
+              newRowsTransferredTotal <= 0 ||
+              deltaTransferredPayload.length === 0
+            }
+            title={
+              lineSumOverReceived
+                ? "Line total cannot exceed received"
+                : newRowsTransferredTotal <= 0 ||
+                    deltaTransferredPayload.length === 0
+                  ? "Add a new row with quantity > 0 to stage"
+                  : undefined
+            }
+          >
+            <i className="ri-inbox-archive-line text-xs" /> Save &amp; stage to
+            Final FC
           </button>
         </div>
       </div>
