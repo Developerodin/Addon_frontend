@@ -2009,6 +2009,7 @@ const YarnReturnPage = () => {
           transactionId: coneDetails.transactionId,
           yarnCatalogId: scannedCatalogId || undefined,
           articleId: coneDetails.articleId ?? selectedArticleRow?.articleId,
+          articleNumber: coneDetails.articleNumber ?? selectedArticleRow?.articleNumber,
         };
         
         console.log("✅ Created cone object:", {
@@ -2278,6 +2279,16 @@ const YarnReturnPage = () => {
           barcode,
         });
 
+        const returnArticleId = cone.articleId ?? effectiveArticleRowForScan?.articleId;
+        let rawArticleNumber = cone.articleNumber ?? effectiveArticleRowForScan?.articleNumber;
+        if ((!rawArticleNumber || rawArticleNumber === "—") && returnArticleId && orderForSubmit?.articles?.length) {
+          const matchedArt = orderForSubmit.articles.find(
+            (a) => String(a.id || (a as any)._id).trim() === String(returnArticleId).trim()
+          );
+          if (matchedArt?.articleNumber) rawArticleNumber = matchedArt.articleNumber;
+        }
+        const returnArticleNumber = rawArticleNumber && rawArticleNumber !== "—" ? rawArticleNumber : undefined;
+
         const transactionData = {
           yarn: yarnIdString, // legacy: YarnCatalog _id
           yarnCatalogId: yarnIdString,
@@ -2291,6 +2302,10 @@ const YarnReturnPage = () => {
           orderno: productionOrderNoForApi(orderForSubmit),
           orderId: orderForSubmit.id,
           conesIdsArray: [String(cone.id).replace(/-\d+$/, "") || cone.id],
+          ...(returnArticleId && {
+            articleId: returnArticleId,
+            articleNumber: returnArticleNumber,
+          }),
         };
 
         const response = await fetch(`${API_BASE_URL}/yarn-management/yarn-transactions`, {
