@@ -115,12 +115,15 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
   const addLot = () => {
     setLots((prev) => [
       ...prev,
-      { lotNumber: "", numberOfBoxes: 1, lineQty: emptyLineQtyMap(poItems), lineBoxes: emptyLineQtyMap(poItems) },
+      { lotNumber: "", numberOfBoxes: 1, lineQty: emptyLineQtyMap(poItems), lineBoxes: emptyLineQtyMap(poItems), isExisting: false },
     ]);
   };
 
   const removeLot = (index: number) => {
-    setLots((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
+    setLots((prev) => {
+      if (prev[index]?.isExisting) return prev;
+      return prev.length <= 1 ? prev : prev.filter((_, i) => i !== index);
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -295,14 +298,23 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                 </p>
 
                 <div className="space-y-4">
-                  {lots.map((lot, lotIndex) => (
+                  {lots.map((lot, lotIndex) => {
+                    const isReadOnly = !!lot.isExisting;
+                    return (
                     <div
                       key={lotIndex}
-                      className="border border-gray-200 rounded-lg p-3 space-y-3 bg-white shadow-sm"
+                      className={`border rounded-lg p-3 space-y-3 shadow-sm ${isReadOnly ? "border-gray-300 bg-gray-50/60" : "border-gray-200 bg-white"}`}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-bold text-gray-800">Invoice {lotIndex + 1}</span>
-                        {lots.length > 1 && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-gray-800">Invoice {lotIndex + 1}</span>
+                          {isReadOnly && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-green-100 text-green-700 border border-green-200">
+                              <i className="ri-lock-line text-[9px]" /> Saved
+                            </span>
+                          )}
+                        </div>
+                        {lots.length > 1 && !isReadOnly && (
                           <button
                             type="button"
                             onClick={() => removeLot(lotIndex)}
@@ -314,7 +326,10 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-[10px] font-medium text-gray-600">Invoice number *</label>
+                          <label className="text-[10px] font-medium text-gray-600">Invoice number {isReadOnly ? "" : "*"}</label>
+                          {isReadOnly ? (
+                            <div className="mt-0.5 px-2 py-1.5 text-xs text-gray-700 bg-gray-100 border border-gray-200 rounded">{lot.lotNumber || "—"}</div>
+                          ) : (
                           <input
                             className={lotInputCls}
                             value={lot.lotNumber}
@@ -327,9 +342,13 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                             }
                             placeholder="e.g. INV-001"
                           />
+                          )}
                         </div>
                         <div>
-                          <label className="text-[10px] font-medium text-gray-600">Number of boxes *</label>
+                          <label className="text-[10px] font-medium text-gray-600">Number of boxes {isReadOnly ? "" : "*"}</label>
+                          {isReadOnly ? (
+                            <div className="mt-0.5 px-2 py-1.5 text-xs text-gray-700 bg-gray-100 border border-gray-200 rounded text-right">{lot.numberOfBoxes}</div>
+                          ) : (
                           <input
                             type="number"
                             min={1}
@@ -344,6 +363,7 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                               })
                             }
                           />
+                          )}
                         </div>
                       </div>
 
@@ -352,7 +372,7 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                           <thead className="bg-gray-50">
                             <tr>
                               <th className="px-2 py-2 text-left font-bold text-gray-600">Article</th>
-                              <th className="px-2 py-2 text-right">Max</th>
+                              {!isReadOnly && <th className="px-2 py-2 text-right">Max</th>}
                               <th className="px-2 py-2 text-right w-[88px]">Qty</th>
                               <th className="px-2 py-2 text-right w-[88px]">Boxes</th>
                             </tr>
@@ -367,8 +387,11 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                               return (
                                 <tr key={`${lotIndex}-${id}`} className="border-t border-gray-100">
                                   <td className="px-2 py-2 text-gray-900">{it.productName || "—"}</td>
-                                  <td className="px-2 py-2 text-right text-gray-500">{max}</td>
+                                  {!isReadOnly && <td className="px-2 py-2 text-right text-gray-500">{max}</td>}
                                   <td className="px-2 py-2">
+                                    {isReadOnly ? (
+                                      <div className="text-right text-xs text-gray-700">{v || "—"}</div>
+                                    ) : (
                                     <input
                                       type="number"
                                       min={0}
@@ -380,8 +403,12 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                                         setLineQty(lotIndex, id, raw === "" ? 0 : Number(raw));
                                       }}
                                     />
+                                    )}
                                   </td>
                                   <td className="px-2 py-2">
+                                    {isReadOnly ? (
+                                      <div className="text-right text-xs text-gray-700">{boxV || "—"}</div>
+                                    ) : (
                                     <input
                                       type="number"
                                       min={0}
@@ -392,6 +419,7 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                                         setLineBoxes(lotIndex, id, raw === "" ? 0 : Number(raw));
                                       }}
                                     />
+                                    )}
                                   </td>
                                 </tr>
                               );
@@ -400,7 +428,8 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                         </table>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </>
             )}

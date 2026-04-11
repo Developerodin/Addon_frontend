@@ -14,6 +14,8 @@ export type VendorLotDraft = {
   lineQty: Record<string, number>;
   /** PO line id → boxes received in this lot */
   lineBoxes: Record<string, number>;
+  /** true when this lot was loaded from the API (already saved) — should be read-only in UI */
+  isExisting?: boolean;
 };
 
 export function emptyLineQtyMap(poItems: VendorPurchaseOrderItem[]): Record<string, number> {
@@ -42,10 +44,11 @@ export function buildVendorLotDrafts(po: VendorPurchaseOrder): VendorLotDraft[] 
         numberOfBoxes: Math.max(1, Number(lot.numberOfBoxes || 1)),
         lineQty,
         lineBoxes,
+        isExisting: true,
       };
     });
   }
-  return [{ lotNumber: "", numberOfBoxes: 1, lineQty: emptyLineQtyMap(items), lineBoxes: emptyLineQtyMap(items) }];
+  return [{ lotNumber: "", numberOfBoxes: 1, lineQty: emptyLineQtyMap(items), lineBoxes: emptyLineQtyMap(items), isExisting: false }];
 }
 
 export function orderedQtyByLine(poItems: VendorPurchaseOrderItem[]): Record<string, number> {
@@ -80,6 +83,7 @@ export function validateVendorLotDrafts(
 ): string | null {
   for (let i = 0; i < drafts.length; i++) {
     const d = drafts[i];
+    if (d.isExisting) continue;
     if (!d.lotNumber.trim()) return `Invoice ${i + 1}: invoice number is required`;
     if (!d.numberOfBoxes || d.numberOfBoxes < 1) return `Invoice ${i + 1}: number of boxes must be at least 1`;
     const batch = Object.keys(d.lineQty).reduce((s, k) => s + Math.max(0, Number(d.lineQty[k] ?? 0)), 0);
