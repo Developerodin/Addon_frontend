@@ -1,0 +1,21 @@
+---
+description: Next.js 14, TypeScript strict, React 18, and shared import conventions
+globs: **/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Stack
+
+- **Next.js 14** (App Router under `app/`), **React 18**, **TypeScript strict**, **Tailwind**, **Redux** (`@reduxjs/toolkit`, `react-redux`).
+- Path alias: `@/*` → repo root (`tsconfig` paths).
+
+# Patterns
+
+- Match **existing** patterns in the nearest feature folder: naming, hooks vs components, API clients, and styling (Tailwind / SCSS as used locally).
+- Shared API base URLs and env: respect `shared/data/utilities/api.ts` — `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_RSERVICE_BASE_URL`; do not introduce duplicate base-URL logic without a reason.
+- `next.config.js` sets `typescript.ignoreBuildErrors: true` in this project — still **fix types** in code you touch; do not rely on build suppression for new errors.
+
+# Imports and quality
+
+- Prefer extending existing utilities/components over duplicating logic.
+- Add brief comments only where behavior is non-obvious; avoid noisy docblocks on trivial code.

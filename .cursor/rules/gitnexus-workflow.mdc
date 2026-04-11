@@ -1,0 +1,28 @@
+---
+description: GitNexus impact analysis, exploration, and safe refactors
+alwaysApply: true
+---
+
+# GitNexus (Addon_frontend)
+
+Repo is indexed as **Addon_frontend**. If tools warn the index is stale, run `npx gitnexus analyze` (add `--embeddings` only if `.gitnexus/meta.json` already has embeddings).
+
+## Before editing symbols
+
+- Run **impact** upstream on the function/class/method you will change: `gitnexus_impact({ target: "SymbolName", direction: "upstream" })`.
+- Report blast radius (d=1 callers, processes, risk). **Do not ignore HIGH/CRITICAL** without user alignment.
+
+## Exploration
+
+- Prefer `gitnexus_query({ query: "..." })` over blind grepping for unfamiliar flows.
+- Use `gitnexus_context({ name: "SymbolName" })` for callers, callees, and process participation.
+
+## Commits and refactors
+
+- Before commit: `gitnexus_detect_changes({ scope: "staged" })` (or `compare` with `base_ref` when reviewing branch delta).
+- Renames: `gitnexus_rename` with `dry_run: true` first; never raw find-and-replace renames across the graph.
+- After refactors: `gitnexus_detect_changes({ scope: "all" })` to confirm scope.
+
+## Resources
+
+- `gitnexus://repo/Addon_frontend/context`, `.../processes`, `.../process/{name}` for traces.

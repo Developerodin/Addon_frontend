@@ -164,6 +164,12 @@ export function VendorSecondaryCheckingListCard({
                 <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
                   Received
                 </th>
+                <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                  Remaining
+                </th>
+                <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                  Transferred
+                </th>
                 <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
                   M1/M2/M4 Counts
                 </th>
@@ -179,7 +185,7 @@ export function VendorSecondaryCheckingListCard({
               {paginatedFlows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={9}
                     className="px-1.5 py-10 border border-gray-200 text-center text-gray-400 text-xs font-bold tracking-widest uppercase"
                   >
                     No batches found
@@ -223,21 +229,27 @@ export function VendorSecondaryCheckingListCard({
                       <td className="px-1.5 py-2.5 text-right font-medium text-gray-700 text-[12px] border border-gray-200">
                         {sc.received.toLocaleString()}
                       </td>
+                      <td className="px-1.5 py-2.5 text-right font-bold text-amber-800 text-[12px] border border-gray-200">
+                        {(sc.remaining ?? 0).toLocaleString()}
+                      </td>
+                      <td className="px-1.5 py-2.5 text-right font-medium text-gray-600 text-[12px] border border-gray-200">
+                        {(sc.transferred ?? 0).toLocaleString()}
+                      </td>
                       <td className="px-1.5 py-2.5 border border-gray-200">
                         <div className="flex gap-2">
                           <div className="bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded">
                             <span className="text-emerald-700 font-bold text-[10px]">
-                              M1: {sc.m1Quantity}
+                              M1: {sc.m1Quantity ?? 0}
                             </span>
                           </div>
                           <div className="bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded">
                             <span className="text-amber-700 font-bold text-[10px]">
-                              M2: {sc.m2Quantity}
+                              M2: {sc.m2Quantity ?? 0}
                             </span>
                           </div>
                           <div className="bg-red-50 border border-red-100 px-1.5 py-0.5 rounded">
                             <span className="text-red-700 font-bold text-[10px]">
-                              M4: {sc.m4Quantity}
+                              M4: {sc.m4Quantity ?? 0}
                             </span>
                           </div>
                         </div>

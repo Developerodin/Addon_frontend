@@ -27,8 +27,13 @@ import {
   type VendorSecondaryCheckingProcessData,
 } from "./components/VendorSecondaryCheckingProcessDrawer";
 import { VendorSecondaryCheckingListCard } from "./components/VendorSecondaryCheckingListCard";
-import { VendorSecondaryCheckingPostSaveContainerDrawer } from "./components/VendorSecondaryCheckingPostSaveContainerDrawer";
+import {
+  VendorSecondaryCheckingM1StagingModal,
+  type PendingSecondaryCheckingPatch,
+} from "./components/VendorSecondaryCheckingM1StagingModal";
 import { productionFlowListParams } from "../utils/vendorPoProductionFlowList";
+import { m1RemainingForTransfer } from "./utils/m1Staging";
+import { evaluateSecondaryCheckingSave } from "./utils/evaluateSecondaryCheckingSave";
 
 const SecondaryCheckingPage = () => {
   const [flows, setFlows] = useState<VendorProductionFlow[]>([]);
@@ -164,9 +169,13 @@ const SecondaryCheckingPage = () => {
   };
 
   const handleOpenProcess = (flow: VendorProductionFlow) => {
-    /** Post-save container is z-[90+]; process drawer is z-50 — must close or Save clicks hit the invisible overlay. */
-    setPostSaveContainerOpen(false);
-    setPostSaveContainerFlow(null);
+    /** M1 staging modal sits above the process drawer — close it so Save isn’t blocked. */
+    setM1StagingModalOpen(false);
+    setM1StagingFlow(null);
+    setM1StagingPatch(null);
+    setM1StagingDisplayTotals(null);
+    setM1StagingRequireContainer(false);
+    setM1StagingPlannedQtyHint(0);
     const session = ++processDrawerSessionRef.current;
     setIsProcessing(true);
     setProcessDrawerFetching(true);
@@ -179,20 +188,11 @@ const SecondaryCheckingPage = () => {
         setSelectedFlow(fresh);
         setFlows((prev) => prev.map((f) => (f.id === fresh.id ? fresh : f)));
         const q = fresh.floorQuantities.secondaryChecking;
-        const qty = (v: unknown) => {
-          const n = Number(v);
-          if (!Number.isFinite(n)) return 0;
-          return Math.max(0, Math.round(n));
-        };
         setProcessingData({
           received: q.received || 0,
           repairStatus: q.repairStatus || "NOT_REQUIRED",
           repairRemarks: q.repairRemarks || "",
-          stagingContainerBarcode: "",
-          /** Prefill so ops edit the running total (e.g. 100 → 220), not a mistaken “+120 this visit” increment. */
-          m1Quantity: qty(q.m1Quantity),
-          m2Quantity: qty(q.m2Quantity),
-          m4Quantity: qty(q.m4Quantity),
+          /** M1/M2/M4 inputs stay empty until the user enters totals (see save validation). */
         });
       } catch (err: any) {
         if (session !== processDrawerSessionRef.current) return;
@@ -213,104 +213,90 @@ const SecondaryCheckingPage = () => {
     setSelectedFlow(null);
   }, []);
 
-  const [postSaveContainerOpen, setPostSaveContainerOpen] = useState(false);
-  const [postSaveContainerFlow, setPostSaveContainerFlow] =
-    useState<VendorProductionFlow | null>(null);
+  const [m1StagingModalOpen, setM1StagingModalOpen] = useState(false);
+  const [m1StagingFlow, setM1StagingFlow] = useState<VendorProductionFlow | null>(
+    null,
+  );
+  const [m1StagingPatch, setM1StagingPatch] =
+    useState<PendingSecondaryCheckingPatch | null>(null);
+  const [m1StagingDisplayTotals, setM1StagingDisplayTotals] = useState<{
+    m1: number;
+    m2: number;
+    m4: number;
+  } | null>(null);
+  const [m1StagingRequireContainer, setM1StagingRequireContainer] =
+    useState(false);
+  const [m1StagingPlannedQtyHint, setM1StagingPlannedQtyHint] = useState(0);
 
-  /** After QC save: prompt to scan/confirm physical container only (no transfer drawer). */
-  const openPostSaveContainer = useCallback((flow: VendorProductionFlow) => {
-    setPostSaveContainerFlow(flow);
-    setPostSaveContainerOpen(true);
-  }, []);
+  const processDrawerSaveEval = useMemo(() => {
+    if (!selectedFlow) return null;
+    return evaluateSecondaryCheckingSave(
+      selectedFlow.floorQuantities.secondaryChecking,
+      processingData,
+      selectedFlow.plannedQuantity,
+    );
+  }, [selectedFlow, processingData]);
 
+  /**
+   * Drawer Save: PATCH immediately when the body has no M1 field; otherwise open the M1 staging
+   * modal (container scan when saving positive M1 — see requireContainer flags below).
+   */
   const handleSaveProcessing = async () => {
     if (!selectedFlow) {
       toast.error("Batch not loaded — close the drawer and open Process again.");
       return;
     }
+
+    const currentSc = selectedFlow.floorQuantities.secondaryChecking;
+    const ev = evaluateSecondaryCheckingSave(
+      currentSc,
+      processingData,
+      selectedFlow.plannedQuantity,
+    );
+    if (!ev.ok) {
+      toast.error(ev.error);
+      return;
+    }
+
     setSaving(true);
     try {
-      const numOr0 = (v: unknown) => {
-        const n = Number(v);
-        return Number.isFinite(n) ? n : 0;
-      };
-      const received = numOr0(
-        selectedFlow.floorQuantities.secondaryChecking.received,
-      );
-      const currentSc = selectedFlow.floorQuantities.secondaryChecking;
-      const currentM1 = numOr0(currentSc.m1Quantity);
-      const currentM2 = numOr0(currentSc.m2Quantity);
-      const currentM4 = numOr0(currentSc.m4Quantity);
-      const m1Quantity =
-        processingData.m1Quantity !== undefined &&
-        processingData.m1Quantity !== null
-          ? Number(processingData.m1Quantity)
-          : currentM1;
-      const m2Quantity =
-        processingData.m2Quantity !== undefined &&
-        processingData.m2Quantity !== null
-          ? Number(processingData.m2Quantity)
-          : currentM2;
-      const m4Quantity =
-        processingData.m4Quantity !== undefined &&
-        processingData.m4Quantity !== null
-          ? Number(processingData.m4Quantity)
-          : currentM4;
-
-      if (
-        [m1Quantity, m2Quantity, m4Quantity].some(
-          (v) => !Number.isInteger(v) || v < 0,
-        )
-      ) {
-        toast.error("M1, M2, and M4 must be whole numbers ≥ 0");
-        return;
-      }
-
-      if (
-        [received, m1Quantity, m2Quantity, m4Quantity].every(Number.isFinite) &&
-        m1Quantity + m2Quantity + m4Quantity > received
-      ) {
-        toast.error("M1 + M2 + M4 cannot exceed batch received quantity");
-        return;
-      }
-
-      const stagingBarcode = String(
-        processingData.stagingContainerBarcode ?? "",
-      ).trim();
-      if (m1Quantity > 0 && !stagingBarcode) {
-        toast.error(
-          "Enter or scan the container barcode (required to stage M1 to Branding on save).",
+      if (ev.route === "immediate") {
+        const updated = await vendorProductionFlowService.updateFloor(
+          selectedFlow.id,
+          "secondaryChecking",
+          ev.body,
         );
+        setFlows((prev) =>
+          prev.map((f) => (f.id === updated.id ? updated : f)),
+        );
+        toast.success("Secondary checking updated");
+        closeProcessDrawer();
         return;
       }
 
-      /** Replace with resolved M1/M2/M4; blank fields keep server values. */
-      const payload: Record<string, unknown> = {
-        mode: "replace",
-        m1Quantity,
-        m2Quantity,
-        m4Quantity,
-        repairStatus: processingData.repairStatus,
-        repairRemarks: processingData.repairRemarks,
+      /** Staging modal applies PATCH; container + auto-transfer when user entered positive M1. */
+      const { m1Remaining: _staleM1Rem, ...scRest } = currentSc;
+      const mergedSc = {
+        ...scRest,
+        m1Quantity: ev.displayTotals.m1,
+        m2Quantity: ev.displayTotals.m2,
+        m4Quantity: ev.displayTotals.m4,
       };
-
-      if (m1Quantity > 0 && stagingBarcode) {
-        payload.existingContainerBarcode = stagingBarcode;
-        payload.autoTransferToNextFloor = true;
-      }
-
-      const updated = await vendorProductionFlowService.updateFloor(
-        selectedFlow.id,
-        "secondaryChecking",
-        payload,
+      const plannedHint = m1RemainingForTransfer(
+        mergedSc as VendorProductionFlow["floorQuantities"]["secondaryChecking"],
       );
-      toast.success("Secondary checking updated");
-      setFlows((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
+
+      setM1StagingFlow(selectedFlow);
+      setM1StagingPatch(ev.body);
+      setM1StagingDisplayTotals(ev.displayTotals);
+      const m1Positive =
+        ev.body.m1Quantity !== undefined && ev.body.m1Quantity > 0;
+      setM1StagingRequireContainer(m1Positive);
+      setM1StagingPlannedQtyHint(plannedHint);
       closeProcessDrawer();
-      // Open after process drawer (z-70) unmounts so container step is never hidden underneath.
-      queueMicrotask(() => openPostSaveContainer(updated));
-    } catch (err: any) {
-      toast.error(err.message || "Update failed");
+      queueMicrotask(() => setM1StagingModalOpen(true));
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Update failed");
     } finally {
       setSaving(false);
     }
@@ -351,11 +337,32 @@ const SecondaryCheckingPage = () => {
         setProcessingData={setProcessingData}
         onSave={handleSaveProcessing}
         saving={saving}
+        saveDisabled={
+          saving ||
+          processDrawerFetching ||
+          !(processDrawerSaveEval?.ok ?? false)
+        }
       />
-      <VendorSecondaryCheckingPostSaveContainerDrawer
-        open={postSaveContainerOpen}
-        flow={postSaveContainerFlow}
-        onClose={() => setPostSaveContainerOpen(false)}
+      <VendorSecondaryCheckingM1StagingModal
+        open={m1StagingModalOpen}
+        baselineFlow={m1StagingFlow}
+        pendingPatch={m1StagingPatch}
+        displayTotals={m1StagingDisplayTotals}
+        requireContainerScan={m1StagingRequireContainer}
+        plannedTransferQtyHint={m1StagingPlannedQtyHint}
+        onClose={() => {
+          setM1StagingModalOpen(false);
+          setM1StagingFlow(null);
+          setM1StagingPatch(null);
+          setM1StagingDisplayTotals(null);
+          setM1StagingRequireContainer(false);
+          setM1StagingPlannedQtyHint(0);
+        }}
+        onFloorUpdated={(updated) => {
+          setFlows((prev) =>
+            prev.map((f) => (f.id === updated.id ? updated : f)),
+          );
+        }}
         onTransferred={async (next) => {
           setFlows((prev) =>
             prev.map((f) =>

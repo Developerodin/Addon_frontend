@@ -1,0 +1,14 @@
+---
+description: MCP tools — read schemas first; browser workflow for UI verification
+alwaysApply: true
+---
+
+# MCP
+
+- Before `call_mcp_tool`, **read the tool’s JSON schema** under the project `mcps/<server>/tools/` folder so arguments match the server.
+- Use **GitNexus** MCP (`user-gitnexus`) per `gitnexus-workflow.mdc` and `AGENTS.md`.
+
+# Browser (cursor-ide-browser)
+
+- For interactive UI checks: **snapshot before structural actions**; refresh snapshot after navigation or DOM changes.
+- Lock tab before interactions when required by server instructions; unlock when done.

@@ -7,10 +7,8 @@ import type {
   QualityFloorQuantity,
 } from "@/shared/services/vendorProductionFlowService";
 
-/** Form state: floor qty + physical container for PATCH staging (secondary→branding). */
-export type VendorSecondaryCheckingProcessData = Partial<QualityFloorQuantity> & {
-  stagingContainerBarcode?: string;
-};
+/** Form state: floor qty (container scan happens after save in a separate modal). */
+export type VendorSecondaryCheckingProcessData = Partial<QualityFloorQuantity>;
 
 type Props = {
   open: boolean;
@@ -24,6 +22,8 @@ type Props = {
   >;
   onSave: () => void;
   saving?: boolean;
+  /** When true, Save is disabled (invalid / noop form — see page evaluateSecondaryCheckingSave). */
+  saveDisabled?: boolean;
 };
 
 /**
@@ -38,22 +38,11 @@ export function VendorSecondaryCheckingProcessDrawer({
   setProcessingData,
   onSave,
   saving,
+  saveDisabled,
 }: Props) {
   if (!open) return null;
 
   const scSaved = flow?.floorQuantities.secondaryChecking;
-
-  const resolvedM1 = (() => {
-    if (
-      processingData.m1Quantity !== undefined &&
-      processingData.m1Quantity !== null
-    ) {
-      return Number(processingData.m1Quantity);
-    }
-    return Number(scSaved?.m1Quantity ?? 0);
-  })();
-  const needsContainerForStaging =
-    Number.isFinite(resolvedM1) && resolvedM1 > 0;
 
   return (
     <>
@@ -97,12 +86,12 @@ export function VendorSecondaryCheckingProcessDrawer({
           <>
             <div className={CRM.drawerBodyScroll}>
               <p className={CRM.drawerHint}>
-                <strong>M1 / M2 / M4 are totals</strong> for this batch (out of
-                received) — not “amount to transfer” and not “add only this
-                time”. Example: first visit M1 = 100; next visit to add 120 more,
-                set M1 to <strong>220</strong> (100 + 120). Inputs load the
-                current saved totals — edit them, then{" "}
-                <strong>Save &amp; update</strong>.
+                <strong>M1 / M2 / M4</strong> start empty — type only what you change;
+                <strong> blank</strong> leaves that count off the request (server keeps
+                it). Numbers you type are sent <strong>as-is</strong> in the PATCH. If
+                you enter <strong>M2 or M4</strong>, Save posts immediately. If you enter
+                only <strong>M1</strong> (and/or repair fields), Save opens the{" "}
+                <strong>container / M1 staging</strong> modal.
               </p>
 
               <div className={CRM.drawerSection}>
@@ -148,6 +137,27 @@ export function VendorSecondaryCheckingProcessDrawer({
                   </div>
                   <div>
                     <span className="text-[10px] font-bold text-gray-500 uppercase block mb-0.5">
+                      Remaining (to next floor)
+                    </span>
+                    <span className="font-semibold text-amber-900">
+                      {(
+                        flow.floorQuantities.secondaryChecking?.remaining ?? 0
+                      ).toLocaleString()}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-500 uppercase block mb-0.5">
+                      Transferred (out of SC)
+                    </span>
+                    <span className="font-semibold text-gray-800">
+                      {(
+                        flow.floorQuantities.secondaryChecking?.transferred ??
+                        0
+                      ).toLocaleString()}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-500 uppercase block mb-0.5">
                       Batch id
                     </span>
                     <span className="font-mono text-[10px] text-gray-600">
@@ -172,7 +182,7 @@ export function VendorSecondaryCheckingProcessDrawer({
                 {scSaved && (
                   <div className="px-3 pt-2 pb-1">
                     <p className="text-[10px] font-bold text-gray-500 uppercase mb-1.5">
-                      Same numbers below (editable totals)
+                      Saved on server (reference — type new totals above)
                     </p>
                     <div className="flex flex-wrap gap-2">
                       <span className="inline-flex items-center rounded border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
@@ -203,10 +213,12 @@ export function VendorSecondaryCheckingProcessDrawer({
                       }
                       onChange={(e) => {
                         const v = e.target.value;
-                        setProcessingData((p) => ({
-                          ...p,
-                          m1Quantity: v === "" ? undefined : Number(v),
-                        }));
+                        setProcessingData((p) => {
+                          if (v === "") return { ...p, m1Quantity: undefined };
+                          const n = Number(v);
+                          if (!Number.isFinite(n)) return p;
+                          return { ...p, m1Quantity: Math.round(n) };
+                        });
                       }}
                     />
                   </div>
@@ -225,10 +237,12 @@ export function VendorSecondaryCheckingProcessDrawer({
                       }
                       onChange={(e) => {
                         const v = e.target.value;
-                        setProcessingData((p) => ({
-                          ...p,
-                          m2Quantity: v === "" ? undefined : Number(v),
-                        }));
+                        setProcessingData((p) => {
+                          if (v === "") return { ...p, m2Quantity: undefined };
+                          const n = Number(v);
+                          if (!Number.isFinite(n)) return p;
+                          return { ...p, m2Quantity: Math.round(n) };
+                        });
                       }}
                     />
                   </div>
@@ -247,10 +261,12 @@ export function VendorSecondaryCheckingProcessDrawer({
                       }
                       onChange={(e) => {
                         const v = e.target.value;
-                        setProcessingData((p) => ({
-                          ...p,
-                          m4Quantity: v === "" ? undefined : Number(v),
-                        }));
+                        setProcessingData((p) => {
+                          if (v === "") return { ...p, m4Quantity: undefined };
+                          const n = Number(v);
+                          if (!Number.isFinite(n)) return p;
+                          return { ...p, m4Quantity: Math.round(n) };
+                        });
                       }}
                     />
                   </div>
@@ -258,45 +274,7 @@ export function VendorSecondaryCheckingProcessDrawer({
               </div>
 
               <div className={CRM.drawerSection}>
-                <div className={CRM.drawerSectionHead}>
-                  3. Container for staging to Branding
-                </div>
-                <div className="p-3 space-y-2">
-                  <p className="text-[10px] text-gray-600 leading-snug">
-                    Backend requires the <strong>existing</strong> bag/container
-                    barcode (or container id) when{" "}
-                    <strong>M1 &gt; 0</strong> so the auto-transfer to Branding
-                    can stage on that container. Scan or paste the physical
-                    label.
-                  </p>
-                  <label className={CRM.label}>
-                    Container barcode / id
-                    {needsContainerForStaging ? (
-                      <span className="text-red-600"> *</span>
-                    ) : null}
-                  </label>
-                  <input
-                    type="text"
-                    className={`${CRM.input} border-purple-200 focus:border-purple-500 font-mono`}
-                    placeholder={
-                      needsContainerForStaging
-                        ? "Required — scan bag/container"
-                        : "Only if staging (usually leave empty when M1 is 0)"
-                    }
-                    value={processingData.stagingContainerBarcode ?? ""}
-                    onChange={(e) =>
-                      setProcessingData((p) => ({
-                        ...p,
-                        stagingContainerBarcode: e.target.value,
-                      }))
-                    }
-                    disabled={!!saving}
-                  />
-                </div>
-              </div>
-
-              <div className={CRM.drawerSection}>
-                <div className={CRM.drawerSectionHead}>4. Repair remarks</div>
+                <div className={CRM.drawerSectionHead}>3. Repair remarks</div>
                 <div className="p-3">
                   <label className={CRM.label}>Remarks</label>
                   <textarea
@@ -327,7 +305,7 @@ export function VendorSecondaryCheckingProcessDrawer({
                 type="button"
                 onClick={onSave}
                 className={CRM.btnPrimary}
-                disabled={!!saving}
+                disabled={!!saving || !!saveDisabled}
               >
                 <i className="ri-save-line text-xs" />
                 {saving ? "Saving…" : "Save & update"}

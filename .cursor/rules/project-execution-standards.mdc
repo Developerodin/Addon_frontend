@@ -1,0 +1,25 @@
+---
+description: Scope limits, 500-line split rule, bash, citations, concrete fixes
+alwaysApply: true
+---
+
+# Execution and scope
+
+- **Real environment**: Run commands yourself (investigate, fix, verify). Do not stop after one failed attempt without a different approach.
+- **Shell**: Use **bash** for terminal commands.
+- **Minimal diffs**: Change only what the task requires. No drive-by refactors or unrelated files.
+
+# File and function size
+
+- Keep source files **under 500 lines**. If a change would push a file to ~500+, **split first**: extract components, hooks, utils, or services in the same feature folder; match existing naming and imports.
+- Prefer **small, focused functions** (aim under ~50 lines); separate heavy logic from UI where it helps.
+
+# Communication and citations
+
+- When pointing at existing code, use **Cursor code references**: opening fence on its own line, `startLine:endLine:filepath`, then the code block.
+- Prefer **markdown links** for external URLs; give full URLs/paths when citing.
+- Avoid `§` in user-facing copy. Skip engagement-style closings.
+
+# User-facing code answers
+
+- Give **concrete code or explanations** for fixes; experts want patches and specifics, not only high-level advice.
