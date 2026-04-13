@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useSelector } from "react-redux";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
@@ -24,48 +24,29 @@ import {
 } from "@/shared/services/machineOrderAssignmentService";
 import { containersMasterService, hasActiveItems } from "@/shared/services/containersMasterService";
 import { machinesService } from "@/shared/services/machinesService";
-import QRCode from "qrcode";
+import { QZTrayLoader, QZTrayStatus, QZTrayUntrustedWarning, QZTrayRequestBlocked } from "@/shared/components/qzTray";
+import { printContainerLabels, isQZLoaded, type PrinterInfo } from "@/shared/utils/qzTray";
 type KnittingTab = "orders" | "machine-view" | "article-view" | "planning";
 
-/** Print 50×70mm label with QR code (articleId + orderId) and article number */
-async function printContainerLabel(articleId: string, orderId: string, articleNumber: string): Promise<void> {
-  const qrPayload = JSON.stringify({ articleId, orderId });
-  const qrDataUrl = await QRCode.toDataURL(qrPayload, {
-    width: 120,
-    margin: 1,
-    color: { dark: "#000000", light: "#FFFFFF" },
-    errorCorrectionLevel: "M",
-  });
-  const printWindow = window.open("", "_blank");
-  if (!printWindow) {
-    throw new Error("Popup blocked. Allow popups to print.");
-  }
-  printWindow.document.write(`
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <title>Label - ${articleNumber}</title>
-        <style>
-          @page { size: 50mm 70mm; margin: 0; }
-          * { box-sizing: border-box; margin: 0; padding: 0; }
-          body { font-family: system-ui, sans-serif; width: 50mm; height: 70mm; padding: 4mm; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-          .qr { width: 35mm; height: 35mm; flex-shrink: 0; }
-          .qr img { width: 100%; height: 100%; object-fit: contain; }
-          .article { font-size: 14pt; font-weight: bold; text-align: center; margin-top: 4mm; word-break: break-all; }
-        </style>
-      </head>
-      <body>
-        <div class="qr"><img src="${qrDataUrl}" alt="QR" /></div>
-        <div class="article">${articleNumber || "—"}</div>
-      </body>
-    </html>
-  `);
-  printWindow.document.close();
-  printWindow.focus();
-  setTimeout(() => {
-    printWindow.print();
-    printWindow.close();
-  }, 300);
+/** 50×70mm ZPL preset — aligned with Containers Master default for thermal QR labels */
+const KNITTING_CONTAINER_LABEL_QZ_SETTINGS = {
+  paperWidth: 398,
+  paperHeight: 558,
+  orientation: "vertical" as const,
+  labelsPerPage: 1,
+  columnsPerRow: 1,
+  firstLabelTopMargin: 0,
+  showCutLines: false,
+  qrCodeSize: 12,
+  detailsFontSize: 35,
+};
+
+/** One ZPL job: QR = container barcode, text = article number (`printContainerLabels` handles QZ connect). */
+function sendKnittingContainerLabelPrintJob(barcode: string, articleNumber: string) {
+  return printContainerLabels(
+    [{ barcode, containerName: articleNumber?.trim() || barcode }],
+    { customSettings: KNITTING_CONTAINER_LABEL_QZ_SETTINGS }
+  );
 }
 
 const ORDER_STATUS_OPTIONS: OrderStatusType[] = [
@@ -156,6 +137,18 @@ const KnittingFloorSupervisorPage = () => {
   const [containerNextFloor, setContainerNextFloor] = useState('');
   const [pendingWeightForContainer, setPendingWeightForContainer] = useState<number | undefined>(undefined);
   const [containerSubmitting, setContainerSubmitting] = useState(false);
+  const [containerLabelPrinting, setContainerLabelPrinting] = useState(false);
+  const [qzStatus, setQzStatus] = useState<{
+    scriptLoaded: boolean;
+    connected: boolean;
+    printer: PrinterInfo | null;
+    printers: PrinterInfo[];
+  }>({
+    scriptLoaded: false,
+    connected: false,
+    printer: null,
+    printers: [],
+  });
   /** After barcode enter/scan: idle | loading | not-found | already-filled | ok. Only allow update when ok. */
   const [containerCheckStatus, setContainerCheckStatus] = useState<'idle' | 'loading' | 'not-found' | 'already-filled' | 'ok'>('idle');
   const [containerFetched, setContainerFetched] = useState<{ activeItems?: Array<{ article: string | { articleNumber?: string }; quantity: number }>; activeFloor?: string } | null>(null);
@@ -834,9 +827,69 @@ const KnittingFloorSupervisorPage = () => {
     return priorityClasses[priority as keyof typeof priorityClasses] || 'bg-gray-100 text-gray-800';
   };
 
+  const toastWide = { maxWidth: "480px", whiteSpace: "pre-line" as const };
+
+  const handlePrintKnittingContainerLabel = useCallback(async () => {
+    if (!selectedOrder || !containerArticleId) return;
+    const barcode = containerBarcode.trim();
+    if (!barcode) {
+      toast.error("Enter or scan container barcode before printing");
+      return;
+    }
+    if (!isQZLoaded()) {
+      toast.error("QZ Tray script not loaded. Wait a few seconds and try again.");
+      return;
+    }
+    if (!qzStatus.connected) {
+      toast.error(
+        "QZ Tray is not connected.\n\n" +
+          "1) Open the QZ Tray desktop app (menu bar / system tray).\n" +
+          "2) Click the QZ status in the page header to connect.\n" +
+          "3) When prompted: check \"Remember this decision\", then Allow.\n\n" +
+          "Install: https://qz.io/download/",
+        { duration: 12000, style: toastWide }
+      );
+      return;
+    }
+    if (!qzStatus.printer) {
+      toast.error(
+        "No default printer from QZ Tray.\n\n" +
+          "Set a default printer in your OS (Printers & scanners), then click the QZ status in the header to refresh.",
+        { duration: 9000, style: toastWide }
+      );
+      return;
+    }
+
+    const article = selectedOrder.articles.find(
+      (a) => a._id === containerArticleId || a.id === containerArticleId
+    );
+    const articleNumber = article?.articleNumber ?? article?.factoryCode ?? "—";
+
+    setContainerLabelPrinting(true);
+    const toastId = toast.loading("Sending label to printer…");
+    try {
+      const result = await sendKnittingContainerLabelPrintJob(barcode, articleNumber);
+      toast.dismiss(toastId);
+      if (result.success) {
+        toast.success(`Printed ${result.printed} label(s) — ${qzStatus.printer.name}`);
+      } else {
+        toast.error(result.error || "Print failed", { duration: 10000, style: toastWide });
+      }
+    } catch (e) {
+      toast.dismiss(toastId);
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(msg, { duration: 10000, style: toastWide });
+    } finally {
+      setContainerLabelPrinting(false);
+    }
+  }, [selectedOrder, containerArticleId, containerBarcode, qzStatus.connected, qzStatus.printer]);
+
   return (
     <div className="main-content !p-[10px]">
       <Seo title="Knitting Floor Supervisor Dashboard"/>
+      <QZTrayLoader />
+      <QZTrayUntrustedWarning />
+      <QZTrayRequestBlocked />
 
       <div className="bg-white shadow-sm border border-gray-300 overflow-hidden mx-0">
         <div className="p-[10px]">
@@ -875,6 +928,9 @@ const KnittingFloorSupervisorPage = () => {
               />
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <div className="bg-gray-50 px-2 py-1 rounded border border-gray-200">
+                <QZTrayStatus onStatusChange={setQzStatus} />
+              </div>
               <button
                 type="button"
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
@@ -1679,25 +1735,44 @@ const KnittingFloorSupervisorPage = () => {
                     />
                     <p className="text-[10px] text-gray-500 mt-0.5">Set automatically from article process flow</p>
                   </div>
+                  <div className="rounded border border-gray-200 bg-gray-50 px-2 py-1.5 text-[10px] text-gray-700">
+                    <span className="font-semibold text-gray-800">Label printer (QZ Tray): </span>
+                    {!qzStatus.scriptLoaded ? (
+                      <span>Loading QZ script…</span>
+                    ) : qzStatus.connected && qzStatus.printer ? (
+                      <span className="text-green-800">Connected — {qzStatus.printer.name}</span>
+                    ) : qzStatus.connected ? (
+                      <span className="text-amber-800">Connected but no default printer — set one in OS settings, then refresh QZ status in the header.</span>
+                    ) : (
+                      <span className="text-amber-800">
+                        Not connected — open the QZ Tray app, then use <strong>QZ Tray</strong> in the page header (same as yarn receive).
+                      </span>
+                    )}
+                  </div>
                   <div className="flex justify-end gap-2 pt-1 flex-wrap">
                     <button
                       type="button"
-                      onClick={async () => {
-                        if (!selectedOrder || !containerArticleId) return;
-                        const article = selectedOrder.articles.find((a) => a._id === containerArticleId || a.id === containerArticleId);
-                        const articleId = getArticleMongoId(containerArticleId, selectedOrder.articles) ?? containerArticleId;
-                        const orderId = selectedOrder.id ?? selectedOrder._id ?? '';
-                        const articleNumber = article?.articleNumber ?? article?.factoryCode ?? '—';
-                        try {
-                          await printContainerLabel(articleId, orderId, articleNumber);
-                          toast.success('Label opened for printing');
-                        } catch (e) {
-                          toast.error(e instanceof Error ? e.message : 'Print failed');
-                        }
-                      }}
-                      disabled={!containerArticleId}
+                      onClick={handlePrintKnittingContainerLabel}
+                      disabled={
+                        !containerArticleId ||
+                        !containerBarcode.trim() ||
+                        containerLabelPrinting ||
+                        !qzStatus.scriptLoaded ||
+                        !qzStatus.connected ||
+                        !qzStatus.printer
+                      }
                       className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-gray-700 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Print 50×70mm label with QR code (articleId + orderId) and article number"
+                      title={
+                        containerLabelPrinting
+                          ? "Printing…"
+                          : !qzStatus.scriptLoaded
+                            ? "Loading QZ Tray…"
+                            : !qzStatus.connected
+                              ? "Connect QZ Tray from the header first"
+                              : !qzStatus.printer
+                                ? "No default printer"
+                                : "QZ Tray: 50×70mm — QR = container barcode, text = article number"
+                      }
                     >
                       <i className="ri-printer-line text-xs" />
                       Print label

@@ -351,9 +351,20 @@ export const connectQZ = async (): Promise<QZConnection> => {
       setTimeout(() => {
         connectionPromise = null;
       }, 3000);
+      const raw = error?.message || String(error);
+      let errorOut =
+        raw || 'Failed to connect to QZ Tray. Ensure QZ Tray is running.';
+      if (/unable to establish connection/i.test(raw) || /websocket.*failed/i.test(raw)) {
+        errorOut =
+          'Cannot reach QZ Tray (WebSocket failed). The QZ Tray desktop app is probably not running.\n\n' +
+          '1) Install or launch QZ Tray — https://qz.io/download/\n' +
+          '2) Wait until its icon appears in the menu bar (macOS) or system tray (Windows)\n' +
+          '3) Use the QZ status control on this page to connect, approve the certificate, then print again\n\n' +
+          `Technical detail: ${raw}`;
+      }
       return {
         isConnected: false,
-        error: error.message || 'Failed to connect to QZ Tray. Ensure QZ Tray is running.',
+        error: errorOut,
       };
     }
     // On success, keep connectionPromise so future connectQZ() reuse the same resolved connection
