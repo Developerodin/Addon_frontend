@@ -180,6 +180,41 @@ export type WarehouseOrdersListParams = {
   limit?: number;
 };
 
+export interface BulkImportSinglePairItem {
+  styleCode: string;
+  colour: string;
+  pattern: string;
+  quantity: number;
+}
+
+export interface BulkImportMultiPairItem {
+  styleCode: string;
+  type: string;
+  colour: string;
+  pattern: string;
+  quantity: number;
+}
+
+export interface BulkImportOrderRow {
+  clientType: string;
+  clientName: string;
+  date: string;
+  status: string;
+  styleCodeSinglePair?: BulkImportSinglePairItem[];
+  styleCodeMultiPair?: BulkImportMultiPairItem[];
+}
+
+export interface BulkImportPayload {
+  orders: BulkImportOrderRow[];
+}
+
+export interface BulkImportSummary {
+  created: number;
+  failed: number;
+  errors: Array<{ row?: number; reason: string }>;
+  processingTime?: number;
+}
+
 export const whmsWarehouseOrders = {
   list: (params: WarehouseOrdersListParams = {}) =>
     request<PaginatedWarehouseOrders>(`/warehouse-orders${qs(params as Record<string, unknown>)}`),
@@ -189,5 +224,7 @@ export const whmsWarehouseOrders = {
   update: (orderId: string, body: UpdateWarehouseOrderBody) =>
     request<WarehouseOrder>(`/warehouse-orders/${orderId}`, { method: 'PATCH', body: JSON.stringify(body) }),
   delete: (orderId: string) => request<void>(`/warehouse-orders/${orderId}`, { method: 'DELETE' }),
+  bulkImport: (payload: BulkImportPayload) =>
+    request<BulkImportSummary>('/warehouse-orders/bulk-import', { method: 'POST', body: JSON.stringify(payload) }),
 };
 

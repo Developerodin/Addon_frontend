@@ -26,10 +26,28 @@ type Props = {
 /** Display name only (no id) — same clients as /warehouse-management/clients. */
 export function warehouseClientDisplayName(c: WarehouseClient | null | undefined): string {
   if (!c) return "";
+  // Store rows persist names/codes under storeProfile; root retailer/distributor are often empty.
+  if (c.type === "Store") {
+    const sp = c.storeProfile;
+    const bill = sp?.billCode?.trim();
+    if (bill) return bill;
+    const sap = sp?.sapCode?.trim();
+    if (sap) return sap;
+    const retek = sp?.retekCode?.trim();
+    if (retek) return retek;
+    const b = sp?.brand?.trim();
+    const sub = sp?.brandSub?.trim();
+    if (b && sub) return `${b} / ${sub}`;
+    if (b) return b;
+    if (sub) return sub;
+    const city = sp?.city?.trim();
+    if (city) return city;
+  }
   const name =
     c.retailerName?.trim() ||
     c.distributorName?.trim() ||
     c.outlet?.trim() ||
+    c.parentKeyCode?.trim() ||
     "";
   return name || "—";
 }

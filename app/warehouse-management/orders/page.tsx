@@ -1,14 +1,19 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast, Toaster } from "react-hot-toast";
+import * as XLSX from "xlsx";
+import { saveAs } from "file-saver";
 import {
   whmsWarehouseOrders,
   normalizeWarehouseOrderStatus,
   type WarehouseOrder,
   type WarehouseOrderStatus,
+  type BulkImportOrderRow,
+  type BulkImportSinglePairItem,
+  type BulkImportMultiPairItem,
 } from "@/shared/services/whmsWarehouseOrderService";
 import WarehouseOrdersTable from "./components/WarehouseOrdersTable";
 import WarehouseOrderDetailDrawer from "./components/WarehouseOrderDetailDrawer";
@@ -35,6 +40,8 @@ export default function WarehouseOrdersPage() {
   const [rows, setRows] = useState<WarehouseOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const importRef = useRef<HTMLInputElement>(null);
 
   const stats = useMemo(() => {
     const by: Record<WarehouseOrderStatus, number> = {
@@ -95,6 +102,119 @@ export default function WarehouseOrdersPage() {
       await fetchRows();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Delete failed");
+    }
+  };
+
+  const downloadTemplate = () => {
+    const orderRows = [
+      { clientType: "Store", clientName: "My Store Brand", date: "17/02/2026", status: "pending", pairType: "single", styleCode: "SC-001", colour: "Red", pattern: "Solid", quantity: 10, type: "" },
+      { clientType: "", clientName: "", date: "", status: "", pairType: "single", styleCode: "SC-002", colour: "Blue", pattern: "Stripe", quantity: 5, type: "" },
+      { clientType: "", clientName: "", date: "", status: "", pairType: "multi", styleCode: "MP-001", colour: "Green", pattern: "Check", quantity: 20, type: "Cotton" },
+      { clientType: "Trade", clientName: "Another Client", date: "20/02/2026", status: "pending", pairType: "single", styleCode: "SC-003", colour: "Black", pattern: "Plain", quantity: 15, type: "" },
+    ];
+    const instructions = [
+      { Field: "clientType", Description: "Store, Trade, Departmental, or Ecom" },
+      { Field: "clientName", Description: "Human-readable client name (backend resolves to clientId)" },
+      { Field: "date", Description: "DD/MM/YYYY or DD-MM-YYYY" },
+      { Field: "status", Description: "pending, in-progress, packed, dispatched, cancelled" },
+      { Field: "pairType", Description: "'single' or 'multi' — determines single-pair vs multi-pair item" },
+      { Field: "styleCode", Description: "Style code string (backend auto-resolves ID)" },
+      { Field: "colour", Description: "Colour name" },
+      { Field: "pattern", Description: "Pattern name" },
+      { Field: "quantity", Description: "Numeric quantity" },
+      { Field: "type", Description: "Required for multi-pair items only (e.g. Cotton)" },
+      { Field: "---", Description: "---" },
+      { Field: "GROUPING", Description: "Rows with clientType filled start a new order. Subsequent rows without clientType are items belonging to the same order." },
+    ];
+    const ws = XLSX.utils.json_to_sheet(orderRows);
+    const wsInst = XLSX.utils.json_to_sheet(instructions);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Orders");
+    XLSX.utils.book_append_sheet(wb, wsInst, "Instructions");
+    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    saveAs(new Blob([wbout], { type: "application/octet-stream" }), "warehouse-orders-bulk-template.xlsx");
+    toast.success("Template downloaded");
+  };
+
+  const handleBulkImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setIsImporting(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array", cellDates: true });
+      const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]] || {}, { defval: "", raw: false });
+      if (!rawRows.length) { toast.error("No rows found in file"); return; }
+
+      const str = (v: unknown) => String(v ?? "").trim();
+      const num = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+      const parseDate = (v: unknown): string => {
+        if (v instanceof Date) {
+          const dd = String(v.getUTCDate()).padStart(2, "0");
+          const mm = String(v.getUTCMonth() + 1).padStart(2, "0");
+          return `${dd}/${mm}/${v.getUTCFullYear()}`;
+        }
+        const raw = String(v ?? "").trim();
+        if (!raw) return "";
+        const serial = Number(raw);
+        if (Number.isFinite(serial) && serial > 1000 && serial < 100000) {
+          const d = new Date(Math.round((serial - 25569) * 86400 * 1000));
+          const dd = String(d.getUTCDate()).padStart(2, "0");
+          const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+          return `${dd}/${mm}/${d.getUTCFullYear()}`;
+        }
+        if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/.test(raw)) return raw.replace(/-/g, "/");
+        return raw;
+      };
+
+      const orders: BulkImportOrderRow[] = [];
+      let current: BulkImportOrderRow | null = null;
+
+      for (const row of rawRows) {
+        const ct = str(row.clientType || row.ClientType || row["Client Type"]);
+        const cn = str(row.clientName || row.ClientName || row["Client Name"]);
+        const dt = parseDate(row.date ?? row.Date);
+        const st = str(row.status || row.Status);
+        const sc = str(row.styleCode || row.StyleCode || row["Style Code"]);
+        const colour = str(row.colour || row.Colour || row.color || row.Color);
+        const pattern = str(row.pattern || row.Pattern);
+        const qty = num(row.quantity || row.Quantity || row.qty || row.Qty);
+        const type = str(row.type || row.Type);
+        const pt = str(row.pairType || row.PairType || row["Pair Type"]).toLowerCase();
+
+        if (ct) {
+          current = { clientType: ct, clientName: cn, date: dt, status: st || "pending" };
+          orders.push(current);
+        }
+        if (!current || !sc) continue;
+
+        if (pt === "multi" || pt === "multipair" || pt === "multi-pair") {
+          const item: BulkImportMultiPairItem = { styleCode: sc, type, colour, pattern, quantity: qty };
+          current.styleCodeMultiPair = [...(current.styleCodeMultiPair || []), item];
+        } else {
+          const item: BulkImportSinglePairItem = { styleCode: sc, colour, pattern, quantity: qty };
+          current.styleCodeSinglePair = [...(current.styleCodeSinglePair || []), item];
+        }
+      }
+
+      if (!orders.length) { toast.error("No valid orders parsed. Ensure clientType is filled for order header rows."); return; }
+
+      const summary = await whmsWarehouseOrders.bulkImport({ orders });
+      if (summary.created > 0) toast.success(`${summary.created} order(s) created successfully`);
+      if (summary.failed > 0) toast.error(`${summary.failed} order(s) failed`);
+      if (summary.errors?.length) {
+        summary.errors.slice(0, 5).forEach((err) => {
+          toast.error(`${err.row != null ? `Row ${err.row}: ` : ""}${err.reason}`, { duration: 6000 });
+        });
+        if (summary.errors.length > 5) toast(`+${summary.errors.length - 5} more error(s)`, { icon: "⚠️" });
+      }
+      await fetchRows();
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Bulk import failed");
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -161,6 +281,26 @@ export default function WarehouseOrdersPage() {
                 </select>
                 <i className="ri-arrow-down-s-line absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none" />
               </div>
+              <button
+                type="button"
+                onClick={downloadTemplate}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
+              >
+                <i className="ri-download-2-line text-xs" /> Template
+              </button>
+              <button
+                type="button"
+                onClick={() => importRef.current?.click()}
+                disabled={isImporting}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+              >
+                {isImporting ? (
+                  <><i className="ri-loader-4-line text-xs animate-spin" /> Importing...</>
+                ) : (
+                  <><i className="ri-file-excel-2-line text-xs" /> Bulk Import</>
+                )}
+              </button>
+              <input ref={importRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleBulkImport} />
               <Link
                 href="/warehouse-management/orders/add"
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
