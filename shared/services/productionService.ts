@@ -244,6 +244,9 @@ export interface FloorOrderFilters {
   status?: string;
   priority?: string;
   search?: string;
+  machineId?: string;
+  sortBy?: string;
+  populate?: string;
 }
 
 export interface ApiResponse<T> {
@@ -623,6 +626,61 @@ class ProductionService {
           code: 'FETCH_ERROR',
           message: error instanceof Error ? error.message : 'Failed to fetch floor orders'
         }
+      };
+    }
+  }
+
+  /**
+   * GET /production/floors/Dispatch/orders/pending-warehouse-print
+   * Same filters as getFloorOrders; response has dispatch.transferredData as pending-only lines
+   * (not yet inwarded at warehouse) and omits articles/orders with no pending qty.
+   */
+  async getDispatchPendingWarehousePrintOrders(
+    filters: FloorOrderFilters = {}
+  ): Promise<ApiResponse<PaginatedResponse<ProductionOrder>>> {
+    const queryParams = new URLSearchParams();
+
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') {
+        queryParams.append(key, String(value));
+      }
+    });
+
+    const queryString = queryParams.toString();
+    const endpoint = queryString
+      ? `/floors/Dispatch/orders/pending-warehouse-print?${queryString}`
+      : `/floors/Dispatch/orders/pending-warehouse-print`;
+
+    try {
+      const response = await this.request<any>(endpoint);
+
+      const responseData = response.success ? response.data : response;
+
+      const transformedData: PaginatedResponse<ProductionOrder> = {
+        ...responseData,
+        results: (responseData.results ?? []).map((order: any) => this.transformOrder(order)),
+      };
+
+      return {
+        success: true,
+        data: transformedData,
+      };
+    } catch (error) {
+      console.error('Error in getDispatchPendingWarehousePrintOrders:', error);
+      return {
+        success: false,
+        data: {
+          results: [],
+          page: 1,
+          limit: 10,
+          totalPages: 0,
+          totalResults: 0,
+        },
+        error: {
+          code: 'FETCH_ERROR',
+          message:
+            error instanceof Error ? error.message : 'Failed to fetch pending warehouse print orders',
+        },
       };
     }
   }

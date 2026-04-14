@@ -102,6 +102,11 @@ export type CreateWarehouseClientBody = Partial<Omit<WarehouseClient, 'id' | 'cr
   type: WarehouseClientType;
 };
 
+/** POST `/warehouse-clients/bulk-import` — same item shapes as single create. */
+export type WarehouseClientsBulkImportBody = {
+  items: CreateWarehouseClientBody[];
+};
+
 export type UpdateWarehouseClientBody = Partial<Omit<WarehouseClient, 'id' | 'createdAt' | 'updatedAt'>>;
 
 export interface PaginatedWarehouseClients {
@@ -127,4 +132,6 @@ export const whmsWarehouseClients = {
     request<WarehouseClient>(`/warehouse-clients/${clientId}`, { method: 'PATCH', body: JSON.stringify(body) }),
   delete: (clientId: string) =>
     request<void>(`/warehouse-clients/${clientId}`, { method: 'DELETE' }),
+  bulkImport: (body: WarehouseClientsBulkImportBody) =>
+    request<unknown>('/warehouse-clients/bulk-import', { method: 'POST', body: JSON.stringify(body) }),
 };

@@ -1,13 +1,17 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { Vendor } from "./types";
 import VendorViewDrawer from "./components/VendorViewDrawer";
 import { toast } from "react-hot-toast";
-import { listVendors, patchVendor } from "@/shared/services/vendorManagementService";
+import { bulkImportVendors, listVendors, patchVendor } from "@/shared/services/vendorManagementService";
 import { mapVendorDocToVendor } from "./vendorMappers";
+import {
+  downloadVendorBulkExcelTemplate,
+  parseVendorBulkExcelToBody,
+} from "./vendorBulkImportExcel";
 
 const PAGE_SIZE = 10;
 
@@ -27,6 +31,8 @@ const VendorListPage = () => {
 
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [bulkImporting, setBulkImporting] = useState(false);
+  const bulkFileRef = useRef<HTMLInputElement>(null);
 
   const loadVendors = useCallback(async () => {
     setLoading(true);
@@ -87,6 +93,25 @@ const VendorListPage = () => {
     setShowViewModal(false);
     setSelectedVendor(null);
     router.push(`/vendor-po/vendor-list/edit/${vendor.id}`);
+  };
+
+  const handleBulkImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setBulkImporting(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const body = parseVendorBulkExcelToBody(buf);
+      await bulkImportVendors(body);
+      toast.success("Vendors imported successfully.");
+      await loadVendors();
+    } catch (err: unknown) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setBulkImporting(false);
+    }
   };
 
   const handleDisableEnable = async (vendor: Vendor) => {
@@ -161,6 +186,42 @@ const VendorListPage = () => {
                 />
                 <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-xs" />
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  downloadVendorBulkExcelTemplate();
+                  toast.success("Template downloaded");
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
+              >
+                <i className="ri-file-download-line text-xs" />
+                Template
+              </button>
+              <input
+                ref={bulkFileRef}
+                type="file"
+                className="hidden"
+                accept=".xlsx,.xls"
+                onChange={handleBulkImportFile}
+              />
+              <button
+                type="button"
+                disabled={bulkImporting}
+                onClick={() => bulkFileRef.current?.click()}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+              >
+                {bulkImporting ? (
+                  <>
+                    <i className="ri-loader-4-line text-xs animate-spin" />
+                    Importing…
+                  </>
+                ) : (
+                  <>
+                    <i className="ri-file-excel-2-line text-xs" />
+                    Bulk Import
+                  </>
+                )}
+              </button>
               <Link
                 href="/vendor-po/vendor-list/add"
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"

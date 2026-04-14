@@ -797,13 +797,47 @@ const DispatchFloorSupervisorPage = () => {
       return rows;
     };
 
+    let loadingToast: string | undefined;
+
     try {
+      loadingToast = toast.loading("Loading pending warehouse print data…");
+      const printFiltersBase: FloorOrderFilters = {
+        limit: 100,
+        ...(filters.status && { status: filters.status }),
+        ...(filters.priority && { priority: filters.priority }),
+        ...(searchQuery && { search: searchQuery }),
+      };
+
+      const printOrders: ProductionOrder[] = [];
+      let printPage = 1;
+      let printTotalPages = 1;
+      const maxPages = 500;
+
+      while (printPage <= printTotalPages && printPage <= maxPages) {
+        const pendingRes = await productionService.getDispatchPendingWarehousePrintOrders({
+          ...printFiltersBase,
+          page: printPage,
+        });
+
+        if (!pendingRes.success || !pendingRes.data) {
+          if (loadingToast !== undefined) toast.dismiss(loadingToast);
+          toast.error(pendingRes.error?.message ?? "Failed to load pending print data");
+          return;
+        }
+
+        printOrders.push(...pendingRes.data.results);
+        printTotalPages = pendingRes.data.totalPages ?? 1;
+        printPage += 1;
+      }
+
+      if (loadingToast !== undefined) toast.dismiss(loadingToast);
+
       const response = await fetch(`/templates/stock-transfer-note.html?v=${Date.now()}`, { cache: "no-store" });
       let htmlTemplate = await response.text();
 
       const factoryCodes = Array.from(
         new Set(
-          orders
+          printOrders
             .flatMap((order) => order.articles.map((article) => String(article.articleNumber ?? "").trim()))
             .filter(Boolean)
         )
@@ -816,7 +850,7 @@ const DispatchFloorSupervisorPage = () => {
         return acc;
       }, {});
 
-      const tableRows = orders.flatMap((order) =>
+      const tableRows = printOrders.flatMap((order) =>
         order.articles.flatMap((article) => buildRowsForArticle(article, articleNameByFactoryCode))
       );
       const totalQty = tableRows.reduce((sum, row) => sum + row.qtyInPairs, 0);
@@ -864,6 +898,7 @@ const DispatchFloorSupervisorPage = () => {
         toast.error("Please allow popups to print list");
       }
     } catch (error) {
+      if (loadingToast !== undefined) toast.dismiss(loadingToast);
       console.error("Error printing list:", error);
       toast.error("Failed to load print template");
     }

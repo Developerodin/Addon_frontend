@@ -336,6 +336,28 @@ export interface WhmsWarehouseInventoryPatchBody {
   adjustReason?: string;
 }
 
+/** POST /v1/whms/warehouse-inventory/bulk-import — same auth as create (manageOrders). */
+export interface WhmsWarehouseInventoryBulkImportItem {
+  factoryCode: string;
+  styleCode: string;
+  totalQuantity: number;
+  blockedQuantity: number;
+}
+
+export interface WhmsWarehouseInventoryBulkImportBody {
+  items: WhmsWarehouseInventoryBulkImportItem[];
+}
+
+/** Response shape may vary; surface common fields from the API. */
+export interface WhmsWarehouseInventoryBulkImportResult {
+  created?: number;
+  updated?: number;
+  failed?: number;
+  message?: string;
+  errors?: Array<{ row?: number; reason?: string; message?: string }>;
+  [key: string]: unknown;
+}
+
 export const whmsWarehouseInventory = {
   list: (params?: Record<string, string | number | undefined>) =>
     request<WhmsPaginated<WhmsWarehouseInventoryDTO>>(`/warehouse-inventory${qs(params || {})}`),
@@ -353,6 +375,11 @@ export const whmsWarehouseInventory = {
     }),
   delete: (inventoryId: string) =>
     request<void>(`/warehouse-inventory/${inventoryId}`, { method: 'DELETE' }),
+  bulkImport: (body: WhmsWarehouseInventoryBulkImportBody) =>
+    request<WhmsWarehouseInventoryBulkImportResult>('/warehouse-inventory/bulk-import', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };
 
 // --- 3. Approvals ---

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Seo from "@/shared/layout-components/seo/seo";
@@ -13,6 +13,12 @@ import {
 } from "@/shared/services/whmsWarehouseClientService";
 import WarehouseClientsTable from "./components/WarehouseClientsTable";
 import WarehouseClientDetailDrawer from "./components/WarehouseClientDetailDrawer";
+import {
+  downloadWarehouseClientStoreTemplate,
+  downloadWarehouseClientTradeTemplate,
+  parseWarehouseClientStoreImportFile,
+  parseWarehouseClientTradeImportFile,
+} from "./components/warehouseClientBulkImport";
 
 const TYPE_TABS: { id: WarehouseClientType; label: string }[] = [
   { id: "Store", label: "Store" },
@@ -58,6 +64,9 @@ export default function WarehouseManagementClientsPage() {
   const [totalResults, setTotalResults] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [isBulkImporting, setIsBulkImporting] = useState(false);
+  const storeBulkInputRef = useRef<HTMLInputElement>(null);
+  const tradeBulkInputRef = useRef<HTMLInputElement>(null);
 
   const hasPermission = hasSubPermission("/warehouse-management", "Clients");
 
@@ -118,6 +127,56 @@ export default function WarehouseManagementClientsPage() {
       setRows([]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleStoreBulkFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setIsBulkImporting(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const { items, errors } = parseWarehouseClientStoreImportFile(buf);
+      if (errors.length) {
+        toast.error(errors.slice(0, 5).join(" · ") + (errors.length > 5 ? "…" : ""));
+      }
+      if (!items.length) {
+        if (!errors.length) toast.error("No valid rows to import");
+        return;
+      }
+      await whmsWarehouseClients.bulkImport({ items });
+      toast.success(`Imported ${items.length} Store row(s)`);
+      await fetchClients();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Bulk import failed");
+    } finally {
+      setIsBulkImporting(false);
+    }
+  };
+
+  const handleTradeBulkFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setIsBulkImporting(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const { items, errors } = parseWarehouseClientTradeImportFile(buf);
+      if (errors.length) {
+        toast.error(errors.slice(0, 5).join(" · ") + (errors.length > 5 ? "…" : ""));
+      }
+      if (!items.length) {
+        if (!errors.length) toast.error("No valid rows to import");
+        return;
+      }
+      await whmsWarehouseClients.bulkImport({ items });
+      toast.success(`Imported ${items.length} row(s)`);
+      await fetchClients();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Bulk import failed");
+    } finally {
+      setIsBulkImporting(false);
     }
   };
 
@@ -240,6 +299,62 @@ export default function WarehouseManagementClientsPage() {
                 </select>
                 <i className="ri-arrow-down-s-line absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none" />
               </div>
+              <input
+                ref={storeBulkInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={handleStoreBulkFile}
+              />
+              <input
+                ref={tradeBulkInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={handleTradeBulkFile}
+              />
+              <button
+                type="button"
+                disabled={isBulkImporting}
+                onClick={() => downloadWarehouseClientStoreTemplate()}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-50"
+              >
+                <i className="ri-file-excel-2-line text-xs" /> Store template
+              </button>
+              <button
+                type="button"
+                disabled={isBulkImporting}
+                onClick={() => downloadWarehouseClientTradeTemplate()}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-50"
+              >
+                <i className="ri-file-excel-2-line text-xs" /> Trade template
+              </button>
+              <button
+                type="button"
+                disabled={isBulkImporting}
+                onClick={() => storeBulkInputRef.current?.click()}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-purple-200 text-purple-700 text-[11px] font-bold rounded hover:bg-purple-50 transition-colors shadow-sm disabled:opacity-50"
+              >
+                {isBulkImporting ? (
+                  <i className="ri-loader-4-line text-xs animate-spin" />
+                ) : (
+                  <i className="ri-upload-2-line text-xs" />
+                )}
+                Import Store
+              </button>
+              <button
+                type="button"
+                disabled={isBulkImporting}
+                onClick={() => tradeBulkInputRef.current?.click()}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-purple-200 text-purple-700 text-[11px] font-bold rounded hover:bg-purple-50 transition-colors shadow-sm disabled:opacity-50"
+              >
+                {isBulkImporting ? (
+                  <i className="ri-loader-4-line text-xs animate-spin" />
+                ) : (
+                  <i className="ri-upload-2-line text-xs" />
+                )}
+                Import Trade / Dept / Ecom
+              </button>
               <Link
                 href="/warehouse-management/clients/add"
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
