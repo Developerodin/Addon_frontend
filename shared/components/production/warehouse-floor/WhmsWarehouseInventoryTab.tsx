@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "react-hot-toast";
 import {
   whmsWarehouseInventory,
@@ -8,6 +8,10 @@ import {
 } from "@/shared/services/whmsService";
 import WarehouseInventoryCreateModal from "./WarehouseInventoryCreateModal";
 import WarehouseInventoryDetailDrawer from "./WarehouseInventoryDetailDrawer";
+import {
+  downloadWarehouseInventoryImportTemplate,
+  parseWarehouseInventoryImportFile,
+} from "./warehouseInventoryBulkImport";
 
 /**
  * WHMS warehouse inventory — GET /v1/whms/warehouse-inventory (list + detail + logs).
@@ -24,6 +28,8 @@ export default function WhmsWarehouseInventoryTab() {
   const [debouncedStyleCode, setDebouncedStyleCode] = useState("");
   const [sortBy, setSortBy] = useState("createdAt:desc");
   const [createOpen, setCreateOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailRow, setDetailRow] = useState<WhmsWarehouseInventoryDTO | null>(null);
@@ -79,6 +85,51 @@ export default function WhmsWarehouseInventoryTab() {
     setDetailRow((d) => (d?.id === dto.id ? dto : d));
   };
 
+  const onDownloadTemplate = () => {
+    try {
+      downloadWarehouseInventoryImportTemplate();
+      toast.success("Template downloaded");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to build template");
+    }
+  };
+
+  const onPickImportFile = () => importInputRef.current?.click();
+
+  const onImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setImporting(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const { items, errors: parseErrors } = parseWarehouseInventoryImportFile(buf);
+      if (parseErrors.length && !items.length) {
+        toast.error(parseErrors.slice(0, 6).join(" · "));
+        return;
+      }
+      if (parseErrors.length && items.length) {
+        toast.error(`Some rows skipped: ${parseErrors.slice(0, 4).join(" · ")}`, { duration: 6000 });
+      }
+      const result = await whmsWarehouseInventory.bulkImport({ items });
+      const created = typeof result.created === "number" ? result.created : undefined;
+      const failed = typeof result.failed === "number" ? result.failed : undefined;
+      const msg = result.message;
+      if (msg) toast.success(msg);
+      else if (created !== undefined || failed !== undefined)
+        toast.success(
+          `Import finished${created !== undefined ? ` · ${created} created` : ""}${failed !== undefined ? ` · ${failed} failed` : ""}`,
+        );
+      else toast.success("Import submitted");
+      void load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <>
       <WarehouseInventoryCreateModal
@@ -91,6 +142,13 @@ export default function WhmsWarehouseInventoryTab() {
       />
 
       <div className="p-[10px] flex flex-wrap items-center gap-2 border-b border-gray-300 bg-white">
+        <input
+          ref={importInputRef}
+          type="file"
+          className="hidden"
+          accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+          onChange={(ev) => void onImportFile(ev)}
+        />
         <button
           type="button"
           onClick={() => setCreateOpen(true)}
@@ -98,6 +156,23 @@ export default function WhmsWarehouseInventoryTab() {
         >
           <i className="ri-add-line text-xs" />
           Add inventory
+        </button>
+        <button
+          type="button"
+          onClick={onDownloadTemplate}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50"
+        >
+          <i className="ri-file-download-line text-xs" />
+          Download template
+        </button>
+        <button
+          type="button"
+          onClick={() => void onPickImportFile()}
+          disabled={importing}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 disabled:opacity-50"
+        >
+          <i className={`ri-upload-2-line text-xs ${importing ? "animate-pulse" : ""}`} />
+          {importing ? "Importing…" : "Import"}
         </button>
         <button
           type="button"
