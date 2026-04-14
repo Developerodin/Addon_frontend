@@ -42,6 +42,22 @@ export interface CreateVendorBody {
   products?: string[];
 }
 
+/** One product row for bulk import — factory code from catalog (POST /vendor-management/bulk). */
+export interface BulkVendorProductRef {
+  factoryCode: string;
+}
+
+/** One vendor in bulk import — same shape as single create, but products use factoryCode objects. */
+export interface BulkVendorItem {
+  header: VendorManagementHeaderInput;
+  contactPersons: VendorContactPersonInput[];
+  products: BulkVendorProductRef[];
+}
+
+export interface BulkImportVendorsBody {
+  vendors: BulkVendorItem[];
+}
+
 export interface ListVendorsParams {
   vendorName?: string;
   vendorCode?: string;
@@ -128,6 +144,20 @@ export async function createVendor(body: CreateVendorBody): Promise<VendorManage
       ...body,
       products: body.products ?? [],
     }),
+  });
+}
+
+/**
+ * POST /v1/vendor-management/bulk — non-empty `vendors` array; each item matches create shape with `products` as `{ factoryCode }[]`.
+ */
+export async function bulkImportVendors(body: BulkImportVendorsBody): Promise<unknown> {
+  if (!body.vendors?.length) {
+    throw new Error('Bulk import requires at least one vendor.');
+  }
+  const url = `${baseUrl()}/bulk`;
+  return requestJson<unknown>(url, {
+    method: 'POST',
+    body: JSON.stringify(body),
   });
 }
 
@@ -220,6 +250,7 @@ export async function removeVendorProducts(
 
 export const vendorManagementService = {
   create: createVendor,
+  bulkImport: bulkImportVendors,
   list: listVendors,
   get: getVendor,
   patch: patchVendor,
