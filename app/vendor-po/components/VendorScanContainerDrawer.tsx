@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-hot-toast";
 import {
   containersMasterService,
   hasActiveItems,
   type ContainerMaster,
 } from "@/shared/services/containersMasterService";
+import { VendorDispatchReceivePanel } from "./VendorDispatchReceivePanel";
 
 function normalizeFloor(f: string | undefined): string {
   return (f ?? "").replace(/\s+/g, "").toLowerCase();
@@ -17,8 +18,14 @@ type Props = {
   onClose: () => void;
   /** Human floor name used by container.activeFloor (e.g. "Branding", "Final Checking") */
   expectedFloorName: string;
+  /** When the drawer opens, pre-fill the barcode field (e.g. after Final QC staging → Dispatch). */
+  initialBarcode?: string;
   /** Called after accept succeeds (refresh lists / counters from server). */
   onAccepted?: () => void | Promise<void>;
+  /**
+   * When true (Dispatch floor only), accept sends `vendorReceive` with qty and/or style lines — not a bare POST accept.
+   */
+  vendorDispatchReceive?: boolean;
 };
 
 /**
@@ -35,17 +42,34 @@ export function VendorScanContainerDrawer({
   open,
   onClose,
   expectedFloorName,
+  initialBarcode,
   onAccepted,
+  vendorDispatchReceive = false,
 }: Props) {
   const [barcode, setBarcode] = useState("");
   const [loading, setLoading] = useState(false);
   const [acceptLoading, setAcceptLoading] = useState(false);
   const [scanned, setScanned] = useState<ContainerMaster | null>(null);
+  const wasOpenRef = useRef(false);
 
   const reset = useCallback(() => {
     setBarcode("");
     setScanned(null);
   }, []);
+
+  /**
+   * Apply optional prefill when the drawer opens (not on every render while open).
+   */
+  useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      const b = initialBarcode?.trim();
+      if (b) {
+        setBarcode(b);
+        setScanned(null);
+      }
+    }
+    wasOpenRef.current = open;
+  }, [open, initialBarcode]);
 
   const handleClose = () => {
     reset();
@@ -89,7 +113,7 @@ export function VendorScanContainerDrawer({
     }
   };
 
-  const accept = async () => {
+  const acceptBare = async () => {
     if (!scanned?.barcode) return;
     if (!hasActiveItems(scanned)) return;
     if (!belongs) return;
@@ -204,30 +228,42 @@ export function VendorScanContainerDrawer({
               {hasActiveItems(scanned) ? (
                 <>
                   {!belongs && (
-                    <div className="p-2 rounded border-2 border-red-400 bg-red-50 text-[11px] text-red-800">
-                      This container is assigned to{" "}
-                      <strong>
-                        {String(scanned.activeFloor || "unknown")}
-                      </strong>
-                      , not {expectedFloorName}. Accept is disabled.
+                    <div className="p-2 rounded border-2 border-amber-400 bg-amber-50 text-[11px] text-amber-900">
+                      This container is on{" "}
+                      <strong>{String(scanned.activeFloor || "unknown")}</strong>, not{" "}
+                      <strong>{expectedFloorName}</strong>. You can still accept if your process allows it; the API may reject invalid state.
                     </div>
                   )}
-                  <button
-                    type="button"
-                    disabled={acceptLoading || !belongs}
-                    onClick={() => void accept()}
-                    className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-emerald-600 text-white hover:bg-emerald-700 w-full disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {acceptLoading ? "Accepting…" : "Accept container"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={reset}
-                    className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 w-full"
-                    disabled={acceptLoading}
-                  >
-                    Scan another
-                  </button>
+                  {vendorDispatchReceive ? (
+                    <VendorDispatchReceivePanel
+                      container={scanned}
+                      onScanAnother={reset}
+                      onAccepted={async () => {
+                        await onAccepted?.();
+                        reset();
+                        onClose();
+                      }}
+                    />
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        disabled={acceptLoading || !belongs}
+                        onClick={() => void acceptBare()}
+                        className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-emerald-600 text-white hover:bg-emerald-700 w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {acceptLoading ? "Accepting…" : "Accept container"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={reset}
+                        className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 w-full"
+                        disabled={acceptLoading}
+                      >
+                        Scan another
+                      </button>
+                    </>
+                  )}
                 </>
               ) : (
                 <>

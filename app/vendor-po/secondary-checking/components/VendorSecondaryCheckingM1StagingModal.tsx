@@ -57,6 +57,7 @@ export function VendorSecondaryCheckingM1StagingModal({
   const [scanLoading, setScanLoading] = useState(false);
   const [scannedContainer, setScannedContainer] =
     useState<ContainerMaster | null>(null);
+  const [scanBlockReason, setScanBlockReason] = useState<string | null>(null);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [successBarcode, setSuccessBarcode] = useState<string | undefined>();
 
@@ -64,6 +65,7 @@ export function VendorSecondaryCheckingM1StagingModal({
     setStep("form");
     setScanBarcode("");
     setScannedContainer(null);
+    setScanBlockReason(null);
     setSuccessBarcode(undefined);
   }, []);
 
@@ -85,19 +87,28 @@ export function VendorSecondaryCheckingM1StagingModal({
     }
     setScanLoading(true);
     setScannedContainer(null);
+    setScanBlockReason(null);
     try {
       const c = await containersMasterService.getByBarcode(b);
+      // Always show the scanned container, even if it's unusable.
+      setScannedContainer(c);
       if (hasActiveItems(c)) {
+        const activeCount = Array.isArray(c.activeItems) ? c.activeItems.length : 0;
+        const reason = `Not empty: activeFloor=\"${c.activeFloor ?? "—"}\", activeItems=${activeCount}, qty=${Number(
+          c.quantity ?? 0,
+        ).toLocaleString()}`;
+        setScanBlockReason(reason);
         toast.error(
           "This container is not empty. Use an empty container with no active stock.",
         );
         return;
       }
       if (!containerRef(c)) {
+        const reason = "Missing usable container reference (barcode/id) for staging.";
+        setScanBlockReason(reason);
         toast.error("Container has no barcode or id for transfer.");
         return;
       }
-      setScannedContainer(c);
       toast.success("Empty container verified — save to apply and stage");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Container not found");
@@ -132,7 +143,7 @@ export function VendorSecondaryCheckingM1StagingModal({
       return;
     }
     if (hasActiveItems(scannedContainer!)) {
-      toast.error("Container must be empty.");
+      toast.error(scanBlockReason || "Container must be empty.");
       return;
     }
     const ref = containerRef(scannedContainer!);
@@ -171,6 +182,10 @@ export function VendorSecondaryCheckingM1StagingModal({
 
   const articles = scannedContainer ? getContainerArticles(scannedContainer) : [];
   const d = displayTotals;
+  const canStage =
+    Boolean(scannedContainer) &&
+    !hasActiveItems(scannedContainer) &&
+    Boolean(containerRef(scannedContainer));
 
   return (
     <>
@@ -345,6 +360,14 @@ export function VendorSecondaryCheckingM1StagingModal({
                       Branding.
                     </p>
                   )}
+                  {scanBlockReason ? (
+                    <div className="rounded border border-amber-300 bg-amber-50 p-2 text-amber-900">
+                      <div className="font-bold text-[10px] uppercase tracking-wide">
+                        Blocked
+                      </div>
+                      <div className="font-mono break-words">{scanBlockReason}</div>
+                    </div>
+                  ) : null}
                   <button
                     type="button"
                     disabled={
@@ -357,6 +380,12 @@ export function VendorSecondaryCheckingM1StagingModal({
                   >
                     {submitLoading ? "Saving…" : "Save — update & stage"}
                   </button>
+                  {!canStage ? (
+                    <p className="text-[10px] text-gray-700">
+                      Pick an <strong>empty</strong> Active container (no active items).
+                      This modal will not stage onto a “dirty” bag.
+                    </p>
+                  ) : null}
                 </div>
               )}
 

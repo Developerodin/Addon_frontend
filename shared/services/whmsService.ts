@@ -212,9 +212,14 @@ export interface WhmsInwardReceiveRow {
   articleNumber: string;
   QuantityFromFactory: number;
   receivedQuantity: number;
+  /** Often the StyleCode document id (24-char hex) from vendor floors; PATCH accept expects the master code string. */
   styleCode: string;
   brand: string;
   status: InwardReceiveStatus | string;
+  /** `vendor` | `production` — vendor lines appear after WHMS promote-vendor-dispatch (not automatically on vendor dispatch accept). */
+  inwardSource?: string;
+  vendorProductionFlowId?: string;
+  vendorPurchaseOrderId?: string;
   orderData?: Record<string, unknown>;
   receivedAt: string;
   receivedInContainerId?: string | null;
@@ -226,6 +231,20 @@ export interface WhmsInwardReceiveRow {
 export type WhmsInwardReceivePatchBody = {
   receivedQuantity?: number;
   status?: InwardReceiveStatus;
+  /** Required by API when accepting so WarehouseInventory can resolve style + article (factory code). */
+  styleCode?: string;
+};
+
+/** POST /v1/whms/inward-receive/promote-vendor-dispatch — creates vendor inward queue rows from dispatch data (idempotent). */
+export type PromoteVendorDispatchBody = {
+  vendorProductionFlowId: string;
+  /** Omit or empty for confirm-only / all matching lines; set to scanned bag barcode for FC→dispatch container lines. */
+  containerBarcode?: string;
+};
+
+export type PromoteVendorDispatchResponse = {
+  createdOrSkipped: number;
+  linesMatched: number;
 };
 
 export const whmsInwardReceive = {
@@ -234,6 +253,15 @@ export const whmsInwardReceive = {
   get: (id: string) => request<WhmsInwardReceiveRow>(`/inward-receive/${id}`),
   patch: (id: string, body: WhmsInwardReceivePatchBody) =>
     request<WhmsInwardReceiveRow>(`/inward-receive/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  /**
+   * Gate vendor lines into the inward-receive queue after dispatch is reflected on the flow/container.
+   * Auth: same as other inward writes (e.g. manageOrders).
+   */
+  promoteVendorDispatch: (body: PromoteVendorDispatchBody) =>
+    request<PromoteVendorDispatchResponse>(`/inward-receive/promote-vendor-dispatch`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };
 
 // --- 2c. Warehouse inventory (GET list/detail/logs; POST/PATCH/DELETE manageOrders) ---

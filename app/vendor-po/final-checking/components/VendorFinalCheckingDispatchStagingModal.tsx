@@ -3,9 +3,11 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
 import vendorProductionFlowService, {
+  mergeProductionFlowPreservePopulatedRefs,
   type RepairStatus,
   type TransferredDataRow,
   type VendorProductionFlow,
+  type VendorTransferItem,
 } from "@/shared/services/vendorProductionFlowService";
 import {
   containersMasterService,
@@ -19,15 +21,18 @@ import { formatTransferredRowLabel } from "../../utils/transferredStyleRows";
 const Z_BACK = 100;
 const Z_PANEL = 110;
 
-/** Full finalChecking PATCH (no container) — modal adds barcode + auto-transfer toward Dispatch. */
+/**
+ * Draft payload from the drawer for **Save & stage**. The modal sends one
+ * `PATCH …/floors/finalChecking` with counts + **full** `transferredData` lines for the move
+ * + `existingContainerBarcode` (no separate `PATCH …/transfer`, no container accept — that is Dispatch).
+ */
 export type PendingFinalCheckingStagingPatch = {
-  mode: "replace";
-  transferredData: TransferredDataRow[];
   m1Quantity: number;
   m2Quantity: number;
   m4Quantity: number;
   repairStatus: RepairStatus;
   repairRemarks: string;
+  transferredData?: TransferredDataRow[];
 };
 
 type Step = "form" | "success";
@@ -36,18 +41,23 @@ type Props = {
   open: boolean;
   baselineFlow: VendorProductionFlow | null;
   pendingPatch: PendingFinalCheckingStagingPatch | null;
+  /** Style-wise lines for `PATCH …/floors/finalChecking` `transferredData`; sum must match staged qty. */
+  transferItems: VendorTransferItem[];
   onClose: () => void;
   onFloorUpdated: (updated: VendorProductionFlow) => void;
 };
 
 /**
- * Container scan + PATCH finalChecking with auto-transfer to Dispatch (same pattern as
- * secondary-checking M1 modal / branding → Final staging).
+ * One `PATCH …/floors/finalChecking` (counts + transferredData + existingContainerBarcode).
+ * **Do not** call `PATCH …/transfer` for this leg. Dispatch receive is a separate step: user scans
+ * the same barcode on **Vendor Dispatch** and `POST …/containers-masters/barcode/:barcode/accept`
+ * (updates dispatch only). WHMS inward rows are created later via `POST …/promote-vendor-dispatch`.
  */
 export function VendorFinalCheckingDispatchStagingModal({
   open,
   baselineFlow,
   pendingPatch,
+  transferItems,
   onClose,
   onFloorUpdated,
 }: Props) {
@@ -69,7 +79,7 @@ export function VendorFinalCheckingDispatchStagingModal({
   useEffect(() => {
     if (!open || !baselineFlow || !pendingPatch) return;
     reset();
-  }, [open, baselineFlow?.id, pendingPatch, reset]);
+  }, [open, baselineFlow?.id, pendingPatch, transferItems, reset]);
 
   const close = () => {
     reset();
@@ -105,7 +115,11 @@ export function VendorFinalCheckingDispatchStagingModal({
     }
   };
 
-  const persistAndTransfer = async () => {
+  /**
+   * Persists Final QC floor PATCH with staging payload only. Dispatch `POST …/accept` runs on the
+   * Dispatch screen (same barcode) so `dispatch.received` updates; inward queue rows are created in WHMS promote.
+   */
+  const persistFloorStageOnly = async () => {
     if (!baselineFlow || !pendingPatch) return;
     if (!scannedContainer) {
       toast.error("Load an empty container first");
@@ -115,32 +129,53 @@ export function VendorFinalCheckingDispatchStagingModal({
       toast.error("Container must be empty.");
       return;
     }
-    const ref = containerRef(scannedContainer);
+    const ref = containerRef(scannedContainer)?.trim();
     if (!ref) {
       toast.error("Missing container reference");
       return;
     }
+    const qty = transferItems.reduce((s, i) => s + Math.max(0, Number(i.transferred) || 0), 0);
+    if (qty <= 0) {
+      toast.error("No quantity to transfer — reopen from Final QC.");
+      return;
+    }
     setSubmitLoading(true);
     try {
-      const patchWithContainer = {
-        ...pendingPatch,
-        existingContainerBarcode: ref,
-        autoTransferToNextFloor: true,
-      };
-      const updated = (await vendorProductionFlowService.updateFloor(
+      const transferredData: TransferredDataRow[] = transferItems
+        .filter((i) => (Number(i.transferred) || 0) > 0)
+        .map((i) => ({
+          transferred: Math.max(0, Number(i.transferred) || 0),
+          styleCode: i.styleCode?.trim(),
+          brand: i.brand?.trim(),
+        }));
+
+      const sumLines = transferredData.reduce((s, r) => s + (Number(r.transferred) || 0), 0);
+      if (sumLines !== qty || sumLines <= 0) {
+        toast.error("Style lines must match total quantity to stage.");
+        return;
+      }
+
+      const saved = await vendorProductionFlowService.updateFloor(
         baselineFlow.id,
         "finalChecking",
-        patchWithContainer,
-      )) as VendorProductionFlow & {
-        vendorTransferContainer?: { _id?: string; barcode?: string };
-      };
-      const apiBar = updated.vendorTransferContainer?.barcode?.trim();
-      setSuccessBarcode(apiBar || ref);
+        {
+          m1Quantity: pendingPatch.m1Quantity,
+          m2Quantity: pendingPatch.m2Quantity,
+          m4Quantity: pendingPatch.m4Quantity,
+          repairStatus: pendingPatch.repairStatus,
+          repairRemarks: pendingPatch.repairRemarks,
+          transferredData,
+          existingContainerBarcode: ref,
+        },
+      );
+      const merged = mergeProductionFlowPreservePopulatedRefs(baselineFlow, saved);
+
+      setSuccessBarcode(ref);
       setStep("success");
       toast.success(
-        "Staged on container — scan on Dispatch when the flow moves there to receive.",
+        "Staged on container — accept on Dispatch updates dispatch; WHMS promote creates inward rows.",
       );
-      onFloorUpdated(updated);
+      onFloorUpdated(merged);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");
     } finally {
@@ -151,9 +186,7 @@ export function VendorFinalCheckingDispatchStagingModal({
   if (!open || !baselineFlow || !pendingPatch) return null;
 
   const articles = scannedContainer ? getContainerArticles(scannedContainer) : [];
-  const lines = pendingPatch.transferredData.filter(
-    (r) => (Number(r.transferred) || 0) > 0,
-  );
+  const lines = transferItems.filter((r) => (Number(r.transferred) || 0) > 0);
   const totalQty = lines.reduce((s, r) => s + (Number(r.transferred) || 0), 0);
   const fc = baselineFlow.floorQuantities.finalChecking;
 
@@ -175,8 +208,8 @@ export function VendorFinalCheckingDispatchStagingModal({
         <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
           <h3 className="text-sm font-bold text-gray-800">
             {step === "success"
-              ? "Staged for Dispatch"
-              : "Scan container — save & stage to Dispatch"}
+              ? "Saved & staged"
+              : "Scan container — save & stage"}
           </h3>
           <button
             type="button"
@@ -243,12 +276,15 @@ export function VendorFinalCheckingDispatchStagingModal({
           {step === "success" ? (
             <div className="space-y-3">
               <p className="text-gray-700">
-                Scan this barcode on <strong>Dispatch</strong> (accept) when the
-                batch is ready to receive there.
+                <strong>Inward Received rows are created in WHMS</strong> (
+                <code className="text-[10px]">POST …/promote-vendor-dispatch</code>
+                ), not when you save Final Checking or when dispatch accepts the bag. Next:{" "}
+                <strong>Vendor Dispatch</strong> → scan this barcode → accept (updates flow). Then warehouse →{" "}
+                <strong>Promote vendor dispatch</strong> (this batch ID + this barcode for bag lines, or batch ID only for confirm-only lines) → count → PATCH lines.
               </p>
               <div className="p-3 rounded-lg border border-purple-200 bg-purple-50/80">
                 <div className="text-[10px] font-bold text-purple-800 uppercase mb-1">
-                  Barcode
+                  Barcode (scan on Dispatch)
                 </div>
                 <div className="font-mono text-sm font-bold break-all text-gray-900">
                   {successBarcode}
@@ -268,13 +304,15 @@ export function VendorFinalCheckingDispatchStagingModal({
                   Copy
                 </button>
               </div>
-              <button
-                type="button"
-                onClick={close}
-                className="w-full px-3 py-2 text-[12px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700"
-              >
-                Done
-              </button>
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={close}
+                  className="w-full px-3 py-2 text-[12px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700"
+                >
+                  Done
+                </button>
+              </div>
             </div>
           ) : (
             <>
@@ -329,7 +367,8 @@ export function VendorFinalCheckingDispatchStagingModal({
                     </p>
                   ) : (
                     <p className="text-emerald-800 font-semibold">
-                      Empty — save will update final QC and stage toward Dispatch.
+                      Empty — save runs <code className="text-[10px]">PATCH …/floors/finalChecking</code> only. Accept the same barcode on Dispatch next (no{" "}
+                      <code className="text-[10px]">PATCH …/transfer</code>).
                     </p>
                   )}
                   <button
@@ -339,10 +378,10 @@ export function VendorFinalCheckingDispatchStagingModal({
                       hasActiveItems(scannedContainer) ||
                       !scannedContainer
                     }
-                    onClick={() => void persistAndTransfer()}
+                    onClick={() => void persistFloorStageOnly()}
                     className="w-full px-3 py-2 text-[12px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
                   >
-                    {submitLoading ? "Saving…" : "Save — update & stage"}
+                    {submitLoading ? "Saving…" : "Save & stage (Dispatch accept next)"}
                   </button>
                 </div>
               )}

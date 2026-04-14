@@ -20,6 +20,8 @@ export interface ContainerActiveArticlePopulated {
 export interface ContainerActiveItem {
   article: string | ContainerActiveArticlePopulated;
   quantity: number;
+  /** Set when container was staged from vendor pipeline — used for dispatch accept `vendorReceive`. */
+  vendorProductionFlowId?: string;
 }
 
 export interface ContainerMaster {
@@ -70,10 +72,19 @@ export function getContainerFirstArticle(container: ContainerMaster | null | und
 export function getContainerArticles(container: ContainerMaster | null | undefined): Array<{ articleId: string; quantity: number }> {
   if (!container) return [];
   if (container.activeItems && container.activeItems.length > 0) {
-    return container.activeItems.map((item) => ({
-      articleId: typeof item.article === 'string' ? item.article : (item.article._id ?? item.article.id ?? ''),
-      quantity: item.quantity ?? 0,
-    }));
+    // Vendor pipeline containers may have `activeItems` rows without an `article` payload
+    // (e.g. only vendorProductionFlow + transferItems). Guard to avoid runtime crashes.
+    return container.activeItems.map((item) => {
+      const art = (item as unknown as { article?: string | ContainerActiveArticlePopulated }).article;
+      const articleId =
+        typeof art === 'string'
+          ? art.trim()
+          : (art?._id ?? art?.id ?? '').trim();
+      return {
+        articleId,
+        quantity: item.quantity ?? 0,
+      };
+    });
   }
   const legacy = container.activeArticle;
   if (typeof legacy === 'string' && legacy.trim()) {
@@ -85,6 +96,49 @@ export function getContainerArticles(container: ContainerMaster | null | undefin
   }
   return [];
 }
+
+const MONGO_OBJECT_ID_RE = /^[a-f0-9]{24}$/i;
+
+/**
+ * Collects vendor production flow ids from container `activeItems` or populated article fields.
+ */
+export function collectVendorProductionFlowIdsFromContainer(
+  container: ContainerMaster | null | undefined,
+): string[] {
+  if (!container) return [];
+  const ids = new Set<string>();
+  for (const item of container.activeItems ?? []) {
+    const raw = item.vendorProductionFlowId?.trim();
+    if (raw && MONGO_OBJECT_ID_RE.test(raw)) ids.add(raw);
+  }
+  const firstArt = getContainerFirstArticle(container);
+  if (firstArt && typeof firstArt === 'object') {
+    const rec = firstArt as Record<string, unknown>;
+    for (const key of ['vendorProductionFlowId', 'vendorProductionFlow'] as const) {
+      const v = rec[key];
+      if (typeof v === 'string' && MONGO_OBJECT_ID_RE.test(v.trim())) ids.add(v.trim());
+    }
+  }
+  return Array.from(ids);
+}
+
+/** One line for `vendorReceive.transferItems` on POST …/barcode/:barcode/accept (vendor floors). */
+export type VendorReceiveTransferItemLine = {
+  transferred: number;
+  styleCode: string;
+  brand: string;
+};
+
+/** Body fragment for vendor dispatch / FC / branding accept when backend expects `vendorReceive`. */
+export type VendorReceiveAcceptPayload = {
+  vendorProductionFlow?: string;
+  quantity?: number;
+  transferItems?: VendorReceiveTransferItemLine[];
+};
+
+export type PostContainerAcceptBody = {
+  vendorReceive?: VendorReceiveAcceptPayload;
+};
 
 export interface ContainersListParams {
   status?: ContainerStatus;
@@ -205,6 +259,14 @@ class ContainersMasterService {
     return this.request<ContainerMaster>(`/barcode/${encodeURIComponent(barcode)}`);
   }
 
+  /** GET /barcode/:barcode/with-articles — fuller payload (activeFloor, activeItems) per vendor API notes. */
+  async getByBarcodeWithArticles(barcode: string): Promise<ContainerMaster> {
+    if (!barcode || !barcode.trim()) throw new Error('barcode is required');
+    return this.request<ContainerMaster>(
+      `/barcode/${encodeURIComponent(barcode.trim())}/with-articles`,
+    );
+  }
+
   /**
    * GET /by-floor/:floor/with-articles — containers on a floor with populated articles.
    * Encode floor names with spaces/special chars (e.g. Final%20Checking).
@@ -255,11 +317,15 @@ class ContainersMasterService {
     });
   }
 
-  /** POST /barcode/:barcode/accept – updates received data for all articles in activeItems. */
-  async acceptByBarcode(barcode: string): Promise<ContainerMaster> {
+  /**
+   * POST /barcode/:barcode/accept — updates received data for active items.
+   * Optional body: e.g. `{ vendorReceive: { quantity, transferItems?, vendorProductionFlow? } }` on vendor floors.
+   */
+  async acceptByBarcode(barcode: string, body?: PostContainerAcceptBody): Promise<ContainerMaster> {
     if (!barcode || !barcode.trim()) throw new Error('barcode is required');
     return this.request<ContainerMaster>(`/barcode/${encodeURIComponent(barcode.trim())}/accept`, {
       method: 'POST',
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
   }
 

@@ -1,0 +1,325 @@
+Project Proposal for Addon Holdings
+System Development for Replenishment, Manufacturing, Warehousing, and Order
+Management
+Executive Summary
+This proposal outlines the design, development, and deployment of an integrated
+software solution for Addon Holdings. The system will digitally transform the company’s
+operations across Manufacturing, Warehousing, and Order Management, streamlining
+workflows, improving traceability, and offering real-time data visibility. The proposed
+solution will be built using the MERN Stack (MongoDB, Express.js, React.js, Node.js)
+and hosted on AWS cloud infrastructure for scalability and reliability.
+Project Scope
+The scope includes the design and implementation of five core modules:
+● Catalog Managment System
+● Inventory Replenishment System
+● Manufacturing Management System
+● Warehouse Management System (WMS)
+● Customer Order Portal (B2B)
+Each module will be integrated to ensure seamless data flow, process automation, and
+MIS-level insights for management.
+Development Aproch
+Phase 1: We will develop an initial system that brings all business operations in one place. We
+will grow so that the system is modular enough to be used individually at any stage.
+Phase 2: After completion of phase 1, we can consider interlinking of these modules if
+required.
+Details of Individual Modules
+Cataloging & Inventory Module (Masters of everything)
+This module will provide an interface to upload all the following data in the new system -
+1. Category Management
+● Features:
+○ Perform CURD (Create, Update, replicate, delete) operations on
+categories and adjust the hierarchy to create child/grandchild categories.
+○ Search, import, and export categories using Excel.
+2. Raw Material Cataloging
+Features:
+● Maintain a catalog of all raw materials with unique identifiers and specifications.
+● Assign raw materials to categories for better grouping and traceability.
+● Enable CURD operations and Excel import/export functionality for raw material
+lists.
+3. Process Cataloging
+Features:
+● Catalog all manufacturing processes with unique process IDs.
+● Define time, resource, and cost parameters for each process.
+● Maintain dependencies and sequencing for multistage operations.
+4. Assets and Machinery
+● Features:
+○ Catalog assets and machinery with unique identifiers.
+○ Track usage and maintenance schedules.
+5. Product Management
+● Features:
+○ Perform CURD operations on products and assign them to categories.
+○ Search and filter products efficiently.
+6. BOM & Process Linking in Product Creation
+Features:
+● During product creation, allow the linking of associated processes and raw
+materials.
+● Generate and manage BOM (Bill of Materials) dynamically.
+● Auto-calculate unit cost based on raw material usage and process parameters.
+● Enable real-time cost sheet generation and updates for production planning.
+Manufacturing Module
+Yarn Purchase & Inward Management
+Objective: Efficiently track yarn purchase type, inward logistics, and inventory levels.
+● Purchase Order Management
+○ Differentiate between order-based purchases and general inventory stock.
+○ Define and monitor minimum inventory levels to trigger new purchase alerts.
+● Bag Barcoding with Weight Scale Integration
+○ Automatically generate barcodes for yarn bags upon inward entry.
+○ Integrate digital weighing scale to capture weight in real-time.
+○ Match each bag’s weight against the PO for verification.
+● Yarn Lot Management
+○ Group yarn bags into lots (e.g., 50 bags = Lot 1).
+○ Tag each lot with supplier info for traceability.
+Yarn Testing & Barcode System
+Objective: Ensure yarn quality before production and standardize cone-level traceability.
+● Yarn Testing Module
+○ Log lab testing data lot-wise.
+○ Approve lots based on lab results (pass/fail logic).
+○ Allow custom format uploads for test reports.
+● Cone Barcoding System
+○ Generate cone barcodes post-quality approval.
+○ Assign barcode storage locations (racks) for easy retrieval and scanning.
+Machine & Production Planning
+Objective: Optimize machine allocation and ensure clear planning.
+● Machine Planning Dashboard
+○ Upload Excel files with needle-wise production plans.
+○ Visualize planning using bar charts or Gantt charts.
+○ Distinguish between Terry and Non-Terry machines.
+● Article-wise Yarn Allocation
+○ Map yarn requirement based on BOM.
+○ Include 10% extra quantity buffer per article.
+Production Tracking (Knitting)
+Objective: Track daily output, operator productivity, and quality in knitting stage.
+● Machine Operation Logging
+○ Assign machine to operator with shift-wise tracking.
+○ Capture downtime and production time.
+● Production Entry and QR Code Generation
+○ Daily production entry with auto/manual input.
+○ QR codes generated per production output (after accounting for defects).
+● Defect & Rework Tracking
+○ Real-time DHU (Defect per Hundred Units) calculation.
+○ Differentiate between rejection (reduce count) and rework (retain count).
+○ Weekly DHU performance reports per operator.
+ROSSO & Intermediate Output
+Objective: Manage post-knitting stages with performance tracking.
+● ROSSO Output Logging
+○ Use shared tablets for supervisor scanning.
+○ Get operator-wise machine output data.
+● Mid-checking with TABs
+○ Assign checking tablets to individual checkers.
+○ Record output and defects per checker.
+○ Calculate DHU similar to end-line checking.
+Washing & Chemical Planning
+Objective: Manage batch washing and chemical usage.
+● Washing Lot Management
+○ Group articles/designs into washing lots (up to 500 pcs per lot).
+○ Tag all QR codes of articles in that lot.
+● Chemical Calculation Module
+○ Auto-calculate chemical requirements based on lot size.
+○ Option to upload calculation logic via Excel.
+Post-Washing Handling
+Objective: Efficiently transfer post-wash goods to boarding.
+● Mixed Bin Management
+○ Fix the QR tags of all items from different articles in one bin.
+○ Skip article-level segregation post-wash.
+Boarding, Pressing & Final Check
+Objective: Track all finishing steps and ensure quality.
+● Boarding
+○ The operator scans bins after completing the boarding process.
+● Pressing Trolley Management
+○ Pressing capacity handling (e.g., 250 pcs per batch).
+○ Handle overflow (e.g., 20 extra pcs) using manual entry.
+● Final Checking
+○ Checker-wise scanning using tablets.
+○ Entry of defects, calculate DHU.
+○ Adjust final count based on rejections.
+Warehouse Management System (WMS)
+Objective: Streamline the tracking, storing, picking, and dispatching of semi-finished
+and finished goods along with packing materials.
+Inward & Stocking
+Objective: Efficiently receive and organize goods in bins/racks with proper
+identification.
+● Post-production goods are scanned and assigned to bins/racks.
+● Stock categorization between semi-finished and finished goods.
+● Bulk barcode creation for tagging and storing.
+Customer Order Processing
+Objective: Accept and prioritize orders from various sources.
+● Orders are received through manual entry, Excel upload, or online sync.
+● Prioritize and trace based on source and urgency.
+Pick List Management
+Objective: Automate order-based picking assignment.
+● Automatic pick list generation based on order and inventory.
+● Assign pickers and track with barcode scanners.
+Picking Execution
+Objective: Track real-time item pickup against the pick list.
+● Update pick lists live as items are scanned during picking.
+● Handle discrepancies through the alert system.
+Dispatch Scanning
+Objective: Ensure correct order fulfillment before dispatch.
+● Final scan of items before dispatch.
+● Order-wise validation and closure for billing.
+Billing Integration
+Objective: Automate data push to billing platforms post-dispatch.
+● Push dispatch-confirmed data to billing system or ERP.
+Packing List & Sticker Creation
+Objective: Generate documentation and labels for packed goods.
+● Generate packing list after scanning.
+● Create stickers with barcodes and quantity details.
+Trims & Packing Material Inventory
+Objective: Track and manage inventory of packing materials.
+● Maintain a separate warehouse section for trims (e.g., tags, polybags, cartons).
+● Track consumption of packing materials.
+● Trigger alerts for low stock and automate reorder suggestions.
+Process Automation
+Objective: Minimize manual steps using technology.
+● Identify manual tasks and automate using barcode/RFID.
+● Introduce handheld tools for real-time data capture and validation.
+Order Placement Website
+Objective: Enable seamless order placement for buyers and efficient backend order
+management.
+B2B Buyer Portal
+Objective: Provide a secure and user-friendly interface for bulk buyers to view and
+place orders.
+● Buyer login/signup with role-based access.
+● Catalog browsing with filters (article no, design, category, availability).
+● Real-time stock visibility synced from WMS.
+● Pricing, minimum order quantity, and delivery timeline display.
+● Order cart functionality and checkout.
+● Bulk order upload via Excel.
+● View past orders, invoices, delivery status.
+Order Placement & Confirmation
+Objective: Ensure accuracy and automation in capturing buyer orders.
+● Auto-check for availability during checkout.
+● Instant confirmation if inventory exists.
+● Backorder logic for unavailable quantities.
+Admin Panel – Order Management
+Objective: Empower backend team to manage orders efficiently.
+● View/manage all B2B orders.
+● Approve, reject, or edit incoming orders.
+● Allocate warehouse inventory for accepted orders.
+● Trigger picklist generation directly from panel.
+● Push order for dispatch and initiate billing.
+Buyer Master & Pricing Control
+Objective: Maintain control over buyer-specific pricing.
+● Manage buyer accounts, contact info, credit terms.
+● Assign unique pricing slabs per buyer or region.
+Order Status Tracking
+Objective: Provide transparency for both buyers and admin.
+● Order lifecycle: Placed → Approved → Picking → Dispatched.
+● Real-time status update notifications via SMS/email.
+Reports & Analytics
+Objective: Gain business insights from order activity.
+● Sales by buyer, region, article.
+● Order volume trends, backorder rates.
+● Top-selling designs and styles.
+Portal Settings & Customization
+Objective: Allow branding and role customization.
+● Company logo, colors, user role access, notification settings.
+● Export order and invoice data to Excel/PDF.
+Technical Approach
+Tech Stack
+● Frontend: React.js
+● Backend: Node.js with Express.js
+● Database: MongoDB
+● Hosting: AWS (EC2, S3, RDS, IAM, CloudWatch)
+● Authentication: JWT-based secure login system
+● Barcode & QR Integration: Hardware scanner-compatible design
+● Reporting/MIS: Real-time dashboards with charts and exports
+● Scalability: Microservice-ready architecture for future expansion
+Hardware Requirements
+Objective: Outline essential hardware that the client needs to procure to operate the ERP,
+WMS, and B2B system efficiently.
+Component Minimum Requirement Recommended Specification
+Workstations &
+Terminals
+Desktop/Laptop (i3, 4GB
+RAM, HDD)
+Desktop/Laptop (i5 or higher, 8GB
+RAM, SSD)
+Tablets (for floor
+use)
+Android tablet, 8-inch, 2GB
+RAM
+Android tablet, 10-inch+, 4GB+ RAM,
+rugged casing
+Barcode Scanners 1D handheld USB scanner 2D barcode scanner (USB/Bluetooth),
+QR compatible
+Fixed-Mount
+Scanners
+Optional Installed at high-volume stations
+(dispatch/packing lines)
+Barcode & Label
+Printers
+Basic thermal printer (2x1
+size label support)
+Zebra/TSC printers, supports 2x1 and
+4x6 label sizes
+Weighing Scales Digital scale (manual
+readout)
+USB/Serial-enabled digital scale
+integrated with ERP
+Networking
+Equipment
+Basic Wi-Fi router Dual-band Wi-Fi routers, extenders,
+wired LAN for key stations
+Power Backup Basic UPS for desktops Centralized UPS + dedicated backup
+for routers/printers
+Trims Inventory
+Setup
+Manual tracking (not
+automated)
+Barcode-labeled shelves and bin
+mapping system
+Operating System Windows 10 (Home or Pro) Windows 11 Pro (64-bit), fully updated
+for compatibility
+Project Timeline (25 Weeks)
+Phase Duration Activities
+1. Requirement Finalization &
+Planning
+Week 1 (5 days) Final specs, architecture,
+workflows
+2. UI/UX Wireframing & Approval Week 2 (5 days) Screens design & user
+journey
+3. Backend & DB Schema Setup Week 3 (5 days) API design, MongoDB
+modeling
+4. Catalog Module Week 4,5,6,7 (20
+days)
+Development and
+implementation of the catalog
+Module
+5. Replenishment System Week (8,9,10,11)
+(20Days)
+Development and
+implementation of
+Replenishment Ssytem
+6. Manufacturing Module Week 12,13,14,15,16
+(25 days)
+Development and
+implementation of the
+Manufacturing Module
+7. Warehouse Module Week(17,18,19,20,21)
+(25 Days)
+Development and
+implementation of the
+Warehouse Module
+8. Order System/Website Week(22,23,24,25)(20
+Days)
+Development and
+implementation of website
+Note - After the Catalog Module is developed, we do 2 Modules in parallel to save time as
+compared to linear approach.
+Cost Structure
+Software Module Estimated Development Cost (INR)
+1. Catalog Module 1,50,000
+2. Replenishment System 2,50,000
+3. Manufacturing Module 2,50,000
+4. Warehouse Module 2,50,000
+5. Order System / Website 85,000
+Total: 9,85,000/-
+Important:
+● The cost estimate is based on the currently defined modules and assumed
+project timeline.
+● Any scope changes, delays, or additional features may result in cost revision.
+● A more precise cost will be shared post wireframe approval and detailed feature
+mapping.
+● Payment can be made in 5 installments of 20% each, starting from singup to
+deployment.

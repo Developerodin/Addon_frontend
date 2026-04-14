@@ -12,19 +12,45 @@ import {
   receivedQtyFloor,
   statusBadgeClass,
 } from "./inwardReceiveTableUtils";
+import {
+  humanizeInwardReceiveStyleError,
+  inwardReceiveDisplayStyleCode,
+  inwardReceivePatchStyleCode,
+  isMongoObjectIdString,
+  resolveInwardReceiveStyleCodeMasterMap,
+} from "./inwardReceiveStyleCodeResolve";
 import WarehouseScanContainerDrawer from "./WarehouseScanContainerDrawer";
+import WhmsInwardVendorBagScanDrawer from "./WhmsInwardVendorBagScanDrawer";
 import WhmsInwardReceivedDetailDrawer from "./WhmsInwardReceivedDetailDrawer";
+import WhmsInwardReceivedToolbar from "./WhmsInwardReceivedToolbar";
+
+export type WhmsInwardReceivedTabProps = {
+  /** Applied on first render (e.g. deep-link from Vendor Dispatch). */
+  initialSourceFilter?: "all" | "vendor" | "production";
+  /** Prefills search so rows for this vendor production flow id surface without a new API contract. */
+  initialVendorProductionFlowId?: string;
+};
 
 /** WHMS inward-receive list — GET /v1/whms/inward-receive. */
-export default function WhmsInwardReceivedTab() {
+export default function WhmsInwardReceivedTab({
+  initialSourceFilter,
+  initialVendorProductionFlowId,
+}: WhmsInwardReceivedTabProps = {}) {
   const [scanDrawerOpen, setScanDrawerOpen] = useState(false);
+  const [vendorBagScanOpen, setVendorBagScanOpen] = useState(false);
   const [rows, setRows] = useState<WhmsInwardReceiveRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() =>
+    initialVendorProductionFlowId?.trim() ? initialVendorProductionFlowId.trim() : "",
+  );
+  /** Query `inwardSource` on list API — vendor vs factory production lines. */
+  const [sourceFilter, setSourceFilter] = useState<"all" | "vendor" | "production">(
+    () => initialSourceFilter ?? "all",
+  );
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailRow, setDetailRow] = useState<WhmsInwardReceiveRow | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -33,6 +59,8 @@ export default function WhmsInwardReceivedTab() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editQty, setEditQty] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
+  /** StyleCode ObjectId → master `styleCode` string (from product / vendor APIs). */
+  const [styleCodeIdToMaster, setStyleCodeIdToMaster] = useState<Record<string, string>>({});
 
   const beginEdit = (r: WhmsInwardReceiveRow) => {
     setEditingId(r.id);
@@ -56,18 +84,25 @@ export default function WhmsInwardReceivedTab() {
     }
     const fq = factoryQty(row);
     const statusToSend = autoStatusFromQuantities(fq, rq);
+    const patchStyle = inwardReceivePatchStyleCode(row, styleCodeIdToMaster);
+    if (row.styleCode?.trim() && isMongoObjectIdString(row.styleCode) && !patchStyle) {
+      toast.error("Could not resolve style code for this line. Check product style links and refresh.");
+      return;
+    }
     setSavingId(editingId);
     try {
       const updated = await whmsInwardReceive.patch(editingId, {
         receivedQuantity: rq,
         status: statusToSend,
+        ...(patchStyle ? { styleCode: patchStyle } : {}),
       });
       setRows((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
       setDetailRow((d) => (d?.id === updated.id ? updated : d));
       toast.success(statusToSend === InwardReceiveStatus.ACCEPTED ? "Saved — accepted (qty matches factory)" : "Saved — on hold (qty differs)");
       cancelEdit();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Update failed");
+      const msg = e instanceof Error ? e.message : "Update failed";
+      toast.error(humanizeInwardReceiveStyleError(msg, row, styleCodeIdToMaster));
     } finally {
       setSavingId(null);
     }
@@ -75,14 +110,23 @@ export default function WhmsInwardReceivedTab() {
 
   /** On-hold row: set status from action buttons (Accept / Reject). */
   const patchHoldStatus = async (r: WhmsInwardReceiveRow, status: typeof InwardReceiveStatus.ACCEPTED | typeof InwardReceiveStatus.REJECTED) => {
+    const patchStyle = status === InwardReceiveStatus.ACCEPTED ? inwardReceivePatchStyleCode(r, styleCodeIdToMaster) : undefined;
+    if (status === InwardReceiveStatus.ACCEPTED && r.styleCode?.trim() && isMongoObjectIdString(r.styleCode) && !patchStyle) {
+      toast.error("Could not resolve style code for this line. Check product style links and refresh.");
+      return;
+    }
     setSavingId(r.id);
     try {
-      const updated = await whmsInwardReceive.patch(r.id, { status });
+      const updated = await whmsInwardReceive.patch(r.id, {
+        status,
+        ...(status === InwardReceiveStatus.ACCEPTED && patchStyle ? { styleCode: patchStyle } : {}),
+      });
       setRows((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
       setDetailRow((d) => (d?.id === updated.id ? updated : d));
       toast.success(status === InwardReceiveStatus.ACCEPTED ? "Accepted" : "Rejected");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Update failed");
+      const msg = e instanceof Error ? e.message : "Update failed";
+      toast.error(humanizeInwardReceiveStyleError(msg, r, styleCodeIdToMaster));
     } finally {
       setSavingId(null);
     }
@@ -91,17 +135,28 @@ export default function WhmsInwardReceivedTab() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await whmsInwardReceive.list({ page, limit });
-      setRows(data.results ?? []);
+      const listParams: Record<string, string | number | undefined> = { page, limit };
+      if (sourceFilter === "vendor") listParams.inwardSource = "vendor";
+      if (sourceFilter === "production") listParams.inwardSource = "production";
+      const data = await whmsInwardReceive.list(listParams);
+      const nextRows = data.results ?? [];
+      setRows(nextRows);
       setTotalPages(Math.max(1, data.totalPages ?? 1));
-      setTotalResults(data.totalResults ?? data.results?.length ?? 0);
+      setTotalResults(data.totalResults ?? nextRows.length ?? 0);
+      try {
+        const resolved = await resolveInwardReceiveStyleCodeMasterMap(nextRows);
+        setStyleCodeIdToMaster(resolved);
+      } catch {
+        setStyleCodeIdToMaster({});
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to load inward receive");
       setRows([]);
+      setStyleCodeIdToMaster({});
     } finally {
       setLoading(false);
     }
-  }, [page, limit]);
+  }, [page, limit, sourceFilter]);
 
   useEffect(() => {
     load();
@@ -111,10 +166,21 @@ export default function WhmsInwardReceivedTab() {
     const q = search.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((r) => {
-      const blob = [r.articleNumber, r.styleCode, r.brand, r.status].join(" ").toLowerCase();
+      const blob = [
+        r.articleNumber,
+        r.styleCode,
+        inwardReceiveDisplayStyleCode(r, styleCodeIdToMaster),
+        r.brand,
+        r.status,
+        r.inwardSource,
+        r.vendorProductionFlowId,
+        r.vendorPurchaseOrderId,
+      ]
+        .join(" ")
+        .toLowerCase();
       return blob.includes(q);
     });
-  }, [rows, search]);
+  }, [rows, search, styleCodeIdToMaster]);
 
   const openDetail = async (id: string) => {
     setDetailId(id);
@@ -123,6 +189,14 @@ export default function WhmsInwardReceivedTab() {
     try {
       const one = await whmsInwardReceive.get(id);
       setDetailRow(one);
+      try {
+        const extra = await resolveInwardReceiveStyleCodeMasterMap([one]);
+        if (Object.keys(extra).length > 0) {
+          setStyleCodeIdToMaster((prev) => ({ ...prev, ...extra }));
+        }
+      } catch {
+        /* keep list-derived map */
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to load row");
       setDetailId(null);
@@ -133,54 +207,32 @@ export default function WhmsInwardReceivedTab() {
 
   return (
     <>
-      <WarehouseScanContainerDrawer
-        open={scanDrawerOpen}
-        onClose={() => setScanDrawerOpen(false)}
+      {sourceFilter !== "vendor" ? (
+        <WarehouseScanContainerDrawer
+          open={scanDrawerOpen}
+          onClose={() => setScanDrawerOpen(false)}
+          onAccepted={() => void load()}
+        />
+      ) : null}
+      <WhmsInwardVendorBagScanDrawer
+        open={vendorBagScanOpen}
+        onClose={() => setVendorBagScanOpen(false)}
         onAccepted={() => void load()}
       />
-      <div className="p-[10px] flex flex-wrap items-center gap-2 border-b border-gray-300 bg-white">
-        <button
-          type="button"
-          onClick={() => setScanDrawerOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-teal-600 text-white hover:bg-teal-700 shadow-sm"
-        >
-          <i className="ri-barcode-line text-xs" />
-          Scan container
-        </button>
-        <button
-          type="button"
-          onClick={() => load()}
-          disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50"
-        >
-          <i className={`ri-refresh-line text-xs ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
-        <div className="relative flex-1 min-w-[140px] max-w-[240px]">
-          <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search article, style, brand…"
-            className="bg-white border border-gray-300 pl-8 pr-3 py-1.5 text-[11px] rounded w-full placeholder:text-gray-500 focus:ring-1 focus:ring-teal-400 focus:border-teal-500"
-          />
-        </div>
-        <select
-          value={limit}
-          onChange={(e) => {
-            setLimit(Number(e.target.value));
-            setPage(1);
-          }}
-          className="bg-white border border-gray-300 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5"
-        >
-          <option value={10}>10 / page</option>
-          <option value={25}>25 / page</option>
-          <option value={50}>50 / page</option>
-          <option value={100}>100 / page</option>
-        </select>
-        <span className="text-[11px] font-medium text-gray-600 ml-auto">{totalResults} row{totalResults !== 1 ? "s" : ""}</span>
-      </div>
+      <WhmsInwardReceivedToolbar
+        onScanClick={() => setScanDrawerOpen(true)}
+        onVendorBagScanClick={() => setVendorBagScanOpen(true)}
+        onRefresh={() => void load()}
+        loading={loading}
+        search={search}
+        onSearchChange={setSearch}
+        sourceFilter={sourceFilter}
+        onSourceFilterChange={setSourceFilter}
+        onResetPage={() => setPage(1)}
+        limit={limit}
+        onLimitChange={setLimit}
+        totalResults={totalResults}
+      />
 
       <div className="border border-gray-300 border-t-0 rounded-b overflow-hidden bg-white">
         {loading ? (
@@ -194,13 +246,22 @@ export default function WhmsInwardReceivedTab() {
               <i className="ri-inbox-line text-2xl text-gray-300" />
             </div>
             <h3 className="text-sm font-bold text-gray-400 mb-1">{rows.length === 0 ? "No inward receive rows" : "No matches"}</h3>
-            <p className="text-xs text-gray-400">GET /v1/whms/inward-receive · adjust search or refresh</p>
+            <p className="text-xs text-gray-400">
+              {rows.length === 0 ? "Adjust search or refresh the list." : "No rows match your search."}
+              {sourceFilter === "vendor" && rows.length === 0 ? (
+                <span className="block mt-3 text-left max-w-sm mx-auto text-gray-700 font-medium leading-relaxed">
+                  After vendor dispatch runs <strong>PATCH transfer</strong> to a warehouse bag, tap <strong>Scan bag</strong> here
+                  and confirm empty <strong>POST accept</strong> on that barcode so inward lines can appear.
+                </span>
+              ) : null}
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-xs border-collapse">
               <thead className="bg-gray-100 border-b border-gray-300">
                 <tr>
+                  <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Source</th>
                   <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Article</th>
                   <th className="px-2 py-1.5 text-right font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Qty factory</th>
                   <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Style</th>
@@ -218,14 +279,24 @@ export default function WhmsInwardReceivedTab() {
                   const showHoldActions = !isEditing && isOnHoldStatus(String(r.status));
                   return (
                     <tr key={r.id} className={`transition-colors ${isEditing ? "bg-amber-50/40" : "hover:bg-gray-50"}`}>
+                      <td className="px-2 py-1.5 border-r border-gray-300 text-[10px] font-bold uppercase text-gray-600 whitespace-nowrap">
+                        {(r.inwardSource ?? "—").toString() || "—"}
+                      </td>
                       <td className="px-2 py-1.5 border-r border-gray-300 font-semibold text-gray-900 whitespace-nowrap">
                         {r.articleNumber || "—"}
                       </td>
                       <td className="px-2 py-1.5 border-r border-gray-300 text-right font-medium tabular-nums text-teal-800">
                         {(r.QuantityFromFactory ?? 0).toLocaleString()}
                       </td>
-                      <td className="px-2 py-1.5 border-r border-gray-300 max-w-[120px] truncate font-medium text-gray-900" title={r.styleCode}>
-                        {r.styleCode || "—"}
+                      <td
+                        className="px-2 py-1.5 border-r border-gray-300 max-w-[120px] truncate font-medium text-gray-900"
+                        title={
+                          isMongoObjectIdString(r.styleCode)
+                            ? `${inwardReceiveDisplayStyleCode(r, styleCodeIdToMaster)} · id ${r.styleCode}`
+                            : inwardReceiveDisplayStyleCode(r, styleCodeIdToMaster)
+                        }
+                      >
+                        {inwardReceiveDisplayStyleCode(r, styleCodeIdToMaster)}
                       </td>
                       <td className="px-2 py-1.5 border-r border-gray-300 max-w-[100px] truncate text-gray-800" title={r.brand}>
                         {r.brand || "—"}
@@ -377,6 +448,7 @@ export default function WhmsInwardReceivedTab() {
       <WhmsInwardReceivedDetailDrawer
         detailId={detailId}
         detailRow={detailRow}
+        styleCodeIdToMaster={styleCodeIdToMaster}
         detailLoading={detailLoading}
         savingId={savingId}
         onClose={() => {
