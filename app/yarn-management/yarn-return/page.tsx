@@ -182,6 +182,50 @@ const buildHistoryRecord = (order: ProductionOrder): ReturnRecord => {
   };
 };
 
+/**
+ * After reloading orders, keep the user's article selection if that article still has pending cones.
+ * Mirrors `articleRows` cone–article matching so rowId stays stable.
+ */
+function resolvePreservedArticleSelection(
+  filtered: ProductionOrder[],
+  preserve: { orderId: string; articleRowId: string } | undefined
+): { orderId: string; articleRowId: string } | null {
+  if (!preserve || filtered.length === 0) return null;
+  const order = filtered.find((o) => String(o.id) === String(preserve.orderId));
+  if (!order) return null;
+
+  const suffix = `-${order.id}`;
+  if (!preserve.articleRowId.endsWith(suffix)) return null;
+  const artIdStr = preserve.articleRowId.slice(0, -suffix.length);
+
+  const articles = order.articles?.length
+    ? order.articles
+    : [{ id: order.id, articleNumber: order.orderNumber, plannedQuantity: 0 } as Article];
+  const firstArticleId = articles[0] ? articles[0].id || (articles[0] as { _id?: string })._id : undefined;
+
+  const art = articles.find(
+    (a) => String(a.id || (a as { _id?: string })._id) === artIdStr
+  );
+  if (!art) return null;
+
+  const artId = art.id || (art as { _id?: string })._id;
+  let conesForArticle = order.cones.filter((c) => {
+    if (c.articleId && String(c.articleId) === String(artId)) return true;
+    if (c.articleNumber && art.articleNumber && String(c.articleNumber).trim() === String(art.articleNumber).trim())
+      return true;
+    if (!c.articleId && !c.articleNumber) return artId === firstArticleId;
+    return false;
+  });
+  if (conesForArticle.length === 0 && order.cones.length > 0 && articles.length === 1) {
+    conesForArticle = order.cones;
+  }
+
+  const pendingCones = conesForArticle.filter((c) => c.status !== "Returned");
+  if (pendingCones.length === 0) return null;
+
+  return { orderId: order.id, articleRowId: preserve.articleRowId };
+}
+
 const getAccessToken = (): string | null => {
   if (typeof document === "undefined") return null;
   try {
@@ -646,7 +690,10 @@ const YarnReturnPage = () => {
 
   /** Build orders from assignment and fetch cones for each (like yarn-issue loadOrdersForMachine). */
   const loadOrdersForMachine = useCallback(
-    async (assignment: MachineOrderAssignmentTopItems) => {
+    async (
+      assignment: MachineOrderAssignmentTopItems,
+      options?: { preserveSelection?: { orderId: string; articleRowId: string } }
+    ) => {
       const items = assignment.productionOrderItems ?? [];
       if (items.length === 0) {
         setOrders([]);
@@ -740,18 +787,24 @@ const YarnReturnPage = () => {
         );
         setReturnTransactions(allReturnTxs);
 
-        const first = filtered[0];
-        if (first?.id) {
-          setSelectedOrderId(first.id);
-          const firstArticle = first.articles?.[0];
-          if (firstArticle) {
-            setSelectedArticleRowId(`${firstArticle.id}-${first.id}`);
-          } else {
-            setSelectedArticleRowId(first.id);
-          }
+        const restored = resolvePreservedArticleSelection(filtered, options?.preserveSelection);
+        if (restored) {
+          setSelectedOrderId(restored.orderId);
+          setSelectedArticleRowId(restored.articleRowId);
         } else {
-          setSelectedOrderId(null);
-          setSelectedArticleRowId(null);
+          const first = filtered[0];
+          if (first?.id) {
+            setSelectedOrderId(first.id);
+            const firstArticle = first.articles?.[0];
+            if (firstArticle) {
+              setSelectedArticleRowId(`${firstArticle.id}-${first.id}`);
+            } else {
+              setSelectedArticleRowId(first.id);
+            }
+          } else {
+            setSelectedOrderId(null);
+            setSelectedArticleRowId(null);
+          }
         }
       } catch (error) {
         console.error("Error loading orders for machine:", error);
@@ -2446,6 +2499,11 @@ const YarnReturnPage = () => {
       if (updatedOrder) {
         upsertHistoryRecord(updatedOrder);
 
+        const preserveArticleSelection =
+          !showQuickReturnDrawer && selectedArticleRow
+            ? { orderId: selectedArticleRow.orderId, articleRowId: selectedArticleRow.rowId }
+            : undefined;
+
         toast.success(`${results.length} cone(s) marked returned successfully.`);
 
         // Close modal and reset
@@ -2523,7 +2581,9 @@ const YarnReturnPage = () => {
                   : "Assignment item marked in progress."
               );
               if (!showQuickReturnDrawer && selectedMachineAssignment) {
-                loadOrdersForMachine(selectedMachineAssignment);
+                await loadOrdersForMachine(selectedMachineAssignment, {
+                  preserveSelection: preserveArticleSelection,
+                });
               }
             } catch (err) {
               console.error("Assignment yarn-return status update failed:", err);
@@ -2711,7 +2771,9 @@ const YarnReturnPage = () => {
 
         // Reload orders and return transactions from API so pending counts (Orders Awaiting, Cones Pending, etc.) are correct
         if (!showQuickReturnDrawer && selectedMachineAssignment) {
-          await loadOrdersForMachine(selectedMachineAssignment);
+          await loadOrdersForMachine(selectedMachineAssignment, {
+            preserveSelection: preserveArticleSelection,
+          });
         }
       }
     } catch (error) {
