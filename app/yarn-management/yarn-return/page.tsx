@@ -1398,12 +1398,12 @@ const YarnReturnPage = () => {
     });
   };
 
-  const handleOpenQuickReturnDrawer = () => {
-    setShowScanReturnPanel(false);
-    setShowQuickReturnDrawer(true);
-    setQuickReturnOrder(null);
-    resetQuickReturnScanState();
-  };
+  // const handleOpenQuickReturnDrawer = () => {
+  //   setShowScanReturnPanel(false);
+  //   setShowQuickReturnDrawer(true);
+  //   setQuickReturnOrder(null);
+  //   resetQuickReturnScanState();
+  // };
 
   const handleCloseQuickReturnDrawer = () => {
     setShowQuickReturnDrawer(false);
@@ -2737,7 +2737,7 @@ const YarnReturnPage = () => {
               </span>
             </div>
             <div className="flex items-center gap-2 flex-wrap justify-end">
-              <button
+              {/* <button
                 type="button"
                 onClick={handleOpenQuickReturnDrawer}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-purple-200 text-purple-700 text-[11px] font-bold rounded hover:bg-purple-50 transition-colors"
@@ -2745,7 +2745,7 @@ const YarnReturnPage = () => {
               >
                 <i className="ri-scan-2-line text-sm"></i>
                 Quick return
-              </button>
+              </button> */}
               <button
                 type="button"
                 onClick={() => setShowHistoryDrawer(true)}

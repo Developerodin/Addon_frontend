@@ -12,7 +12,6 @@ function headerKey(cell: unknown): string {
 }
 
 const HEADER_TO_FIELD: Record<string, keyof WhmsWarehouseInventoryBulkImportItem> = {
-  factorycode: "factoryCode",
   stylecode: "styleCode",
   totalquantity: "totalQuantity",
   blockedquantity: "blockedQuantity",
@@ -32,10 +31,9 @@ export function downloadWarehouseInventoryImportTemplate(): void {
   const workbook = XLSX.utils.book_new();
   const worksheet = XLSX.utils.json_to_sheet([
     {
-      factoryCode: "ART001",
-      styleCode: "SC-100",
-      totalQuantity: 50,
-      blockedQuantity: 0,
+      styleCode: "ABC-123",
+      totalQuantity: 100,
+      blockedQuantity: 5,
     },
   ]);
   XLSX.utils.book_append_sheet(workbook, worksheet, "Items");
@@ -67,9 +65,9 @@ export function parseWarehouseInventoryImportFile(buf: ArrayBuffer): {
     if (field) colMap.set(field, key);
   }
 
-  if (colMap.size < 4) {
+  if (colMap.size < 3) {
     errors.push(
-      "Missing columns. Expected: factoryCode, styleCode, totalQuantity, blockedQuantity (aliases like Factory Code are OK).",
+      "Missing columns. Expected: styleCode, totalQuantity, blockedQuantity (aliases like Style Code are OK).",
     );
     return { items: [], errors };
   }
@@ -77,17 +75,12 @@ export function parseWarehouseInventoryImportFile(buf: ArrayBuffer): {
   const items: WhmsWarehouseInventoryBulkImportItem[] = [];
   rows.forEach((row, idx) => {
     const line = idx + 2;
-    const factoryCode = String(row[colMap.get("factoryCode")!] ?? "").trim();
     const styleCode = String(row[colMap.get("styleCode")!] ?? "").trim();
-    if (!factoryCode && !styleCode) return;
+    if (!styleCode) return;
 
     const totalQuantity = num(row[colMap.get("totalQuantity")!], 0);
     const blockedQuantity = num(row[colMap.get("blockedQuantity")!], 0);
 
-    if (!factoryCode || !styleCode) {
-      errors.push(`Row ${line}: factoryCode and styleCode are required.`);
-      return;
-    }
     if (Number.isNaN(totalQuantity) || Number.isNaN(blockedQuantity)) {
       errors.push(`Row ${line}: totalQuantity and blockedQuantity must be numbers.`);
       return;
@@ -96,7 +89,7 @@ export function parseWarehouseInventoryImportFile(buf: ArrayBuffer): {
       errors.push(`Row ${line}: quantities cannot be negative.`);
       return;
     }
-    items.push({ factoryCode, styleCode, totalQuantity, blockedQuantity });
+    items.push({ styleCode, totalQuantity, blockedQuantity });
   });
 
   if (!items.length && !errors.length) {

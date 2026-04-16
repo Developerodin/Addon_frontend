@@ -103,6 +103,22 @@ export default function VendorPOForm({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (!articles.length) return;
+    setLineItems((prev) => {
+      let changed = false;
+      const next = prev.map((row) => {
+        if (row.articleCode?.trim() || !row.articleId) return row;
+        const matched = articles.find((a) => a.id === row.articleId);
+        const resolvedCode = matched?.vendorCode?.trim() || matched?.code?.trim() || "";
+        if (!resolvedCode) return row;
+        changed = true;
+        return { ...row, articleCode: resolvedCode };
+      });
+      return changed ? next : prev;
+    });
+  }, [articles]);
+
   const validate = (): boolean => {
     const e: Record<string, string> = {};
     if (!vendorId.trim()) e.vendor = "Vendor is required";

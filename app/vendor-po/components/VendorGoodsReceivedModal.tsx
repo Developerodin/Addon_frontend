@@ -5,7 +5,12 @@ import { toast } from "react-hot-toast";
 import vendorPurchaseOrderService, {
   VendorPurchaseOrder,
 } from "@/shared/services/vendorPurchaseOrderService";
-import { getPoLineItemId, productNameForPoLineId, readVendorName } from "./vendorPacklistHelpers";
+import {
+  getPoLineItemId,
+  productNameForPoLineId,
+  readVendorName,
+  vendorCodeFromPoLineItem,
+} from "./vendorPacklistHelpers";
 import {
   type VendorLotDraft,
   buildVendorLotDrafts,
@@ -223,6 +228,7 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                         <thead className="bg-gray-50/80">
                           <tr>
                             <th className="px-2 py-1.5 text-left font-bold text-gray-600 border-b">Article</th>
+                            <th className="px-2 py-1.5 text-left font-bold text-gray-600 border-b">Vendor code</th>
                             <th className="px-2 py-1.5 text-right font-bold text-gray-600 border-b">Ordered</th>
                           </tr>
                         </thead>
@@ -232,6 +238,9 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                             return (
                               <tr key={id || it.productName} className="bg-white">
                                 <td className="px-2 py-1.5 border-b border-gray-100">{it.productName || "—"}</td>
+                                <td className="px-2 py-1.5 border-b border-gray-100">
+                                  {vendorCodeFromPoLineItem(it) || "no vendor code"}
+                                </td>
                                 <td className="px-2 py-1.5 text-right border-b border-gray-100">
                                   {Number(it.quantity || 0).toLocaleString()}
                                 </td>
@@ -372,6 +381,7 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                           <thead className="bg-gray-50">
                             <tr>
                               <th className="px-2 py-2 text-left font-bold text-gray-600">Article</th>
+                              <th className="px-2 py-2 text-left font-bold text-gray-600">Vendor code</th>
                               {!isReadOnly && <th className="px-2 py-2 text-right">Max</th>}
                               <th className="px-2 py-2 text-right w-[88px]">Qty</th>
                               <th className="px-2 py-2 text-right w-[88px]">Boxes</th>
@@ -387,6 +397,7 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                               return (
                                 <tr key={`${lotIndex}-${id}`} className="border-t border-gray-100">
                                   <td className="px-2 py-2 text-gray-900">{it.productName || "—"}</td>
+                                  <td className="px-2 py-2 text-gray-700">{vendorCodeFromPoLineItem(it) || "no vendor code"}</td>
                                   {!isReadOnly && <td className="px-2 py-2 text-right text-gray-500">{max}</td>}
                                   <td className="px-2 py-2">
                                     {isReadOnly ? (

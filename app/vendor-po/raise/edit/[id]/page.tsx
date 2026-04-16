@@ -64,7 +64,41 @@ const VendorPOEditPage = () => {
       try {
         const poRes = await vendorPurchaseOrderService.getById(id);
         if (!cancelled) {
-          setPo(mapVendorPurchaseOrderToUi(poRes));
+          const mappedPo = mapVendorPurchaseOrderToUi(poRes);
+          const hydratedLineItems = await Promise.all(
+            (mappedPo.lineItems || []).map(async (line) => {
+              const hasCode = !!line.articleCode?.trim();
+              const hasName = !!line.articleName?.trim();
+              const hasType = !!line.type?.trim();
+              const hasColor = !!line.color?.trim();
+              const hasPattern = !!line.pattern?.trim();
+              if (!line.articleId || (hasCode && hasName && hasType && hasColor && hasPattern)) {
+                return line;
+              }
+              try {
+                const product = await getProductById(line.articleId);
+                const productMapped = productRecordToVendorPOArticle(
+                  product as Record<string, unknown> | null | undefined,
+                  line.articleId
+                );
+                if (!productMapped) return line;
+                return {
+                  ...line,
+                  articleCode: line.articleCode?.trim() || productMapped.vendorCode?.trim() || productMapped.code || "",
+                  articleName: line.articleName?.trim() || productMapped.name || "",
+                  type: line.type?.trim() || productMapped.type || "",
+                  color: line.color?.trim() || productMapped.color || "",
+                  pattern: line.pattern?.trim() || productMapped.pattern || "",
+                };
+              } catch {
+                return line;
+              }
+            })
+          );
+          setPo({
+            ...mappedPo,
+            lineItems: hydratedLineItems,
+          });
           setNotFound(false);
         }
       } catch {

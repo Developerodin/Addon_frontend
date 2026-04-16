@@ -81,10 +81,14 @@ export function mapVendorPurchaseOrderToUi(po: VendorPurchaseOrder): VendorPO {
   const lineItems = (po.poItems || []).map((item) => {
     const pid = item.productId;
     const articleId = typeof pid === "string" ? pid : pid?.id || pid?._id || "";
+    const resolvedVendorCode =
+      (typeof pid === "object" ? pid?.vendorCode : "") ||
+      item.vendorCode ||
+      "";
     return {
       id: item._id || `${po.id}-${String(articleId)}`,
       articleId,
-      articleCode: typeof pid === "object" ? pid?.vendorCode || "" : "",
+      articleCode: resolvedVendorCode,
       articleName: item.productName || (typeof pid === "object" ? pid?.name || "" : ""),
       type: item.type ?? "",
       color: item.color ?? "",

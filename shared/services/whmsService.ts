@@ -310,7 +310,6 @@ export interface WhmsWarehouseInventoryPatchBody {
 
 /** POST /v1/whms/warehouse-inventory/bulk-import — same auth as create (manageOrders). */
 export interface WhmsWarehouseInventoryBulkImportItem {
-  factoryCode: string;
   styleCode: string;
   totalQuantity: number;
   blockedQuantity: number;

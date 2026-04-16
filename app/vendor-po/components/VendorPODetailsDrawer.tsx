@@ -28,6 +28,25 @@ function formatMoney(n: number): string {
   return `₹${Number(n || 0).toLocaleString()}`;
 }
 
+function readProductVendorCode(item: VendorPurchaseOrder["poItems"][number]): string {
+  const pid = item.productId;
+  if (typeof pid === "object" && pid?.vendorCode?.trim()) return pid.vendorCode.trim();
+  return "";
+}
+
+function receivedQtyByLineFromLots(po: VendorPurchaseOrder | null | undefined): Record<string, number> {
+  const map: Record<string, number> = {};
+  if (!po?.receivedLotDetails?.length) return map;
+  for (const lot of po.receivedLotDetails) {
+    for (const line of lot.poItems || []) {
+      const key = String(line.poItem || "").trim();
+      if (!key) continue;
+      map[key] = (map[key] || 0) + Number(line.receivedQuantity || 0);
+    }
+  }
+  return map;
+}
+
 function lotStatusLabel(s: VendorLotStatus | undefined): string | undefined {
   if (!s) return undefined;
   const map: Record<VendorLotStatus, string> = {
@@ -103,6 +122,7 @@ export function VendorPODetailsDrawer({
 
   const statusLogs = (d?.statusLogs as Array<Record<string, unknown>> | undefined) ?? [];
   const packlists = packlistToArray(d?.packListDetails);
+  const receivedByLineFromLots = receivedQtyByLineFromLots(d ?? summary.rawPurchaseOrder);
   const receivedLots = showReceivedLotDetails
     ? d != null && d.receivedLotDetails !== undefined
       ? d.receivedLotDetails
@@ -293,8 +313,17 @@ export function VendorPODetailsDrawer({
                             <th className="border border-gray-300 px-2 py-1 text-left font-medium text-gray-500 uppercase">
                               Product
                             </th>
+                            <th className="border border-gray-300 px-2 py-1 text-left font-medium text-gray-500 uppercase">
+                              Vendor code
+                            </th>
                             <th className="border border-gray-300 px-2 py-1 text-right font-medium text-gray-500 uppercase">
                               Qty
+                            </th>
+                            <th className="border border-gray-300 px-2 py-1 text-right font-medium text-gray-500 uppercase">
+                              Received
+                            </th>
+                            <th className="border border-gray-300 px-2 py-1 text-right font-medium text-gray-500 uppercase">
+                              Pending
                             </th>
                             <th className="border border-gray-300 px-2 py-1 text-right font-medium text-gray-500 uppercase">
                               Rate
@@ -312,7 +341,14 @@ export function VendorPODetailsDrawer({
                             const pid = item.productId;
                             const name =
                               item.productName || (typeof pid === "object" ? pid?.name || "" : "") || "—";
+                            const vendorCode = readProductVendorCode(item);
                             const qty = Number(item.quantity || 0);
+                            const lineId = getPoLineItemId(item) ?? "";
+                            const receivedFromItem = Number(item.receivedQuantity || 0);
+                            const receivedFromLots = lineId ? Number(receivedByLineFromLots[lineId] || 0) : 0;
+                            const receivedRaw = receivedFromItem > 0 ? receivedFromItem : receivedFromLots;
+                            const received = Math.max(0, receivedRaw);
+                            const pending = Math.max(0, qty - received);
                             const rate = Number(item.rate || 0);
                             const g = Number(item.gstRate ?? 0);
                             const lineSub = qty * rate;
@@ -320,7 +356,10 @@ export function VendorPODetailsDrawer({
                             return (
                               <tr key={key} className="hover:bg-gray-50">
                                 <td className="border border-gray-300 px-2 py-1.5">{name}</td>
+                                <td className="border border-gray-300 px-2 py-1.5">{vendorCode || "no vendor code"}</td>
                                 <td className="border border-gray-300 px-2 py-1.5 text-right">{qty.toLocaleString()}</td>
+                                <td className="border border-gray-300 px-2 py-1.5 text-right">{received.toLocaleString()}</td>
+                                <td className="border border-gray-300 px-2 py-1.5 text-right">{pending.toLocaleString()}</td>
                                 <td className="border border-gray-300 px-2 py-1.5 text-right">{formatMoney(rate)}</td>
                                 <td className="border border-gray-300 px-2 py-1.5 text-right">{g}%</td>
                                 <td className="border border-gray-300 px-2 py-1.5 text-right">{formatMoney(lineSub)}</td>
@@ -524,18 +563,22 @@ export function VendorPODetailsDrawer({
           )}
         </div>
 
-        <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3 flex-shrink-0 border-t border-gray-200">
+        <div className="bg-gray-50 px-6 py-4 flex items-center justify-end gap-2 flex-shrink-0 border-t border-gray-200">
           {summary.status === "Submitted to vendor" && (
             <Link
               href={`/vendor-po/purchase-management/purchase/edit/${summary.id}`}
-              className="ti-btn ti-btn-primary ti-btn-sm inline-flex items-center gap-2"
+              className="inline-flex items-center justify-center gap-1.5 rounded-md border border-black bg-black px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-900 hover:border-gray-900 transition-colors whitespace-nowrap"
               onClick={onClose}
             >
               <i className="ri-edit-line" />
               Edit
             </Link>
           )}
-          <button type="button" onClick={onClose} className="ti-btn ti-btn-light ti-btn-sm">
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors whitespace-nowrap"
+          >
             Close
           </button>
         </div>
