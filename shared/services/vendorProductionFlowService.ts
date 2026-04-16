@@ -74,6 +74,8 @@ export interface QualityFloorQuantity extends BaseFloorQuantity {
   m1Remaining: number;
   m2Transferred?: number;
   m2Remaining?: number;
+  /** Quantity from boxes not yet scanned/accepted on this floor. */
+  pendingFromBoxes?: number;
   repairStatus: RepairStatus;
   repairRemarks?: string;
 }
