@@ -7,6 +7,7 @@ import HelpIcon from "@/shared/components/HelpIcon";
 import { CRM } from "../vendor-list/crmUiClasses";
 import vendorProductionFlowService, {
   mergeProductionFlowPreservePopulatedRefs,
+  type VendorTransferItem,
   VendorProductionFlow,
 } from "@/shared/services/vendorProductionFlowService";
 import { formatTransferredRowLabel } from "../utils/transferredStyleRows";
@@ -28,13 +29,15 @@ const FinalCheckingPage = () => {
     null,
   );
   const [isProcessing, setIsProcessing] = useState(false);
-  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [scanOpen, setScanOpen] = useState(false);
   const [finalStagingOpen, setFinalStagingOpen] = useState(false);
   const [finalStagingFlow, setFinalStagingFlow] =
     useState<VendorProductionFlow | null>(null);
   const [finalStagingPatch, setFinalStagingPatch] =
     useState<PendingFinalCheckingStagingPatch | null>(null);
+  const [finalStagingTransferItems, setFinalStagingTransferItems] = useState<
+    VendorTransferItem[]
+  >([]);
 
   const loadFlows = useCallback(async () => {
     setLoading(true);
@@ -85,6 +88,7 @@ const FinalCheckingPage = () => {
     setFinalStagingOpen(false);
     setFinalStagingFlow(null);
     setFinalStagingPatch(null);
+    setFinalStagingTransferItems([]);
     setSelectedFlow(flow);
     setIsProcessing(true);
   };
@@ -116,9 +120,11 @@ const FinalCheckingPage = () => {
     (ctx: {
       flow: VendorProductionFlow;
       patch: PendingFinalCheckingStagingPatch;
+      transferItems: VendorTransferItem[];
     }) => {
       setFinalStagingFlow(ctx.flow);
       setFinalStagingPatch(ctx.patch);
+      setFinalStagingTransferItems(ctx.transferItems);
       setIsProcessing(false);
       queueMicrotask(() => setFinalStagingOpen(true));
     },
@@ -129,35 +135,8 @@ const FinalCheckingPage = () => {
     setFinalStagingOpen(false);
     setFinalStagingFlow(null);
     setFinalStagingPatch(null);
+    setFinalStagingTransferItems([]);
   }, []);
-
-  const handleConfirmFinalQuality = async (id: string) => {
-    const flow = flows.find((f) => f.id === id);
-    const final = flow?.floorQuantities?.finalChecking;
-    const pendingToDispatch = Math.max(
-      0,
-      (final?.completed ?? 0) - (final?.transferred ?? 0),
-    );
-    if (pendingToDispatch <= 0) {
-      toast.error(
-        "Nothing pending to dispatch. Ensure final checking 'completed' is set above 'transferred'.",
-      );
-      return;
-    }
-    setConfirmingId(id);
-    try {
-      await vendorProductionFlowService.confirmFinalQuality(id, {
-        remarks: "Dispatch ready and confirmed",
-      });
-      toast.success("Batch quality confirmed and completed");
-      loadFlows();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Confirmation failed";
-      toast.error(msg);
-    } finally {
-      setConfirmingId(null);
-    }
-  };
 
   if (loading) {
     return (
@@ -186,7 +165,7 @@ const FinalCheckingPage = () => {
               </h1>
               <HelpIcon
                 title="Final QC"
-                content="Process: M1 by style, optional container to stage toward Dispatch. Use Scan container on the toolbar to accept inbound bags. Confirm batch moves completed work to dispatch per API."
+                content="M1 by style. Save (no transferredData) updates counts only. Save & stage: PATCH …/floors/finalChecking with transferredData + existingContainerBarcode — no PATCH …/transfer. Vendor dispatch accept does not create WHMS inward rows; warehouse runs POST …/promote-vendor-dispatch, then PATCH inward lines. Confirm (no container) still uses POST …/confirm when applicable."
               />
             </div>
             <div className="flex items-center gap-2">
@@ -362,18 +341,6 @@ const FinalCheckingPage = () => {
                             <i className="ri-edit-line" />
                             Process
                           </button>
-                          {!flow.finalQualityConfirmed && (
-                            <button
-                              type="button"
-                              onClick={() => handleConfirmFinalQuality(flow.id)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors disabled:opacity-50"
-                              disabled={confirmingId === flow.id}
-                            >
-                              {confirmingId === flow.id
-                                ? "..."
-                                : "Confirm Batch"}
-                            </button>
-                          )}
                         </div>
                       </td>
                     </tr>
@@ -425,6 +392,7 @@ const FinalCheckingPage = () => {
         open={finalStagingOpen}
         baselineFlow={finalStagingFlow}
         pendingPatch={finalStagingPatch}
+        transferItems={finalStagingTransferItems}
         onClose={closeFinalStagingModal}
         onFloorUpdated={mergeFinalFlowInState}
       />

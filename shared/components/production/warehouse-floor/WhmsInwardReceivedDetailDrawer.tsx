@@ -1,12 +1,16 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import type { WhmsInwardReceiveRow } from "@/shared/services/whmsService";
+import { inwardReceiveDisplayStyleCode, isMongoObjectIdString } from "./inwardReceiveStyleCodeResolve";
 import { isOnHoldStatus, statusBadgeClass } from "./inwardReceiveTableUtils";
 
 export interface WhmsInwardReceivedDetailDrawerProps {
   detailId: string | null;
   detailRow: WhmsInwardReceiveRow | null;
+  /** StyleCode ObjectId → master code; same map as the list tab. */
+  styleCodeIdToMaster: Record<string, string>;
   detailLoading: boolean;
   savingId: string | null;
   onClose: () => void;
@@ -17,6 +21,7 @@ export interface WhmsInwardReceivedDetailDrawerProps {
 export default function WhmsInwardReceivedDetailDrawer({
   detailId,
   detailRow,
+  styleCodeIdToMaster,
   detailLoading,
   savingId,
   onClose,
@@ -50,10 +55,44 @@ export default function WhmsInwardReceivedDetailDrawer({
                 <dt className="text-gray-500 font-medium">ID</dt>
                 <dd className="font-mono text-[10px] break-all">{detailRow.id}</dd>
               </div>
+              {detailRow.inwardSource ? (
+                <div className="grid grid-cols-[100px_1fr] gap-1">
+                  <dt className="text-gray-500 font-medium">Source</dt>
+                  <dd className="font-semibold uppercase text-[10px]">{detailRow.inwardSource}</dd>
+                </div>
+              ) : null}
               <div className="grid grid-cols-[100px_1fr] gap-1">
                 <dt className="text-gray-500 font-medium">Article</dt>
                 <dd className="font-semibold">{detailRow.articleNumber}</dd>
               </div>
+              {detailRow.vendorProductionFlowId ? (
+                <div className="grid grid-cols-[100px_1fr] gap-1">
+                  <dt className="text-gray-500 font-medium">Vendor flow</dt>
+                  <dd className="space-y-1">
+                    <span className="font-mono text-[10px] break-all block">{detailRow.vendorProductionFlowId}</span>
+                    <Link
+                      href="/vendor-po/dispatch"
+                      className="text-sky-700 font-bold underline text-[10px] inline-block"
+                    >
+                      Open vendor dispatch
+                    </Link>
+                  </dd>
+                </div>
+              ) : null}
+              {detailRow.vendorPurchaseOrderId ? (
+                <div className="grid grid-cols-[100px_1fr] gap-1">
+                  <dt className="text-gray-500 font-medium">VPO id</dt>
+                  <dd className="space-y-1">
+                    <span className="font-mono text-[10px] break-all block">{detailRow.vendorPurchaseOrderId}</span>
+                    <Link
+                      href={`/vendor-po/purchase-management/purchase/edit/${encodeURIComponent(detailRow.vendorPurchaseOrderId)}`}
+                      className="text-sky-700 font-bold underline text-[10px] inline-block"
+                    >
+                      Open purchase edit
+                    </Link>
+                  </dd>
+                </div>
+              ) : null}
               <div className="grid grid-cols-[100px_1fr] gap-1">
                 <dt className="text-gray-500 font-medium">Qty factory</dt>
                 <dd className="tabular-nums font-bold text-teal-800">{(detailRow.QuantityFromFactory ?? 0).toLocaleString()}</dd>
@@ -64,7 +103,16 @@ export default function WhmsInwardReceivedDetailDrawer({
               </div>
               <div className="grid grid-cols-[100px_1fr] gap-1">
                 <dt className="text-gray-500 font-medium">Style</dt>
-                <dd className="break-words">{detailRow.styleCode}</dd>
+                <dd className="break-words space-y-0.5">
+                  <span className="font-semibold text-gray-900">
+                    {inwardReceiveDisplayStyleCode(detailRow, styleCodeIdToMaster)}
+                  </span>
+                  {isMongoObjectIdString(detailRow.styleCode) ? (
+                    <span className="block text-[10px] font-mono text-gray-500 break-all" title="Style code document id">
+                      id {detailRow.styleCode}
+                    </span>
+                  ) : null}
+                </dd>
               </div>
               <div className="grid grid-cols-[100px_1fr] gap-1">
                 <dt className="text-gray-500 font-medium">Brand</dt>

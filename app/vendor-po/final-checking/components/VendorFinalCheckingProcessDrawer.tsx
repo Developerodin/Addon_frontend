@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "react-hot-toast";
 import { CRM } from "../../vendor-list/crmUiClasses";
@@ -8,12 +8,12 @@ import { VendorFloorBatchSummary } from "../../components/VendorFloorBatchSummar
 import vendorProductionFlowService, {
   type FinalCheckingFloorQuantity,
   type VendorProductionFlow,
+  type VendorTransferItem,
 } from "@/shared/services/vendorProductionFlowService";
 import { getStyleCodesByVendorCode, type StyleCodeByVendorRow } from "@/shared/services/productService";
 import { resolveVendorCodeForStyleLookup } from "../../branding/brandingFloorUtils";
 import {
   styleOptionId,
-  toTransferredPayloadRows,
   toVendorTransferItems,
   type TransferredStyleRowDraft,
 } from "../../utils/transferredStyleRows";
@@ -23,6 +23,10 @@ import {
   allowedStyleCodeIdsFromInbound,
   initialFinalCheckingStyleRows,
 } from "../finalCheckingInboundAggregates";
+import {
+  buildFinalCheckingTransferredDeltaDraft,
+  finalCheckingTransferredBaselineDraft,
+} from "../finalCheckingTransferredDelta";
 import type { PendingFinalCheckingStagingPatch } from "./VendorFinalCheckingDispatchStagingModal";
 
 function m1AvailableToTransfer(fc: FinalCheckingFloorQuantity): number {
@@ -38,6 +42,8 @@ type Props = {
   onStagingRequested: (ctx: {
     flow: VendorProductionFlow;
     patch: PendingFinalCheckingStagingPatch;
+    /** Resolved style codes + brands for `PATCH …/floors/finalChecking` `transferredData`. */
+    transferItems: VendorTransferItem[];
   }) => void;
 };
 
@@ -58,6 +64,8 @@ export function VendorFinalCheckingProcessDrawer({
   const [vendorCodeResolved, setVendorCodeResolved] = useState<string | null>(null);
   /** Render in `document.body` so parent layout/stacking cannot block footer clicks (same as branding drawer). */
   const [portalEl, setPortalEl] = useState<HTMLElement | null>(null);
+  /** Drawer-open snapshot of style/qty — PATCH must send only deltas vs this (server merges adds). */
+  const transferredBaselineRef = useRef<Map<string, number>>(new Map());
   useEffect(() => {
     setPortalEl(document.body);
   }, []);
@@ -86,6 +94,7 @@ export function VendorFinalCheckingProcessDrawer({
     setM2Quantity(fc.m2Quantity ?? 0);
     setM4Quantity(fc.m4Quantity ?? 0);
     setRows(initialFinalCheckingStyleRows(fc));
+    transferredBaselineRef.current = finalCheckingTransferredBaselineDraft(fc);
   }, [open, flow?.id]);
 
   const loadStyles = useCallback(async () => {
@@ -164,28 +173,53 @@ export function VendorFinalCheckingProcessDrawer({
     setRows((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
   };
 
-  const buildBasePatch = (f: VendorProductionFlow): PendingFinalCheckingStagingPatch => {
+  const buildFloorPatchBody = (f: VendorProductionFlow): PendingFinalCheckingStagingPatch => {
     const fcPersist = f.floorQuantities.finalChecking;
-    return {
-      mode: "replace",
-      transferredData: toTransferredPayloadRows(rows, styleOptions),
+    const delta = buildFinalCheckingTransferredDeltaDraft(rows, transferredBaselineRef.current);
+    const base: PendingFinalCheckingStagingPatch = {
       m1Quantity: Math.max(0, Number(m1Quantity) || 0),
       m2Quantity: Math.max(0, Number(m2Quantity) || 0),
       m4Quantity: Math.max(0, Number(m4Quantity) || 0),
       repairStatus: fcPersist.repairStatus ?? "NOT_REQUIRED",
       repairRemarks: (fcPersist.repairRemarks ?? "").trim(),
     };
+    if (delta.length) base.transferredData = delta;
+    return base;
   };
 
+  const assertNoNegativeStyleDelta = (): boolean => {
+    const delta = buildFinalCheckingTransferredDeltaDraft(rows, transferredBaselineRef.current);
+    if (delta.some((r) => (Number(r.transferred) || 0) < 0)) {
+      toast.error(
+        "Reducing a style line below the saved amount is not supported via merge-PATCH. Refresh the batch or ask ops for a data fix.",
+      );
+      return false;
+    }
+    return true;
+  };
+
+  /**
+   * QC-only save: M1/M2/M4 + repair — **no** `transferredData` (sending it on the same floor PATCH can
+   * auto-forward to dispatch with the new API). Style lines apply when you use **Save & stage**.
+   */
   const handleSaveOnly = async () => {
     if (!flow) return;
+    if (totalTransferred > transferCap) {
+      toast.error(
+        `M1 row total cannot exceed inbound received (${transferCap.toLocaleString()}).`,
+      );
+      return;
+    }
     setSaving(true);
     try {
-      const updated = await vendorProductionFlowService.updateFloor(
-        flow.id,
-        "finalChecking",
-        buildBasePatch(flow),
-      );
+      const fcPersist = flow.floorQuantities.finalChecking;
+      const updated = await vendorProductionFlowService.updateFloor(flow.id, "finalChecking", {
+        m1Quantity: Math.max(0, Number(m1Quantity) || 0),
+        m2Quantity: Math.max(0, Number(m2Quantity) || 0),
+        m4Quantity: Math.max(0, Number(m4Quantity) || 0),
+        repairStatus: fcPersist.repairStatus ?? "NOT_REQUIRED",
+        repairRemarks: (fcPersist.repairRemarks ?? "").trim(),
+      });
       toast.success("Final quality details saved");
       onSaved(updated);
       onClose();
@@ -200,6 +234,7 @@ export function VendorFinalCheckingProcessDrawer({
   /** Validates M1 lines, then parent closes drawer and opens container scan modal. */
   const handleSaveAndStage = () => {
     if (!flow) return;
+    if (!assertNoNegativeStyleDelta()) return;
     if (totalTransferred > transferCap) {
       toast.error(
         `M1 row total cannot exceed inbound received (${transferCap.toLocaleString()}).`,
@@ -212,7 +247,11 @@ export function VendorFinalCheckingProcessDrawer({
       toast.error("Enter M1 style line quantities > 0 before staging on a container.");
       return;
     }
-    onStagingRequested({ flow, patch: buildBasePatch(flow) });
+    onStagingRequested({
+      flow,
+      patch: buildFloorPatchBody(flow),
+      transferItems: items,
+    });
   };
 
   if (!open || !flow || !finalLive) return null;
@@ -253,8 +292,13 @@ export function VendorFinalCheckingProcessDrawer({
         <div className={`${CRM.drawerBodyScroll} min-h-0`}>
           <p className={CRM.drawerHint}>
             <strong>Final QC:</strong> M1 rows ≤ inbound <code className="text-[10px]">receivedData</code>.{" "}
-            <strong>Save</strong> updates QC only. <strong>Save &amp; stage to Dispatch</strong> closes this drawer and opens the{" "}
-            <strong>container scan</strong> modal (empty bag + PATCH with <code className="text-[10px]">autoTransferToNextFloor</code>), same pattern as secondary checking M1.
+            <strong>Save</strong> updates M1/M2/M4 and repair fields only — it does <strong>not</strong> send{" "}
+            <code className="text-[10px]">transferredData</code> (that path can auto-move to dispatch).{" "}
+            <strong>Save &amp; stage</strong> opens the container modal: <code className="text-[10px]">PATCH …/floors/finalChecking</code> with{" "}
+            <code className="text-[10px]">transferredData</code> + <code className="text-[10px]">existingContainerBarcode</code> only. Then go to{" "}
+            <strong>Dispatch</strong> and run <code className="text-[10px]">POST …/containers-masters/barcode/…/accept</code> on the same barcode (dispatch data only). WHMS{" "}
+            <code className="text-[10px]">promote-vendor-dispatch</code> creates inward rows. No{" "}
+            <code className="text-[10px]">PATCH …/transfer</code>.
           </p>
 
           <VendorFloorBatchSummary

@@ -162,6 +162,9 @@ export function VendorSecondaryCheckingListCard({
                   Planned
                 </th>
                 <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                  Pending Scan
+                </th>
+                <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
                   Received
                 </th>
                 <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
@@ -185,7 +188,7 @@ export function VendorSecondaryCheckingListCard({
               {paginatedFlows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={10}
                     className="px-1.5 py-10 border border-gray-200 text-center text-gray-400 text-xs font-bold tracking-widest uppercase"
                   >
                     No batches found
@@ -225,6 +228,18 @@ export function VendorSecondaryCheckingListCard({
                       </td>
                       <td className="px-1.5 py-2.5 text-right font-bold text-gray-800 text-[12px] border border-gray-200">
                         {flow.plannedQuantity.toLocaleString()}
+                      </td>
+                      <td className="px-1.5 py-2.5 text-right border border-gray-200">
+                        {(sc.pendingFromBoxes ?? 0) > 0 ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-50 border border-orange-200 text-[10px] font-bold text-orange-700">
+                            <i className="ri-barcode-line text-[9px]" />
+                            {(sc.pendingFromBoxes ?? 0).toLocaleString()}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-gray-400 font-medium">
+                            0
+                          </span>
+                        )}
                       </td>
                       <td className="px-1.5 py-2.5 text-right font-medium text-gray-700 text-[12px] border border-gray-200">
                         {sc.received.toLocaleString()}

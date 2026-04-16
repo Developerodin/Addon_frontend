@@ -1,4 +1,5 @@
 import type {
+  ReceivedDataRow,
   TransferredDataRow,
   VendorTransferItem,
 } from "@/shared/services/vendorProductionFlowService";
@@ -93,7 +94,8 @@ export function toVendorTransferItems(
       const opt = sid
         ? styleOptions.find((o) => styleOptionId(o) === sid)
         : undefined;
-      const styleCode = (opt?.styleCode ?? r.styleCodeId).trim();
+      /** Style master id (Mongo/ObjectId string) — matches `transferredData.styleCode` and transfer API. */
+      const styleCode = sid;
       const brand = (r.brand.trim() || opt?.brand?.trim() || "").trim();
       return {
         transferred: Math.max(0, Number(r.transferred) || 0),
@@ -104,7 +106,9 @@ export function toVendorTransferItems(
 }
 
 /** List cell / chip label — `styleCode` field is often an ObjectId. */
-export function formatTransferredRowLabel(row: TransferredDataRow): string {
+export function formatTransferredRowLabel(
+  row: TransferredDataRow | ReceivedDataRow,
+): string {
   const qty = row.transferred ?? 0;
   const brand = row.brand?.trim();
   const sc = row.styleCode?.trim();

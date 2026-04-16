@@ -74,6 +74,8 @@ export interface QualityFloorQuantity extends BaseFloorQuantity {
   m1Remaining: number;
   m2Transferred?: number;
   m2Remaining?: number;
+  /** Quantity from boxes not yet scanned/accepted on this floor. */
+  pendingFromBoxes?: number;
   repairStatus: RepairStatus;
   repairRemarks?: string;
 }
@@ -83,6 +85,10 @@ export interface BrandingFloorQuantity extends BaseFloorQuantity {
 }
 
 export interface FinalCheckingFloorQuantity extends QualityFloorQuantity {
+  transferredData?: TransferredDataRow[];
+}
+
+export interface DispatchFloorQuantity extends BaseFloorQuantity {
   transferredData?: TransferredDataRow[];
 }
 
@@ -105,8 +111,10 @@ export interface VendorProductionFlow {
     branding: BrandingFloorQuantity;
     finalChecking: FinalCheckingFloorQuantity;
     /** Present when API returns dispatch floor; increments on container accept at Dispatch. */
-    dispatch?: BaseFloorQuantity;
+    dispatch?: DispatchFloorQuantity;
   };
+  /** Populated on some `PATCH …/transfer` responses (e.g. dispatch → warehouse). */
+  vendorTransferContainer?: { barcode?: string; _id?: string; id?: string };
   createdAt?: string;
   updatedAt?: string;
 }
@@ -127,8 +135,13 @@ export interface UpdateFloorPayload {
 export type VendorTransferFromFloorKey =
   | "secondaryChecking"
   | "branding"
-  | "finalChecking";
-export type VendorTransferToFloorKey = "branding" | "finalChecking" | "dispatch";
+  | "finalChecking"
+  | "dispatch";
+export type VendorTransferToFloorKey =
+  | "branding"
+  | "finalChecking"
+  | "dispatch"
+  | "warehouse";
 
 export type VendorTransferItem = {
   transferred: number;
@@ -143,14 +156,15 @@ export type VendorTransferItem = {
  * - required: fromFloorKey, toFloorKey, quantity
  * - secondary → branding & branding → finalChecking: send `existingContainerBarcode` (barcode or 24-char id)
  * - branding → finalChecking additionally requires `transferItems` (style-wise breakdown) whose sum = quantity
- * - finalChecking → dispatch: `transferItems` + `existingContainerBarcode` when staging to dispatch on a bag (if backend supports this leg)
+ * - finalChecking → dispatch: use `PATCH …/floors/finalChecking` with `transferredData` + `existingContainerBarcode`, then `POST …/containers-masters/barcode/:barcode/accept` — **do not** use this `transfer` call for that leg.
+ * - dispatch → warehouse: `fromFloorKey` `dispatch`, `toFloorKey` `warehouse`, `existingContainerBarcode` required (Active container), optional `transferItems` (non-empty ⇒ sum of `transferred` must equal `quantity`).
  * - response may include `vendorTransferContainer` for scanning on destination
  */
 export interface TransferProductionFlowPayload {
   fromFloorKey: VendorTransferFromFloorKey;
   toFloorKey: VendorTransferToFloorKey;
   quantity: number;
-  /** Reuse an existing `containers_masters` row (barcode or Mongo `_id`). Required for secondary→branding / branding→finalChecking. */
+  /** Reuse an existing `containers_masters` row (barcode or Mongo `_id`). Required for secondary→branding / branding→finalChecking / dispatch→warehouse. */
   existingContainerBarcode?: string;
   transferItems?: VendorTransferItem[];
 }
@@ -271,8 +285,9 @@ export const vendorProductionFlowService = {
    *
    * NOTE (container legs):
    * - Secondary → branding and branding → finalChecking stage a container.
-   * - Destination `received` updates only after barcode accept on destination floor.
-   * - `currentFloorKey` stays on the sending floor until the container is accepted.
+   * - Dispatch → warehouse: stages into an existing Active container; warehouse completes with `POST …/containers-masters/barcode/:barcode/accept` (empty body).
+   * - Destination `received` updates only after barcode accept on destination floor (where applicable).
+   * - `currentFloorKey` stays on the sending floor until the container is accepted (where applicable).
    */
   transfer: async (flowId: string, payload: TransferProductionFlowPayload): Promise<VendorProductionFlow> => {
     return requestJson(`${baseUrl}/${flowId}/transfer`, {

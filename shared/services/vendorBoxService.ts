@@ -147,10 +147,30 @@ export async function updateVendorBox(
   });
 }
 
+export interface ScanAcceptResponse {
+  box: VendorBox;
+  flow: Record<string, any> | null;
+  acceptedUnits: number;
+}
+
+/**
+ * Scan-accept a vendor box on the secondary checking floor.
+ * @param barcode - The box barcode or boxId
+ */
+export async function scanAcceptVendorBox(
+  barcode: string
+): Promise<ScanAcceptResponse> {
+  return requestJson<ScanAcceptResponse>(`${baseUrl}/scan-accept`, {
+    method: "POST",
+    body: JSON.stringify({ barcode }),
+  });
+}
+
 const vendorBoxService = {
   list: listVendorBoxes,
   bulkCreate: bulkCreateVendorBoxes,
   update: updateVendorBox,
+  scanAccept: scanAcceptVendorBox,
 };
 
 export default vendorBoxService;

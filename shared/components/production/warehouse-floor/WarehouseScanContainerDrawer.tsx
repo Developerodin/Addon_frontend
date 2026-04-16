@@ -10,10 +10,29 @@ import {
 } from "@/shared/services/containersMasterService";
 import { productionService, type Article } from "@/shared/services/productionService";
 
-const CURRENT_FLOOR = "Warehouse";
+const ACCEPTED_FLOORS = ["warehouse", "warehouseinward"];
 
 function normalizeFloor(f: string | undefined): string {
   return (f ?? "").replace(/\s+/g, "").toLowerCase();
+}
+
+/**
+ * @returns true when the container's activeFloor is any warehouse-related floor.
+ */
+function isWarehouseFloor(activeFloor: string | undefined): boolean {
+  return ACCEPTED_FLOORS.includes(normalizeFloor(activeFloor));
+}
+
+interface VendorFlowItem {
+  vendorProductionFlow?: {
+    referenceCode?: string;
+    id?: string;
+    product?: { name?: string; factoryCode?: string };
+    vendor?: { id?: string };
+    vendorPurchaseOrder?: { vpoNumber?: string };
+  };
+  quantity?: number;
+  transferItems?: Array<{ transferred: number; styleCode?: string; brand?: string }>;
 }
 
 export interface WarehouseScanContainerDrawerProps {
@@ -33,6 +52,7 @@ export default function WarehouseScanContainerDrawer({ open, onClose, onAccepted
   const [scanned, setScanned] = useState<{
     container: ContainerMaster;
     articles: Array<{ article: Article | null; quantity: number }>;
+    vendorItems: VendorFlowItem[];
   } | null>(null);
 
   const reset = useCallback(() => {
@@ -45,6 +65,16 @@ export default function WarehouseScanContainerDrawer({ open, onClose, onAccepted
     onClose();
   };
 
+  /**
+   * @returns vendor flow items from activeItems (items without article but with vendorProductionFlow).
+   */
+  const extractVendorItems = (container: ContainerMaster): VendorFlowItem[] => {
+    if (!container.activeItems?.length) return [];
+    return container.activeItems.filter(
+      (item) => (item as unknown as VendorFlowItem).vendorProductionFlow && !(item as unknown as { article?: unknown }).article,
+    ) as unknown as VendorFlowItem[];
+  };
+
   const fetchContainer = async () => {
     const b = barcode.trim();
     if (!b) return;
@@ -52,18 +82,19 @@ export default function WarehouseScanContainerDrawer({ open, onClose, onAccepted
     setScanned(null);
     try {
       const container = await containersMasterService.getByBarcode(b);
-      const articlesRaw = getContainerArticles(container);
+      const vendorItems = extractVendorItems(container);
+      const articlesRaw = getContainerArticles(container).filter((a) => a.articleId);
       const resolved = await Promise.all(
         articlesRaw.map((a) =>
           productionService.getArticle(a.articleId).then((r) =>
-            r.success && r.data ? { article: r.data as Article, quantity: a.quantity } : { article: null, quantity: a.quantity }
-          )
-        )
+            r.success && r.data ? { article: r.data as Article, quantity: a.quantity } : { article: null, quantity: a.quantity },
+          ).catch(() => ({ article: null as Article | null, quantity: a.quantity })),
+        ),
       );
-      setScanned({ container, articles: resolved });
-      if (normalizeFloor(container.activeFloor) !== normalizeFloor(CURRENT_FLOOR)) {
+      setScanned({ container, articles: resolved, vendorItems });
+      if (!isWarehouseFloor(container.activeFloor)) {
         toast.error(
-          `This container belongs to "${container.activeFloor ?? "unknown"}", not ${CURRENT_FLOOR}. Accept is disabled until the container is assigned to Warehouse.`
+          `This container belongs to "${container.activeFloor ?? "unknown"}", not Warehouse. Accept is disabled.`,
         );
       }
     } catch (err) {
@@ -97,8 +128,7 @@ export default function WarehouseScanContainerDrawer({ open, onClose, onAccepted
     }
   };
 
-  const belongs =
-    Boolean(scanned) && normalizeFloor(scanned?.container?.activeFloor) === normalizeFloor(CURRENT_FLOOR);
+  const belongs = Boolean(scanned) && isWarehouseFloor(scanned?.container?.activeFloor);
 
   if (!open) return null;
 
@@ -153,8 +183,38 @@ export default function WarehouseScanContainerDrawer({ open, onClose, onAccepted
               </div>
               <h4 className="text-[11px] font-bold text-gray-800 uppercase tracking-wider">Items</h4>
               <div className="p-2 bg-gray-50 rounded border border-gray-200 text-[12px] text-gray-900 space-y-1">
-                {scanned.articles.map((item, i) => (
-                  <div key={i} className={i > 0 ? "pt-1 border-t border-gray-200 mt-1" : ""}>
+                {scanned.vendorItems.length > 0 && scanned.vendorItems.map((item, i) => {
+                  const vpf = item.vendorProductionFlow;
+                  return (
+                    <div key={`v-${i}`} className={i > 0 ? "pt-1 border-t border-gray-200 mt-1" : ""}>
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-block px-1.5 py-0.5 text-[9px] font-bold rounded bg-purple-100 text-purple-800 uppercase">Vendor</span>
+                        <span className="font-bold text-[#495057]">{vpf?.referenceCode ?? vpf?.id?.slice(-6) ?? "—"}</span>
+                        <span className="text-gray-600">× {item.quantity ?? 0}</span>
+                      </div>
+                      {vpf?.product?.name && (
+                        <p className="text-[10px] text-gray-500 mt-0.5">
+                          {vpf.product.name} {vpf.product.factoryCode ? `(${vpf.product.factoryCode})` : ""}
+                          {vpf.vendorPurchaseOrder?.vpoNumber ? ` · ${vpf.vendorPurchaseOrder.vpoNumber}` : ""}
+                        </p>
+                      )}
+                      {item.transferItems && item.transferItems.length > 0 && (
+                        <div className="mt-1 text-[11px] text-emerald-900 bg-emerald-50 border border-emerald-100 rounded p-1.5">
+                          <span className="font-semibold">Style breakdown:</span>
+                          <ul className="mt-0.5 list-disc list-inside space-y-0.5">
+                            {item.transferItems.map((ti, tIdx) => (
+                              <li key={tIdx}>
+                                {ti.transferred} · {ti.styleCode || "—"} · {ti.brand || "—"}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {scanned.articles.filter((a) => a.article).map((item, i) => (
+                  <div key={`a-${i}`} className={(i > 0 || scanned.vendorItems.length > 0) ? "pt-1 border-t border-gray-200 mt-1" : ""}>
                     <div>
                       <span className="font-bold text-[#495057]">{(item.article as Article | null)?.articleNumber ?? "—"}</span>
                       <span className="text-gray-600"> × {item.quantity}</span>
@@ -185,8 +245,8 @@ export default function WarehouseScanContainerDrawer({ open, onClose, onAccepted
                 <>
                   {!belongs && (
                     <div className="p-2 rounded border-2 border-red-400 bg-red-50 text-[11px] text-red-800">
-                      This container is assigned to <strong>{String(scanned.container.activeFloor || "unknown")}</strong>, not{" "}
-                      {CURRENT_FLOOR}. Accept Article is disabled.
+                      This container is assigned to <strong>{String(scanned.container.activeFloor || "unknown")}</strong>, not Warehouse.
+                      Accept is disabled.
                     </div>
                   )}
                   <button
@@ -195,7 +255,7 @@ export default function WarehouseScanContainerDrawer({ open, onClose, onAccepted
                     onClick={() => void accept()}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-emerald-600 text-white hover:bg-emerald-700 w-full disabled:opacity-50 disabled:cursor-not-allowed mt-3"
                   >
-                    {acceptLoading ? "Accepting..." : "Accept Article Quantity"}
+                    {acceptLoading ? "Accepting..." : "Accept Quantity"}
                   </button>
                 </>
               ) : (

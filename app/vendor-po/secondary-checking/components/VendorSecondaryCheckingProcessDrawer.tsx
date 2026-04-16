@@ -137,6 +137,16 @@ export function VendorSecondaryCheckingProcessDrawer({
                   </div>
                   <div>
                     <span className="text-[10px] font-bold text-gray-500 uppercase block mb-0.5">
+                      Pending Scan (from boxes)
+                    </span>
+                    <span className="font-semibold text-orange-700">
+                      {(
+                        flow.floorQuantities.secondaryChecking?.pendingFromBoxes ?? 0
+                      ).toLocaleString()}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-500 uppercase block mb-0.5">
                       Remaining (to next floor)
                     </span>
                     <span className="font-semibold text-amber-900">

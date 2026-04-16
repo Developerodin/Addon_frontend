@@ -19,6 +19,13 @@ export function styleBrandKey(styleCodeId: string, brand: string): string {
   return `${styleCodeId.trim()}${KEY_SEP}${brand.trim()}`;
 }
 
+/** Inverse of `styleBrandKey` for delta rows when a style bucket was removed from the form. */
+export function parseStyleBrandKey(key: string): { styleCode: string; brand: string } {
+  const i = key.indexOf(KEY_SEP);
+  if (i < 0) return { styleCode: key.trim(), brand: "" };
+  return { styleCode: key.slice(0, i).trim(), brand: key.slice(i + KEY_SEP.length).trim() };
+}
+
 /**
  * Sums `receivedData` lines per (styleCode, brand) — matches how operators think about caps per style.
  */

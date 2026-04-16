@@ -27,6 +27,7 @@ import {
   type VendorSecondaryCheckingProcessData,
 } from "./components/VendorSecondaryCheckingProcessDrawer";
 import { VendorSecondaryCheckingListCard } from "./components/VendorSecondaryCheckingListCard";
+import { VendorSecondaryCheckingScanAccept } from "./components/VendorSecondaryCheckingScanAccept";
 import {
   VendorSecondaryCheckingM1StagingModal,
   type PendingSecondaryCheckingPatch,
@@ -302,8 +303,30 @@ const SecondaryCheckingPage = () => {
     }
   };
 
+  const handleBoxScanAccepted = useCallback(
+    (result: { flow: Record<string, any> | null }) => {
+      if (result.flow) {
+        setFlows((prev) => {
+          const fId = result.flow?.id;
+          const exists = prev.some((f) => f.id === fId);
+          if (exists) {
+            return prev.map((f) =>
+              f.id === fId ? (result.flow as unknown as VendorProductionFlow) : f,
+            );
+          }
+          return [result.flow as unknown as VendorProductionFlow, ...prev];
+        });
+      }
+      loadFlows();
+    },
+    [loadFlows],
+  );
+
   return (
     <>
+      <div className="main-content !p-[10px] !pb-0">
+        <VendorSecondaryCheckingScanAccept onAccepted={handleBoxScanAccepted} />
+      </div>
       <VendorSecondaryCheckingListCard
         loading={loading}
         flows={flows}
