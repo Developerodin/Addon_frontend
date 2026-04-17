@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import Link from "next/link";
@@ -35,62 +35,103 @@ const DashboardPage = () => {
   const [inventoryError, setInventoryError] = useState<string | null>(null);
   const [alertsError, setAlertsError] = useState<string | null>(null);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalResults, setTotalResults] = useState(0);
+
+  // Filter state (server-side)
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Export state
+  const [exporting, setExporting] = useState(false);
+
   const hasPermission = hasSubPermission("/yarn-management", "Dashboard");
 
-  const fetchInventory = useCallback(async () => {
+  /**
+   * Transforms API response item to YarnInventory format
+   */
+  const transformInventoryItem = useCallback((item: any): YarnInventory => {
+    const totalWeight =
+      item.longTermStorage.totalWeight + item.shortTermStorage.totalWeight;
+    const totalNetWeight =
+      item.longTermStorage.netWeight + item.shortTermStorage.netWeight;
+    const blockedQty = item.blockedQty || 0;
+    const availableQty = Math.max(0, totalNetWeight - blockedQty);
+
+    let status: "In Stock" | "Low Stock" | "Out of Stock" = "In Stock";
+    if (
+      item.inventoryStatus === "low_stock" ||
+      item.inventoryStatus === "soon_to_be_low"
+    ) {
+      status = "Low Stock";
+    } else if (totalWeight === 0) {
+      status = "Out of Stock";
+    }
+
+    return {
+      id: item._id || inventoryYarnId(item) || item.yarnName,
+      yarnName: item.yarnName,
+      weight: totalWeight,
+      longTermWeight: item.longTermStorage.totalWeight,
+      shortTermWeight: item.shortTermStorage.totalWeight,
+      conesLongTerm: item.longTermStorage.numberOfCones,
+      conesShortTerm: item.shortTermStorage.numberOfCones,
+      blockedQty,
+      availableQty,
+      unitOfMeasurement: "kg",
+      ratePerUnit: 0,
+      totalValue: 0,
+      lastUpdated: new Date().toISOString().split("T")[0],
+      status,
+      supplier: "",
+      yarnId: inventoryYarnId(item),
+      inventoryStatus: item.inventoryStatus,
+      overbooked: item.overbooked,
+    };
+  }, []);
+
+  const fetchInventory = useCallback(async (
+    page: number = currentPage,
+    limit: number = rowsPerPage,
+    yarnName: string = searchTerm,
+    inventoryStatus: string = statusFilter
+  ) => {
     try {
       setInventoryLoading(true);
       setInventoryError(null);
 
-      const inventoryPage = await yarnInventoryService.getYarnInventories({
-        limit: 20,
-        page: 1,
-      });
+      // Build API params
+      const params: Record<string, any> = {
+        limit,
+        page,
+      };
 
-      const transformedInventory: YarnInventory[] = inventoryPage.results.map(
-        (item) => {
-          const totalWeight =
-            item.longTermStorage.totalWeight + item.shortTermStorage.totalWeight;
-          const totalNetWeight =
-            item.longTermStorage.netWeight + item.shortTermStorage.netWeight;
-          const blockedQty = item.overbooked ? totalNetWeight : 0;
-          const availableQty = totalNetWeight - blockedQty;
+      // Add yarn_name filter if search term exists
+      if (yarnName.trim()) {
+        params.yarn_name = yarnName.trim();
+      }
 
-          let status: "In Stock" | "Low Stock" | "Out of Stock" = "In Stock";
-          if (
-            item.inventoryStatus === "low_stock" ||
-            item.inventoryStatus === "soon_to_be_low"
-          ) {
-            status = "Low Stock";
-          } else if (totalWeight === 0) {
-            status = "Out of Stock";
-          }
-
-          return {
-            id: item._id || inventoryYarnId(item) || item.yarnName,
-            yarnName: item.yarnName,
-            weight: totalWeight,
-            longTermWeight: item.longTermStorage.totalWeight,
-            shortTermWeight: item.shortTermStorage.totalWeight,
-            conesLongTerm: item.longTermStorage.numberOfCones,
-            conesShortTerm: item.shortTermStorage.numberOfCones,
-            blockedQty,
-            availableQty,
-            unitOfMeasurement: "kg",
-            ratePerUnit: 0,
-            totalValue: 0,
-            lastUpdated: new Date().toISOString().split("T")[0],
-            status,
-            supplier: "",
-            yarnId: inventoryYarnId(item),
-            inventoryStatus: item.inventoryStatus,
-            overbooked: item.overbooked,
-          };
+      // Map status filter to API inventory_status
+      if (inventoryStatus !== "all") {
+        if (inventoryStatus === "Low Stock") {
+          params.inventory_status = "low_stock";
+        } else if (inventoryStatus === "In Stock") {
+          params.inventory_status = "in_stock";
         }
-      );
+      }
+
+      const inventoryPage = await yarnInventoryService.getYarnInventories(params);
+
+      const transformedInventory = inventoryPage.results.map(transformInventoryItem);
 
       const totalStockKg = inventoryPage.summary?.totalKg ?? 0;
       setInventory(transformedInventory);
+      setTotalPages(inventoryPage.totalPages || 1);
+      setTotalResults(inventoryPage.totalResults || 0);
       setSummary((prev) => ({
         ...prev,
         totalStock: totalStockKg,
@@ -104,7 +145,7 @@ const DashboardPage = () => {
     } finally {
       setInventoryLoading(false);
     }
-  }, []);
+  }, [currentPage, rowsPerPage, searchTerm, statusFilter, transformInventoryItem]);
 
   const fetchAlerts = useCallback(async () => {
     try {
@@ -186,12 +227,149 @@ const DashboardPage = () => {
       setAlertsLoading(false);
       return;
     }
-    fetchInventory();
+    fetchInventory(currentPage, rowsPerPage, searchTerm, statusFilter);
     fetchAlerts();
-  }, [hasPermission, fetchInventory, fetchAlerts]);
+  }, [hasPermission, currentPage, rowsPerPage, fetchAlerts]);
+
+  // Debounced search effect
+  useEffect(() => {
+    if (!hasPermission) return;
+    
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+
+    searchDebounceRef.current = setTimeout(() => {
+      setCurrentPage(1);
+      fetchInventory(1, rowsPerPage, searchTerm, statusFilter);
+    }, 400);
+
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
+    };
+  }, [searchTerm, statusFilter, hasPermission, rowsPerPage]);
+
+  /**
+   * Handles page change from pagination controls
+   */
+  const handlePageChange = useCallback((newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
+  }, [totalPages]);
+
+  /**
+   * Handles rows per page change
+   */
+  const handleRowsPerPageChange = useCallback((newLimit: number) => {
+    setRowsPerPage(newLimit);
+    setCurrentPage(1);
+  }, []);
+
+  /**
+   * Handles search term change (debounced)
+   */
+  const handleSearchChange = useCallback((term: string) => {
+    setSearchTerm(term);
+  }, []);
+
+  /**
+   * Handles status filter change
+   */
+  const handleStatusFilterChange = useCallback((status: string) => {
+    setStatusFilter(status);
+  }, []);
+
+  /**
+   * Exports all inventory data to Excel
+   */
+  const handleExportExcel = useCallback(async () => {
+    try {
+      setExporting(true);
+
+      // Fetch all inventory data
+      const allInventory = await yarnInventoryService.getAllYarnInventories();
+
+      // Transform to export format matching table columns
+      const exportData = allInventory.map((item) => {
+        const totalWeight =
+          item.longTermStorage.totalWeight + item.shortTermStorage.totalWeight;
+        const totalNetWeight =
+          item.longTermStorage.netWeight + item.shortTermStorage.netWeight;
+        const blockedQty = item.blockedQty || 0;
+        const availableQty = Math.max(0, totalNetWeight - blockedQty);
+
+        let status = "In Stock";
+        if (
+          item.inventoryStatus === "low_stock" ||
+          item.inventoryStatus === "soon_to_be_low"
+        ) {
+          status = "Low Stock";
+        } else if (totalWeight === 0) {
+          status = "Out of Stock";
+        }
+
+        return {
+          "Yarn Name": item.yarnName,
+          "LTS (kg)": item.longTermStorage.totalWeight,
+          "STS (kg)": item.shortTermStorage.totalWeight,
+          "Cones": item.shortTermStorage.numberOfCones,
+          "Blocked Qty (kg)": blockedQty,
+          "Available Qty (kg)": availableQty,
+          "Status": status,
+        };
+      });
+
+      // Generate CSV content
+      if (exportData.length === 0) {
+        alert("No data to export");
+        return;
+      }
+
+      const headers = Object.keys(exportData[0]);
+      const csvRows = [
+        headers.join(","),
+        ...exportData.map((row) =>
+          headers
+            .map((header) => {
+              const value = row[header as keyof typeof row];
+              // Escape commas and quotes in values
+              if (typeof value === "string" && (value.includes(",") || value.includes('"'))) {
+                return `"${value.replace(/"/g, '""')}"`;
+              }
+              return value;
+            })
+            .join(",")
+        ),
+      ];
+      const csvContent = csvRows.join("\n");
+
+      // Create and download file
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `yarn-inventory-${new Date().toISOString().split("T")[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Error exporting inventory:", err);
+      alert("Failed to export inventory. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  }, []);
+
+  // Track if alerts modal has been shown once (only auto-open on initial load)
+  const alertsShownRef = useRef(false);
 
   useEffect(() => {
-    if (alerts.length > 0 && !alertsLoading) {
+    if (alerts.length > 0 && !alertsLoading && !alertsShownRef.current) {
+      alertsShownRef.current = true;
       setShowAlertsModal(true);
     }
   }, [alerts.length, alertsLoading]);
@@ -264,21 +442,14 @@ const DashboardPage = () => {
           <SummaryCards summary={summary} loading={inventoryLoading || alertsLoading} />
         </div>
 
-        {inventoryLoading ? (
-          <div className="border-t border-gray-100 p-[10px]">
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600 mr-3"></div>
-              <p className="text-[10px] text-gray-400 font-bold tracking-wider uppercase">Loading Inventory...</p>
-            </div>
-          </div>
-        ) : inventoryError ? (
+        {inventoryError ? (
           <div className="border-t border-gray-100 p-[10px]">
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <i className="ri-error-warning-line text-3xl text-red-400 mb-2"></i>
               <p className="text-[11px] text-gray-500 mb-2">{inventoryError}</p>
               <button
                 type="button"
-                onClick={fetchInventory}
+                onClick={() => fetchInventory(currentPage, rowsPerPage, searchTerm, statusFilter)}
                 className="text-[10px] text-purple-600 font-bold hover:underline"
               >
                 Retry
@@ -286,7 +457,22 @@ const DashboardPage = () => {
             </div>
           </div>
         ) : (
-          <LiveInventoryTable inventory={inventory} />
+          <LiveInventoryTable
+            inventory={inventory}
+            loading={inventoryLoading}
+            currentPage={currentPage}
+            rowsPerPage={rowsPerPage}
+            totalPages={totalPages}
+            totalResults={totalResults}
+            searchTerm={searchTerm}
+            statusFilter={statusFilter}
+            onPageChange={handlePageChange}
+            onRowsPerPageChange={handleRowsPerPageChange}
+            onSearchChange={handleSearchChange}
+            onStatusFilterChange={handleStatusFilterChange}
+            onExportExcel={handleExportExcel}
+            exporting={exporting}
+          />
         )}
       </div>
 
