@@ -160,8 +160,8 @@ const DashboardPage = () => {
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
         poSent: false,
-        page: 1,
-        limit: 50,
+        alertStatus: 'has_alert',
+        limit: 200,
         skipRecalculation: true,
       });
 
@@ -169,11 +169,6 @@ const DashboardPage = () => {
       const alertSummary = reqResponse.alertSummary;
 
       const transformedAlerts: InventoryAlert[] = requisitions
-        .filter(
-          (req) =>
-            req.alertStatus === "below_minimum" ||
-            req.alertStatus === "overbooked"
-        )
         .map((req) => {
           let alertType: "Low Stock" | "Out of Stock" | "Overblocked" =
             "Low Stock";

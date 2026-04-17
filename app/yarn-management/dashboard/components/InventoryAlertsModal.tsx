@@ -1,6 +1,8 @@
 "use client";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { InventoryAlert } from "../types";
+
+const ALERTS_PER_PAGE = 20;
 
 interface InventoryAlertsModalProps {
   isOpen: boolean;
@@ -15,6 +17,26 @@ const InventoryAlertsModal: React.FC<InventoryAlertsModalProps> = ({
   alerts,
   loading = false,
 }) => {
+  const [visibleCount, setVisibleCount] = useState(ALERTS_PER_PAGE);
+
+  // Reset visible count when modal opens or alerts change
+  useEffect(() => {
+    if (isOpen) {
+      setVisibleCount(ALERTS_PER_PAGE);
+    }
+  }, [isOpen, alerts]);
+
+  const visibleAlerts = alerts.slice(0, visibleCount);
+  const hasMore = visibleCount < alerts.length;
+  const remainingCount = alerts.length - visibleCount;
+
+  /**
+   * Load more alerts - adds ALERTS_PER_PAGE more items to visible list
+   */
+  const handleShowMore = () => {
+    setVisibleCount((prev) => Math.min(prev + ALERTS_PER_PAGE, alerts.length));
+  };
+
   // Prevent body scroll when modal is open
   useEffect(() => {
     if (isOpen) {
@@ -142,7 +164,7 @@ const InventoryAlertsModal: React.FC<InventoryAlertsModalProps> = ({
               </div>
             ) : (
               <div className="space-y-2">
-                {alerts.map((alert) => {
+                {visibleAlerts.map((alert) => {
                   const styles = getAlertStyles(alert.severity);
                   return (
                     <div
@@ -189,6 +211,16 @@ const InventoryAlertsModal: React.FC<InventoryAlertsModalProps> = ({
                     </div>
                   );
                 })}
+                {hasMore && (
+                  <button
+                    type="button"
+                    onClick={handleShowMore}
+                    className="w-full py-2.5 px-4 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 transition-colors duration-200 flex items-center justify-center gap-2"
+                  >
+                    <i className="ri-arrow-down-line text-base"></i>
+                    Show More ({remainingCount} remaining)
+                  </button>
+                )}
               </div>
             )}
           </div>

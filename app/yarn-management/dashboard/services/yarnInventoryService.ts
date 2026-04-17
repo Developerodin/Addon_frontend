@@ -312,6 +312,7 @@ class YarnInventoryService {
     startDate: string;
     endDate: string;
     poSent?: boolean;
+    alertStatus?: 'below_minimum' | 'overbooked' | 'has_alert';
     page?: number;
     limit?: number;
     skipRecalculation?: boolean;
@@ -321,6 +322,8 @@ class YarnInventoryService {
     queryParams.append('endDate', params.endDate);
     if (params.poSent !== undefined)
       queryParams.append('poSent', params.poSent.toString());
+    if (params.alertStatus)
+      queryParams.append('alertStatus', params.alertStatus);
     if (params.page) queryParams.append('page', params.page.toString());
     if (params.limit) queryParams.append('limit', params.limit.toString());
     if (params.skipRecalculation)
