@@ -4,9 +4,10 @@ import { InventorySummary } from "../types";
 
 interface SummaryCardsProps {
   summary: InventorySummary;
+  loading?: boolean;
 }
 
-const SummaryCards: React.FC<SummaryCardsProps> = ({ summary }) => {
+const SummaryCards: React.FC<SummaryCardsProps> = ({ summary, loading = false }) => {
   const cards = [
     {
       title: "Total Stock",
@@ -59,7 +60,11 @@ const SummaryCards: React.FC<SummaryCardsProps> = ({ summary }) => {
         >
           <div className="flex-1 min-w-0">
             <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">{card.title}</p>
-            <p className={`text-sm font-bold truncate ${card.color}`}>{card.value}</p>
+            {loading ? (
+              <div className="h-5 w-16 bg-gray-200 rounded animate-pulse"></div>
+            ) : (
+              <p className={`text-sm font-bold truncate ${card.color}`}>{card.value}</p>
+            )}
           </div>
           <div className={`${card.color} text-xl opacity-30 flex-shrink-0 ml-2`}>
             <i className={card.icon}></i>

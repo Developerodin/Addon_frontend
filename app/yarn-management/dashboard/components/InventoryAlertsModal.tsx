@@ -6,12 +6,14 @@ interface InventoryAlertsModalProps {
   isOpen: boolean;
   onClose: () => void;
   alerts: InventoryAlert[];
+  loading?: boolean;
 }
 
 const InventoryAlertsModal: React.FC<InventoryAlertsModalProps> = ({
   isOpen,
   onClose,
   alerts,
+  loading = false,
 }) => {
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -101,9 +103,13 @@ const InventoryAlertsModal: React.FC<InventoryAlertsModalProps> = ({
                 <h2 className="text-base font-semibold text-gray-900">
                   Inventory Alerts
                 </h2>
-                <p className="text-xs text-gray-600">
-                  {alerts.length} {alerts.length === 1 ? "alert" : "alerts"}
-                </p>
+                {loading ? (
+                  <div className="h-4 w-16 bg-gray-200 rounded animate-pulse mt-0.5"></div>
+                ) : (
+                  <p className="text-xs text-gray-600">
+                    {alerts.length} {alerts.length === 1 ? "alert" : "alerts"}
+                  </p>
+                )}
               </div>
             </div>
             <button
@@ -117,7 +123,12 @@ const InventoryAlertsModal: React.FC<InventoryAlertsModalProps> = ({
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-3">
-            {alerts.length === 0 ? (
+            {loading ? (
+              <div className="flex flex-col items-center justify-center h-full text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500 mb-3"></div>
+                <p className="text-xs text-gray-500">Loading alerts...</p>
+              </div>
+            ) : alerts.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center py-8">
                 <div className="p-3 bg-gray-100 rounded-full mb-3">
                   <i className="ri-checkbox-circle-line text-2xl text-gray-400"></i>

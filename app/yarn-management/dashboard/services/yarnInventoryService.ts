@@ -48,12 +48,29 @@ export interface YarnInventoryResponse {
   overbooked: boolean;
 }
 
+export interface InventorySummaryResponse {
+  totalLongTermKg: number;
+  totalShortTermKg: number;
+  totalKg: number;
+  yarnWise: Array<{
+    yarnName: string;
+    yarnId: string;
+    longTermKg: number;
+    shortTermKg: number;
+    totalKg: number;
+    longTermCones: number;
+    shortTermCones: number;
+    inventoryStatus: string;
+  }>;
+}
+
 export interface YarnInventoryListResponse {
   results: YarnInventoryResponse[];
   page: number;
   limit: number;
   totalPages: number;
   totalResults: number;
+  summary?: InventorySummaryResponse;
 }
 
 export interface YarnInventoryQueryParams {
@@ -79,6 +96,23 @@ export interface YarnRequisitionResponse {
   poSent: boolean;
   created: string;
   lastUpdated: string;
+}
+
+export interface RequisitionAlertSummary {
+  total: number;
+  pendingDeliveries: number;
+  alertCount: number;
+  belowMinimumCount: number;
+  overbookedCount: number;
+}
+
+export interface YarnRequisitionListResponse {
+  results: YarnRequisitionResponse[];
+  page: number;
+  limit: number;
+  totalPages: number;
+  totalResults: number;
+  alertSummary: RequisitionAlertSummary;
 }
 
 export interface UpdateRequisitionStatusRequest {
@@ -270,21 +304,53 @@ class YarnInventoryService {
     );
   }
 
-  // Yarn Requisition APIs
+  /**
+   * Fetch paginated yarn requisitions with alert summary.
+   * @param params - query filters including optional pagination
+   */
   async getYarnRequisitions(params: {
     startDate: string;
     endDate: string;
     poSent?: boolean;
-  }): Promise<YarnRequisitionResponse[]> {
+    page?: number;
+    limit?: number;
+    skipRecalculation?: boolean;
+  }): Promise<YarnRequisitionListResponse> {
     const queryParams = new URLSearchParams();
     queryParams.append('startDate', params.startDate);
     queryParams.append('endDate', params.endDate);
     if (params.poSent !== undefined)
       queryParams.append('poSent', params.poSent.toString());
+    if (params.page) queryParams.append('page', params.page.toString());
+    if (params.limit) queryParams.append('limit', params.limit.toString());
+    if (params.skipRecalculation)
+      queryParams.append('skipRecalculation', 'true');
 
-    return this.makeRequest<YarnRequisitionResponse[]>(
+    return this.makeRequest<YarnRequisitionListResponse>(
       `/yarn-requisitions?${queryParams.toString()}`
     );
+  }
+
+  /**
+   * Fetch ALL requisitions across all pages (for full-inventory view).
+   */
+  async getAllYarnRequisitions(params: {
+    startDate: string;
+    endDate: string;
+    poSent?: boolean;
+  }): Promise<{ results: YarnRequisitionResponse[]; alertSummary: RequisitionAlertSummary }> {
+    const pageSize = 100;
+    const allResults: YarnRequisitionResponse[] = [];
+    let alertSummary: RequisitionAlertSummary = { total: 0, pendingDeliveries: 0, alertCount: 0, belowMinimumCount: 0, overbookedCount: 0 };
+
+    for (let page = 1; page <= 100; page++) {
+      const res = await this.getYarnRequisitions({ ...params, page, limit: pageSize });
+      allResults.push(...res.results);
+      alertSummary = res.alertSummary;
+      if (res.results.length < pageSize || page >= res.totalPages) break;
+    }
+
+    return { results: allResults, alertSummary };
   }
 
   async updateRequisitionStatus(
