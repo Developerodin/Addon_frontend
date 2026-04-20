@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useRef, useEffect } from "react";
+import React, { useId, useState, useRef, useEffect } from "react";
 import { toast } from "react-hot-toast";
 
 interface BarcodeScannerProps {
@@ -8,6 +8,8 @@ interface BarcodeScannerProps {
   label?: string;
   autoFocus?: boolean;
   disabled?: boolean;
+  /** Shown when onScan returns false (validation failed). */
+  invalidMessage?: string;
 }
 
 const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
@@ -16,10 +18,13 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
   label,
   autoFocus = true,
   disabled = false,
+  invalidMessage = "Invalid barcode. Please try again.",
 }) => {
   const [scannedCode, setScannedCode] = useState("");
   const [isScanning, setIsScanning] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string>("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const errorId = useId();
 
   useEffect(() => {
     if (autoFocus && !disabled && inputRef.current) {
@@ -30,6 +35,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.trim();
     setScannedCode(value);
+    if (errorMessage) setErrorMessage("");
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -40,19 +46,24 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
 
   const handleScan = async () => {
     if (!scannedCode.trim()) {
-      toast.error("Please enter or scan a barcode");
+      setErrorMessage("Please enter or scan a barcode");
       return;
     }
 
     setIsScanning(true);
     try {
       const result = await onScan(scannedCode.trim());
+      if (result === false) {
+        setErrorMessage(invalidMessage);
+        return;
+      }
       if (result !== false) {
         setScannedCode("");
+        setErrorMessage("");
       }
     } catch (error) {
       console.error("Barcode scan failed:", error);
-      toast.error("Failed to process barcode. Please try again.");
+      setErrorMessage("Failed to process barcode. Please try again.");
     } finally {
       setIsScanning(false);
       if (inputRef.current) {
@@ -85,8 +96,19 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
             onChange={handleInputChange}
             onKeyPress={handleKeyPress}
             disabled={disabled || isScanning}
+            aria-invalid={Boolean(errorMessage)}
+            aria-describedby={errorMessage ? errorId : undefined}
           />
           <i className="ri-barcode-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+          {errorMessage ? (
+            <p
+              id={errorId}
+              role="alert"
+              className="mt-1 text-xs font-medium text-red-600"
+            >
+              {errorMessage}
+            </p>
+          ) : null}
         </div>
         <button
           type="button"

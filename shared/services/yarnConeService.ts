@@ -42,6 +42,19 @@ export interface UpdateYarnConePayload {
   coneStorageId?: string;
 }
 
+export interface ShortTermConeSummary {
+  _id: string;
+  boxId: string;
+  barcode: string;
+  coneStorageId?: string;
+  coneWeight?: number;
+  tearWeight?: number;
+  issueStatus?: string;
+  returnStatus?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 const getAccessToken = (): string | null => {
   if (typeof document === "undefined") return null;
 
@@ -123,6 +136,17 @@ class YarnConeService {
       method: "POST",
       body: hasOverrides ? JSON.stringify(overrides) : JSON.stringify({}),
     });
+  }
+
+  /** GET /short-term/by-box/:boxId - Cones currently in short-term storage for a box */
+  async getShortTermConesByBoxId(boxId: string): Promise<ShortTermConeSummary[]> {
+    if (!boxId) {
+      throw new Error("Box ID is required");
+    }
+    const data = await this.makeRequest<ShortTermConeSummary[]>(
+      `/short-term/by-box/${encodeURIComponent(boxId)}`
+    );
+    return Array.isArray(data) ? data : [];
   }
 
   async updateYarnCone(coneId: string, payload: UpdateYarnConePayload): Promise<YarnCone> {

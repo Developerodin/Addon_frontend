@@ -5,7 +5,9 @@ import { toast } from "react-hot-toast";
 import * as XLSX from "xlsx";
 import JsBarcode from "jsbarcode";
 import yarnBoxService, { YarnBox } from "@/shared/services/yarnBoxService";
-import yarnConeService from "@/shared/services/yarnConeService";
+import yarnConeService, {
+  ShortTermConeSummary,
+} from "@/shared/services/yarnConeService";
 import storageSlotService, {
   StorageSlot,
   SlotDetailsResponse,
@@ -55,6 +57,9 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
   const [scannedBoxDetails, setScannedBoxDetails] = useState<YarnBox | null>(
     null
   );
+  const [existingShortTermCones, setExistingShortTermCones] = useState<
+    ShortTermConeSummary[]
+  >([]);
   const [isProcessingBox, setIsProcessingBox] = useState(false);
   const [storageSlots, setStorageSlots] = useState<StorageSlot[]>([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState(true);
@@ -866,15 +871,48 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
           trimmedBarcode
         );
 
+        // Internal transfer should ONLY allow boxes that are currently on long-term storage.
+        // Long-term storage identifiers in backend are either legacy "LT-*" or rack barcodes like "B7-02-* .. B7-05-*".
+        const storageLoc = String(boxDetails.storageLocation || "").trim();
+        const isLongTermLocation = /^(LT-|B7-0[2-5]-)/i.test(storageLoc);
+        const isStored = boxDetails.storedStatus === true;
+
+        if (!storageLoc || !isLongTermLocation || !isStored) {
+          setScannedBoxDetails(null);
+          setSelectedBox(null);
+          setExistingShortTermCones([]);
+          toast.error(
+            "This box is not on long-term storage. Store it in long-term storage first, then do internal transfer."
+          );
+          return null;
+        }
+
         setScannedBoxDetails(boxDetails);
         const mappedBox = mapYarnBoxToPackedBox(boxDetails);
 
         if (mappedBox.status !== "Stored") {
           setSelectedBox(null);
+          setExistingShortTermCones([]);
           toast.error(
             "Box must be QC approved and stored in long-term storage before transfer"
           );
           return null;
+        }
+
+        // Show which cones (if any) are already in short-term storage for this box.
+        try {
+          const stCones = await yarnConeService.getShortTermConesByBoxId(
+            boxDetails.boxId
+          );
+          setExistingShortTermCones(stCones);
+          if (stCones.length > 0) {
+            toast(
+              `Warning: ${stCones.length} cone(s) already exist in short-term storage for this box`
+            );
+          }
+        } catch (coneErr) {
+          console.error("Failed to fetch existing ST cones for box:", coneErr);
+          setExistingShortTermCones([]);
         }
 
         setSelectedBox(mappedBox);
@@ -884,6 +922,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
       } catch (error) {
         console.error("Failed to fetch box details:", error);
         setScannedBoxDetails(null);
+        setExistingShortTermCones([]);
         toast.error(
           error instanceof Error ? error.message : "Failed to fetch box details"
         );
@@ -1083,6 +1122,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
             onScan={handleScannerScan}
             label="Scan Box Barcode"
             placeholder="Scan box barcode from long-term storage"
+            invalidMessage="This box is not on long-term storage. Store it in long-term storage first, then do internal transfer."
             disabled={isLoadingBox || isProcessingBox}
           />
           {isLoadingBox && (
@@ -1103,6 +1143,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
               setShowInternalTransferModal(false);
               setScannedBoxDetails(null);
               setSelectedBox(null);
+              setExistingShortTermCones([]);
             }
           }}
         >
@@ -1121,6 +1162,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                   setShowInternalTransferModal(false);
                   setScannedBoxDetails(null);
                   setSelectedBox(null);
+                  setExistingShortTermCones([]);
                 }}
                 className="text-gray-400 hover:text-gray-600 transition p-1"
                 title="Close"
@@ -1187,6 +1229,59 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* Existing ST cones from this box (debug / safety) */}
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <div className="bg-gray-50 px-4 py-2 flex items-center justify-between">
+                  <div className="text-sm font-semibold text-gray-800">
+                    Short-term cones from this box
+                  </div>
+                  <div className="text-xs text-gray-600">
+                    {existingShortTermCones.length} found
+                  </div>
+                </div>
+                {existingShortTermCones.length === 0 ? (
+                  <div className="px-4 py-3 text-sm text-gray-600">
+                    No cones currently found in short-term storage for this box.
+                  </div>
+                ) : (
+                  <div className="max-h-40 overflow-y-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-white sticky top-0">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                            Cone Barcode
+                          </th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                            ST Storage
+                          </th>
+                          <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                            Wt (kg)
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {existingShortTermCones.map((c) => (
+                          <tr key={c._id} className="hover:bg-gray-50">
+                            <td className="px-4 py-2 text-sm font-mono text-gray-800">
+                              {c.barcode}
+                            </td>
+                            <td className="px-4 py-2 text-sm font-mono text-gray-700">
+                              {c.coneStorageId || "-"}
+                            </td>
+                            <td className="px-4 py-2 text-sm text-gray-900 text-right">
+                              {typeof c.coneWeight === "number"
+                                ? c.coneWeight.toFixed(3)
+                                : "-"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
               <div className="flex justify-end gap-2 pt-2 border-t border-gray-200">
                 <button
                   type="button"
@@ -1194,6 +1289,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                     setShowInternalTransferModal(false);
                     setScannedBoxDetails(null);
                     setSelectedBox(null);
+                    setExistingShortTermCones([]);
                   }}
                   className="ti-btn ti-btn-light"
                 >

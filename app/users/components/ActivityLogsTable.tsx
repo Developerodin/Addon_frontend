@@ -16,6 +16,29 @@ interface ActivityLogsTableProps {
   onLimitChange: (limit: number) => void;
 }
 
+const DISPLAY_TIME_ZONE = "Asia/Kolkata";
+
+/**
+ * Format an ISO date string into a deterministic timestamp.
+ * Uses an explicit time zone so logs render the same for all viewers.
+ *
+ * @param dateStr - ISO date string (e.g. "2026-04-04T23:51:16.174Z")
+ * @returns Formatted time string, or "-" if invalid.
+ */
+const formatDateTime = (dateStr: string): string => {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "-";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: DISPLAY_TIME_ZONE,
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(d);
+};
+
 const LogRow: React.FC<{ log: ActivityLogEntry }> = ({ log }) => {
   const [expanded, setExpanded] = useState(false);
   const hasDetails = (log.requestMeta && Object.keys(log.requestMeta).length > 0) || log.errorMessage;
@@ -104,16 +127,6 @@ const getActionColor = (action: string) => {
   return map[action] || "bg-gray-100 text-gray-600";
 };
 
-const formatDateTime = (dateStr: string) =>
-  new Date(dateStr).toLocaleString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-
 const getMethodColor = (method: string) => {
   const map: Record<string, string> = {
     GET: "bg-green-50 text-green-700",
@@ -196,7 +209,7 @@ const ActivityLogsTable: React.FC<ActivityLogsTableProps> = ({
         </thead>
         <tbody>
           {logs.map((log) => (
-            <LogRow key={log.id} log={log} />
+            <LogRow key={`${log.id}-${log.createdAt}`} log={log} />
           ))}
         </tbody>
       </table>
