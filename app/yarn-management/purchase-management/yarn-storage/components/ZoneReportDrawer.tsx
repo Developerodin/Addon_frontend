@@ -26,6 +26,13 @@ interface ConeWithRack extends ConeInSlot {
   rackBarcode?: string;
 }
 
+interface ZoneSummary {
+  totalBoxes: number;
+  totalCones: number;
+  totalWeight: number;
+  yarnTypes: number;
+}
+
 const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
   isOpen,
   onClose,
@@ -34,6 +41,7 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
 }) => {
   const [boxes, setBoxes] = useState<BoxWithRack[]>([]);
   const [cones, setCones] = useState<ConeWithRack[]>([]);
+  const [summary, setSummary] = useState<ZoneSummary | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [viewMode, setViewMode] = useState<"menu" | "summary" | "full">("menu");
 
@@ -46,6 +54,7 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
       setIsLoading(true);
       setBoxes([]);
       setCones([]);
+      setSummary(null);
       try {
         // GET /storage/slots/with-contents?zone=LT - single API, all slots with boxes & cones
         const res = await storageSlotService.getSlotsWithContents({ zone: zoneType });
@@ -75,6 +84,11 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
 
         setBoxes(allBoxes);
         setCones(allCones);
+        
+        // Use summary from API if available
+        if (res.summary) {
+          setSummary(res.summary);
+        }
       } catch (err) {
         console.error("Failed to fetch report data:", err);
         toast.error("Failed to load report data");
@@ -85,10 +99,16 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
     fetchReportData();
   }, [isOpen, zoneType]);
 
-  const totalWeight =
-    boxes.reduce((sum, b) => sum + (b.boxWeight ?? 0), 0) +
-    cones.reduce((sum, c) => sum + (c.coneWeight ?? 0), 0);
-  const yarnTypes = new Set([
+  // Use API summary if available, otherwise calculate on frontend
+  // LT: boxWeight only (boxes in LT storage)
+  // ST: coneWeight - tearWeight only (cones in ST storage, net weight)
+  const totalWeight = summary?.totalWeight ?? (
+    zoneType === "LT"
+      ? boxes.reduce((sum, b) => sum + (b.boxWeight ?? 0), 0)
+      : cones.reduce((sum, c) => sum + ((c.coneWeight ?? 0) - (c.tearWeight ?? 0)), 0)
+  );
+  
+  const yarnTypes = summary?.yarnTypes ?? new Set([
     ...boxes.map((b) => b.yarnName || "Unknown"),
     ...cones.map((c) => c.yarnName || "Unknown"),
   ]).size;

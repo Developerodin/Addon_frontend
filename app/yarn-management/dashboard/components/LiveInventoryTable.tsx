@@ -136,15 +136,6 @@ const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
 
   return (
     <div className="border-t border-gray-100">
-      {/* Info banner about weight calculation */}
-      <div className="mx-[10px] mt-[10px] p-2.5 bg-amber-50 border border-amber-200 rounded flex items-start gap-2">
-        <i className="ri-information-line text-amber-600 text-sm mt-0.5 flex-shrink-0"></i>
-        <p className="text-[10px] text-amber-800 leading-relaxed">
-          <span className="font-bold">Note:</span> Available Qty may show a difference of 3-4 kg for some yarns. 
-          Earlier, gross weight was recorded in the net weight field. This will auto-correct as yarn consumption 
-          transactions are processed.
-        </p>
-      </div>
 
       {/* Header with search, filters, and rows per page */}
       <div className="p-[10px] flex flex-wrap items-center justify-between gap-4">
@@ -270,13 +261,20 @@ const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
                   </div>
                 </th>
                 <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                  LTS (kg)
+                  <div>LTS (kg)</div>
+                  <div className="text-[8px] font-normal text-gray-600 normal-case">= boxWeight</div>
                 </th>
                 <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                  STS (kg)
+                  <div>STS (kg)</div>
+                  <div className="text-[8px] font-normal text-gray-600 normal-case">= coneWeight - tearWeight</div>
                 </th>
                 <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                  Cones
+                  <div>Unallocated (kg)</div>
+                  <div className="text-[8px] font-normal text-gray-600 normal-case">= boxWeight</div>
+                </th>
+                <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                  <div>Cones</div>
+                  <div className="text-[8px] font-normal text-gray-600 normal-case">= count(ST cones)</div>
                 </th>
                 <th
                   className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100/50"
@@ -286,6 +284,7 @@ const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
                     Blocked (kg)
                     <SortIcon field="blockedQty" />
                   </div>
+                  <div className="text-[8px] font-normal text-gray-600 normal-case">= coneWeight - tearWeight</div>
                 </th>
                 <th
                   className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100/50"
@@ -295,6 +294,7 @@ const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
                     Available Qty
                     <SortIcon field="availableQty" />
                   </div>
+                  <div className="text-[8px] font-normal text-gray-600 normal-case">= LTS + STS - Blocked</div>
                 </th>
                 <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
                   Status
@@ -322,6 +322,15 @@ const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
                   </td>
                   <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">
                     {item.shortTermWeight.toLocaleString()} kg
+                  </td>
+                  <td className="px-1.5 py-2 text-[12px] border border-gray-200">
+                    {item.unallocatedWeight > 0 ? (
+                      <span className="text-purple-600 font-semibold">
+                        {item.unallocatedWeight.toLocaleString()} kg
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">0 kg</span>
+                    )}
                   </td>
                   <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">
                     {item.conesShortTerm}

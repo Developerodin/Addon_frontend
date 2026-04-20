@@ -2,12 +2,13 @@ export interface YarnInventory {
   id: string;
   yarnName: string;
   weight: number; // in kg (total from LTS + STS)
-  longTermWeight: number; // total weight in long-term storage
-  shortTermWeight: number; // total weight in short-term storage
-  conesLongTerm: number; // number of cones in long-term storage
+  longTermWeight: number; // total weight in long-term storage (boxes in LT)
+  shortTermWeight: number; // total weight in short-term storage (cones only)
+  unallocatedWeight: number; // boxes without storage location
+  conesLongTerm: number; // number of cones in long-term storage (always 0)
   conesShortTerm: number; // number of cones in short-term storage
-  blockedQty: number; // blocked quantity for production
-  availableQty: number; // available quantity (net weight - blocked)
+  blockedQty: number; // blocked quantity for production (issued cones)
+  availableQty: number; // available quantity (LT net + ST net - blocked)
   unitOfMeasurement: string;
   ratePerUnit: number;
   totalValue: number;

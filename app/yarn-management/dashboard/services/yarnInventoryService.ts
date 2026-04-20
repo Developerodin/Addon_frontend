@@ -36,6 +36,11 @@ export interface StorageInfo {
   numberOfCones: number;
 }
 
+export interface UnallocatedStorageInfo {
+  totalWeight: number;
+  netWeight: number;
+}
+
 export interface YarnInventoryResponse {
   _id?: string;
   /** Present when API embeds catalog; list endpoints may omit. */
@@ -44,6 +49,8 @@ export interface YarnInventoryResponse {
   yarnName: string;
   longTermStorage: StorageInfo;
   shortTermStorage: StorageInfo;
+  unallocatedStorage?: UnallocatedStorageInfo;
+  blockedQty?: number;
   inventoryStatus: 'in_stock' | 'low_stock' | 'soon_to_be_low';
   overbooked: boolean;
 }

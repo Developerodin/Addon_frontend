@@ -53,12 +53,21 @@ const DashboardPage = () => {
 
   /**
    * Transforms API response item to YarnInventory format
+   * 
+   * Storage Logic:
+   * - LT (Long-Term): Boxes in LT storage locations
+   * - ST (Short-Term): Cones in ST storage locations only
+   * - Unallocated: Boxes without storage location
+   * - Blocked: Cones issued for production
+   * - Available: LT net + ST net - Blocked
+   * - Total Weight: LT + ST (unallocated is separate)
    */
   const transformInventoryItem = useCallback((item: any): YarnInventory => {
     const totalWeight =
       item.longTermStorage.totalWeight + item.shortTermStorage.totalWeight;
     const totalNetWeight =
       item.longTermStorage.netWeight + item.shortTermStorage.netWeight;
+    const unallocatedWeight = item.unallocatedStorage?.totalWeight || 0;
     const blockedQty = item.blockedQty || 0;
     const availableQty = Math.max(0, totalNetWeight - blockedQty);
 
@@ -78,6 +87,7 @@ const DashboardPage = () => {
       weight: totalWeight,
       longTermWeight: item.longTermStorage.totalWeight,
       shortTermWeight: item.shortTermStorage.totalWeight,
+      unallocatedWeight,
       conesLongTerm: item.longTermStorage.numberOfCones,
       conesShortTerm: item.shortTermStorage.numberOfCones,
       blockedQty,
@@ -293,6 +303,7 @@ const DashboardPage = () => {
           item.longTermStorage.totalWeight + item.shortTermStorage.totalWeight;
         const totalNetWeight =
           item.longTermStorage.netWeight + item.shortTermStorage.netWeight;
+        const unallocatedWeight = item.unallocatedStorage?.totalWeight || 0;
         const blockedQty = item.blockedQty || 0;
         const availableQty = Math.max(0, totalNetWeight - blockedQty);
 
@@ -310,6 +321,7 @@ const DashboardPage = () => {
           "Yarn Name": item.yarnName,
           "LTS (kg)": item.longTermStorage.totalWeight,
           "STS (kg)": item.shortTermStorage.totalWeight,
+          "Unallocated (kg)": unallocatedWeight,
           "Cones": item.shortTermStorage.numberOfCones,
           "Blocked Qty (kg)": blockedQty,
           "Available Qty (kg)": availableQty,
