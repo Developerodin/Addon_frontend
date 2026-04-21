@@ -8,6 +8,7 @@ import {
   whmsPickListApi,
   WhmsPickListEntry,
   WhmsPickListEntryPatchBody,
+  WhmsPickListOrderGroup,
   whmsPickPack,
   WhmsPackBatch,
   WhmsPackOrder,
@@ -38,6 +39,17 @@ function resolveOrderNumber(entry: WhmsPickListEntry): string {
   if (entry.orderNumber) return entry.orderNumber;
   if (entry.orderId && typeof entry.orderId === "object") return entry.orderId.orderNumber ?? "";
   return "";
+}
+
+function resolveOrderWiseClientName(group: WhmsPickListOrderGroup): string {
+  const direct = group.clientName;
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+  const o = group.order;
+  if (o && typeof o === "object" && o !== null && "clientName" in o) {
+    const c = (o as { clientName?: unknown }).clientName;
+    if (typeof c === "string" && c.trim()) return c.trim();
+  }
+  return "—";
 }
 
 function mapPickListEntry(entry: WhmsPickListEntry): PickItem {
@@ -245,6 +257,7 @@ export const pickPackApi = {
         results: (data.results ?? []).map((group) => ({
           orderId: group.orderId,
           orderNumber: group.orderNumber,
+          clientName: resolveOrderWiseClientName(group),
           order: group.order,
           items: (group.items ?? []).map((item) => ({
             id: item.id,

@@ -98,10 +98,11 @@ export default function WarehouseOrdersTable({
   }
 
   return (
-    <table className="w-full border-collapse border border-gray-200 min-w-[980px]">
+    <table className="w-full border-collapse border border-gray-200 min-w-[1100px]">
       <thead>
         <tr className="bg-gray-50/30">
           <th className={thFirst}>Order #</th>
+          <th className={th}>Addon order ID</th>
           <th className={th}>Date</th>
           <th className={th}>Client</th>
           <th className={th}>Client type</th>
@@ -116,6 +117,7 @@ export default function WarehouseOrdersTable({
         {rows.map((o) => (
           <tr key={o.id} className="hover:bg-gray-50/50 transition-colors group">
             <td className={tdBold}>{o.orderNumber?.trim() || o.id}</td>
+            <td className={td}>{o.addonOrderId?.trim() || "—"}</td>
             <td className={td}>{safeDate(o.date)}</td>
             <td className={td}>{o.clientName?.trim() || "—"}</td>
             <td className={td}>{o.clientType}</td>

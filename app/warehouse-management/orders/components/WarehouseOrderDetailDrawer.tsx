@@ -124,6 +124,7 @@ export default function WarehouseOrderDetailDrawer({ orderId, open, onClose }: P
             <div className="space-y-4">
               <div className="grid grid-cols-12 gap-2">
                 <Field label="Order #" value={order.orderNumber || order.id} />
+                <Field label="Addon order ID" value={order.addonOrderId?.trim() || "—"} />
                 <Field label="Status" value={warehouseOrderStatusLabel(order.status)} />
                 <Field label="Date" value={order.date ? new Date(order.date).toLocaleString() : "—"} />
                 <Field label="Client type" value={order.clientType} />

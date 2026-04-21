@@ -7,9 +7,11 @@ import type { PickListOrderGroup, PickListOrderItem } from "../types";
 
 function downloadOrderExcel(group: PickListOrderGroup) {
   const rows = group.items.map((item) => ({
+    "Order No": group.orderNumber,
+    Client: group.clientName,
     "SKU Code": item.skuCode,
     "Style Code": item.styleCode,
-    "Shade": item.shade || "—",
+    Color: item.shade || "—",
     "Size": item.size || "—",
     "Qty": item.quantity,
     "Pickup Qty": item.pickupQuantity,
@@ -22,16 +24,20 @@ function downloadOrderExcel(group: PickListOrderGroup) {
 }
 
 function printOrderPickList(group: PickListOrderGroup) {
+  const esc = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const clientLabel = esc(group.clientName);
   const tableRows = group.items
     .map(
       (item) =>
         `<tr>
-          <td>${item.skuCode}</td>
-          <td>${item.styleCode}</td>
-          <td>${item.shade || "—"}</td>
-          <td>${item.size || "—"}</td>
+          <td>${clientLabel}</td>
+          <td>${esc(item.skuCode)}</td>
+          <td>${esc(item.styleCode)}</td>
+          <td>${esc(item.shade || "—")}</td>
+          <td>${esc(item.size || "—")}</td>
           <td style="text-align:center">${item.quantity}</td>
-          <td style="text-align:center">${item.pickupQuantity}</td>
+          <td style="text-align:center" class="pickup-qty-cell"></td>
         </tr>`,
     )
     .join("");
@@ -47,6 +53,7 @@ function printOrderPickList(group: PickListOrderGroup) {
   th,td{border:1px solid #d1d5db;padding:6px 10px;text-align:left}
   th{background:#f3f4f6;font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.5px}
   tr:nth-child(even){background:#fafafa}
+  td.pickup-qty-cell{min-height:1.5em}
   .summary{margin-top:12px;font-size:11px;color:#555}
   @media print{body{padding:12px}button{display:none!important}}
 </style>
@@ -54,7 +61,7 @@ function printOrderPickList(group: PickListOrderGroup) {
   <h2>Pick List – ${group.orderNumber}</h2>
   <div class="meta">${group.totalItems} items &middot; Total Qty: ${group.totalQuantity} &middot; Picked: ${group.totalPickupQuantity}</div>
   <table>
-    <thead><tr><th>SKU Code</th><th>Style Code</th><th>Shade</th><th>Size</th><th style="text-align:center">Qty</th><th style="text-align:center">Pickup Qty</th></tr></thead>
+    <thead><tr><th>Client</th><th>SKU Code</th><th>Style Code</th><th>Color</th><th>Size</th><th style="text-align:center">Qty</th><th style="text-align:center">Pickup Qty</th></tr></thead>
     <tbody>${tableRows}</tbody>
   </table>
   <div class="summary">Printed on ${new Date().toLocaleString()}</div>
@@ -88,15 +95,20 @@ function ItemRow({
   item,
   index,
   orderNumber,
+  clientName,
   onSave,
+  onDeleteItem,
 }: {
   item: PickListOrderItem;
   index: number;
   orderNumber: string;
+  clientName: string;
   onSave: (itemId: string, pickupQty: number) => void;
+  onDeleteItem?: (itemId: string) => Promise<void>;
 }) {
   const [qty, setQty] = useState<number>(item.pickupQuantity);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const dirty = qty !== item.pickupQuantity;
   const disabled = item.status === "picked";
@@ -111,6 +123,17 @@ function ItemRow({
     }
   };
 
+  const handleDeleteLine = async () => {
+    if (!onDeleteItem || deleting) return;
+    if (!confirm("Remove this pick line?")) return;
+    setDeleting(true);
+    try {
+      await onDeleteItem(item.id);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <tr className="hover:bg-gray-50/50 transition-colors group">
       <td className="px-2 py-2 text-[11px] font-medium text-gray-500 border border-gray-200 text-center w-10">
@@ -118,6 +141,9 @@ function ItemRow({
       </td>
       <td className="px-2 py-2 text-[11px] font-bold text-purple-700 border border-gray-200 whitespace-nowrap">
         {orderNumber}
+      </td>
+      <td className="px-2 py-2 text-[11px] font-semibold text-gray-700 border border-gray-200 whitespace-nowrap">
+        {clientName}
       </td>
       <td className="px-2 py-2 text-[12px] font-bold text-gray-900 border border-gray-200 whitespace-nowrap">
         {item.skuCode}
@@ -148,24 +174,45 @@ function ItemRow({
       <td className="px-2 py-2 border border-gray-200 text-center w-24">
         {statusBadge(item.status)}
       </td>
-      <td className="px-2 py-2 border border-gray-200 text-center w-24">
-        <button
-          type="button"
-          disabled={disabled || !dirty || saving}
-          onClick={handleSave}
-          className={`inline-flex items-center gap-1 px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wide transition-colors shadow-sm
-            ${disabled || !dirty
-              ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-              : "bg-purple-600 text-white hover:bg-purple-700 cursor-pointer"
-            }`}
-        >
-          {saving ? (
-            <i className="ri-loader-4-line animate-spin text-xs"></i>
-          ) : (
-            <i className="ri-save-line text-xs"></i>
-          )}
-          Save
-        </button>
+      <td className="px-2 py-2 border border-gray-200 text-center min-w-[7.5rem]">
+        <div className="flex items-center justify-center gap-1 flex-wrap">
+          <button
+            type="button"
+            disabled={disabled || !dirty || saving}
+            onClick={handleSave}
+            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[10px] font-bold uppercase tracking-wide transition-colors shadow-sm
+              ${disabled || !dirty
+                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                : "bg-purple-600 text-white hover:bg-purple-700 cursor-pointer"
+              }`}
+          >
+            {saving ? (
+              <i className="ri-loader-4-line animate-spin text-xs"></i>
+            ) : (
+              <i className="ri-save-line text-xs"></i>
+            )}
+            Save
+          </button>
+          {onDeleteItem ? (
+            <button
+              type="button"
+              title="Remove pick line"
+              disabled={deleting}
+              onClick={handleDeleteLine}
+              className={`inline-flex items-center justify-center w-8 h-8 rounded text-[11px] transition-colors shadow-sm border
+                ${deleting
+                  ? "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed"
+                  : "bg-red-50 text-red-600 border-red-100 hover:bg-red-100 cursor-pointer"
+                }`}
+            >
+              {deleting ? (
+                <i className="ri-loader-4-line animate-spin text-sm"></i>
+              ) : (
+                <i className="ri-delete-bin-line text-sm"></i>
+              )}
+            </button>
+          ) : null}
+        </div>
       </td>
     </tr>
   );
@@ -175,12 +222,28 @@ function OrderGroupRow({
   group,
   index,
   onSave,
+  onDeleteItem,
+  onDeleteOrder,
 }: {
   group: PickListOrderGroup;
   index: number;
   onSave: (itemId: string, pickupQty: number) => void;
+  onDeleteItem?: (itemId: string) => Promise<void>;
+  onDeleteOrder?: (orderId: string, orderNumber: string) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [deletingOrder, setDeletingOrder] = useState(false);
+
+  const handleDeleteOrder = async () => {
+    if (!onDeleteOrder || deletingOrder) return;
+    if (!confirm(`Remove all pick lines for order ${group.orderNumber}?`)) return;
+    setDeletingOrder(true);
+    try {
+      await onDeleteOrder(group.orderId, group.orderNumber);
+    } finally {
+      setDeletingOrder(false);
+    }
+  };
 
   const progressPct = group.totalQuantity > 0
     ? Math.round((group.totalPickupQuantity / group.totalQuantity) * 100)
@@ -203,6 +266,9 @@ function OrderGroupRow({
               {group.totalItems} {group.totalItems === 1 ? "item" : "items"}
             </span>
           </div>
+        </td>
+        <td className="px-2 py-2.5 text-[11px] font-semibold text-gray-700 border border-gray-200 whitespace-nowrap">
+          {group.clientName}
         </td>
         <td className="px-2 py-2.5 border border-gray-200" colSpan={2}>
           <div className="flex items-center gap-3">
@@ -249,8 +315,8 @@ function OrderGroupRow({
         <td className="px-2 py-2.5 border border-gray-200 text-center w-24">
           {statusBadge(group.overallStatus)}
         </td>
-        <td className="px-2 py-2.5 border border-gray-200 text-center w-24">
-          <div className="flex items-center justify-center gap-1">
+        <td className="px-2 py-2.5 border border-gray-200 text-center min-w-[7.5rem]">
+          <div className="flex items-center justify-center gap-1 flex-wrap">
             <button
               type="button"
               title="Download Excel"
@@ -275,12 +341,39 @@ function OrderGroupRow({
             >
               <i className={`ri-arrow-${expanded ? "up" : "down"}-s-line`}></i>
             </button>
+            {onDeleteOrder ? (
+              <button
+                type="button"
+                title="Remove all pick lines for this order"
+                disabled={deletingOrder}
+                onClick={(e) => { e.stopPropagation(); void handleDeleteOrder(); }}
+                className={`inline-flex items-center justify-center w-7 h-7 rounded text-[11px] transition-colors shadow-sm
+                  ${deletingOrder
+                    ? "bg-gray-50 text-gray-300 cursor-not-allowed"
+                    : "bg-red-50 text-red-600 hover:bg-red-100"
+                  }`}
+              >
+                {deletingOrder ? (
+                  <i className="ri-loader-4-line animate-spin text-xs"></i>
+                ) : (
+                  <i className="ri-delete-bin-line"></i>
+                )}
+              </button>
+            ) : null}
           </div>
         </td>
       </tr>
 
       {expanded && group.items.map((item, idx) => (
-        <ItemRow key={item.id} item={item} index={idx} orderNumber={group.orderNumber} onSave={onSave} />
+        <ItemRow
+          key={item.id}
+          item={item}
+          index={idx}
+          orderNumber={group.orderNumber}
+          clientName={group.clientName}
+          onSave={onSave}
+          onDeleteItem={onDeleteItem}
+        />
       ))}
     </>
   );
@@ -289,9 +382,13 @@ function OrderGroupRow({
 export default function PickTable({
   orderGroups,
   onSave,
+  onDeleteItem,
+  onDeleteOrder,
 }: {
   orderGroups: PickListOrderGroup[];
   onSave: (itemId: string, pickupQty: number) => void;
+  onDeleteItem?: (itemId: string) => Promise<void>;
+  onDeleteOrder?: (orderId: string, orderNumber: string) => Promise<void>;
 }) {
   if (orderGroups.length === 0) {
     return (
@@ -307,7 +404,7 @@ export default function PickTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse border border-gray-200 min-w-[820px]">
+      <table className="w-full border-collapse border border-gray-200 min-w-[920px]">
         <thead>
           <tr className="bg-gray-50/30">
             <th className="px-2 py-2.5 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 text-center w-10">
@@ -317,13 +414,16 @@ export default function PickTable({
               Order No
             </th>
             <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+              Client
+            </th>
+            <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
               SKU Code
             </th>
             <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
               Style Code
             </th>
             <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-              Shade
+              Color
             </th>
             <th className="px-2 py-2.5 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 text-center w-20">
               Qty
@@ -334,14 +434,21 @@ export default function PickTable({
             <th className="px-2 py-2.5 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 text-center w-24">
               Status
             </th>
-            <th className="px-2 py-2.5 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 text-center w-24">
+            <th className="px-2 py-2.5 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 text-center min-w-[7.5rem]">
               Action
             </th>
           </tr>
         </thead>
         <tbody>
           {orderGroups.map((group, idx) => (
-            <OrderGroupRow key={group.orderId} group={group} index={idx} onSave={onSave} />
+            <OrderGroupRow
+              key={group.orderId}
+              group={group}
+              index={idx}
+              onSave={onSave}
+              onDeleteItem={onDeleteItem}
+              onDeleteOrder={onDeleteOrder}
+            />
           ))}
         </tbody>
       </table>

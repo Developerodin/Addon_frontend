@@ -262,6 +262,32 @@ const PickPackPage = () => {
     }
   };
 
+  const deletePickItem = useCallback(
+    async (itemId: string) => {
+      try {
+        await pickPackApi.deletePickEntry(itemId);
+        notify("Pick line removed", "success");
+        await loadPickList(pickFilters);
+      } catch {
+        notify("Failed to delete pick line", "error");
+      }
+    },
+    [pickFilters, loadPickList],
+  );
+
+  const deletePickOrder = useCallback(
+    async (orderId: string, orderNumber: string) => {
+      try {
+        await pickPackApi.deletePickOrderEntries(orderId);
+        notify(`All pick lines removed for order ${orderNumber}`, "success");
+        await loadPickList(pickFilters);
+      } catch {
+        notify("Failed to delete pick lines for order", "error");
+      }
+    },
+    [pickFilters, loadPickList],
+  );
+
   // ── Pick filter / pagination handlers ──────────────────────────────────
 
   const handlePickFilterChange = useCallback(
@@ -476,6 +502,8 @@ const PickPackPage = () => {
                 <PickListDashboard
                   orderWiseData={pickOrderWise}
                   onSavePickupQty={savePickupQty}
+                  onDeletePickItem={deletePickItem}
+                  onDeletePickOrder={deletePickOrder}
                   onAlert={(msg) => notify(msg, "error")}
                   onFilterChange={handlePickFilterChange}
                   onPageChange={handlePickPageChange}

@@ -126,6 +126,8 @@ export interface WarehouseOrderStyleCodeMultiPairRow {
 export interface WarehouseOrder {
   id: string;
   orderNumber?: string;
+  /** Optional external / customer reference (e.g. Addon order number). */
+  addonOrderId?: string;
   clientType: WarehouseClientType;
   clientId: string;
   clientName?: string;
@@ -142,6 +144,8 @@ export interface WarehouseOrder {
 export type CreateWarehouseOrderBody = {
   clientType: WarehouseClientType;
   clientId: string;
+  /** Optional external / customer reference (e.g. Addon order number). */
+  addonOrderId?: string;
   date?: string;
   styleCodeSinglePair?: WarehouseOrderStyleCodeSinglePairRow[];
   styleCodeMultiPair?: WarehouseOrderStyleCodeMultiPairRow[];
@@ -166,6 +170,8 @@ export interface PaginatedWarehouseOrders {
 export type WarehouseOrdersListParams = {
   q?: string;
   orderNumber?: string;
+  /** Prefix match filter (optional). */
+  addonOrderId?: string;
   status?: WarehouseOrderStatus;
   clientType?: WarehouseClientType;
   clientId?: string;
@@ -200,6 +206,8 @@ export interface BulkImportOrderRow {
   clientName: string;
   date: string;
   status: string;
+  /** Optional external / customer reference (e.g. Addon order number). */
+  addonOrderId?: string;
   styleCodeSinglePair?: BulkImportSinglePairItem[];
   styleCodeMultiPair?: BulkImportMultiPairItem[];
 }

@@ -45,6 +45,7 @@ type Props = {
 type FormState = {
   clientType: WarehouseClientType;
   clientId: string;
+  addonOrderId: string;
   date: string;
   status: WarehouseOrderStatus;
   single: WarehouseOrderStyleCodeSinglePairRow[];
@@ -64,6 +65,7 @@ function fromOrder(o?: WarehouseOrder | null): FormState {
   return {
     clientType: (o?.clientType ?? "Store") as WarehouseClientType,
     clientId: o?.clientId ?? "",
+    addonOrderId: (o?.addonOrderId ?? "").trim(),
     date: toIsoDateInput(o?.date),
     status: normalizeWarehouseOrderStatus(o?.status),
     single:
@@ -150,6 +152,7 @@ export default function WarehouseOrderForm({
       const body: CreateWarehouseOrderBody = {
         clientType: s.clientType,
         clientId: s.clientId.trim(),
+        ...(s.addonOrderId.trim() ? { addonOrderId: s.addonOrderId.trim() } : {}),
         ...(s.date ? { date: `${s.date}T00:00:00.000Z` } : {}),
         ...(s.status ? { status: s.status } : {}),
         ...(single.length ? { styleCodeSinglePair: single } : {}),
@@ -160,6 +163,7 @@ export default function WarehouseOrderForm({
     }
 
     const body: UpdateWarehouseOrderBody = {
+      addonOrderId: s.addonOrderId.trim(),
       ...(s.date ? { date: `${s.date}T00:00:00.000Z` } : {}),
       ...(s.status ? { status: s.status } : {}),
       ...(single.length ? { styleCodeSinglePair: single } : { styleCodeSinglePair: [] }),
@@ -214,6 +218,21 @@ export default function WarehouseOrderForm({
             </select>
             <i className="ri-arrow-down-s-line absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none" />
           </div>
+        </div>
+
+        <div className="col-span-12 sm:col-span-4">
+          <label className={labelClass}>Addon order ID</label>
+          <input
+            type="text"
+            className={inputClass}
+            placeholder="e.g. external / customer ref"
+            value={s.addonOrderId}
+            onChange={(e) => setS((p) => ({ ...p, addonOrderId: e.target.value }))}
+            autoComplete="off"
+          />
+          <p className="mt-1 text-[10px] text-gray-500 font-medium">
+            Optional reference (e.g. Addon order number).
+          </p>
         </div>
       </div>
 

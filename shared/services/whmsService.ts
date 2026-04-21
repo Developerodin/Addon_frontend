@@ -543,6 +543,8 @@ export interface WhmsPickListOrderWiseItem {
 export interface WhmsPickListOrderGroup {
   orderId: string;
   orderNumber: string;
+  /** Present when API returns it on the group; otherwise may live on `order`. */
+  clientName?: string;
   order?: Record<string, unknown>;
   items: WhmsPickListOrderWiseItem[];
   totalQuantity: number;

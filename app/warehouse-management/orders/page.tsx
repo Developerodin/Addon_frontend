@@ -107,16 +107,17 @@ export default function WarehouseOrdersPage() {
 
   const downloadTemplate = () => {
     const orderRows = [
-      { clientType: "Store", clientName: "My Store Brand", date: "17/02/2026", status: "pending", pairType: "single", styleCode: "SC-001", colour: "Red", pattern: "Solid", quantity: 10, type: "" },
-      { clientType: "", clientName: "", date: "", status: "", pairType: "single", styleCode: "SC-002", colour: "Blue", pattern: "Stripe", quantity: 5, type: "" },
-      { clientType: "", clientName: "", date: "", status: "", pairType: "multi", styleCode: "MP-001", colour: "Green", pattern: "Check", quantity: 20, type: "Cotton" },
-      { clientType: "Trade", clientName: "Another Client", date: "20/02/2026", status: "pending", pairType: "single", styleCode: "SC-003", colour: "Black", pattern: "Plain", quantity: 15, type: "" },
+      { clientType: "Store", clientName: "My Store Brand", date: "17/02/2026", status: "pending", addonOrderId: "ADDON-1001", pairType: "single", styleCode: "SC-001", colour: "Red", pattern: "Solid", quantity: 10, type: "" },
+      { clientType: "", clientName: "", date: "", status: "", addonOrderId: "", pairType: "single", styleCode: "SC-002", colour: "Blue", pattern: "Stripe", quantity: 5, type: "" },
+      { clientType: "", clientName: "", date: "", status: "", addonOrderId: "", pairType: "multi", styleCode: "MP-001", colour: "Green", pattern: "Check", quantity: 20, type: "Cotton" },
+      { clientType: "Trade", clientName: "Another Client", date: "20/02/2026", status: "pending", addonOrderId: "ADDON-2044", pairType: "single", styleCode: "SC-003", colour: "Black", pattern: "Plain", quantity: 15, type: "" },
     ];
     const instructions = [
       { Field: "clientType", Description: "Store, Trade, Departmental, or Ecom" },
       { Field: "clientName", Description: "Human-readable client name (backend resolves to clientId)" },
       { Field: "date", Description: "DD/MM/YYYY or DD-MM-YYYY" },
       { Field: "status", Description: "pending, in-progress, packed, dispatched, cancelled" },
+      { Field: "addonOrderId", Description: "Optional external / customer reference (e.g. Addon order number); set on order header rows only" },
       { Field: "pairType", Description: "'single' or 'multi' — determines single-pair vs multi-pair item" },
       { Field: "styleCode", Description: "Style code string (backend auto-resolves ID)" },
       { Field: "colour", Description: "Colour name" },
@@ -184,7 +185,16 @@ export default function WarehouseOrdersPage() {
         const pt = str(row.pairType || row.PairType || row["Pair Type"]).toLowerCase();
 
         if (ct) {
-          current = { clientType: ct, clientName: cn, date: dt, status: st || "pending" };
+          const addonOrderId = str(
+            row.addonOrderId ?? row.AddonOrderId ?? row["Addon Order ID"] ?? row["addon order id"],
+          );
+          current = {
+            clientType: ct,
+            clientName: cn,
+            date: dt,
+            status: st || "pending",
+            ...(addonOrderId ? { addonOrderId } : {}),
+          };
           orders.push(current);
         }
         if (!current || !sc) continue;
