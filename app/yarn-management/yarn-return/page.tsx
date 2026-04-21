@@ -496,7 +496,7 @@ const YarnReturnPage = () => {
 
   // When return modal opens:
   // - auto-fill Tear Weight from scanned cone data (if available)
-  // - fetch latest weight from scale (localhost or 192.168.0.28) and pre-fill Total/Net
+  // - fetch latest weight from return scale API (192.168.0.39:7001 or localhost:7001 /api/latest/return) and pre-fill Total/Net
   useEffect(() => {
     if (!showReturnModal) return;
     let cancelled = false;
@@ -536,7 +536,7 @@ const YarnReturnPage = () => {
         });
       }
 
-      const w = await fetchWeightLatest();
+      const w = await fetchWeightLatest("return");
       if (cancelled || w == null || w <= 0) return;
       // Use three decimal places from scale without rounding (truncate)
       setTransactionForm((prev) => {
@@ -3806,7 +3806,7 @@ const YarnReturnPage = () => {
                           onClick={async () => {
                             setFetchingWeight(true);
                             try {
-                              const w = await fetchWeightLatest();
+                              const w = await fetchWeightLatest("return");
                               if (w != null && w > 0) {
                                 // Use three decimal places from scale without rounding (truncate)
                                 const truncatedWeight = Math.trunc(w * 1000) / 1000;

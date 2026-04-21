@@ -21,15 +21,23 @@ const WEIGHT_API_CANDIDATES_KNITTING = [
   'http://localhost:7001/api/latest/knitting',
 ] as const;
 
-export type WeightApiContext = 'cones' | 'boxes' | 'knitting';
+/** Candidates for yarn return weight scale. */
+const WEIGHT_API_CANDIDATES_RETURN = [
+  'http://192.168.0.39:7001/api/latest/return',
+  'http://localhost:7001/api/latest/return',
+] as const;
+
+export type WeightApiContext = 'cones' | 'boxes' | 'knitting' | 'return';
 
 const CACHE_KEY = 'weightApiUrl';
 const CACHE_KEY_BOXES = 'weightApiUrlBoxes';
 const CACHE_KEY_KNITTING = 'weightApiUrlKnitting';
+const CACHE_KEY_RETURN = 'weightApiUrlReturn';
 
 let cachedUrl: string | null = null;
 let cachedUrlBoxes: string | null = null;
 let cachedUrlKnitting: string | null = null;
+let cachedUrlReturn: string | null = null;
 
 /**
  * Try fetching from a URL; returns true if response is ok.
@@ -46,12 +54,14 @@ async function probe(url: string): Promise<boolean> {
 function getCandidates(context: WeightApiContext): readonly string[] {
   if (context === 'boxes') return WEIGHT_API_CANDIDATES_BOXES;
   if (context === 'knitting') return WEIGHT_API_CANDIDATES_KNITTING;
+  if (context === 'return') return WEIGHT_API_CANDIDATES_RETURN;
   return WEIGHT_API_CANDIDATES;
 }
 
 function getCacheKey(context: WeightApiContext): string {
   if (context === 'boxes') return CACHE_KEY_BOXES;
   if (context === 'knitting') return CACHE_KEY_KNITTING;
+  if (context === 'return') return CACHE_KEY_RETURN;
   return CACHE_KEY;
 }
 
@@ -61,6 +71,7 @@ function urlMatchesContext(url: string, context: WeightApiContext): boolean {
     const path = new URL(url).pathname.replace(/\/+$/, '');
     if (context === 'knitting') return path.endsWith('/knitting');
     if (context === 'boxes') return path.endsWith('/box');
+    if (context === 'return') return path.endsWith('/return');
     return path.endsWith('/cones');
   } catch {
     return false;
@@ -70,19 +81,21 @@ function urlMatchesContext(url: string, context: WeightApiContext): boolean {
 function getCachedUrl(context: WeightApiContext): string | null {
   if (context === 'boxes') return cachedUrlBoxes;
   if (context === 'knitting') return cachedUrlKnitting;
+  if (context === 'return') return cachedUrlReturn;
   return cachedUrl;
 }
 
 function setCachedUrl(context: WeightApiContext, url: string | null): void {
   if (context === 'boxes') cachedUrlBoxes = url;
   else if (context === 'knitting') cachedUrlKnitting = url;
+  else if (context === 'return') cachedUrlReturn = url;
   else cachedUrl = url;
 }
 
 /**
  * Resolve the weight API URL: try cached (memory/localStorage) first, then try each candidate.
  * Caches the first URL that responds (in memory and localStorage).
- * @param context - 'cones' for cone weight (default), 'boxes' for box weight (uses 192.168.0.3).
+ * @param context - 'cones' | 'boxes' | 'knitting' | 'return' — each uses its own candidate URLs and cache.
  */
 export async function getResolvedWeightApiUrl(context: WeightApiContext = 'cones'): Promise<string> {
   const candidates = getCandidates(context);
@@ -126,7 +139,7 @@ export async function getResolvedWeightApiUrl(context: WeightApiContext = 'cones
 
 /**
  * Fetch latest weight from the resolved API.
- * @param context - 'cones' for cone scale (localhost/192.168.0.10), 'boxes' for box scale (192.168.0.3).
+ * @param context - Which scale endpoint to use (see getResolvedWeightApiUrl).
  * Returns weight in kg or null on failure.
  */
 export async function fetchWeightLatest(context: WeightApiContext = 'cones'): Promise<number | null> {
