@@ -1,16 +1,21 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast } from "react-hot-toast";
 import * as XLSX from "xlsx";
+import YarnReportCalcInfoPopover from "./components/YarnReportCalcInfoPopover";
 import {
   yarnInventoryService,
   YarnReportRow,
   YarnReportResponse,
 } from "../services/yarnInventoryService";
+import PaginationControls from "../components/PaginationControls";
+
+const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
+const DEFAULT_PAGE_SIZE = 20;
 
 const YARN_REPORT_COLUMNS: { key: keyof YarnReportRow; label: string }[] = [
   { key: "store", label: "Store" },
@@ -47,12 +52,39 @@ const YarnReportPage = () => {
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<YarnReportResponse | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const hasPermission = hasSubPermission("/yarn-management", "Dashboard");
+
+  const totalResults = report?.results?.length ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalResults / pageSize) || 1);
+
+  const paginatedRows = useMemo(() => {
+    const rows = report?.results ?? [];
+    const start = (currentPage - 1) * pageSize;
+    return rows.slice(start, start + pageSize);
+  }, [report?.results, currentPage, pageSize]);
+
+  /** Keeps current page in range when result count or page size changes. */
+  useEffect(() => {
+    if (!report) return;
+    setCurrentPage((p) => (p > totalPages ? totalPages : p));
+  }, [report, totalPages]);
+
+  /**
+   * Updates rows-per-page and resets to the first page so the slice stays valid.
+   */
+  const handlePageSizeChange = (next: number) => {
+    setPageSize(next);
+    setCurrentPage(1);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hasPermission) return;
+    setSubmitError(null);
     if (!startDate || !endDate) {
       toast.error("Please select both start and end dates");
       return;
@@ -70,12 +102,14 @@ const YarnReportPage = () => {
         end_date: endDate,
       });
       setReport(data);
+      setCurrentPage(1);
       toast.success("Report loaded");
     } catch (err) {
       console.error("Yarn report error:", err);
-      toast.error(
-        err instanceof Error ? err.message : "Failed to load yarn report"
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to load yarn report";
+      setSubmitError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -169,10 +203,38 @@ const YarnReportPage = () => {
               </Link>
               <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
               <h1 className="text-sm font-bold text-gray-800">Yarn Report</h1>
+              <YarnReportCalcInfoPopover
+                startDate={startDate}
+                endDate={endDate}
+              />
             </div>
           </div>
 
           {/* Date range form */}
+          {submitError && (
+            <div
+              className="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-800"
+              role="alert"
+              aria-live="polite"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-extrabold text-red-900 mb-0.5">
+                    Failed to load yarn report
+                  </div>
+                  <div className="break-words">{submitError}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSubmitError(null)}
+                  className="shrink-0 w-7 h-7 inline-flex items-center justify-center rounded hover:bg-red-100 text-red-700 focus:outline-none focus:ring-2 focus:ring-red-500/20"
+                  aria-label="Dismiss error"
+                >
+                  <i className="ri-close-line text-base" aria-hidden></i>
+                </button>
+              </div>
+            </div>
+          )}
           <form
             onSubmit={handleSubmit}
             className="flex flex-wrap items-end gap-3 mb-4 p-3 bg-gray-50 rounded border border-gray-100"
@@ -222,7 +284,30 @@ const YarnReportPage = () => {
 
           {/* Download button - shown when report loaded */}
           {report && (
-            <div className="flex justify-end mb-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2">
+                <label
+                  htmlFor="yarn-report-page-size"
+                  className="text-[10px] font-bold text-gray-500 whitespace-nowrap"
+                >
+                  Rows per page
+                </label>
+                <select
+                  id="yarn-report-page-size"
+                  value={pageSize}
+                  onChange={(e) =>
+                    handlePageSizeChange(Number(e.target.value))
+                  }
+                  className="text-xs py-1.5 px-2 border border-gray-200 rounded bg-white focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none"
+                  aria-label="Rows per page"
+                >
+                  {PAGE_SIZE_OPTIONS.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <button
                 type="button"
                 onClick={handleDownloadExcel}
@@ -263,9 +348,9 @@ const YarnReportPage = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {report.results.map((row, idx) => (
+                  {paginatedRows.map((row, idx) => (
                     <tr
-                      key={idx}
+                      key={(currentPage - 1) * pageSize + idx}
                       className="border-b border-gray-100 hover:bg-gray-50/50"
                     >
                       {YARN_REPORT_COLUMNS.map((col) => (
@@ -297,6 +382,19 @@ const YarnReportPage = () => {
             </div>
           )}
         </div>
+
+        {report && report.results && report.results.length > 0 && (
+          <div className="border-t border-gray-100 px-3 py-3 bg-gray-50/50">
+            <PaginationControls
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalResults={totalResults}
+              pageSize={pageSize}
+              loading={loading}
+              onPageChange={setCurrentPage}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
