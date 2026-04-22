@@ -102,6 +102,12 @@ function formatClientLabel(args: { clientName?: string; clientType?: string }): 
   return name || type;
 }
 
+function formatPickerLabel(pickerName?: string): string | null {
+  const name = (pickerName ?? "").trim();
+  if (!name) return null;
+  return `Picked by: ${name}`;
+}
+
 function ItemRow({
   item,
   index,
@@ -238,17 +244,22 @@ function OrderGroupRow({
   group,
   index,
   onSave,
+  onSetPickerName,
   onDeleteItem,
   onDeleteOrder,
 }: {
   group: PickListOrderGroup;
   index: number;
   onSave: (itemId: string, pickupQty: number) => void;
+  onSetPickerName?: (orderId: string, pickerName: string) => Promise<void>;
   onDeleteItem?: (itemId: string) => Promise<void>;
   onDeleteOrder?: (orderId: string, orderNumber: string) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [deletingOrder, setDeletingOrder] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerNameDraft, setPickerNameDraft] = useState(group.pickerName ?? "");
+  const [pickerSaving, setPickerSaving] = useState(false);
 
   const handleDeleteOrder = async () => {
     if (!onDeleteOrder || deletingOrder) return;
@@ -265,8 +276,94 @@ function OrderGroupRow({
     ? Math.round((group.totalPickupQuantity / group.totalQuantity) * 100)
     : 0;
 
+  const openPickerModal = () => {
+    setPickerNameDraft(group.pickerName ?? "");
+    setPickerOpen(true);
+  };
+
+  const closePickerModal = () => {
+    if (pickerSaving) return;
+    setPickerOpen(false);
+  };
+
+  const savePickerName = async () => {
+    if (!onSetPickerName || pickerSaving) return;
+    const name = pickerNameDraft.trim();
+    if (!name) return;
+    setPickerSaving(true);
+    try {
+      await onSetPickerName(group.orderId, name);
+      setPickerOpen(false);
+    } finally {
+      setPickerSaving(false);
+    }
+  };
+
   return (
     <>
+      {pickerOpen ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center px-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Set picker name"
+          onClick={closePickerModal}
+        >
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-[1px]" />
+          <div
+            className="relative w-full max-w-sm rounded-lg bg-white shadow-xl border border-gray-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-[12px] font-bold text-gray-900 truncate">Picker name</div>
+                <div className="text-[11px] font-semibold text-gray-500 truncate">{group.orderNumber}</div>
+              </div>
+              <button
+                type="button"
+                onClick={closePickerModal}
+                disabled={pickerSaving}
+                className="inline-flex items-center justify-center w-8 h-8 rounded bg-gray-50 text-gray-500 hover:bg-gray-100 disabled:opacity-60"
+                aria-label="Close"
+              >
+                <i className="ri-close-line text-base" />
+              </button>
+            </div>
+            <div className="px-4 py-4">
+              <label className="block text-[11px] font-bold text-gray-700 mb-1" htmlFor={`picker-${group.orderId}`}>
+                Name
+              </label>
+              <input
+                id={`picker-${group.orderId}`}
+                value={pickerNameDraft}
+                onChange={(e) => setPickerNameDraft(e.target.value)}
+                autoFocus
+                className="w-full bg-white border border-gray-200 rounded px-3 py-2 text-[12px] font-semibold text-gray-900 outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-200"
+                placeholder="e.g. Raj"
+              />
+              <div className="mt-3 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closePickerModal}
+                  disabled={pickerSaving}
+                  className="px-3 py-2 rounded text-[11px] font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void savePickerName()}
+                  disabled={!pickerNameDraft.trim() || pickerSaving || !onSetPickerName}
+                  className="px-3 py-2 rounded text-[11px] font-bold bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60"
+                >
+                  {pickerSaving ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <tr
         className="bg-gray-50/60 hover:bg-gray-100/80 cursor-pointer transition-colors border-t-2 border-gray-200"
         onClick={() => setExpanded(!expanded)}
@@ -282,6 +379,11 @@ function OrderGroupRow({
               {formatClientLabel({ clientName: group.clientName, clientType: group.clientType }) ? (
                 <span className="text-[10px] font-semibold text-gray-600 leading-4 truncate">
                   {formatClientLabel({ clientName: group.clientName, clientType: group.clientType })}
+                </span>
+              ) : null}
+              {formatPickerLabel(group.pickerName) ? (
+                <span className="text-[10px] font-semibold text-gray-500 leading-4 truncate">
+                  {formatPickerLabel(group.pickerName)}
                 </span>
               ) : null}
             </div>
@@ -343,6 +445,15 @@ function OrderGroupRow({
         </td>
         <td className="px-2 py-2.5 border border-gray-200 text-center min-w-[7.5rem]">
           <div className="flex items-center justify-center gap-1 flex-wrap">
+            <button
+              type="button"
+              title="Set picker name"
+              onClick={(e) => { e.stopPropagation(); openPickerModal(); }}
+              className="inline-flex items-center justify-center w-7 h-7 rounded text-[11px] bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors shadow-sm"
+              aria-label="Set picker name"
+            >
+              <i className="ri-user-3-line"></i>
+            </button>
             <button
               type="button"
               title="Download Excel"
@@ -408,11 +519,13 @@ function OrderGroupRow({
 export default function PickTable({
   orderGroups,
   onSave,
+  onSetPickerName,
   onDeleteItem,
   onDeleteOrder,
 }: {
   orderGroups: PickListOrderGroup[];
   onSave: (itemId: string, pickupQty: number) => void;
+  onSetPickerName?: (orderId: string, pickerName: string) => Promise<void>;
   onDeleteItem?: (itemId: string) => Promise<void>;
   onDeleteOrder?: (orderId: string, orderNumber: string) => Promise<void>;
 }) {
@@ -475,6 +588,7 @@ export default function PickTable({
               group={group}
               index={idx}
               onSave={onSave}
+              onSetPickerName={onSetPickerName}
               onDeleteItem={onDeleteItem}
               onDeleteOrder={onDeleteOrder}
             />

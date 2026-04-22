@@ -252,6 +252,13 @@ export const pickPackApi = {
     await whmsPickListApi.deleteByOrder(orderId);
   },
 
+  /**
+   * Set picker name for an entire order's pick lines.
+   */
+  async setPickerNameForOrder(orderId: string, pickerName: string): Promise<void> {
+    await whmsPickListApi.setPickerNameForOrder(orderId, { pickerName });
+  },
+
   async fetchPickListOrderWise(
     filters?: PickListFilters,
   ): Promise<PickListOrderWiseResponse | null> {
@@ -274,6 +281,7 @@ export const pickPackApi = {
           orderNumber: group.orderNumber,
           clientName: resolveOrderWiseClientName(group),
           clientType: resolveOrderWiseClientType(group),
+          pickerName: (group.pickerName ?? "").trim() || undefined,
           order: group.order,
           items: (group.items ?? []).map((item) => ({
             id: item.id,

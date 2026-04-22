@@ -144,6 +144,7 @@ export interface PickListOrderGroup {
   orderNumber: string;
   clientName: string;
   clientType?: string;
+  pickerName?: string;
   order?: Record<string, unknown>;
   items: PickListOrderItem[];
   totalQuantity: number;

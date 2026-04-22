@@ -545,6 +545,7 @@ export interface WhmsPickListOrderGroup {
   orderNumber: string;
   /** Present when API returns it on the group; otherwise may live on `order`. */
   clientName?: string;
+  pickerName?: string;
   order?: Record<string, unknown>;
   items: WhmsPickListOrderWiseItem[];
   totalQuantity: number;
@@ -581,6 +582,11 @@ export const whmsPickListApi = {
     request<WhmsPickListEntry[]>(`/pick-list/order/${encodeURIComponent(orderId)}`),
   deleteByOrder: (orderId: string) =>
     request<void>(`/pick-list/order/${encodeURIComponent(orderId)}`, { method: 'DELETE' }),
+  setPickerNameForOrder: (orderId: string, body: { pickerName: string }) =>
+    request<{ orderId: string; pickerName: string }>(`/pick-list/order/${encodeURIComponent(orderId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
   get: (pickListId: string) =>
     request<WhmsPickListEntry>(`/pick-list/${pickListId}`),
   update: (pickListId: string, body: WhmsPickListEntryPatchBody) =>

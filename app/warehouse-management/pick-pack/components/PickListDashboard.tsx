@@ -8,6 +8,7 @@ import PickTable from "./PickTable";
 interface PickListDashboardProps {
   orderWiseData?: PickListOrderWiseResponse | null;
   onSavePickupQty: (itemId: string, pickupQty: number) => void;
+  onSetPickerName?: (orderId: string, pickerName: string) => Promise<void>;
   onDeletePickItem?: (itemId: string) => Promise<void>;
   onDeletePickOrder?: (orderId: string, orderNumber: string) => Promise<void>;
   onAlert?: (message: string) => void;
@@ -23,6 +24,7 @@ const DEBOUNCE_MS = 400;
 const PickListDashboard: React.FC<PickListDashboardProps> = ({
   orderWiseData,
   onSavePickupQty,
+  onSetPickerName,
   onDeletePickItem,
   onDeletePickOrder,
   onFilterChange,
@@ -186,6 +188,7 @@ const PickListDashboard: React.FC<PickListDashboardProps> = ({
           <PickTable
             orderGroups={orderWiseData?.results ?? []}
             onSave={onSavePickupQty}
+            onSetPickerName={onSetPickerName}
             onDeleteItem={onDeletePickItem}
             onDeleteOrder={onDeletePickOrder}
           />

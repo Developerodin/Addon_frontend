@@ -315,6 +315,21 @@ const PickPackPage = () => {
     await loadPickList(pickFilters);
   }, [pickFilters, loadPickList]);
 
+  /**
+   * Persist picker name for an order and reload the list.
+   */
+  const setPickerNameForOrder = useCallback(
+    async (orderId: string, pickerName: string) => {
+      const id = String(orderId || "").trim();
+      const name = String(pickerName || "").trim();
+      if (!id || !name) return;
+      await pickPackApi.setPickerNameForOrder(id, name);
+      notify(`Picker set: ${name}`, "success");
+      await loadPickList(pickFilters);
+    },
+    [loadPickList, pickFilters],
+  );
+
   // ── Pack actions (unchanged) ───────────────────────────────────────────
 
   const setPackedQty = async (batchId: string, orderId: string, itemId: string, packedQty: number) => {
@@ -505,6 +520,7 @@ const PickPackPage = () => {
                 <PickListDashboard
                   orderWiseData={pickOrderWise}
                   onSavePickupQty={savePickupQty}
+                  onSetPickerName={setPickerNameForOrder}
                   onDeletePickItem={deletePickItem}
                   onDeletePickOrder={deletePickOrder}
                   onAlert={(msg) => notify(msg, "error")}
