@@ -10,10 +10,8 @@ import { pickPackApi } from "./pickPackApi";
 import type { PickListFilters, PickListPagination } from "./pickPackApi";
 
 const PickPackPage = () => {
-  const [activeTab, setActiveTab] = useState<"pick" | "pack">("pick");
   const [loading, setLoading] = useState(true);
   const [pickOrderWise, setPickOrderWise] = useState<PickListOrderWiseResponse | null>(null);
-  const [packList, setPackList] = useState<PackList | null>(null);
   const [pickPagination, setPickPagination] = useState<PickListPagination | null>(null);
   const [pickFilters, setPickFilters] = useState<PickListFilters>({});
   const [pickLoading, setPickLoading] = useState(false);
@@ -50,10 +48,7 @@ const PickPackPage = () => {
     let mounted = true;
     (async () => {
       setLoading(true);
-      const [owResult, pkl] = await Promise.all([
-        pickPackApi.fetchPickListOrderWise(),
-        pickPackApi.fetchPackList(),
-      ]);
+      const owResult = await pickPackApi.fetchPickListOrderWise();
       if (!mounted) return;
       if (owResult) {
         setPickOrderWise(owResult);
@@ -64,15 +59,12 @@ const PickPackPage = () => {
           totalResults: owResult.totalResults,
         });
       }
-      setPackList(pkl);
       setLoading(false);
     })();
     return () => {
       mounted = false;
     };
   }, []);
-
-  const packBatches = packList?.batches ?? [];
 
   const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
@@ -476,38 +468,9 @@ const PickPackPage = () => {
             </div>
           </div>
 
-          {/* Tabs */}
+          {/* Pick List */}
           <div className="box">
             <div className="box-body">
-              <div className="flex border-b border-gray-100 mb-4">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("pick")}
-                  className={`px-3 py-2 text-[11px] font-bold transition-colors relative ${
-                    activeTab === "pick" ? "text-purple-600" : "text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  <i className="ri-route-line me-1.5 text-xs"></i>
-                  Pick List
-                  {activeTab === "pick" ? (
-                    <div className="absolute bottom-0 left-0 w-full h-0.5 bg-purple-600 rounded-t-full"></div>
-                  ) : null}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("pack")}
-                  className={`px-3 py-2 text-[11px] font-bold transition-colors relative ${
-                    activeTab === "pack" ? "text-purple-600" : "text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  <i className="ri-box-3-line me-1.5 text-xs"></i>
-                  Pack List
-                  {activeTab === "pack" ? (
-                    <div className="absolute bottom-0 left-0 w-full h-0.5 bg-purple-600 rounded-t-full"></div>
-                  ) : null}
-                </button>
-              </div>
-
               {loading ? (
                 <div className="py-12 text-center text-gray-500">
                   <i className="ri-loader-4-line animate-spin me-2"></i>
@@ -515,8 +478,7 @@ const PickPackPage = () => {
                 </div>
               ) : null}
 
-              {/* Tab Content */}
-              {!loading && activeTab === "pick" && (
+              {!loading && (
                 <PickListDashboard
                   orderWiseData={pickOrderWise}
                   onSavePickupQty={savePickupQty}
@@ -531,17 +493,6 @@ const PickPackPage = () => {
                   isLoading={pickLoading}
                 />
               )}
-
-              {!loading && activeTab === "pack" && packList ? (
-                <PackListDashboard
-                  batches={packBatches}
-                  onSetPackedQty={setPackedQty}
-                  onGenerateCarton={generateCarton}
-                  onCompletePacking={completePacking}
-                  onGenerateBarcodesForOrder={generateBarcodesForOrder}
-                  onAlert={(msg) => notify(msg, "error")}
-                />
-              ) : null}
             </div>
           </div>
         </div>

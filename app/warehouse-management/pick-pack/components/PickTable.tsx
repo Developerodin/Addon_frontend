@@ -108,6 +108,12 @@ function formatPickerLabel(pickerName?: string): string | null {
   return `Picked by: ${name}`;
 }
 
+function formatAddonOrderLabel(addonOrderId?: string): string | null {
+  const id = (addonOrderId ?? "").trim();
+  if (!id) return null;
+  return `Addon: ${id}`;
+}
+
 function ItemRow({
   item,
   index,
@@ -379,6 +385,11 @@ function OrderGroupRow({
               {formatClientLabel({ clientName: group.clientName, clientType: group.clientType }) ? (
                 <span className="text-[10px] font-semibold text-gray-600 leading-4 truncate">
                   {formatClientLabel({ clientName: group.clientName, clientType: group.clientType })}
+                </span>
+              ) : null}
+              {formatAddonOrderLabel(group.addonOrderId) ? (
+                <span className="text-[10px] font-semibold text-gray-500 leading-4 truncate">
+                  {formatAddonOrderLabel(group.addonOrderId)}
                 </span>
               ) : null}
               {formatPickerLabel(group.pickerName) ? (

@@ -279,6 +279,7 @@ export const pickPackApi = {
         results: (data.results ?? []).map((group) => ({
           orderId: group.orderId,
           orderNumber: group.orderNumber,
+          addonOrderId: (group.addonOrderId ?? "").trim() || undefined,
           clientName: resolveOrderWiseClientName(group),
           clientType: resolveOrderWiseClientType(group),
           pickerName: (group.pickerName ?? "").trim() || undefined,

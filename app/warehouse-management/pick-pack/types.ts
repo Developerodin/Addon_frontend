@@ -142,6 +142,7 @@ export interface PickListOrderItem {
 export interface PickListOrderGroup {
   orderId: string;
   orderNumber: string;
+  addonOrderId?: string;
   clientName: string;
   clientType?: string;
   pickerName?: string;
