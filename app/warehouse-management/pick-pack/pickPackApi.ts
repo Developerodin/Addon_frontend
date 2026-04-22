@@ -52,6 +52,21 @@ function resolveOrderWiseClientName(group: WhmsPickListOrderGroup): string {
   return "—";
 }
 
+/**
+ * Resolve client type for order-wise grouping.
+ * Falls back to `group.order.clientType` when not present directly on the group.
+ */
+function resolveOrderWiseClientType(group: WhmsPickListOrderGroup): string | undefined {
+  const direct = (group as unknown as { clientType?: unknown }).clientType;
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+  const o = group.order;
+  if (o && typeof o === "object" && o !== null && "clientType" in o) {
+    const ct = (o as { clientType?: unknown }).clientType;
+    if (typeof ct === "string" && ct.trim()) return ct.trim();
+  }
+  return undefined;
+}
+
 function mapPickListEntry(entry: WhmsPickListEntry): PickItem {
   const raw = entry.status ?? "";
   const status = (["pending", "partial", "picked", "verified", "skipped"].includes(raw)
@@ -258,6 +273,7 @@ export const pickPackApi = {
           orderId: group.orderId,
           orderNumber: group.orderNumber,
           clientName: resolveOrderWiseClientName(group),
+          clientType: resolveOrderWiseClientType(group),
           order: group.order,
           items: (group.items ?? []).map((item) => ({
             id: item.id,
@@ -267,6 +283,7 @@ export const pickPackApi = {
             size: item.size ?? "",
             quantity: item.quantity ?? 0,
             pickupQuantity: item.pickupQuantity ?? 0,
+            availableStock: (item as unknown as { availableStock?: unknown }).availableStock as number | undefined,
             status: (["pending", "partial", "picked"].includes(item.status) ? item.status : "pending") as "pending" | "partial" | "picked",
           })),
           totalQuantity: group.totalQuantity ?? 0,

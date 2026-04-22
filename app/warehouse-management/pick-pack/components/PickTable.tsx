@@ -91,6 +91,17 @@ function statusBadge(status: string) {
   );
 }
 
+/**
+ * Build compact client label for display under order number.
+ */
+function formatClientLabel(args: { clientName?: string; clientType?: string }): string | null {
+  const name = (args.clientName ?? "").trim();
+  const type = (args.clientType ?? "").trim();
+  if (!name && !type) return null;
+  if (name && type) return `${name} • ${type}`;
+  return name || type;
+}
+
 function ItemRow({
   item,
   index,
@@ -156,6 +167,11 @@ function ItemRow({
       </td>
       <td className="px-2 py-2 text-[12px] font-bold text-gray-900 border border-gray-200 text-center w-20">
         {item.quantity}
+      </td>
+      <td className="px-2 py-2 border border-gray-200 text-center w-24">
+        <span className="text-[12px] font-bold text-gray-900">
+          {typeof item.availableStock === "number" ? item.availableStock : "—"}
+        </span>
       </td>
       <td className="px-2 py-2 border border-gray-200 w-28">
         <input
@@ -261,7 +277,14 @@ function OrderGroupRow({
         <td className="px-2 py-2.5 border border-gray-200 whitespace-nowrap">
           <div className="flex items-center gap-2">
             <i className={`ri-arrow-${expanded ? "down" : "right"}-s-line text-sm text-gray-400 transition-transform`} />
-            <span className="text-[12px] font-bold text-purple-700">{group.orderNumber}</span>
+            <div className="flex flex-col min-w-0">
+              <span className="text-[12px] font-bold text-purple-700 leading-4">{group.orderNumber}</span>
+              {formatClientLabel({ clientName: group.clientName, clientType: group.clientType }) ? (
+                <span className="text-[10px] font-semibold text-gray-600 leading-4 truncate">
+                  {formatClientLabel({ clientName: group.clientName, clientType: group.clientType })}
+                </span>
+              ) : null}
+            </div>
             <span className="bg-purple-50 text-purple-600 text-[9px] font-bold px-1.5 py-0.5 rounded">
               {group.totalItems} {group.totalItems === 1 ? "item" : "items"}
             </span>
@@ -308,6 +331,9 @@ function OrderGroupRow({
         </td>
         <td className="px-2 py-2.5 border border-gray-200 text-center w-20">
           <span className="text-[11px] font-bold text-gray-800">{group.totalQuantity}</span>
+        </td>
+        <td className="px-2 py-2.5 border border-gray-200 text-center w-24">
+          <span className="text-[11px] font-bold text-gray-400">—</span>
         </td>
         <td className="px-2 py-2.5 border border-gray-200 text-center w-28">
           <span className="text-[11px] font-bold text-gray-800">{group.totalPickupQuantity}</span>
@@ -427,6 +453,9 @@ export default function PickTable({
             </th>
             <th className="px-2 py-2.5 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 text-center w-20">
               Qty
+            </th>
+            <th className="px-2 py-2.5 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 text-center w-24">
+              Stock
             </th>
             <th className="px-2 py-2.5 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 text-center w-28">
               Pickup Qty

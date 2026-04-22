@@ -135,6 +135,7 @@ export interface PickListOrderItem {
   size: string;
   quantity: number;
   pickupQuantity: number;
+  availableStock?: number;
   status: 'pending' | 'partial' | 'picked';
 }
 
@@ -142,6 +143,7 @@ export interface PickListOrderGroup {
   orderId: string;
   orderNumber: string;
   clientName: string;
+  clientType?: string;
   order?: Record<string, unknown>;
   items: PickListOrderItem[];
   totalQuantity: number;
