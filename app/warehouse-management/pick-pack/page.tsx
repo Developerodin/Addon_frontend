@@ -257,6 +257,9 @@ const PickPackPage = () => {
       } else {
         notify(`Pickup quantity reset: ${item.skuCode}`, "info");
       }
+
+      // Stock is updated on the backend; refetch so the "Stock" column shows latest values.
+      await loadPickList(pickFilters);
     } catch {
       notify("Failed to save pickup quantity", "error");
     }
