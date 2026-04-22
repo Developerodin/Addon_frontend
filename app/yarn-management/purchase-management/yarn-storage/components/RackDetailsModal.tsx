@@ -147,6 +147,14 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
     }
   };
 
+  /**
+   * Format KG values with a fixed number of decimals (avoids float noise like 0.6000000000000001).
+   */
+  const formatKg = (value: unknown, decimals = 4): string => {
+    if (typeof value !== "number" || !Number.isFinite(value)) return "-";
+    return value.toFixed(decimals);
+  };
+
 
   return (
     <>
@@ -301,7 +309,10 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
                                       <div className="text-gray-700 mt-0.5"><span className="text-gray-500 font-bold">Shade:</span> {box.shadeCode}</div>
                                     </td>
                                     <td className="px-3 py-2.5 text-center">
-                                      <div className="font-bold text-gray-900">{box.boxWeight} <span className="text-[9px] font-bold text-gray-600 uppercase">kg</span></div>
+                                      <div className="font-bold text-gray-900">
+                                        {formatKg(box.boxWeight, 4)}{" "}
+                                        <span className="text-[9px] font-bold text-gray-600 uppercase">kg</span>
+                                      </div>
                                       <div className="text-gray-700 mt-0.5 font-medium">{box.numberOfCones} <span className="text-[9px] font-bold text-gray-600 uppercase">cones</span></div>
                                     </td>
                                     <td className="px-3 py-2.5">
@@ -359,8 +370,13 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
                                       <div className="text-gray-700 mt-1"><span className="text-[9px] uppercase text-gray-500 font-bold">Shade:</span> {cone.shadeCode}</div>
                                     </td>
                                     <td className="px-3 py-2.5 text-center">
-                                      <div className="font-bold text-gray-900">{cone.coneWeight} <span className="text-[9px] font-bold text-gray-600 uppercase">kg</span></div>
-                                      <div className="text-[9px] text-gray-600 mt-0.5 font-medium">Tear: {cone.tearWeight}</div>
+                                      <div className="font-bold text-gray-900">
+                                        {formatKg(cone.coneWeight, 4)}{" "}
+                                        <span className="text-[9px] font-bold text-gray-600 uppercase">kg</span>
+                                      </div>
+                                      <div className="text-[9px] text-gray-600 mt-0.5 font-medium">
+                                        Tear: {formatKg(cone.tearWeight, 4)}
+                                      </div>
                                     </td>
                                     <td className="px-3 py-2.5">
                                       <div className="flex flex-col gap-1">
@@ -410,7 +426,10 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
                             </div>
                             <div>
                               <label className="text-[9px] font-bold text-gray-600 uppercase">Total Weight</label>
-                              <div className="text-[14px] font-bold text-gray-900 mt-0.5">{historyData.currentInventory.totalWeight.toFixed(2)} <span className="text-[10px] font-bold text-gray-600 uppercase">kg</span></div>
+                              <div className="text-[14px] font-bold text-gray-900 mt-0.5">
+                                {formatKg(historyData.currentInventory.totalWeight, 4)}{" "}
+                                <span className="text-[10px] font-bold text-gray-600 uppercase">kg</span>
+                              </div>
                             </div>
                             <div>
                               <label className="text-[9px] font-bold text-gray-600 uppercase">Yarn Types</label>
@@ -461,7 +480,10 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
                                       </td>
                                       <td className="px-3 py-2.5">
                                         <div className="text-gray-900 font-medium truncate max-w-[120px]" title={item.yarnName}>{item.yarnName || "-"}</div>
-                                        <div className="text-primary font-bold mt-0.5">{item.weight.toFixed(2)} <span className="text-[9px] font-bold text-gray-600 uppercase">kg</span></div>
+                                        <div className="text-primary font-bold mt-0.5">
+                                          {formatKg(item.weight, 4)}{" "}
+                                          <span className="text-[9px] font-bold text-gray-600 uppercase">kg</span>
+                                        </div>
                                       </td>
                                       <td className="px-3 py-2.5">
                                         {item.fromLocation && item.toLocation ? (

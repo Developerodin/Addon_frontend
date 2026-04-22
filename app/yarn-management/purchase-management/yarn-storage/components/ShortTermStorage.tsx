@@ -52,6 +52,13 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
   onRefresh,
   preferences,
 }) => {
+  /**
+   * Format weights safely with fixed decimals (avoids JS float noise like 0.6000000000000001).
+   */
+  const formatKg = useCallback((value: unknown, decimals = 4): string => {
+    if (typeof value !== "number" || !Number.isFinite(value)) return "-";
+    return value.toFixed(decimals);
+  }, []);
   const [selectedBox, setSelectedBox] = useState<PackedBox | null>(null);
   const [isLoadingBox, setIsLoadingBox] = useState(false);
   const [scannedBoxDetails, setScannedBoxDetails] = useState<YarnBox | null>(
@@ -1270,9 +1277,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                               {c.coneStorageId || "-"}
                             </td>
                             <td className="px-4 py-2 text-sm text-gray-900 text-right">
-                              {typeof c.coneWeight === "number"
-                                ? c.coneWeight.toFixed(3)
-                                : "-"}
+                              {formatKg(c.coneWeight, 4)}
                             </td>
                           </tr>
                         ))}

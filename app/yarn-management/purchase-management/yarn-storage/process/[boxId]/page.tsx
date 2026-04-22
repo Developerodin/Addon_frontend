@@ -16,10 +16,23 @@ import { QZTrayLoader, QZTrayStatus, QZTrayUntrustedWarning, QZTrayRequestBlocke
 import { printCones } from "@/shared/utils/qzTray";
 import { fetchWeightLatest } from "@/shared/data/utilities/weightApi";
 
-// Load Google Font for preview
-const LatoFontHeader = () => (
-  <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet" />
-);
+/**
+ * Ensures the Lato Google Font stylesheet exists in document head.
+ * Avoids rendering `<link>` tags inside the React tree (browser may relocate them, causing React `removeChild` crashes).
+ */
+const ensureLatoFontStylesheet = (): void => {
+  if (typeof window === "undefined") return;
+  const id = "google-font-lato";
+  const existing = document.getElementById(id);
+  if (existing) return;
+
+  const link = document.createElement("link");
+  link.id = id;
+  link.rel = "stylesheet";
+  link.href =
+    "https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap";
+  document.head.appendChild(link);
+};
 
 
 const getProcessedBoxStorageKey = (boxId: string) =>
@@ -98,6 +111,10 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     () => getProcessedBoxStorageKey(boxIdParam),
     [boxIdParam]
   );
+
+  useEffect(() => {
+    ensureLatoFontStylesheet();
+  }, []);
 
   const buildConeInputs = useCallback((conesList: YarnCone[]) => {
     const formatted: Record<
@@ -785,7 +802,6 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
 
   return (
     <div className="main-content !p-[10px]">
-      <LatoFontHeader />
       <Seo title={`Processed Box - ${box.boxId}`} />
       <QZTrayLoader />
       <QZTrayUntrustedWarning />
