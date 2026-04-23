@@ -2,21 +2,44 @@
 
 import React, { useState } from "react";
 import * as XLSX from "xlsx";
+import type { Range } from "xlsx";
 import { saveAs } from "file-saver";
 import type { PickListOrderGroup, PickListOrderItem } from "../types";
 
+/**
+ * Build compact client label (name and/or type) for print/export.
+ */
+function formatClientLabel(args: { clientName?: string; clientType?: string }): string | null {
+  const name = (args.clientName ?? "").trim();
+  const type = (args.clientType ?? "").trim();
+  if (!name && !type) return null;
+  if (name && type) return `${name} • ${type}`;
+  return name || type;
+}
+
 function downloadOrderExcel(group: PickListOrderGroup) {
-  const rows = group.items.map((item) => ({
-    "Order No": group.orderNumber,
-    Client: group.clientName,
-    "SKU Code": item.skuCode,
-    "Style Code": item.styleCode,
-    Color: item.shade || "—",
-    "Size": item.size || "—",
-    "Qty": item.quantity,
-    "Pickup Qty": item.pickupQuantity,
-  }));
-  const ws = XLSX.utils.json_to_sheet(rows);
+  const clientLine = formatClientLabel({ clientName: group.clientName, clientType: group.clientType });
+  const headers = ["Order No", "SKU Code", "Style Code", "Color", "Size", "Qty", "Pickup Qty"] as const;
+  const dataRows = group.items.map((item) => [
+    group.orderNumber,
+    item.skuCode,
+    item.styleCode,
+    item.shade || "—",
+    item.size || "—",
+    item.quantity,
+    item.pickupQuantity,
+  ]);
+  const aoa: (string | number)[][] = [[`Pick List – ${group.orderNumber}`]];
+  if (clientLine) aoa.push([`Client: ${clientLine}`]);
+  aoa.push([...headers]);
+  aoa.push(...dataRows);
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  const colCount = headers.length;
+  const merges: Range[] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: colCount - 1 } }];
+  if (clientLine) merges.push({ s: { r: 1, c: 0 }, e: { r: 1, c: colCount - 1 } });
+  ws["!merges"] = merges;
+
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Pick List");
   const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
@@ -26,12 +49,14 @@ function downloadOrderExcel(group: PickListOrderGroup) {
 function printOrderPickList(group: PickListOrderGroup) {
   const esc = (s: string) =>
     s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  const clientLabel = esc(group.clientName);
+  const clientLine = formatClientLabel({ clientName: group.clientName, clientType: group.clientType });
+  const clientBlock = clientLine
+    ? `<div class="client">Client: ${esc(clientLine)}</div>`
+    : "";
   const tableRows = group.items
     .map(
       (item) =>
         `<tr>
-          <td>${clientLabel}</td>
           <td>${esc(item.skuCode)}</td>
           <td>${esc(item.styleCode)}</td>
           <td>${esc(item.shade || "—")}</td>
@@ -48,6 +73,7 @@ function printOrderPickList(group: PickListOrderGroup) {
   *{margin:0;padding:0;box-sizing:border-box}
   body{font-family:Arial,Helvetica,sans-serif;padding:24px;color:#1a1a1a}
   h2{font-size:16px;margin-bottom:4px}
+  .client{font-size:13px;font-weight:600;color:#374151;margin-bottom:8px}
   .meta{font-size:12px;color:#666;margin-bottom:16px}
   table{width:100%;border-collapse:collapse;font-size:12px}
   th,td{border:1px solid #d1d5db;padding:6px 10px;text-align:left}
@@ -59,9 +85,10 @@ function printOrderPickList(group: PickListOrderGroup) {
 </style>
 </head><body>
   <h2>Pick List – ${group.orderNumber}</h2>
+  ${clientBlock}
   <div class="meta">${group.totalItems} items &middot; Total Qty: ${group.totalQuantity} &middot; Picked: ${group.totalPickupQuantity}</div>
   <table>
-    <thead><tr><th>Client</th><th>SKU Code</th><th>Style Code</th><th>Color</th><th>Size</th><th style="text-align:center">Qty</th><th style="text-align:center">Pickup Qty</th></tr></thead>
+    <thead><tr><th>SKU Code</th><th>Style Code</th><th>Color</th><th>Size</th><th style="text-align:center">Qty</th><th style="text-align:center">Pickup Qty</th></tr></thead>
     <tbody>${tableRows}</tbody>
   </table>
   <div class="summary">Printed on ${new Date().toLocaleString()}</div>
@@ -91,17 +118,6 @@ function statusBadge(status: string) {
   );
 }
 
-/**
- * Build compact client label for display under order number.
- */
-function formatClientLabel(args: { clientName?: string; clientType?: string }): string | null {
-  const name = (args.clientName ?? "").trim();
-  const type = (args.clientType ?? "").trim();
-  if (!name && !type) return null;
-  if (name && type) return `${name} • ${type}`;
-  return name || type;
-}
-
 function formatPickerLabel(pickerName?: string): string | null {
   const name = (pickerName ?? "").trim();
   if (!name) return null;
@@ -118,14 +134,12 @@ function ItemRow({
   item,
   index,
   orderNumber,
-  clientName,
   onSave,
   onDeleteItem,
 }: {
   item: PickListOrderItem;
   index: number;
   orderNumber: string;
-  clientName: string;
   onSave: (itemId: string, pickupQty: number) => void;
   onDeleteItem?: (itemId: string) => Promise<void>;
 }) {
@@ -164,9 +178,6 @@ function ItemRow({
       </td>
       <td className="px-2 py-2 text-[11px] font-bold text-purple-700 border border-gray-200 whitespace-nowrap">
         {orderNumber}
-      </td>
-      <td className="px-2 py-2 text-[11px] font-semibold text-gray-700 border border-gray-200 whitespace-nowrap">
-        {clientName}
       </td>
       <td className="px-2 py-2 text-[12px] font-bold text-gray-900 border border-gray-200 whitespace-nowrap">
         {item.skuCode}
@@ -403,9 +414,6 @@ function OrderGroupRow({
             </span>
           </div>
         </td>
-        <td className="px-2 py-2.5 text-[11px] font-semibold text-gray-700 border border-gray-200 whitespace-nowrap">
-          {group.clientName}
-        </td>
         <td className="px-2 py-2.5 border border-gray-200" colSpan={2}>
           <div className="flex items-center gap-3">
             <div className="flex-1 min-w-[80px]">
@@ -518,7 +526,6 @@ function OrderGroupRow({
           item={item}
           index={idx}
           orderNumber={group.orderNumber}
-          clientName={group.clientName}
           onSave={onSave}
           onDeleteItem={onDeleteItem}
         />
@@ -554,7 +561,7 @@ export default function PickTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse border border-gray-200 min-w-[920px]">
+      <table className="w-full border-collapse border border-gray-200 min-w-[820px]">
         <thead>
           <tr className="bg-gray-50/30">
             <th className="px-2 py-2.5 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 text-center w-10">
@@ -562,9 +569,6 @@ export default function PickTable({
             </th>
             <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
               Order No
-            </th>
-            <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-              Client
             </th>
             <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
               SKU Code

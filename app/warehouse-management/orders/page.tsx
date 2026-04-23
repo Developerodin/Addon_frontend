@@ -107,10 +107,10 @@ export default function WarehouseOrdersPage() {
 
   const downloadTemplate = () => {
     const orderRows = [
-      { clientType: "Store", clientName: "My Store Brand", date: "17/02/2026", status: "pending", addonOrderId: "ADDON-1001", pairType: "single", styleCode: "SC-001", colour: "Red", pattern: "Solid", quantity: 10, type: "" },
-      { clientType: "", clientName: "", date: "", status: "", addonOrderId: "", pairType: "single", styleCode: "SC-002", colour: "Blue", pattern: "Stripe", quantity: 5, type: "" },
+      { clientType: "Store", clientName: "My Store Brand", date: "17/02/2026", status: "pending", addonOrderId: "ADDON-1001", pairType: "single", styleCode: "SC-001", quantity: 10, type: "" },
+      { clientType: "", clientName: "", date: "", status: "", addonOrderId: "", pairType: "single", styleCode: "SC-002", quantity: 5, type: "" },
       { clientType: "", clientName: "", date: "", status: "", addonOrderId: "", pairType: "multi", styleCode: "MP-001", colour: "Green", pattern: "Check", quantity: 20, type: "Cotton" },
-      { clientType: "Trade", clientName: "Another Client", date: "20/02/2026", status: "pending", addonOrderId: "ADDON-2044", pairType: "single", styleCode: "SC-003", colour: "Black", pattern: "Plain", quantity: 15, type: "" },
+      { clientType: "Trade", clientName: "Another Client", date: "20/02/2026", status: "pending", addonOrderId: "ADDON-2044", pairType: "single", styleCode: "SC-003", quantity: 15, type: "" },
     ];
     const instructions = [
       { Field: "clientType", Description: "Store, Trade, Departmental, or Ecom" },
@@ -120,10 +120,9 @@ export default function WarehouseOrdersPage() {
       { Field: "addonOrderId", Description: "Optional external / customer reference (e.g. Addon order number); set on order header rows only" },
       { Field: "pairType", Description: "'single' or 'multi' — determines single-pair vs multi-pair item" },
       { Field: "styleCode", Description: "Style code string (backend auto-resolves ID)" },
-      { Field: "colour", Description: "Colour name" },
-      { Field: "pattern", Description: "Pattern name" },
       { Field: "quantity", Description: "Numeric quantity" },
-      { Field: "type", Description: "Required for multi-pair items only (e.g. Cotton)" },
+      { Field: "type", Description: "Multi-pair items only: material/type (e.g. Cotton). Leave empty for single-pair rows" },
+      { Field: "colour, pattern", Description: "Multi-pair item rows only; both optional" },
       { Field: "---", Description: "---" },
       { Field: "GROUPING", Description: "Rows with clientType filled start a new order. Subsequent rows without clientType are items belonging to the same order." },
     ];
