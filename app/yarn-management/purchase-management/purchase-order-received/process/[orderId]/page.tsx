@@ -163,6 +163,18 @@ const mapAPIOrderToReceivedOrder = (apiOrder: any): ReceivedOrder => {
   };
 };
 
+/**
+ * Whether the box may be edited on the PO receive process page (mirrors backend `ACTIVE_BOX_FILTER`).
+ */
+function isYarnBoxEditableOnProcessPage(box: YarnBox): boolean {
+  if (typeof box.isActiveForProcessing === 'boolean') {
+    return box.isActiveForProcessing;
+  }
+  const conesIssued = box.coneData?.conesIssued === true;
+  const w = Number(box.boxWeight ?? 0);
+  return !conesIssued || w > 0;
+}
+
 const ProcessOrderPage = () => {
   const params = useParams();
   const router = useRouter();
@@ -300,6 +312,18 @@ const ProcessOrderPage = () => {
     }
   }, [showProcessedModal]);
 
+  // Clear edit selection if the active box became read-only (e.g. after refresh).
+  useEffect(() => {
+    if (!activeBoxId || boxes.length === 0) return;
+    const active = boxes.find((b) => {
+      const bId = b._id || b.id || b.boxId;
+      return bId === activeBoxId;
+    });
+    if (active && !isYarnBoxEditableOnProcessPage(active)) {
+      setActiveBoxId(null);
+    }
+  }, [boxes, activeBoxId]);
+
   // Focus barcode input on page load and when boxes are loaded
   useEffect(() => {
     if (!isLoadingBoxes && boxes.length > 0 && barcodeInputRef.current && !activeBoxId) {
@@ -309,37 +333,47 @@ const ProcessOrderPage = () => {
 
   // Focus weight input when a box is activated
   useEffect(() => {
-    if (activeBoxId) {
-      // Use multiple attempts to ensure DOM is updated and input is available
-      const focusWeightInput = () => {
-        const weightInput = document.querySelector(`input[data-box-weight="${activeBoxId}"]`) as HTMLInputElement;
-        if (weightInput) {
-          weightInput.focus();
-          weightInput.select(); // Select the text if any
-          return true;
-        }
-        return false;
-      };
+    if (!activeBoxId) return;
+    const active = boxes.find((b) => {
+      const bId = b._id || b.id || b.boxId;
+      return bId === activeBoxId;
+    });
+    if (!active || !isYarnBoxEditableOnProcessPage(active)) return;
 
-      // Try immediately
-      if (!focusWeightInput()) {
-        // Try after a short delay
-        setTimeout(() => {
-          if (!focusWeightInput()) {
-            // Try one more time after a longer delay
-            setTimeout(() => {
-              focusWeightInput();
-            }, 200);
-          }
-        }, 100);
+    // Use multiple attempts to ensure DOM is updated and input is available
+    const focusWeightInput = () => {
+      const weightInput = document.querySelector(`input[data-box-weight="${activeBoxId}"]`) as HTMLInputElement;
+      if (weightInput) {
+        weightInput.focus();
+        weightInput.select(); // Select the text if any
+        return true;
       }
+      return false;
+    };
+
+    // Try immediately
+    if (!focusWeightInput()) {
+      // Try after a short delay
+      setTimeout(() => {
+        if (!focusWeightInput()) {
+          // Try one more time after a longer delay
+          setTimeout(() => {
+            focusWeightInput();
+          }, 200);
+        }
+      }, 100);
     }
-  }, [activeBoxId]);
+  }, [activeBoxId, boxes]);
 
   // Fetch weight automatically when a row is activated
   useEffect(() => {
     const autoFillWeight = async () => {
       if (!activeBoxId) return;
+      const active = boxes.find((b) => {
+        const bId = b._id || b.id || b.boxId;
+        return bId === activeBoxId;
+      });
+      if (!active || !isYarnBoxEditableOnProcessPage(active)) return;
 
       const weight = await fetchLatestWeight();
       if (weight !== null && weight > 0) {
@@ -425,7 +459,8 @@ const ProcessOrderPage = () => {
       setIsLoadingBoxes(true);
       try {
         const response = await yarnBoxService.getYarnBoxes({
-          po_number: order.orderNumber
+          po_number: order.orderNumber,
+          include_inactive: true,
         });
 
         // Handle both array response and object with results
@@ -638,6 +673,12 @@ const ProcessOrderPage = () => {
       const foundBox = boxes.find(box => box.barcode === scannedBarcode);
 
       if (foundBox) {
+        if (!isYarnBoxEditableOnProcessPage(foundBox)) {
+          toast.error(`Box ${foundBox.boxId} is view only (inactive or fully transferred)`);
+          setBarcodeScanValue('');
+          return;
+        }
+
         const boxId = foundBox._id || foundBox.id || foundBox.boxId;
 
         // Get lot number from box (check boxData first, then box.lotNumber)
@@ -772,6 +813,7 @@ const ProcessOrderPage = () => {
     if (boxes.length === 0) return false;
 
     return boxes.every((box) => {
+      if (!isYarnBoxEditableOnProcessPage(box)) return true;
       const boxId = box._id || box.id || box.boxId;
       const data = boxData[boxId];
       return data &&
@@ -806,6 +848,7 @@ const ProcessOrderPage = () => {
     if (lotBoxes.length === 0) return false;
 
     return lotBoxes.every((box) => {
+      if (!isYarnBoxEditableOnProcessPage(box)) return true;
       const boxId = box._id || box.id || box.boxId;
       const data = boxData[boxId];
       return data &&
@@ -1188,6 +1231,11 @@ const ProcessOrderPage = () => {
       return;
     }
 
+    if (!isYarnBoxEditableOnProcessPage(box)) {
+      toast.error('This box is view only and cannot be updated');
+      return;
+    }
+
     const data = boxData[boxId];
     if (!data) {
       toast.error('Box data not found');
@@ -1235,7 +1283,8 @@ const ProcessOrderPage = () => {
       // Refresh boxes
       if (order?.orderNumber) {
         const response = await yarnBoxService.getYarnBoxes({
-          po_number: order.orderNumber
+          po_number: order.orderNumber,
+          include_inactive: true,
         });
         let boxesData: YarnBox[] = [];
         if (Array.isArray(response)) {
@@ -1291,6 +1340,7 @@ const ProcessOrderPage = () => {
 
         // Check if all boxes are now completed and auto-update status to goods_received
         const allCompleted = boxesData.every((b) => {
+          if (!isYarnBoxEditableOnProcessPage(b)) return true;
           const bId = b._id || b.id || b.boxId;
           const bData = calculatedBoxData[bId] || {};
           return bData.yarnName &&
@@ -2401,7 +2451,7 @@ const ProcessOrderPage = () => {
               const bId = b._id || b.id || b.boxId;
               return bId === activeBoxId;
             });
-            if (!activeBox) return null;
+            if (!activeBox || !isYarnBoxEditableOnProcessPage(activeBox)) return null;
 
             const activeBoxData = boxData[activeBoxId] || {};
             const hasWeight = activeBoxData.boxWeight && parseFloat(activeBoxData.boxWeight) > 0;
@@ -2562,7 +2612,8 @@ const ProcessOrderPage = () => {
                         <tbody>
                           {lotBoxes.map((box) => {
                             const boxId = box._id || box.id || box.boxId;
-                            const isActive = activeBoxId === boxId;
+                            const canEditBox = isYarnBoxEditableOnProcessPage(box);
+                            const isActive = activeBoxId === boxId && canEditBox;
                             // Check if yarnName is a default placeholder (starts with "Yarn-PO-")
                             const defaultYarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-')
                               ? box.yarnName
@@ -2582,10 +2633,11 @@ const ProcessOrderPage = () => {
                               <tr
                                 key={boxId}
                                 className={`hover:bg-gray-50/50 transition-colors group ${isActive ? 'bg-blue-50 border-2 border-blue-400' : ''
-                                  }`}
+                                  } ${!canEditBox ? 'bg-slate-50/90' : ''}`}
                               >
                                 <td className="px-1.5 py-2 border border-gray-200">
                                   <button
+                                    type="button"
                                     onClick={() => setSelectedBoxForDetails(box)}
                                     className="text-[12px] font-bold text-purple-600 hover:text-purple-700 hover:underline cursor-pointer"
                                     title="Click to view full details"
@@ -2595,6 +2647,7 @@ const ProcessOrderPage = () => {
                                 </td>
                                 <td className="px-1.5 py-2 border border-gray-200">
                                   <button
+                                    type="button"
                                     onClick={() => setSelectedBoxForDetails(box)}
                                     className="text-[12px] text-gray-900 font-mono text-purple-600 hover:text-purple-700 hover:underline cursor-pointer"
                                     title="Click to view full details"
@@ -2604,6 +2657,9 @@ const ProcessOrderPage = () => {
                                 </td>
                                 <td className="px-1.5 py-2 border border-gray-200">
                                   {(() => {
+                                    if (!canEditBox) {
+                                      return <span className="text-[12px] text-gray-600">{data.yarnName || '-'}</span>;
+                                    }
                                     const yarnOptionsForLot = data.lotNumber ? getPOItemsDataFromLotNumber(data.lotNumber) : [];
                                     const showLotDropdown = yarnOptionsForLot.length > 1;
 
@@ -2795,6 +2851,13 @@ const ProcessOrderPage = () => {
                                       <i className="ri-loader-4-line animate-spin text-purple-600 text-xs"></i>
                                       <span className="text-[10px] text-gray-500">Updating...</span>
                                     </div>
+                                  ) : !canEditBox ? (
+                                    <span
+                                      className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-slate-200 text-slate-700"
+                                      title="Inactive or fully transferred — view only"
+                                    >
+                                      View only
+                                    </span>
                                   ) : isActive ? (
                                     <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-blue-100 text-blue-800">
                                       Active
@@ -2849,7 +2912,8 @@ const ProcessOrderPage = () => {
                       <tbody>
                         {boxesByLot.unassigned.map((box) => {
                           const boxId = box._id || box.id || box.boxId;
-                          const isActive = activeBoxId === boxId;
+                          const canEditBox = isYarnBoxEditableOnProcessPage(box);
+                          const isActive = activeBoxId === boxId && canEditBox;
                           const defaultYarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-')
                             ? box.yarnName
                             : '';
@@ -2868,10 +2932,11 @@ const ProcessOrderPage = () => {
                             <tr
                               key={boxId}
                               className={`hover:bg-gray-50/50 transition-colors group ${isActive ? 'bg-blue-50 border-2 border-blue-400' : ''
-                                }`}
+                                } ${!canEditBox ? 'bg-slate-50/90' : ''}`}
                             >
                               <td className="px-1.5 py-2 border border-gray-200">
                                 <button
+                                  type="button"
                                   onClick={() => setSelectedBoxForDetails(box)}
                                   className="text-[12px] font-bold text-purple-600 hover:text-purple-700 hover:underline cursor-pointer"
                                   title="Click to view full details"
@@ -2881,6 +2946,7 @@ const ProcessOrderPage = () => {
                               </td>
                               <td className="px-1.5 py-2 border border-gray-200">
                                 <button
+                                  type="button"
                                   onClick={() => setSelectedBoxForDetails(box)}
                                   className="text-[12px] text-gray-900 font-mono text-purple-600 hover:text-purple-700 hover:underline cursor-pointer"
                                   title="Click to view full details"
@@ -2890,6 +2956,9 @@ const ProcessOrderPage = () => {
                               </td>
                               <td className="px-1.5 py-2 border border-gray-200">
                                 {(() => {
+                                  if (!canEditBox) {
+                                    return <span className="text-[12px] text-gray-600">{data.yarnName || '-'}</span>;
+                                  }
                                   const yarnOptionsForLot = data.lotNumber ? getPOItemsDataFromLotNumber(data.lotNumber) : [];
                                   const showLotDropdown = yarnOptionsForLot.length > 1;
 
@@ -3081,6 +3150,13 @@ const ProcessOrderPage = () => {
                                     <i className="ri-loader-4-line animate-spin text-purple-600 text-xs"></i>
                                     <span className="text-[10px] text-gray-500">Updating...</span>
                                   </div>
+                                ) : !canEditBox ? (
+                                  <span
+                                    className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-slate-200 text-slate-700"
+                                    title="Inactive or fully transferred — view only"
+                                  >
+                                    View only
+                                  </span>
                                 ) : isActive ? (
                                   <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-blue-100 text-blue-800">
                                     Active

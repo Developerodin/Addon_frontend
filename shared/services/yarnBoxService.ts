@@ -47,6 +47,8 @@ export interface YarnBox {
     };
     numberOfCones: number;
   };
+  /** From GET when `include_inactive=true`: false means read-only on PO receive process. */
+  isActiveForProcessing?: boolean;
 }
 
 export interface UpdateYarnBoxPayload {
@@ -84,6 +86,8 @@ export interface YarnBoxQueryParams {
   yarn_name?: string;
   cones_issued?: boolean;
   stored_status?: boolean;
+  /** Backend: return all boxes for a PO; each includes `isActiveForProcessing`. */
+  include_inactive?: boolean;
   page?: number;
   limit?: number;
 }
