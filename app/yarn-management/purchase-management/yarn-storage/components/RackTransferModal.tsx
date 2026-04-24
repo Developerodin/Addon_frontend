@@ -51,7 +51,7 @@ const RackTransferModal: React.FC<RackTransferModalProps> = ({
     if (isOpen && initialBoxId) {
       setSelectedBoxIds([initialBoxId]);
       // Try to fetch box details by barcode first
-      yarnBoxService.getYarnBoxByBarcode(initialBoxId).then((box) => {
+      yarnBoxService.getYarnBoxByBarcode(initialBoxId, { includeInactive: true }).then((box) => {
         setScannedBox(box);
       }).catch(() => {
         // If barcode lookup fails, try by boxId
@@ -135,7 +135,9 @@ const RackTransferModal: React.FC<RackTransferModalProps> = ({
 
     setIsLoadingBox(true);
     try {
-      const box = await yarnBoxService.getYarnBoxByBarcode(trimmedBarcode);
+      const box = await yarnBoxService.getYarnBoxByBarcode(trimmedBarcode, {
+        includeInactive: true,
+      });
 
       // Validate box is in the source rack
       if (sourceRack && box.storageLocation !== sourceRack.barcode) {

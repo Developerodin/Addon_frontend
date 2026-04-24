@@ -6,6 +6,7 @@ import * as XLSX from "xlsx";
 import JsBarcode from "jsbarcode";
 import yarnBoxService, { YarnBox } from "@/shared/services/yarnBoxService";
 import yarnConeService, {
+  GenerateConesResponse,
   ShortTermConeSummary,
 } from "@/shared/services/yarnConeService";
 import storageSlotService, {
@@ -32,6 +33,13 @@ import {
 
 const getProcessedBoxStorageKey = (boxId: string) =>
   `processedBoxResult:${boxId}`;
+
+/** Result of resolving a scanned box barcode on the short-term page */
+interface BoxBarcodeFetchResult {
+  mappedBox: PackedBox | null;
+  /** When set, box is not on LT but already has cones — user can open the ST process page */
+  resumeProcessBoxId?: string | null;
+}
 
 interface ShortTermStorageProps {
   inventory: ShortTermInventory[];
@@ -83,6 +91,17 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
   const [rackSlotDetails, setRackSlotDetails] = useState<Map<string, SlotDetailsResponse>>(new Map());
   const [loadingSlotDetails, setLoadingSlotDetails] = useState<Set<string>>(new Set());
   const [showReportDrawer, setShowReportDrawer] = useState(false);
+  /** Box id for which we show “open process page” after scan (already internal-transfer / has cones) */
+  const [resumeProcessBoxId, setResumeProcessBoxId] = useState<string | null>(
+    null
+  );
+  /** Modal: enter box barcode to jump to yarn ST process page (requires existing cones) */
+  const [showOpenProcessByBarcodeModal, setShowOpenProcessByBarcodeModal] =
+    useState(false);
+  const [openProcessBarcodeInput, setOpenProcessBarcodeInput] = useState("");
+  const [openProcessModalError, setOpenProcessModalError] = useState("");
+  const [isOpenProcessModalSubmitting, setIsOpenProcessModalSubmitting] =
+    useState(false);
 
   // Search by rack code or barcode (current-page filter + global API lookup, 5s debounce)
   const [rackSearchQuery, setRackSearchQuery] = useState("");
@@ -860,22 +879,25 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
   }, []);
 
   const fetchBoxByBarcode = useCallback(
-    async (barcode: string): Promise<PackedBox | null> => {
+    async (barcode: string): Promise<BoxBarcodeFetchResult> => {
       const trimmedBarcode = barcode.trim();
 
       if (!trimmedBarcode) {
         toast.error("Please enter a barcode to scan");
-        return null;
+        setResumeProcessBoxId(null);
+        return { mappedBox: null };
       }
 
       setIsLoadingBox(true);
+      setResumeProcessBoxId(null);
       try {
         console.log(
           "ShortTermStorage - fetching box by barcode:",
           trimmedBarcode
         );
         const boxDetails = await yarnBoxService.getYarnBoxByBarcode(
-          trimmedBarcode
+          trimmedBarcode,
+          { includeInactive: true }
         );
 
         // Internal transfer should ONLY allow boxes that are currently on long-term storage.
@@ -888,10 +910,41 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
           setScannedBoxDetails(null);
           setSelectedBox(null);
           setExistingShortTermCones([]);
+
+          const idForCones = String(boxDetails.boxId || "").trim();
+          let hasYarnConesForBox = false;
+          if (idForCones) {
+            try {
+              const allBoxCones =
+                await yarnConeService.getYarnConesByBoxId(idForCones);
+              hasYarnConesForBox = allBoxCones.length > 0;
+            } catch (coneLookupErr) {
+              console.error(
+                "Failed to check existing yarn cones for box:",
+                coneLookupErr
+              );
+              toast.error(
+                coneLookupErr instanceof Error
+                  ? coneLookupErr.message
+                  : "Could not verify existing cones for this box"
+              );
+              return { mappedBox: null };
+            }
+          }
+
+          if (hasYarnConesForBox && idForCones) {
+            setResumeProcessBoxId(idForCones);
+            toast(
+              "This box is already in short-term / internal transfer. Use Open process page to continue.",
+              { duration: 5000 }
+            );
+            return { mappedBox: null, resumeProcessBoxId: idForCones };
+          }
+
           toast.error(
             "This box is not on long-term storage. Store it in long-term storage first, then do internal transfer."
           );
-          return null;
+          return { mappedBox: null };
         }
 
         setScannedBoxDetails(boxDetails);
@@ -903,7 +956,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
           toast.error(
             "Box must be QC approved and stored in long-term storage before transfer"
           );
-          return null;
+          return { mappedBox: null };
         }
 
         // Show which cones (if any) are already in short-term storage for this box.
@@ -925,7 +978,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
         setSelectedBox(mappedBox);
         setShowInternalTransferModal(true);
         toast.success(`Box ${boxDetails.boxId || trimmedBarcode} fetched`);
-        return mappedBox;
+        return { mappedBox };
       } catch (error) {
         console.error("Failed to fetch box details:", error);
         setScannedBoxDetails(null);
@@ -933,7 +986,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
         toast.error(
           error instanceof Error ? error.message : "Failed to fetch box details"
         );
-        return null;
+        return { mappedBox: null };
       } finally {
         setIsLoadingBox(false);
       }
@@ -946,12 +999,157 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
   };
 
   const handleBoxScan = useCallback(
-    async (barcode: string) => {
-      const mappedBox = await fetchBoxByBarcode(barcode);
-      return mappedBox;
+    async (barcode: string): Promise<BoxBarcodeFetchResult> => {
+      return fetchBoxByBarcode(barcode);
     },
     [fetchBoxByBarcode]
   );
+
+  /**
+   * Builds session payload and navigates to the ST process route.
+   * When the box already has cones, uses generate-by-box; otherwise seeds session with the box only (empty cones list).
+   * @param knownBox Optional box from a prior barcode lookup to avoid an extra GET when there are no cones.
+   * @returns true when navigation was triggered
+   */
+  const navigateToStoredBoxProcessPage = useCallback(
+    async (
+      boxId: string,
+      options?: { knownBox?: YarnBox }
+    ): Promise<boolean> => {
+      const id = boxId.trim();
+      if (!id) {
+        toast.error("Box ID is required");
+        return false;
+      }
+
+      try {
+        let conesCheck: Awaited<
+          ReturnType<typeof yarnConeService.getYarnConesByBoxId>
+        > = [];
+        try {
+          conesCheck = await yarnConeService.getYarnConesByBoxId(id);
+        } catch (coneErr) {
+          console.error("Failed to list cones for process page:", coneErr);
+          toast.error(
+            coneErr instanceof Error
+              ? coneErr.message
+              : "Could not verify cones for this box"
+          );
+          return false;
+        }
+
+        let response: GenerateConesResponse;
+        if (conesCheck.length > 0) {
+          response = await yarnConeService.generateConesByBox(id);
+        } else {
+          const boxPayload =
+            options?.knownBox ?? (await yarnBoxService.getYarnBoxById(id));
+          response = {
+            message:
+              "This box has no yarn cones yet. Run internal transfer from long-term storage to generate cones; this page will list them once they exist.",
+            box: boxPayload,
+            cones: [],
+          };
+        }
+
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem(
+              getProcessedBoxStorageKey(id),
+              JSON.stringify(response)
+            );
+          } catch (storageError) {
+            console.error("Failed to cache processed box details:", storageError);
+            toast.error("Could not save session data for process page");
+            return false;
+          }
+        }
+        router.push(
+          `/yarn-management/purchase-management/yarn-storage/process/${encodeURIComponent(
+            id
+          )}`
+        );
+        return true;
+      } catch (error) {
+        console.error("Failed to open process page for box:", error);
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Could not load process page data"
+        );
+        return false;
+      }
+    },
+    [router]
+  );
+
+  const closeOpenProcessByBarcodeModal = useCallback(() => {
+    setShowOpenProcessByBarcodeModal(false);
+    setOpenProcessBarcodeInput("");
+    setOpenProcessModalError("");
+  }, []);
+
+  /**
+   * From the “open by barcode” modal: resolve box by barcode, then open the ST process page (with or without cones).
+   */
+  const handleSubmitOpenProcessByBarcode = useCallback(async () => {
+    const raw = openProcessBarcodeInput.trim();
+    setOpenProcessModalError("");
+    if (!raw) {
+      setOpenProcessModalError("Enter the box barcode");
+      return;
+    }
+
+    setIsOpenProcessModalSubmitting(true);
+    try {
+      const boxDetails = await yarnBoxService.getYarnBoxByBarcode(raw, {
+        includeInactive: true,
+      });
+      const boxId = String(boxDetails.boxId || "").trim();
+      if (!boxId) {
+        setOpenProcessModalError("Could not read box ID from this record");
+        return;
+      }
+
+      const ok = await navigateToStoredBoxProcessPage(boxId, {
+        knownBox: boxDetails,
+      });
+      if (ok) {
+        closeOpenProcessByBarcodeModal();
+      }
+    } catch (err) {
+      console.error("Open process modal: box lookup failed:", err);
+      setOpenProcessModalError(
+        err instanceof Error
+          ? err.message
+          : "Box not found or invalid barcode"
+      );
+    } finally {
+      setIsOpenProcessModalSubmitting(false);
+    }
+  }, [
+    openProcessBarcodeInput,
+    navigateToStoredBoxProcessPage,
+    closeOpenProcessByBarcodeModal,
+  ]);
+
+  /**
+   * Opens ST process page for the box shown in the post-scan resume banner.
+   */
+  const handleOpenResumeProcessPage = useCallback(async () => {
+    const boxId = resumeProcessBoxId?.trim();
+    if (!boxId) {
+      toast.error("No box selected for process page");
+      return;
+    }
+
+    setIsLoadingBox(true);
+    try {
+      await navigateToStoredBoxProcessPage(boxId);
+    } finally {
+      setIsLoadingBox(false);
+    }
+  }, [resumeProcessBoxId, navigateToStoredBoxProcessPage]);
 
   const handleProcessBox = useCallback(async () => {
     if (!scannedBoxDetails) {
@@ -1068,8 +1266,10 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
 
   const handleScannerScan = useCallback(
     async (barcode: string) => {
-      const mappedBox = await handleBoxScan(barcode);
-      return mappedBox ? true : false;
+      const { mappedBox, resumeProcessBoxId: resumeId } =
+        await handleBoxScan(barcode);
+      if (resumeId) return true;
+      return Boolean(mappedBox);
     },
     [handleBoxScan]
   );
@@ -1132,6 +1332,42 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
             invalidMessage="This box is not on long-term storage. Store it in long-term storage first, then do internal transfer."
             disabled={isLoadingBox || isProcessingBox}
           />
+          {resumeProcessBoxId ? (
+            <div
+              className="flex flex-wrap items-center gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-950"
+              role="status"
+              aria-live="polite"
+            >
+              <i
+                className="ri-stack-line text-xl text-amber-700 shrink-0"
+                aria-hidden
+              />
+              <p className="text-sm flex-1 min-w-[200px] m-0">
+                Box{" "}
+                <span className="font-mono font-medium">{resumeProcessBoxId}</span>{" "}
+                already has internal-transfer cones. Open the process page to
+                weigh, assign racks, or print labels.
+              </p>
+              <button
+                type="button"
+                onClick={() => void handleOpenResumeProcessPage()}
+                disabled={isLoadingBox || isProcessingBox}
+                className="ti-btn ti-btn-primary inline-flex items-center gap-1.5 shrink-0"
+                aria-label={`Open short-term process page for box ${resumeProcessBoxId}`}
+              >
+                <i className="ri-external-link-line text-base" aria-hidden />
+                Open process page
+              </button>
+              <button
+                type="button"
+                onClick={() => setResumeProcessBoxId(null)}
+                className="ti-btn ti-btn-light text-sm shrink-0"
+                aria-label="Dismiss resume hint"
+              >
+                Dismiss
+              </button>
+            </div>
+          ) : null}
           {isLoadingBox && (
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <i className="ri-loader-4-line animate-spin"></i>
@@ -1327,6 +1563,19 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
       {/* 2D Grid Layout */}
       <div className="box">
         <div className="box-header flex justify-end items-center flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setOpenProcessModalError("");
+                setOpenProcessBarcodeInput("");
+                setShowOpenProcessByBarcodeModal(true);
+              }}
+              className="ti-btn ti-btn-light text-xs px-3 py-1.5 ml-2 border border-gray-300"
+              title="Open short-term box process page by barcode"
+            >
+              <i className="ri-external-link-line me-1 text-primary"></i>
+              Open process page
+            </button>
             <button
               type="button"
               onClick={handleDownloadRackExcel}
@@ -1645,6 +1894,133 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
         availableRacks={racks}
         onTransferComplete={handleTransferComplete}
       />
+
+      {/* Open ST process page by box barcode (near grid / Download Excel) */}
+      {showOpenProcessByBarcodeModal ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+          role="presentation"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isOpenProcessModalSubmitting) {
+              closeOpenProcessByBarcodeModal();
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="open-process-by-barcode-title"
+            className="w-full max-w-md rounded-lg bg-white shadow-xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b border-gray-200 px-5 py-4 flex items-start justify-between gap-3">
+              <div>
+                <h3
+                  id="open-process-by-barcode-title"
+                  className="text-lg font-semibold text-gray-900 m-0"
+                >
+                  Open box process page
+                </h3>
+                <p className="text-sm text-gray-600 mt-1 mb-0">
+                  Use the box barcode, box Mongo ID on the label, or any cone
+                  barcode from that box — even after transfer to short-term.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isOpenProcessModalSubmitting) {
+                    closeOpenProcessByBarcodeModal();
+                  }
+                }}
+                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                aria-label="Close dialog"
+              >
+                <i className="ri-close-line text-xl" aria-hidden />
+              </button>
+            </div>
+            <form
+              className="px-5 py-4 space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleSubmitOpenProcessByBarcode();
+              }}
+            >
+              <div>
+                <label
+                  htmlFor="open-process-barcode-input"
+                  className="form-label text-sm font-medium text-gray-700"
+                >
+                  Box barcode
+                </label>
+                <input
+                  id="open-process-barcode-input"
+                  type="text"
+                  className="form-control mt-1"
+                  value={openProcessBarcodeInput}
+                  onChange={(e) => {
+                    setOpenProcessBarcodeInput(e.target.value);
+                    if (openProcessModalError) setOpenProcessModalError("");
+                  }}
+                  placeholder="Scan or paste box barcode"
+                  autoComplete="off"
+                  disabled={isOpenProcessModalSubmitting}
+                  aria-invalid={Boolean(openProcessModalError)}
+                  aria-describedby={
+                    openProcessModalError
+                      ? "open-process-barcode-error"
+                      : undefined
+                  }
+                />
+                {openProcessModalError ? (
+                  <p
+                    id="open-process-barcode-error"
+                    role="alert"
+                    className="mt-2 text-sm text-red-600"
+                  >
+                    {openProcessModalError}
+                  </p>
+                ) : null}
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isOpenProcessModalSubmitting) {
+                      closeOpenProcessByBarcodeModal();
+                    }
+                  }}
+                  className="ti-btn ti-btn-light"
+                  disabled={isOpenProcessModalSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="ti-btn ti-btn-primary inline-flex items-center gap-1.5"
+                  disabled={isOpenProcessModalSubmitting}
+                  aria-busy={isOpenProcessModalSubmitting}
+                >
+                  {isOpenProcessModalSubmitting ? (
+                    <>
+                      <i
+                        className="ri-loader-4-line animate-spin"
+                        aria-hidden
+                      />
+                      Opening…
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-external-link-line" aria-hidden />
+                      Open process page
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
 
       {/* Report drawer */}
       <ZoneReportDrawer

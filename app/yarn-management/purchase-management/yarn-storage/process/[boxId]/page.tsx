@@ -186,7 +186,9 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     const fetchEnrichment = async () => {
       try {
         const apiBox = barcode
-          ? await yarnBoxService.getYarnBoxByBarcode(barcode)
+          ? await yarnBoxService.getYarnBoxByBarcode(barcode, {
+              includeInactive: true,
+            })
           : await yarnBoxService.getYarnBoxById(boxId!);
         if (cancelled) return;
         const supplierName =

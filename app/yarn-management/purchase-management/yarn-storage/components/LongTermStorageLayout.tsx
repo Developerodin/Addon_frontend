@@ -387,7 +387,9 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     try {
       console.log("Fetching box by barcode:", trimmedBarcode);
       // Fetch box from API by barcode
-      const boxDetails = await yarnBoxService.getYarnBoxByBarcode(trimmedBarcode);
+      const boxDetails = await yarnBoxService.getYarnBoxByBarcode(trimmedBarcode, {
+        includeInactive: true,
+      });
       console.log("Box details received:", boxDetails);
 
       // Map YarnBox to PackedBox

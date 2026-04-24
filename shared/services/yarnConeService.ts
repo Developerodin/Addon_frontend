@@ -125,6 +125,19 @@ class YarnConeService {
     }
   }
 
+  /**
+   * Lists all yarn cones for a box (any issue/storage state). Uses GET /yarn-cones?box_id=...
+   */
+  async getYarnConesByBoxId(boxId: string): Promise<YarnCone[]> {
+    if (!boxId) {
+      throw new Error("Box ID is required");
+    }
+    const data = await this.makeRequest<YarnCone[] | { results?: YarnCone[] }>(
+      `/?box_id=${encodeURIComponent(boxId)}`
+    );
+    return Array.isArray(data) ? data : (data.results ?? []);
+  }
+
   async generateConesByBox(boxId: string, overrides: Record<string, any> = {}): Promise<GenerateConesResponse> {
     if (!boxId) {
       throw new Error("Box ID is required to generate cones");

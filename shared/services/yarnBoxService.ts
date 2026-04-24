@@ -267,11 +267,22 @@ class YarnBoxService {
     return this.makeRequest<YarnBox>(`/${boxId}`);
   }
 
-  async getYarnBoxByBarcode(barcode: string): Promise<YarnBox> {
+  /**
+   * GET /barcode/:barcode — optional `includeInactive` includes boxes after full ST transfer
+   * (default list API hides them via active filter on the server).
+   */
+  async getYarnBoxByBarcode(
+    barcode: string,
+    options?: { includeInactive?: boolean }
+  ): Promise<YarnBox> {
     if (!barcode) {
       throw new Error('Barcode is required');
     }
-    return this.makeRequest<YarnBox>(`/barcode/${barcode}`);
+    const qs =
+      options?.includeInactive === true ? '?include_inactive=true' : '';
+    return this.makeRequest<YarnBox>(
+      `/barcode/${encodeURIComponent(barcode)}${qs}`
+    );
   }
 
   /** GET /by-storage-location/:storageLocation - Boxes at given storage location (no limit) */
