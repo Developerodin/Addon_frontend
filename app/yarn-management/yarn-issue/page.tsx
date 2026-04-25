@@ -420,7 +420,7 @@ const YarnIssuePage = () => {
 
   const hasPermission = hasSubPermission("/yarn-management", "Yarn Issue");
 
-  // When issue modal opens, fetch latest weight from scale (localhost or 192.168.0.28) and pre-fill
+  // When issue modal opens, fetch latest weight (cones) via weightApi (LAN + localhost) and pre-fill
   useEffect(() => {
     if (!showIssueModal) return;
     let cancelled = false;

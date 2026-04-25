@@ -1,29 +1,32 @@
 /**
- * Weight API: resolve base URL by trying localhost then LAN IP, then fetch latest weight.
- * Supports separate URL candidates for cones (scale) vs boxes (scale).
+ * Weight API: try LAN then localhost, cache the first working URL, then fetch latest weight.
+ * Each context (cones, boxes, knitting, return) has its own path and cache key.
+ *
+ * When the scale PC’s LAN IP or port changes, update WEIGHT_API_LAN_BASE (single place).
  */
+const WEIGHT_API_LAN_BASE = 'http://192.168.0.147:7001';
 
-/** Default candidates for cone weight (yarn-storage process). */
+/** Default candidates for cone weight (e.g. yarn issue — /api/latest/cones). */
 const WEIGHT_API_CANDIDATES = [
-  'http://192.168.0.39:7001/api/latest/cones',
+  `${WEIGHT_API_LAN_BASE}/api/latest/cones`,
   'http://localhost:7001/api/latest/cones',
 ] as const;
 
-/** Candidates for box weight (purchase-order-received process). */
+/** Candidates for box weight (purchase-order-received). */
 const WEIGHT_API_CANDIDATES_BOXES = [
-  'http://192.168.0.39:7001/api/latest/box',
+  `${WEIGHT_API_LAN_BASE}/api/latest/box`,
   'http://localhost:7001/api/latest/box',
 ] as const;
 
 /** Candidates for knitting weight scale. */
 const WEIGHT_API_CANDIDATES_KNITTING = [
-  'http://192.168.0.39:7001/api/latest/knitting',
+  `${WEIGHT_API_LAN_BASE}/api/latest/knitting`,
   'http://localhost:7001/api/latest/knitting',
 ] as const;
 
 /** Candidates for yarn return weight scale. */
 const WEIGHT_API_CANDIDATES_RETURN = [
-  'http://192.168.0.39:7001/api/latest/return',
+  `${WEIGHT_API_LAN_BASE}/api/latest/return`,
   'http://localhost:7001/api/latest/return',
 ] as const;
 

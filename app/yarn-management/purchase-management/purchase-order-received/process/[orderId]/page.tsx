@@ -599,7 +599,7 @@ const ProcessOrderPage = () => {
     }
   };
 
-  // Fetch latest weight from box scale API (192.168.0.105:7001, then localhost:7001)
+  // Fetch latest weight from box scale (shared/data/utilities/weightApi — `boxes` context)
   const fetchLatestWeight = async (): Promise<number | null> => {
     try {
       setIsFetchingWeight(true);

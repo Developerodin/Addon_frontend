@@ -496,7 +496,7 @@ const YarnReturnPage = () => {
 
   // When return modal opens:
   // - auto-fill Tear Weight from scanned cone data (if available)
-  // - fetch latest weight from return scale API (192.168.0.39:7001 or localhost:7001 /api/latest/return) and pre-fill Total/Net
+  // - fetch latest weight from return scale (shared/data/utilities/weightApi) and pre-fill Total/Net
   useEffect(() => {
     if (!showReturnModal) return;
     let cancelled = false;
