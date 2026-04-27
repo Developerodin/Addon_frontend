@@ -7,7 +7,12 @@ import yarnEstimationService, {
   ArticleEstimation,
   YarnIssuedReturned,
   YarnConsumption,
+  summaryOrderFloorTotals,
 } from "@/shared/services/yarnEstimationService";
+import {
+  ArticleFloorStrip,
+  OrderFloorProgressSummary,
+} from "@/shared/components/production/YarnEstimationFloorProgressPanels";
 
 type View = "summary" | "order" | "article";
 
@@ -175,6 +180,9 @@ const YarnEstimationTab: React.FC = () => {
                   <th className="pl-[10px] pr-1 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Order</th>
                   <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Status</th>
                   <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Articles</th>
+                  <th className="px-1.5 py-2.5 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Planned qty</th>
+                  <th className="px-1.5 py-2.5 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Knitting completed</th>
+                  <th className="px-1.5 py-2.5 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Batch weight (knitting)</th>
                   <th className="px-1.5 py-2.5 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Issued (Net Wt)</th>
                   <th className="px-1.5 py-2.5 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Returned (Net Wt)</th>
                   <th className="px-1.5 py-2.5 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Consumption (Net Wt)</th>
@@ -182,7 +190,9 @@ const YarnEstimationTab: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {summaryData.map((row) => (
+                {summaryData.map((row) => {
+                  const floor = summaryOrderFloorTotals(row);
+                  return (
                   <tr key={row.orderId} className="hover:bg-gray-50/50">
                     <td className="pl-[10px] pr-1 py-2.5 text-[12px] font-medium text-gray-900 border border-gray-300">
                       {row.orderNumber}
@@ -192,6 +202,21 @@ const YarnEstimationTab: React.FC = () => {
                     </td>
                     <td className="px-1.5 py-2.5 text-center text-[12px] text-gray-700 border border-gray-300">
                       {row.articleCount}
+                    </td>
+                    <td className="px-1.5 py-2.5 text-right text-[12px] text-gray-700 tabular-nums border border-gray-300">
+                      {typeof floor.plannedQuantityTotal === "number"
+                        ? floor.plannedQuantityTotal.toLocaleString()
+                        : "—"}
+                    </td>
+                    <td className="px-1.5 py-2.5 text-right text-[12px] text-gray-700 tabular-nums border border-gray-300">
+                      {typeof floor.knittingCompletedTotal === "number"
+                        ? floor.knittingCompletedTotal.toLocaleString()
+                        : "—"}
+                    </td>
+                    <td className="px-1.5 py-2.5 text-right text-[12px] text-gray-700 tabular-nums border border-gray-300">
+                      {typeof floor.knittingBatchWeightTotal === "number"
+                        ? `${fmt(floor.knittingBatchWeightTotal)} kg`
+                        : "—"}
                     </td>
                     <td className="px-1.5 py-2.5 text-right text-[12px] text-gray-700 border border-gray-300">
                       <WeightCell data={row.issued} />
@@ -212,7 +237,8 @@ const YarnEstimationTab: React.FC = () => {
                       </button>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -246,7 +272,8 @@ const YarnEstimationTab: React.FC = () => {
       return <div className="p-6 text-center text-sm text-gray-400">No order data found.</div>;
     }
 
-    const { orderNumber, status, articles, orderTotals } = orderDetail;
+    const { orderNumber, status, articles, orderTotals, orderFloorProgress } = orderDetail;
+    const showFloorCols = articles.some((a) => a.floorProgress) || !!orderFloorProgress;
     return (
       <>
         {/* breadcrumb + order header */}
@@ -278,6 +305,8 @@ const YarnEstimationTab: React.FC = () => {
           </div>
         </div>
 
+        {orderFloorProgress && <OrderFloorProgressSummary orderFloorProgress={orderFloorProgress} />}
+
         {/* articles accordion */}
         <div className="px-[10px] pb-[10px]">
           {articles.length === 0 ? (
@@ -292,18 +321,25 @@ const YarnEstimationTab: React.FC = () => {
                     {/* article header */}
                     <button
                       type="button"
-                      className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 text-left"
+                      className="w-full flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 text-left"
                       onClick={() => toggleArticle(key)}
                     >
-                      <div className="flex items-center gap-3">
-                        <i className={`ri-arrow-${isOpen ? "down" : "right"}-s-line text-gray-400`}></i>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <i className={`ri-arrow-${isOpen ? "down" : "right"}-s-line text-gray-400 shrink-0`}></i>
                         <span className="text-[12px] font-bold text-gray-800">{art.articleNumber}</span>
-                        <span className="text-[10px] text-gray-500">Qty {art.plannedQuantity?.toLocaleString()}</span>
+                        {!showFloorCols && (
+                          <span className="text-[10px] text-gray-500">Qty {art.plannedQuantity?.toLocaleString()}</span>
+                        )}
                       </div>
-                      <div className="flex items-center gap-4 text-[11px]">
-                        <span className="text-blue-600">I: {fmt(art.totals?.issued?.netWeight)} kg</span>
-                        <span className="text-orange-600">R: {fmt(art.totals?.returned?.netWeight)} kg</span>
-                        <span className="text-green-700 font-semibold">C: {fmt(art.totals?.consumption?.netWeight)} kg</span>
+                      {showFloorCols && (
+                        <div className="w-full sm:w-auto sm:flex-1 sm:min-w-[200px] order-3 sm:order-none pl-7 sm:pl-0">
+                          <ArticleFloorStrip plannedQuantity={art.plannedQuantity} floorProgress={art.floorProgress} />
+                        </div>
+                      )}
+                      <div className="flex items-center gap-3 sm:gap-4 text-[11px] shrink-0">
+                        <span className="text-blue-600 whitespace-nowrap">I: {fmt(art.totals?.issued?.netWeight)} kg</span>
+                        <span className="text-orange-600 whitespace-nowrap hidden sm:inline">R: {fmt(art.totals?.returned?.netWeight)} kg</span>
+                        <span className="text-green-700 font-semibold whitespace-nowrap">C: {fmt(art.totals?.consumption?.netWeight)} kg</span>
                         {art.articleId && (
                           <button
                             className="w-6 h-6 inline-flex items-center justify-center bg-blue-50 text-blue-500 border border-blue-100 rounded hover:bg-blue-100"
@@ -373,7 +409,7 @@ const YarnEstimationTab: React.FC = () => {
       return <div className="p-6 text-center text-sm text-gray-400">No article data found.</div>;
     }
 
-    const { articleNumber, plannedQuantity, yarns, totals } = articleDetail;
+    const { articleNumber, plannedQuantity, yarns, totals, floorProgress } = articleDetail;
     return (
       <>
         <div className="p-[10px] flex flex-wrap items-center gap-3 border-b border-gray-100">
@@ -382,8 +418,17 @@ const YarnEstimationTab: React.FC = () => {
           </button>
           <div className="w-px h-4 bg-gray-200" />
           <span className="text-[12px] font-bold text-gray-800">{articleNumber}</span>
-          <span className="text-[10px] text-gray-500">Planned Qty: {plannedQuantity?.toLocaleString()}</span>
+          {!floorProgress && (
+            <span className="text-[10px] text-gray-500">Planned Qty: {plannedQuantity?.toLocaleString()}</span>
+          )}
         </div>
+
+        {floorProgress && (
+          <div className="px-[10px] pt-2 pb-1 border-b border-gray-50">
+            <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1">Floor progress</div>
+            <ArticleFloorStrip plannedQuantity={plannedQuantity} floorProgress={floorProgress} />
+          </div>
+        )}
 
         <div className="p-[10px] grid grid-cols-3 gap-2">
           <div className="bg-blue-50 border border-blue-100 rounded p-2">

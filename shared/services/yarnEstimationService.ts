@@ -32,12 +32,44 @@ export interface YarnDetail {
   transactions?: any[];
 }
 
+export interface FloorProgressKnitting {
+  received: number;
+  completed: number;
+  transferred: number;
+  remaining: number;
+  weight: number;
+  m4Quantity: number;
+}
+
+export interface FloorProgressKnitToLinking {
+  /** Same as `knitting.completed` (pair with batch weight for knit → linking handoff). */
+  knittingCompleted: number;
+  batchWeightFromKnitting: number;
+}
+
+export interface FloorProgress {
+  linkingType: string | null;
+  currentFloor: string | null;
+  linkingFloorInFlow: boolean;
+  plannedQuantity: number;
+  knitting: FloorProgressKnitting;
+  knitToLinking: FloorProgressKnitToLinking;
+}
+
+export interface OrderFloorProgress {
+  plannedQuantityTotal: number;
+  /** Sum of `floorProgress.knitting.completed` across articles. */
+  knittingCompletedTotal: number;
+  knittingBatchWeightTotal: number;
+}
+
 export interface EstimationArticle {
   articleId?: string;
   articleNumber: string;
   plannedQuantity: number;
   yarns: YarnDetail[];
   totals: YarnTotals;
+  floorProgress?: FloorProgress | null;
 }
 
 export interface OrderEstimation {
@@ -46,6 +78,7 @@ export interface OrderEstimation {
   status: string;
   articles: EstimationArticle[];
   orderTotals: YarnTotals;
+  orderFloorProgress?: OrderFloorProgress | null;
 }
 
 export interface SummaryOrder {
@@ -54,9 +87,35 @@ export interface SummaryOrder {
   status: string;
   priority: string;
   articleCount: number;
+  /**
+   * Summary-only floor totals. Backend may send these at the root of each result, or nested in `orderFloorProgress`.
+   */
+  orderFloorProgress?: OrderFloorProgress | null;
+  plannedQuantityTotal?: number;
+  knittingCompletedTotal?: number;
+  knittingBatchWeightTotal?: number;
   issued: YarnIssuedReturned;
   returned: YarnIssuedReturned;
   consumption: YarnConsumption;
+}
+
+/** Summary row floor metrics: nested `orderFloorProgress` overrides root-level fields when present. */
+export function summaryOrderFloorTotals(row: SummaryOrder): {
+  plannedQuantityTotal?: number;
+  knittingCompletedTotal?: number;
+  knittingBatchWeightTotal?: number;
+} {
+  const n = row.orderFloorProgress;
+  const pick = (nested: number | undefined, flat: number | undefined): number | undefined => {
+    if (typeof nested === "number" && Number.isFinite(nested)) return nested;
+    if (typeof flat === "number" && Number.isFinite(flat)) return flat;
+    return undefined;
+  };
+  return {
+    plannedQuantityTotal: pick(n?.plannedQuantityTotal, row.plannedQuantityTotal),
+    knittingCompletedTotal: pick(n?.knittingCompletedTotal, row.knittingCompletedTotal),
+    knittingBatchWeightTotal: pick(n?.knittingBatchWeightTotal, row.knittingBatchWeightTotal),
+  };
 }
 
 export interface EstimationSummaryResponse {
@@ -73,6 +132,7 @@ export interface ArticleEstimation {
   plannedQuantity: number;
   yarns: YarnDetail[];
   totals: YarnTotals;
+  floorProgress?: FloorProgress | null;
 }
 
 const getAccessToken = (): string | null => {
@@ -96,6 +156,33 @@ class YarnEstimationService {
     return {
       'Content-Type': 'application/json',
       ...(token && { Authorization: `Bearer ${token}` }),
+    };
+  }
+
+  /** Maps legacy `linkingWeightTotal` to `knittingBatchWeightTotal` when needed. */
+  private normalizeOrderPayload(raw: OrderEstimation): OrderEstimation {
+    const ofp = raw.orderFloorProgress as
+      | (OrderFloorProgress & { linkingWeightTotal?: number })
+      | null
+      | undefined;
+    if (!ofp) return raw;
+    const knittingBatchWeightTotal =
+      typeof ofp.knittingBatchWeightTotal === "number"
+        ? ofp.knittingBatchWeightTotal
+        : typeof ofp.linkingWeightTotal === "number"
+          ? ofp.linkingWeightTotal
+          : 0;
+    const plannedQuantityTotal =
+      typeof ofp.plannedQuantityTotal === "number" ? ofp.plannedQuantityTotal : 0;
+    const knittingCompletedTotal =
+      typeof ofp.knittingCompletedTotal === "number" ? ofp.knittingCompletedTotal : 0;
+    return {
+      ...raw,
+      orderFloorProgress: {
+        plannedQuantityTotal,
+        knittingCompletedTotal,
+        knittingBatchWeightTotal,
+      },
     };
   }
 
@@ -125,7 +212,8 @@ class YarnEstimationService {
 
   async getByOrder(orderId: string, includeTransactions = false): Promise<OrderEstimation> {
     const q = includeTransactions ? '?include_transactions=true' : '';
-    return this.makeRequest<OrderEstimation>(`/order/${encodeURIComponent(orderId)}${q}`);
+    const raw = await this.makeRequest<OrderEstimation>(`/order/${encodeURIComponent(orderId)}${q}`);
+    return this.normalizeOrderPayload(raw);
   }
 
   async getByArticle(articleId: string, includeTransactions = false): Promise<ArticleEstimation> {
