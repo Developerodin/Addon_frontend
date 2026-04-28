@@ -11,11 +11,23 @@ import {
   yarnInventoryService,
   YarnReportRow,
   YarnReportResponse,
+  YarnReportSnapshotBoundsResponse,
 } from "../services/yarnInventoryService";
 import PaginationControls from "../components/PaginationControls";
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
 const DEFAULT_PAGE_SIZE = 20;
+
+/** Local calendar YYYY-MM-DD (avoid UTC drift from `toISOString()` on date inputs). */
+const formatLocalYmd = (d: Date): string => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+const minYmd = (a: string, b: string) => (a <= b ? a : b);
+const maxYmd = (a: string, b: string) => (a >= b ? a : b);
 
 const YARN_REPORT_COLUMNS: { key: keyof YarnReportRow; label: string }[] = [
   { key: "store", label: "Store" },
@@ -42,21 +54,45 @@ const YARN_REPORT_COLUMNS: { key: keyof YarnReportRow; label: string }[] = [
 
 const YarnReportPage = () => {
   const { hasSubPermission } = useNavigation();
-  const today = new Date().toISOString().split("T")[0];
-  const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-    .toISOString()
-    .split("T")[0];
+  const now = new Date();
+  const todayStr = formatLocalYmd(now);
+  const firstOfMonthStr = formatLocalYmd(
+    new Date(now.getFullYear(), now.getMonth(), 1)
+  );
 
-  const [startDate, setStartDate] = useState(firstOfMonth);
-  const [endDate, setEndDate] = useState(today);
+  const [startDate, setStartDate] = useState(() =>
+    firstOfMonthStr > todayStr ? todayStr : firstOfMonthStr
+  );
+  const [endDate, setEndDate] = useState(todayStr);
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<YarnReportResponse | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [snapshotBounds, setSnapshotBounds] =
+    useState<YarnReportSnapshotBoundsResponse | null>(null);
+  const [boundsLoading, setBoundsLoading] = useState(false);
+  const [boundsError, setBoundsError] = useState<string | null>(null);
 
   const hasPermission = hasSubPermission("/yarn-management", "Dashboard");
+
+  const endMaxUi = useMemo(() => {
+    if (!snapshotBounds?.datePicker.endMax) return todayStr;
+    return minYmd(todayStr, snapshotBounds.datePicker.endMax);
+  }, [snapshotBounds, todayStr]);
+
+  const startMinUi = snapshotBounds?.datePicker.startMin ?? "2020-01-01";
+
+  const endMinUi = useMemo(() => {
+    if (!snapshotBounds?.datePicker.endMin) return startDate;
+    return maxYmd(startDate, snapshotBounds.datePicker.endMin);
+  }, [snapshotBounds, startDate]);
+
+  const startMaxUi = useMemo(() => {
+    if (!snapshotBounds?.datePicker.startMax) return endDate;
+    return minYmd(endDate, snapshotBounds.datePicker.startMax);
+  }, [snapshotBounds, endDate]);
 
   const totalResults = report?.results?.length ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalResults / pageSize) || 1);
@@ -73,12 +109,74 @@ const YarnReportPage = () => {
     setCurrentPage((p) => (p > totalPages ? totalPages : p));
   }, [report, totalPages]);
 
+  /** Load snapshot coverage for date picker hints and limits. */
+  useEffect(() => {
+    if (!hasPermission) return;
+    let cancelled = false;
+    setBoundsLoading(true);
+    setBoundsError(null);
+    yarnInventoryService
+      .getYarnReportSnapshotBounds()
+      .then((data) => {
+        if (cancelled) return;
+        setSnapshotBounds(data);
+        if (data.widestValidReportRange) {
+          setStartDate(data.widestValidReportRange.start_date);
+          setEndDate(data.widestValidReportRange.end_date);
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("Yarn snapshot bounds:", err);
+        setBoundsError(
+          err instanceof Error ? err.message : "Could not load snapshot coverage"
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setBoundsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasPermission]);
+
   /**
    * Updates rows-per-page and resets to the first page so the slice stays valid.
    */
   const handlePageSizeChange = (next: number) => {
     setPageSize(next);
     setCurrentPage(1);
+  };
+
+  /**
+   * Start date cannot exceed end date or fall before earliest allowed opening chain.
+   */
+  const handleStartDateChange = (value: string) => {
+    let next = value;
+    if (next && next < startMinUi) {
+      next = startMinUi;
+    }
+    if (next && next > startMaxUi) {
+      next = startMaxUi;
+    }
+    setStartDate(next);
+    if (next && endDate < next) {
+      setEndDate(next);
+    }
+  };
+
+  /**
+   * End date cannot be before start, after today, or after latest closing snapshot.
+   */
+  const handleEndDateChange = (value: string) => {
+    let capped = value > endMaxUi ? endMaxUi : value;
+    if (capped < endMinUi) {
+      capped = endMinUi;
+    }
+    setEndDate(capped);
+    if (capped && startDate > capped) {
+      setStartDate(capped);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -239,28 +337,110 @@ const YarnReportPage = () => {
             onSubmit={handleSubmit}
             className="flex flex-wrap items-end gap-3 mb-4 p-3 bg-gray-50 rounded border border-gray-100"
           >
+            <div className="w-full basis-full space-y-1.5">
+              {boundsLoading && (
+                <p className="text-[10px] text-gray-500" role="status">
+                  Loading snapshot coverage…
+                </p>
+              )}
+              {boundsError && (
+                <p
+                  className="text-[10px] text-amber-800 bg-amber-50 border border-amber-100 rounded px-2 py-1.5"
+                  role="status"
+                >
+                  {boundsError} — date limits fall back to calendar only.
+                </p>
+              )}
+              {snapshotBounds &&
+                !boundsLoading &&
+                snapshotBounds.earliestSnapshotDate &&
+                snapshotBounds.latestSnapshotDate && (
+                  <p
+                    className="text-[11px] leading-snug text-emerald-900 bg-emerald-50 border border-emerald-100 rounded px-2.5 py-2"
+                    role="note"
+                  >
+                    <span className="font-bold text-emerald-950">
+                      Closing snapshot dates on file:{" "}
+                    </span>
+                    <span className="font-mono font-semibold">
+                      {snapshotBounds.earliestSnapshotDate}
+                    </span>
+                    {" → "}
+                    <span className="font-mono font-semibold">
+                      {snapshotBounds.latestSnapshotDate}
+                    </span>
+                    <span className="text-emerald-800">
+                      {" "}
+                      ({snapshotBounds.distinctSnapshotDates} day
+                      {snapshotBounds.distinctSnapshotDates === 1 ? "" : "s"},{" "}
+                      {snapshotBounds.totalSnapshotRows.toLocaleString()} rows).{" "}
+                    </span>
+                    {snapshotBounds.widestValidReportRange ? (
+                      <span className="text-emerald-800">
+                        Widest valid range:{" "}
+                        <span className="font-mono font-semibold">
+                          {snapshotBounds.widestValidReportRange.start_date}
+                        </span>
+                        {" — "}
+                        <span className="font-mono font-semibold">
+                          {snapshotBounds.widestValidReportRange.end_date}
+                        </span>
+                        .{" "}
+                      </span>
+                    ) : null}
+                    <span className="text-emerald-800/95">
+                      {snapshotBounds.yarnReportHelp}
+                    </span>
+                  </p>
+                )}
+              {snapshotBounds &&
+                !boundsLoading &&
+                !snapshotBounds.earliestSnapshotDate && (
+                  <p
+                    className="text-[11px] text-amber-900 bg-amber-50 border border-amber-100 rounded px-2.5 py-2"
+                    role="note"
+                  >
+                    No yarn daily closing snapshots yet — run the nightly snapshot job or
+                    backfill before this report can load.
+                  </p>
+                )}
+            </div>
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 mb-1">
+              <label
+                htmlFor="yarn-report-start-date"
+                className="block text-[10px] font-bold text-gray-500 mb-1"
+              >
                 Start Date
               </label>
               <input
+                id="yarn-report-start-date"
                 type="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => handleStartDateChange(e.target.value)}
+                max={startMaxUi}
+                min={startMinUi}
                 className="text-xs py-1.5 px-2 border border-gray-200 rounded bg-white focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none"
                 required
+                aria-label="Report start date"
               />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 mb-1">
+              <label
+                htmlFor="yarn-report-end-date"
+                className="block text-[10px] font-bold text-gray-500 mb-1"
+              >
                 End Date
               </label>
               <input
+                id="yarn-report-end-date"
                 type="date"
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(e) => handleEndDateChange(e.target.value)}
+                min={endMinUi}
+                max={endMaxUi}
                 className="text-xs py-1.5 px-2 border border-gray-200 rounded bg-white focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none"
                 required
+                aria-label="Report end date"
               />
             </div>
             <button

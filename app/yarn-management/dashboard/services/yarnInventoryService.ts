@@ -196,6 +196,22 @@ export interface YarnReportResponse {
   endDate: string;
 }
 
+/** GET /yarn-management/yarn-report/snapshot-bounds */
+export interface YarnReportSnapshotBoundsResponse {
+  earliestSnapshotDate: string | null;
+  latestSnapshotDate: string | null;
+  distinctSnapshotDates: number;
+  totalSnapshotRows: number;
+  widestValidReportRange: { start_date: string; end_date: string } | null;
+  datePicker: {
+    startMin: string | null;
+    startMax: string | null;
+    endMin: string | null;
+    endMax: string | null;
+  };
+  yarnReportHelp: string;
+}
+
 class YarnInventoryService {
   private baseURL = `${API_BASE_URL}/yarn-management`;
 
@@ -386,6 +402,15 @@ class YarnInventoryService {
     queryParams.append('end_date', params.end_date);
     return this.makeRequest<YarnReportResponse>(
       `/yarn-report?${queryParams.toString()}`
+    );
+  }
+
+  /**
+   * Snapshot coverage for Yarn Report (earliest/latest closing snapshot keys, picker bounds).
+   */
+  async getYarnReportSnapshotBounds(): Promise<YarnReportSnapshotBoundsResponse> {
+    return this.makeRequest<YarnReportSnapshotBoundsResponse>(
+      '/yarn-report/snapshot-bounds'
     );
   }
 }
