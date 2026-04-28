@@ -1808,8 +1808,15 @@ const YarnReturnPage = () => {
             : id ?? ""
         ).trim();
 
-      // Check if cone has been issued - only issued cones can be returned
+      // Check if cone has been issued - only issued cones can be returned.
+      // 'used' cones have already been returned empty and cannot be returned again.
       const issueStatus = (coneDetails.issueStatus ?? coneDetails.issue_status ?? "").toString().toLowerCase();
+      if (issueStatus === "used") {
+        setScanError(
+          "This cone has already been used (returned empty previously) and cannot be returned again."
+        );
+        return;
+      }
       if (issueStatus !== "issued") {
         setScanError("This cone has not been issued and cannot be returned. Only issued cones can be returned.");
         return;

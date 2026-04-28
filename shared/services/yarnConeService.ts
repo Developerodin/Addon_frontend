@@ -2,6 +2,14 @@ import { API_BASE_URL } from "@/shared/data/utilities/api";
 import Cookies from "js-cookie";
 import { YarnBox } from "./yarnBoxService";
 
+/**
+ * Lifecycle status of a yarn cone.
+ *  - not_issued: cone is in the pool / short-term storage and available.
+ *  - issued: cone has been sent out for production and is currently with the operator.
+ *  - used: cone was returned empty (no yarn left). It cannot be reissued or re-edited.
+ */
+export type YarnConeIssueStatus = "issued" | "not_issued" | "used";
+
 export interface YarnCone {
   _id: string;
   poNumber: string;
@@ -11,7 +19,7 @@ export interface YarnCone {
   shadeCode: string;
   coneWeight: number;
   tearWeight: number;
-  issueStatus: string;
+  issueStatus: YarnConeIssueStatus;
   issueWeight: number;
   returnStatus: string;
   returnWeight: number;
@@ -49,7 +57,7 @@ export interface ShortTermConeSummary {
   coneStorageId?: string;
   coneWeight?: number;
   tearWeight?: number;
-  issueStatus?: string;
+  issueStatus?: YarnConeIssueStatus;
   returnStatus?: string;
   createdAt?: string;
   updatedAt?: string;

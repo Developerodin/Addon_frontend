@@ -60,6 +60,38 @@ const formatStatus = (value?: string) =>
 const formatWeight = (value?: number) =>
   typeof value === "number" ? value.toFixed(4) : "-";
 
+/**
+ * Tailwind utility classes for the cone issue-status pill, color-coded by lifecycle:
+ *  - issued     -> blue (out for production)
+ *  - used       -> gray (consumed, no yarn left, locked)
+ *  - not_issued -> green (available)
+ *  - default    -> slate
+ *
+ * @param status - cone.issueStatus value
+ * @returns combined Tailwind class string for the badge
+ */
+const getIssueStatusBadgeClass = (status?: string): string => {
+  switch (status) {
+    case "issued":
+      return "bg-blue-100 text-blue-800";
+    case "used":
+      return "bg-gray-200 text-gray-600 line-through";
+    case "not_issued":
+      return "bg-emerald-100 text-emerald-800";
+    default:
+      return "bg-slate-100 text-slate-700";
+  }
+};
+
+/**
+ * A cone is "used" when it has been returned empty. Used cones must not be
+ * editable (no weight / storage / issue actions).
+ *
+ * @param status - cone.issueStatus value
+ * @returns true when the cone lifecycle is `used`
+ */
+const isConeUsed = (status?: string): boolean => status === "used";
+
 const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
   const router = useRouter();
   const [result, setResult] = useState<GenerateConesResponse | null>(null);
@@ -369,6 +401,14 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
 
     if (!foundCone) {
       toast.error("Cone barcode not found");
+      setBarcodeScanValue("");
+      return;
+    }
+
+    if (isConeUsed(foundCone.issueStatus)) {
+      toast.error(
+        `Cone ${foundCone.barcode} has already been used (returned empty) and cannot be edited.`
+      );
       setBarcodeScanValue("");
       return;
     }
@@ -1112,8 +1152,15 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                           )}
                         </td>
                         <td className="px-1.5 py-2 border border-gray-200">
-                          <span className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-blue-100 text-blue-800 capitalize">
-                            {formatStatus(cone.issueStatus)}
+                          <span
+                            className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full capitalize ${getIssueStatusBadgeClass(
+                              cone.issueStatus
+                            )}`}
+                            aria-label={`Cone status: ${formatStatus(cone.issueStatus)}`}
+                          >
+                            {isConeUsed(cone.issueStatus)
+                              ? "Used / Consumed"
+                              : formatStatus(cone.issueStatus)}
                           </span>
                         </td>
                         <td className="px-1.5 py-2 border border-gray-200">
@@ -1164,6 +1211,17 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                               >
                                 <i className="ri-save-line text-xs"></i>
                                 Save
+                              </button>
+                            ) : isConeUsed(cone.issueStatus) ? (
+                              <button
+                                type="button"
+                                className="flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-400 border border-gray-200 text-[10px] font-bold rounded cursor-not-allowed"
+                                disabled
+                                aria-disabled="true"
+                                title="This cone has been used (returned empty) and can no longer be edited."
+                              >
+                                <i className="ri-lock-line text-xs"></i>
+                                Locked
                               </button>
                             ) : (
                               <button

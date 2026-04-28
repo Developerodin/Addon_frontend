@@ -1228,6 +1228,15 @@ const YarnIssuePage = () => {
         return;
       }
 
+      if (coneDetails.issueStatus === "used") {
+        const msg =
+          "This cone has been used (returned empty) and cannot be issued again.";
+        setScanYarnMismatchError(msg);
+        toast.error(msg);
+        setBarcodeLoading(false);
+        return;
+      }
+
       // Validate scanned cone matches the yarn selected for issue
       const coneYarnName =
         (typeof coneDetails.yarn === "object" && coneDetails.yarn?.yarnName) || coneDetails.yarnName || "";

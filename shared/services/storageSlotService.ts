@@ -122,7 +122,7 @@ export interface BoxInSlot {
 
 export interface ConeInSlot {
   _id: string;
-  issueStatus: string;
+  issueStatus: "issued" | "not_issued" | "used";
   returnStatus: string;
   poNumber: string;
   boxId: string;

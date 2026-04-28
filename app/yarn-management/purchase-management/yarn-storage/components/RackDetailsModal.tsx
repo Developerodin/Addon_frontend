@@ -380,12 +380,29 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
                                     </td>
                                     <td className="px-3 py-2.5">
                                       <div className="flex flex-col gap-1">
-                                        <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${cone.issueStatus === "issued" ? "bg-blue-50 text-blue-600 border-blue-100" : "bg-gray-50 text-gray-400 border-gray-100"
-                                          }`}>
-                                          {cone.issueStatus.replace(/_/g, " ")}
+                                        <span
+                                          className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${
+                                            cone.issueStatus === "issued"
+                                              ? "bg-blue-50 text-blue-600 border-blue-100"
+                                              : cone.issueStatus === "used"
+                                                ? "bg-gray-100 text-gray-500 border-gray-200 line-through"
+                                                : cone.issueStatus === "not_issued"
+                                                  ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                                                  : "bg-gray-50 text-gray-400 border-gray-100"
+                                          }`}
+                                          aria-label={`Cone issue status: ${cone.issueStatus}`}
+                                        >
+                                          {cone.issueStatus === "used"
+                                            ? "Used"
+                                            : cone.issueStatus.replace(/_/g, " ")}
                                         </span>
-                                        <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${cone.returnStatus === "returned" ? "bg-green-50 text-green-600 border-green-100" : "bg-gray-50 text-gray-400 border-gray-100"
-                                          }`}>
+                                        <span
+                                          className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${
+                                            cone.returnStatus === "returned"
+                                              ? "bg-green-50 text-green-600 border-green-100"
+                                              : "bg-gray-50 text-gray-400 border-gray-100"
+                                          }`}
+                                        >
                                           {cone.returnStatus.replace(/_/g, " ")}
                                         </span>
                                       </div>
