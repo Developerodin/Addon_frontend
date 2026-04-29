@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useMemo } from "react";
 import { YarnInventory } from "../types";
+import UnallocatedPosDrawer from "./UnallocatedPosDrawer";
 
 interface LiveInventoryTableProps {
   inventory: YarnInventory[];
@@ -42,6 +43,10 @@ const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
 }) => {
   const [sortField, setSortField] = useState<SortField>("yarnName");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [unallocatedDrawer, setUnallocatedDrawer] = useState<{
+    yarnName: string;
+    weight: number;
+  } | null>(null);
 
   // Client-side sort only (filtering is server-side now)
   const sortedInventory = useMemo(() => {
@@ -325,9 +330,21 @@ const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
                   </td>
                   <td className="px-1.5 py-2 text-[12px] border border-gray-200">
                     {item.unallocatedWeight > 0 ? (
-                      <span className="text-purple-600 font-semibold">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setUnallocatedDrawer({
+                            yarnName: item.yarnName,
+                            weight: item.unallocatedWeight,
+                          })
+                        }
+                        className="inline-flex items-center gap-1 text-purple-600 font-semibold hover:text-purple-800 hover:underline focus:outline-none focus:ring-1 focus:ring-purple-400 rounded"
+                        title="View POs that contain this unallocated stock"
+                        aria-label={`View ${item.unallocatedWeight} kg unallocated stock for ${item.yarnName}`}
+                      >
                         {item.unallocatedWeight.toLocaleString()} kg
-                      </span>
+                        <i className="ri-external-link-line text-[10px] opacity-70" />
+                      </button>
                     ) : (
                       <span className="text-gray-400">0 kg</span>
                     )}
@@ -446,6 +463,13 @@ const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
           </div>
         </div>
       )}
+
+      <UnallocatedPosDrawer
+        isOpen={!!unallocatedDrawer}
+        onClose={() => setUnallocatedDrawer(null)}
+        yarnName={unallocatedDrawer?.yarnName ?? null}
+        expectedTotalKg={unallocatedDrawer?.weight ?? 0}
+      />
     </div>
   );
 };

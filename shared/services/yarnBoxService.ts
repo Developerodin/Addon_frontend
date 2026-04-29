@@ -294,10 +294,20 @@ class YarnBoxService {
     return Array.isArray(data) ? data : (data.results ?? []);
   }
 
-  /** GET /without-storage-location - Boxes without a storage location */
-  async getBoxesWithoutStorageLocation(): Promise<YarnBox[]> {
+  /**
+   * GET /without-storage-location - Boxes without a storage location.
+   * @param options.yarnName - Optional exact yarn name filter (case-insensitive on the server).
+   */
+  async getBoxesWithoutStorageLocation(options?: {
+    yarnName?: string;
+  }): Promise<YarnBox[]> {
+    const params = new URLSearchParams();
+    const yarnName = options?.yarnName?.trim();
+    if (yarnName) params.append('yarn_name', yarnName);
+    const qs = params.toString();
+    const endpoint = `/without-storage-location${qs ? `?${qs}` : ''}`;
     const data = await this.makeRequest<YarnBox[] | { results?: YarnBox[] }>(
-      '/without-storage-location'
+      endpoint
     );
     return Array.isArray(data) ? data : (data.results ?? []);
   }
