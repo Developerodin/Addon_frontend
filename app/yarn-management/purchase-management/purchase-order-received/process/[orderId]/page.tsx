@@ -8,6 +8,8 @@ import { useSelector } from "react-redux";
 import { toast } from "react-hot-toast";
 import yarnPurchaseOrderService, { PurchaseOrderStatus } from "@/shared/services/yarnPurchaseOrderService";
 import yarnBoxService, { YarnBox, UpdateYarnBoxPayload, BulkMatchUpdateItem } from "@/shared/services/yarnBoxService";
+import yarnGrnService, { YarnGrn } from "@/shared/services/yarnGrnService";
+import { downloadGrnHtml, printGrnDocument } from "@/shared/utils/grnPrint";
 import { QZTrayLoader, QZTrayStatus, QZTrayUntrustedWarning, QZTrayRequestBlocked } from "@/shared/components/qzTray";
 import { printCones, connectQZ, getDefaultPrinter, isQZLoaded, getAvailablePrinters, PrinterInfo } from "@/shared/utils/qzTray";
 import { fetchWeightLatest } from "@/shared/data/utilities/weightApi";
@@ -275,6 +277,66 @@ const ProcessOrderPage = () => {
     grnDate: '',
     discrepancyDetails: ''
   });
+
+  // System-issued GRN history for this PO. Hydrated whenever the order loads
+  // and after any save that may have created/revised a GRN. Drives the
+  // "Previous GRNs" dropdown next to the Print Summary button so users can
+  // reprint any historical GRN with one click instead of recreating it.
+  const [poGrns, setPoGrns] = useState<YarnGrn[]>([]);
+  const [showGrnDropdown, setShowGrnDropdown] = useState(false);
+  // Surfaces *why* the dropdown is empty (auth failure vs. genuinely no GRNs).
+  // Without this, "0 GRNs" looks identical to "401 from the API" which is the
+  // exact source of the cross-browser confusion.
+  const [poGrnsError, setPoGrnsError] = useState<string | null>(null);
+
+  /**
+   * Load every active GRN issued for this PO. Re-callable so the page can
+   * refresh the dropdown after a save without re-fetching the whole order.
+   * Logs the full request/response shape so cross-browser discrepancies are
+   * obvious in the console (api base, status, sample id, count).
+   */
+  const refreshPoGrns = React.useCallback(async () => {
+    if (!orderId) return;
+    try {
+      const res = await yarnGrnService.getGrnsByPO(orderId);
+      const list = res.results || [];
+      setPoGrns(list);
+      setPoGrnsError(null);
+      // eslint-disable-next-line no-console
+      console.info('[GRN] history loaded', {
+        orderId,
+        count: list.length,
+        firstGrn: list[0]?.grnNumber,
+        apiBase: process.env.NEXT_PUBLIC_API_BASE_URL || 'auto',
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      console.warn('[GRN] history fetch failed', { orderId, msg, err });
+      setPoGrnsError(msg);
+      setPoGrns([]);
+    }
+  }, [orderId]);
+
+  useEffect(() => {
+    refreshPoGrns();
+  }, [refreshPoGrns, rawApiOrder]);
+
+  // Re-pull GRN history whenever this tab regains focus or becomes visible.
+  // Without this, a GRN issued in another browser/tab/session won't appear
+  // here until the user manually reloads (the "I see it in browser A but
+  // not in browser B" situation).
+  useEffect(() => {
+    const handleFocus = () => refreshPoGrns();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') refreshPoGrns();
+    };
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [refreshPoGrns]);
 
   // Check permission - allow if user has Purchase Management access
   const hasPurchaseManagement = hasSubPermission('/yarn-management', 'Purchase Management');
@@ -1022,6 +1084,15 @@ const ProcessOrderPage = () => {
     }
 
     setIsPrinting(true);
+
+    // Print Summary is intentionally decoupled from the GRN module. It is
+    // a manual-entry print for orders that don't have (and don't need) a
+    // system-issued GRN — typically older / pre-existing POs. The user
+    // types the GRN number, GRN date, vendor invoice details, and any
+    // discrepancy notes; we render the template with those values verbatim
+    // and DO NOT persist anything to the YarnGrn collection. For automatic
+    // GRN tracking on new orders use the GRN History dropdown / GRN module.
+
     try {
       // Fetch the NEW HTML template
       const response = await fetch('/templates/goods-received-note.html');
@@ -1077,10 +1148,22 @@ const ProcessOrderPage = () => {
       const deliveryNote = '';
 
       // Set user provided values
-      const vendorInvoiceNo = printSummaryDetails.vendorInvoiceNo || rawApiOrder?.invoiceNo || rawApiOrder?.billNo || poNumber || '';
-      const vendorInvoiceDate = printSummaryDetails.vendorInvoiceDate ? formatDate(printSummaryDetails.vendorInvoiceDate) : formatDate(orderDate);
-      const grnNo = printSummaryDetails.grnNo || '';
-      const grnDate = printSummaryDetails.grnDate ? formatDate(printSummaryDetails.grnDate) : '';
+      const vendorInvoiceNo =
+        printSummaryDetails.vendorInvoiceNo ||
+        rawApiOrder?.invoiceNo ||
+        rawApiOrder?.billNo ||
+        poNumber ||
+        '';
+      const vendorInvoiceDate = printSummaryDetails.vendorInvoiceDate
+        ? formatDate(printSummaryDetails.vendorInvoiceDate)
+        : formatDate(orderDate);
+      // GRN no comes from the user (manual entry). Date defaults to today
+      // when the user leaves it blank — that's almost always what they want
+      // for a fresh print of an older order.
+      const grnNo = printSummaryDetails.grnNo.trim() || '';
+      const grnDate = printSummaryDetails.grnDate
+        ? formatDate(printSummaryDetails.grnDate)
+        : formatDate(new Date());
 
       // Header Grid values
       htmlTemplate = htmlTemplate.replace(/id="vendor-invoice-no".*?>.*?<\/div>/, `id="vendor-invoice-no">${vendorInvoiceNo}</div>`);
@@ -2247,10 +2330,20 @@ const ProcessOrderPage = () => {
               )}
               <button
                 type="button"
-                onClick={() => setShowPrintSummaryModal(true)}
+                onClick={() => {
+                  // Default GRN Date to today on every open — that's the print
+                  // date and matches user expectation. Other fields stay sticky
+                  // across opens so re-printing doesn't make the user retype.
+                  const today = new Date().toISOString().split('T')[0];
+                  setPrintSummaryDetails((prev) => ({
+                    ...prev,
+                    grnDate: prev.grnDate || today,
+                  }));
+                  setShowPrintSummaryModal(true);
+                }}
                 disabled={isPrinting}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-white text-[11px] font-bold rounded transition-colors shadow-sm ${!isPrinting ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-400 cursor-not-allowed'}`}
-                title="Print Order Summary (PDF)"
+                title="Print order summary (PDF) — manual entry"
               >
                 {isPrinting ? (
                   <i className="ri-loader-4-line animate-spin text-xs"></i>
@@ -2259,6 +2352,122 @@ const ProcessOrderPage = () => {
                 )}
                 {isPrinting ? 'Processing...' : 'Print Summary'}
               </button>
+
+              {/* Previous GRNs for this PO — opens a dropdown listing every GRN
+                  ever issued (newest first) with quick Print + Download actions. */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextOpen = !showGrnDropdown;
+                    setShowGrnDropdown(nextOpen);
+                    // Always pull fresh data when opening so cross-tab/cross-
+                    // browser GRNs (issued elsewhere) appear without a reload.
+                    if (nextOpen) void refreshPoGrns();
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+                  title="Previous GRNs for this PO"
+                  aria-haspopup="menu"
+                  aria-expanded={showGrnDropdown}
+                >
+                  <i className="ri-history-line text-xs" aria-hidden></i>
+                  GRN History
+                  <span className="bg-gray-100 text-gray-600 text-[9px] font-bold px-1 py-0.5 rounded ml-1">
+                    {poGrns.length}
+                  </span>
+                  <i className={`ri-arrow-down-s-line text-xs transition-transform ${showGrnDropdown ? 'rotate-180' : ''}`} aria-hidden></i>
+                </button>
+                {showGrnDropdown && (
+                  <div
+                    role="menu"
+                    className="absolute right-0 mt-1 w-[360px] bg-white border border-gray-200 rounded-md shadow-lg z-30 max-h-[420px] overflow-y-auto"
+                  >
+                    {poGrnsError ? (
+                      <div className="px-3 py-3 text-[11px]" role="alert">
+                        <p className="font-bold text-red-700 mb-1">
+                          <i className="ri-error-warning-line mr-1" aria-hidden></i>
+                          Couldn&apos;t load GRN history
+                        </p>
+                        <p className="text-red-600 leading-snug break-words">{poGrnsError}</p>
+                        <p className="text-gray-500 mt-2">
+                          Likely your login session expired in this browser. Try logging out
+                          &amp; back in, then reopen this dropdown.
+                        </p>
+                      </div>
+                    ) : poGrns.length === 0 ? (
+                      <p className="px-3 py-4 text-[11px] text-gray-500 text-center">
+                        No GRNs issued yet for this PO.
+                      </p>
+                    ) : (
+                      <ul className="divide-y divide-gray-100">
+                        {poGrns.map((grn) => (
+                          <li key={grn.id} className="px-3 py-2 hover:bg-gray-50 transition-colors">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-[11px] font-bold text-gray-800 truncate">
+                                  {grn.grnNumber}
+                                  {grn.revisionNo > 0 && (
+                                    <span className="ml-1.5 inline-flex items-center px-1 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700">
+                                      R{grn.revisionNo}
+                                    </span>
+                                  )}
+                                </p>
+                                <p className="text-[10px] text-gray-500">
+                                  {(grn.lots || []).length} lot(s) ·{' '}
+                                  {grn.grnDate ? new Date(grn.grnDate).toLocaleDateString('en-IN') : '—'}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    try {
+                                      const full = await yarnGrnService.getGrnById(grn.id);
+                                      await printGrnDocument(full);
+                                    } catch (err) {
+                                      toast.error(err instanceof Error ? err.message : 'Print failed');
+                                    }
+                                  }}
+                                  className="px-1.5 py-1 text-[10px] font-bold text-indigo-700 hover:bg-indigo-50 rounded"
+                                  title="Print this GRN"
+                                  aria-label={`Print ${grn.grnNumber}`}
+                                >
+                                  <i className="ri-printer-line" aria-hidden></i>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    try {
+                                      const full = await yarnGrnService.getGrnById(grn.id);
+                                      await downloadGrnHtml(full);
+                                      toast.success(`${grn.grnNumber} downloaded`);
+                                    } catch (err) {
+                                      toast.error(err instanceof Error ? err.message : 'Download failed');
+                                    }
+                                  }}
+                                  className="px-1.5 py-1 text-[10px] font-bold text-green-700 hover:bg-green-50 rounded"
+                                  title="Download (Save as PDF from print dialog)"
+                                  aria-label={`Download ${grn.grnNumber}`}
+                                >
+                                  <i className="ri-file-download-line" aria-hidden></i>
+                                </button>
+                              </div>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <div className="px-3 py-2 border-t border-gray-100 bg-gray-50">
+                      <Link
+                        href="/yarn-management/grn"
+                        className="text-[10px] text-purple-700 hover:underline font-bold uppercase tracking-wider"
+                      >
+                        Open full GRN history →
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
               {/* QC Approve All - commented out
               {order && (
                 <button
@@ -3988,22 +4197,38 @@ const ProcessOrderPage = () => {
 
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">GRN No</label>
+                    <label
+                      htmlFor="print-summary-grn-no"
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                    >
+                      GRN No
+                    </label>
                     <input
+                      id="print-summary-grn-no"
                       type="text"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none"
                       value={printSummaryDetails.grnNo}
-                      onChange={(e) => setPrintSummaryDetails({ ...printSummaryDetails, grnNo: e.target.value })}
+                      onChange={(e) =>
+                        setPrintSummaryDetails({ ...printSummaryDetails, grnNo: e.target.value })
+                      }
                       placeholder="Enter GRN no"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">GRN Date</label>
+                    <label
+                      htmlFor="print-summary-grn-date"
+                      className="block text-sm font-medium text-gray-700 mb-1"
+                    >
+                      GRN Date
+                    </label>
                     <input
+                      id="print-summary-grn-date"
                       type="date"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none"
                       value={printSummaryDetails.grnDate}
-                      onChange={(e) => setPrintSummaryDetails({ ...printSummaryDetails, grnDate: e.target.value })}
+                      onChange={(e) =>
+                        setPrintSummaryDetails({ ...printSummaryDetails, grnDate: e.target.value })
+                      }
                     />
                   </div>
                 </div>

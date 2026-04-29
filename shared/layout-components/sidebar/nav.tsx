@@ -460,6 +460,14 @@ const BaseMenuItems: any = [
             title: "Purchase Order Recevied",
           },
           {
+            icon: PurchaseReceivedIcon,
+            path: "/yarn-management/grn",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "GRN History",
+          },
+          {
             icon: QCIcon,
             path: "/yarn-management/purchase-management/yarn-qc",
             type: "link",
