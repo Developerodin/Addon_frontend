@@ -383,24 +383,6 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
         if (!boxHit && !coneHit) return false;
       }
 
-      if (filters.occupancy !== "empty" && filters.qcStatus !== "all") {
-        if (boxes.length > 0) {
-          if (filters.qcStatus === "approved") {
-            if (!boxes.some((b) => b.qcData?.status === "qc_approved")) {
-              return false;
-            }
-          } else if (filters.qcStatus === "pending") {
-            if (!boxes.some((b) => b.qcData?.status !== "qc_approved")) {
-              return false;
-            }
-          }
-        } else if (cones.length > 0) {
-          if (filters.qcStatus === "pending") return false;
-        } else {
-          return false;
-        }
-      }
-
       return true;
     });
   }, [filtersActive, slotsWithContents, filters]);
@@ -425,7 +407,6 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
     filters.yarnName,
     filters.occupancy,
     filters.sectionCode,
-    filters.qcStatus,
   ]);
 
   const handleClearFilters = () => {
@@ -1724,7 +1705,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                     ? `${storageBtnFilterActiveClass} relative`
                     : `${storageBtnSecondaryClass} relative`
                 }
-                title="Filter racks by yarn, empty status, section, QC"
+                title="Filter racks by yarn, occupancy, and section"
                 aria-expanded={showFilterPanel}
               >
                 <i className="ri-filter-3-line text-sm" aria-hidden />

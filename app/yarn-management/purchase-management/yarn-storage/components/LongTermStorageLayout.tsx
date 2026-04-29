@@ -143,7 +143,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
   const [searchResultRack, setSearchResultRack] = useState<RackLocation | null>(null);
   const [isSearchingByBarcode, setIsSearchingByBarcode] = useState(false);
 
-  // Advanced filters (yarn name / occupancy / section / QC status). Backed by /slots/with-contents.
+  // Advanced filters (yarn name / occupancy / section). Backed by /slots/with-contents.
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [filters, setFilters] = useState<RackFilters>(DEFAULT_RACK_FILTERS);
   const [slotsWithContents, setSlotsWithContents] = useState<
@@ -280,15 +280,6 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         if (!hit) return false;
       }
 
-      if (filters.occupancy !== "empty" && filters.qcStatus !== "all") {
-        if (boxes.length === 0) return false;
-        if (filters.qcStatus === "approved") {
-          if (!boxes.some((b) => b.qcData?.status === "qc_approved")) return false;
-        } else if (filters.qcStatus === "pending") {
-          if (!boxes.some((b) => b.qcData?.status !== "qc_approved")) return false;
-        }
-      }
-
       return true;
     });
   }, [filtersActive, slotsWithContents, filters]);
@@ -314,7 +305,6 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
     filters.yarnName,
     filters.occupancy,
     filters.sectionCode,
-    filters.qcStatus,
   ]);
 
   const handleClearFilters = () => {
@@ -1373,7 +1363,7 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
                     ? `${storageBtnFilterActiveClass} relative`
                     : `${storageBtnSecondaryClass} relative`
                 }
-                title="Filter racks by yarn, empty status, section, QC"
+                title="Filter racks by yarn, occupancy, and section"
                 aria-expanded={showFilterPanel}
               >
                 <i className="ri-filter-3-line text-sm" aria-hidden />

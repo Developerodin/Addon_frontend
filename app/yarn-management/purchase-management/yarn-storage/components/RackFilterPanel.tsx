@@ -12,14 +12,12 @@ export interface RackFilters {
   yarnName: string;
   occupancy: OccupancyFilter;
   sectionCode: string; // 'all' | section code
-  qcStatus: "all" | "approved" | "pending"; // QC of contained boxes
 }
 
 export const DEFAULT_RACK_FILTERS: RackFilters = {
   yarnName: "",
   occupancy: "all",
   sectionCode: "all",
-  qcStatus: "all",
 };
 
 /**
@@ -30,7 +28,6 @@ export const countActiveFilters = (filters: RackFilters): number => {
   if (filters.yarnName.trim()) n += 1;
   if (filters.occupancy !== "all") n += 1;
   if (filters.sectionCode !== "all") n += 1;
-  if (filters.qcStatus !== "all") n += 1;
   return n;
 };
 
@@ -48,7 +45,7 @@ interface RackFilterPanelProps {
 }
 
 /**
- * Collapsible filter surface for storage grids: yarn substring, occupancy, section, box QC.
+ * Collapsible filter surface for storage grids: yarn substring, occupancy, section.
  * Layout uses a 12-column grid on large screens so controls align on one baseline row.
  */
 const RackFilterPanel: React.FC<RackFilterPanelProps> = ({
@@ -123,7 +120,7 @@ const RackFilterPanel: React.FC<RackFilterPanelProps> = ({
 
       <div className="p-4">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-end lg:gap-x-4 lg:gap-y-3">
-          <div className="lg:col-span-4">
+          <div className="lg:col-span-5">
             <label
               htmlFor="rack-filter-yarn"
               className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-600"
@@ -157,7 +154,7 @@ const RackFilterPanel: React.FC<RackFilterPanelProps> = ({
             </div>
           </div>
 
-          <div className="lg:col-span-3">
+          <div className="lg:col-span-4">
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-600">
               Occupancy
             </span>
@@ -203,7 +200,7 @@ const RackFilterPanel: React.FC<RackFilterPanelProps> = ({
             </div>
           </div>
 
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-3">
             <label
               htmlFor="rack-filter-section"
               className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-600"
@@ -223,34 +220,6 @@ const RackFilterPanel: React.FC<RackFilterPanelProps> = ({
                   {s}
                 </option>
               ))}
-            </select>
-          </div>
-
-          <div className="lg:col-span-3">
-            <label
-              htmlFor="rack-filter-qc"
-              className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-600"
-            >
-              Box QC
-            </label>
-            <select
-              id="rack-filter-qc"
-              value={filters.qcStatus}
-              onChange={(e) =>
-                update({ qcStatus: e.target.value as RackFilters["qcStatus"] })
-              }
-              className={`${storageSelectClass} w-full disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500`}
-              style={selectChevronBgStyle}
-              disabled={filters.occupancy === "empty"}
-              title={
-                filters.occupancy === "empty"
-                  ? "Not used for empty racks"
-                  : undefined
-              }
-            >
-              <option value="all">Any</option>
-              <option value="approved">QC approved</option>
-              <option value="pending">Not approved</option>
             </select>
           </div>
         </div>
