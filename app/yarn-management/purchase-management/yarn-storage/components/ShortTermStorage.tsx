@@ -12,9 +12,26 @@ import yarnConeService, {
 import storageSlotService, {
   StorageSlot,
   SlotDetailsResponse,
+  SlotWithContents,
   BoxInSlot,
   ConeInSlot,
 } from "@/shared/services/storageSlotService";
+import RackFilterPanel, {
+  RackFilters,
+  DEFAULT_RACK_FILTERS,
+  countActiveFilters,
+} from "./RackFilterPanel";
+import FilteredRackGrid from "./FilteredRackGrid";
+import {
+  storageInputClass,
+  selectChevronBgStyle,
+  storageIconBtnClass,
+  storageBtnSecondaryClass,
+  storageBtnPrimaryClass,
+  storageBtnFilterActiveClass,
+  storagePaginationBarClass,
+  storageCompactSelectClass,
+} from "./storageUiClasses";
 import { fetchRackDetailsFromYarnApis } from "../utils/rackDetailsApi";
 import { QZTrayStatus } from "@/shared/components/qzTray/QZTrayStatus";
 import { printRacks } from "@/shared/utils/qzTray";
@@ -289,6 +306,132 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
     if (searchResultRack) return [searchResultRack];
     return racksFilteredBySearch;
   }, [rackSearchQuery, searchResultRack, racksFilteredBySearch]);
+
+  const ST_SECTIONS = ["B7-01"];
+  const PAGE_SIZE_OPTIONS = [52, 100, 200, 500];
+
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [filters, setFilters] = useState<RackFilters>(DEFAULT_RACK_FILTERS);
+  const [slotsWithContents, setSlotsWithContents] = useState<
+    SlotWithContents[] | null
+  >(null);
+  const [isLoadingContents, setIsLoadingContents] = useState(false);
+  const [contentsError, setContentsError] = useState<string | null>(null);
+  const [filterPage, setFilterPage] = useState(1);
+  const [filterLimit, setFilterLimit] = useState(52);
+
+  const activeFilterCount = countActiveFilters(filters);
+  const filtersActive = activeFilterCount > 0;
+
+  /**
+   * Lazy-fetch full ST zone (slots + boxes + cones) when any filter is active.
+   */
+  useEffect(() => {
+    if (!filtersActive) return;
+    if (slotsWithContents !== null) return;
+    let cancelled = false;
+    setIsLoadingContents(true);
+    setContentsError(null);
+    storageSlotService
+      .getSlotsWithContents({ zone: "ST" })
+      .then((res) => {
+        if (cancelled) return;
+        setSlotsWithContents(res.results || []);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setContentsError(
+          err instanceof Error ? err.message : "Failed to load rack contents"
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingContents(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [filtersActive, slotsWithContents]);
+
+  const filteredSlots = useMemo<SlotWithContents[] | null>(() => {
+    if (!filtersActive) return null;
+    if (!slotsWithContents) return [];
+
+    const yarnQ = filters.yarnName.trim().toLowerCase();
+
+    return slotsWithContents.filter((slot) => {
+      if (
+        filters.sectionCode !== "all" &&
+        (slot.sectionCode || "") !== filters.sectionCode
+      ) {
+        return false;
+      }
+
+      const boxes = slot.boxes || [];
+      const cones = slot.cones || [];
+      const hasContent = boxes.length > 0 || cones.length > 0;
+
+      if (filters.occupancy === "empty" && hasContent) return false;
+      if (filters.occupancy === "occupied" && !hasContent) return false;
+
+      if (yarnQ) {
+        const boxHit = boxes.some((b) =>
+          (b.yarnName || "").toLowerCase().includes(yarnQ)
+        );
+        const coneHit = cones.some((c) =>
+          (c.yarnName || "").toLowerCase().includes(yarnQ)
+        );
+        if (!boxHit && !coneHit) return false;
+      }
+
+      if (filters.occupancy !== "empty" && filters.qcStatus !== "all") {
+        if (boxes.length > 0) {
+          if (filters.qcStatus === "approved") {
+            if (!boxes.some((b) => b.qcData?.status === "qc_approved")) {
+              return false;
+            }
+          } else if (filters.qcStatus === "pending") {
+            if (!boxes.some((b) => b.qcData?.status !== "qc_approved")) {
+              return false;
+            }
+          }
+        } else if (cones.length > 0) {
+          if (filters.qcStatus === "pending") return false;
+        } else {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [filtersActive, slotsWithContents, filters]);
+
+  const filterMatchCount = filteredSlots?.length ?? 0;
+  const filterTotalPages = Math.max(
+    1,
+    Math.ceil(filterMatchCount / filterLimit) || 1
+  );
+  const displayFilterPage = Math.min(filterPage, filterTotalPages);
+
+  const paginatedFilteredSlots = useMemo(() => {
+    if (!filtersActive || !filteredSlots) return [];
+    const start = (displayFilterPage - 1) * filterLimit;
+    return filteredSlots.slice(start, start + filterLimit);
+  }, [filtersActive, filteredSlots, displayFilterPage, filterLimit]);
+
+  useEffect(() => {
+    if (!filtersActive) return;
+    setFilterPage(1);
+  }, [
+    filters.yarnName,
+    filters.occupancy,
+    filters.sectionCode,
+    filters.qcStatus,
+  ]);
+
+  const handleClearFilters = () => {
+    setFilters(DEFAULT_RACK_FILTERS);
+    setFilterPage(1);
+  };
 
   const getRackStatusColor = (rack: RackLocation | null) => {
     if (!rack) return "bg-gray-100 border-gray-200";
@@ -1277,11 +1420,11 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
   return (
     <div className="space-y-6">
       {/* Header with Transfer Button */}
-      <div className="flex justify-between items-center mb-0 px-1">
-        <div>
+      <div className="flex justify-end items-center mb-0 px-1 gap-2">
+        {/* <div>
           <h2 className="text-xl font-bold text-gray-800">Short-Term Storage</h2>
           <p className="text-gray-600">Yarn inventory for knitting operations</p>
-        </div>
+        </div> */}
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowConeTransferModal(true)}
@@ -1295,28 +1438,6 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
         </div>
       </div>
 
-      <div className="box !bg-transparent border-0 shadow-none">
-        <div className="box-header flex justify-between items-center">
-          <div>
-            <h2 className="box-title text-xl font-semibold">
-              Short-Term Storage
-            </h2>
-            <p className="text-gray-600 mt-1">
-              Yarn inventory for knitting operations
-            </p>
-          </div>
-          {/* <button
-            onClick={handleTransferClick}
-            className="ti-btn ti-btn-primary"
-            disabled={!scannedBoxDetails || isProcessingBox}
-          >
-            <i className="ri-arrow-right-left-line me-1"></i>
-            Process Box
-          </button> */}
-        </div>
-      </div>
-
-      {/* Box Scanner */}
       <div className="box">
         <div className="box-header">
           <h3 className="box-title">
@@ -1562,50 +1683,241 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
 
       {/* 2D Grid Layout */}
       <div className="box">
-        <div className="box-header flex justify-end items-center flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setOpenProcessModalError("");
-                setOpenProcessBarcodeInput("");
-                setShowOpenProcessByBarcodeModal(true);
-              }}
-              className="ti-btn ti-btn-light text-xs px-3 py-1.5 ml-2 border border-gray-300"
-              title="Open short-term box process page by barcode"
-            >
-              <i className="ri-external-link-line me-1 text-primary"></i>
-              Open process page
-            </button>
-            <button
-              type="button"
-              onClick={handleDownloadRackExcel}
-              className="ti-btn ti-btn-light text-xs px-3 py-1.5 ml-2 border border-gray-300"
-              title="Download rack data as Excel"
-            >
-              <i className="ri-file-excel-2-line me-1 text-green-600"></i>
-              Download Excel
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowReportDrawer(true)}
-              className="ti-btn ti-btn-light text-xs px-3 py-1.5 ml-2 border border-gray-300"
-              title="Open zone report"
-            >
-              <i className="ri-file-list-3-line me-1 text-primary"></i>
-              Report
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowPrintBarcodeModal(true)}
-              className="ti-btn ti-btn-primary text-xs px-3 py-1.5 ml-2"
-              title="Print rack barcodes"
-            >
-              <i className="ri-printer-line me-1"></i>
-              Print Barcode
-            </button>
+        <div className="box-header flex flex-col gap-0 border-b border-gray-100 bg-white px-4 py-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+            <div className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+              <label
+                htmlFor="st-storage-rack-search"
+                className="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-500"
+              >
+                Search rack
+              </label>
+              <div className="flex min-w-0 max-w-xl flex-1 items-center gap-2">
+                <input
+                  id="st-storage-rack-search"
+                  type="text"
+                  value={rackSearchQuery}
+                  onChange={(e) => setRackSearchQuery(e.target.value)}
+                  placeholder="Rack code or barcode"
+                  className={`${storageInputClass} min-w-0 flex-1`}
+                  aria-label="Search rack by code or barcode"
+                />
+                {rackSearchQuery.trim() ? (
+                  <button
+                    type="button"
+                    onClick={() => setRackSearchQuery("")}
+                    className={storageIconBtnClass}
+                    title="Clear search"
+                    aria-label="Clear rack search"
+                  >
+                    <i className="ri-close-line text-base" aria-hidden />
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              <button
+                type="button"
+                onClick={() => setShowFilterPanel((v) => !v)}
+                className={
+                  filtersActive
+                    ? `${storageBtnFilterActiveClass} relative`
+                    : `${storageBtnSecondaryClass} relative`
+                }
+                title="Filter racks by yarn, empty status, section, QC"
+                aria-expanded={showFilterPanel}
+              >
+                <i className="ri-filter-3-line text-sm" aria-hidden />
+                Filters
+                {activeFilterCount > 0 ? (
+                  <span
+                    className={`ml-0.5 inline-flex min-h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full px-1 text-[10px] font-bold ${
+                      filtersActive
+                        ? "bg-white text-purple-700"
+                        : "bg-purple-600 text-white"
+                    }`}
+                  >
+                    {activeFilterCount}
+                  </span>
+                ) : null}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenProcessModalError("");
+                  setOpenProcessBarcodeInput("");
+                  setShowOpenProcessByBarcodeModal(true);
+                }}
+                className={storageBtnSecondaryClass}
+                title="Open short-term box process page by barcode"
+              >
+                <i className="ri-external-link-line text-sm text-purple-600" aria-hidden />
+                Open process page
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadRackExcel}
+                className={storageBtnSecondaryClass}
+                title="Download rack data as Excel"
+              >
+                <i className="ri-file-excel-2-line text-sm text-green-600" aria-hidden />
+                Download Excel
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowReportDrawer(true)}
+                className={storageBtnSecondaryClass}
+                title="Open zone report"
+              >
+                <i className="ri-file-list-3-line text-sm text-purple-600" aria-hidden />
+                Report
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowPrintBarcodeModal(true)}
+                className={storageBtnPrimaryClass}
+                title="Print rack barcodes"
+              >
+                <i className="ri-printer-line text-sm" aria-hidden />
+                Print Barcode
+              </button>
+            </div>
+          </div>
+
+          <RackFilterPanel
+            open={showFilterPanel}
+            filters={filters}
+            sections={ST_SECTIONS}
+            isLoading={isLoadingContents}
+            filteredCount={filtersActive ? filteredSlots?.length : undefined}
+            totalCount={slotsWithContents?.length}
+            onChange={setFilters}
+            onClear={handleClearFilters}
+            onClose={() => setShowFilterPanel(false)}
+          />
         </div>
         <div className="box-body">
-          {isLoadingSlots ? (
+          {filtersActive &&
+          slotsWithContents !== null &&
+          !isLoadingContents &&
+          filterMatchCount > 0 ? (
+            <div className={storagePaginationBarClass}>
+              <span className="text-sm text-gray-700">
+                Showing {(displayFilterPage - 1) * filterLimit + 1}–
+                {Math.min(displayFilterPage * filterLimit, filterMatchCount)} of{" "}
+                {filterMatchCount.toLocaleString()} matching racks
+                {slotsWithContents?.length != null ? (
+                  <span className="text-gray-500">
+                    {" "}
+                    (zone {slotsWithContents.length.toLocaleString()} total)
+                  </span>
+                ) : null}
+              </span>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <label htmlFor="st-filter-page-size" className="text-xs font-medium text-gray-600">
+                    Per page
+                  </label>
+                  <select
+                    id="st-filter-page-size"
+                    value={filterLimit}
+                    onChange={(e) => {
+                      setFilterLimit(Number(e.target.value));
+                      setFilterPage(1);
+                    }}
+                    className={storageCompactSelectClass}
+                    style={selectChevronBgStyle}
+                  >
+                    {PAGE_SIZE_OPTIONS.map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setFilterPage((p) => Math.max(1, p - 1))}
+                    disabled={displayFilterPage <= 1}
+                    className={`${storageBtnSecondaryClass} px-2 disabled:pointer-events-none disabled:opacity-40`}
+                    aria-label="Previous page of filtered racks"
+                  >
+                    <i className="ri-arrow-left-s-line text-base" aria-hidden />
+                  </button>
+                  <span className="min-w-[6.5rem] text-center text-sm text-gray-700">
+                    {displayFilterPage} / {filterTotalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFilterPage((p) => Math.min(filterTotalPages, p + 1))
+                    }
+                    disabled={displayFilterPage >= filterTotalPages}
+                    className={`${storageBtnSecondaryClass} px-2 disabled:pointer-events-none disabled:opacity-40`}
+                    aria-label="Next page of filtered racks"
+                  >
+                    <i className="ri-arrow-right-s-line text-base" aria-hidden />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {filtersActive ? (
+            <FilteredRackGrid
+              zone="ST"
+              isLoading={isLoadingContents && !slotsWithContents}
+              error={contentsError}
+              slots={paginatedFilteredSlots}
+              yarnQuery={filters.yarnName}
+              onSlotClick={(slot) => {
+                const nBoxes = slot.boxes?.length ?? 0;
+                const nCones = slot.cones?.length ?? 0;
+                const useCones = nCones > 0 && nBoxes === 0;
+                const rack: RackLocation = {
+                  id: slot._id,
+                  rackCode: slot.label,
+                  row: slot.shelfNumber,
+                  column: slot.floorNumber,
+                  shelf: slot.shelfNumber,
+                  sectionCode: slot.sectionCode,
+                  barcode: slot.barcode,
+                  capacity: 1,
+                  currentBoxes: slot.boxCount ?? nBoxes,
+                  status:
+                    nBoxes + nCones > 0 ? "Occupied" : "Available",
+                };
+                setRackSlotDetails((prev) => {
+                  if (prev.has(slot._id)) return prev;
+                  if (nBoxes > 0 && nCones > 0) return prev;
+                  const next = new Map(prev);
+                  const storageSlot: StorageSlot = {
+                    _id: slot._id,
+                    label: slot.label,
+                    barcode: slot.barcode,
+                    floorNumber: slot.floorNumber,
+                    shelfNumber: slot.shelfNumber,
+                    sectionCode: slot.sectionCode,
+                    zoneCode: slot.zoneCode,
+                    isActive: true,
+                    createdAt: "",
+                    updatedAt: "",
+                  };
+                  next.set(slot._id, {
+                    storageSlot,
+                    zoneType: slot.zoneType || "Short-Term Storage",
+                    type: useCones ? "cones" : "boxes",
+                    count: useCones ? nCones : nBoxes,
+                    data: useCones
+                      ? (slot.cones ?? [])
+                      : (slot.boxes ?? []),
+                  });
+                  return next;
+                });
+                void handleRackClick(rack);
+              }}
+            />
+          ) : isLoadingSlots ? (
             <div className="flex justify-center items-center py-12">
               <div className="text-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>

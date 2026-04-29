@@ -4,6 +4,10 @@ import React, { useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { toast } from "react-hot-toast";
 import storageSlotService from "@/shared/services/storageSlotService";
+import {
+  storageBtnSecondaryClass,
+  storageBtnPrimaryClass,
+} from "./storageUiClasses";
 
 export interface BulkAllocateRow {
   boxBarcode: string;
@@ -237,13 +241,13 @@ const BulkAllocateExcelImport: React.FC<BulkAllocateExcelImportProps> = ({ onCom
           <strong>rackcode</strong>. Each row will allocate that box to the given rack (same as
           scanning box barcode and entering rack code one by one).
         </p>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <button
             type="button"
             onClick={() => downloadTemplate()}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 border border-gray-200 text-[11px] font-bold rounded hover:bg-gray-50"
+            className={storageBtnSecondaryClass}
           >
-            <i className="ri-download-line text-xs"></i>
+            <i className="ri-download-line text-sm" aria-hidden />
             Download template
           </button>
           <input
@@ -252,29 +256,30 @@ const BulkAllocateExcelImport: React.FC<BulkAllocateExcelImportProps> = ({ onCom
             accept=".xlsx,.xls"
             onChange={handleFileChange}
             className="hidden"
+            aria-hidden
           />
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 border border-gray-200 text-[11px] font-bold rounded hover:bg-gray-50"
+            className={storageBtnSecondaryClass}
           >
-            <i className="ri-file-excel-2-line text-green-600 text-xs"></i>
+            <i className="ri-file-excel-2-line text-sm text-green-600" aria-hidden />
             {file ? file.name : "Choose file"}
           </button>
           <button
             type="button"
             onClick={processFile}
             disabled={!file || isProcessing}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`${storageBtnPrimaryClass} disabled:pointer-events-none disabled:opacity-50`}
           >
             {isProcessing ? (
               <>
-                <i className="ri-loader-4-line animate-spin text-xs"></i>
-                Processing...
+                <i className="ri-loader-4-line animate-spin text-sm" aria-hidden />
+                Processing…
               </>
             ) : (
               <>
-                <i className="ri-upload-2-line text-xs"></i>
+                <i className="ri-upload-2-line text-sm" aria-hidden />
                 Upload &amp; Allocate
               </>
             )}

@@ -5,7 +5,7 @@ import * as XLSX from "xlsx";
 import JsBarcode from "jsbarcode";
 import BarcodeScanner from "./BarcodeScanner";
 import AllocateBoxDrawer from "./AllocateBoxDrawer";
-import BulkAllocateExcelImport from "./BulkAllocateExcelImport";
+// import BulkAllocateExcelImport from "./BulkAllocateExcelImport";
 import RackDetailsModal from "./RackDetailsModal";
 import RackTransferModal from "./RackTransferModal";
 import ZoneReportDrawer from "./ZoneReportDrawer";
@@ -13,9 +13,26 @@ import { RackLocation, PackedBox } from "../types";
 import storageSlotService, {
   StorageSlot,
   SlotDetailsResponse,
+  SlotWithContents,
   BoxInSlot,
   ConeInSlot,
 } from "@/shared/services/storageSlotService";
+import RackFilterPanel, {
+  RackFilters,
+  DEFAULT_RACK_FILTERS,
+  countActiveFilters,
+} from "./RackFilterPanel";
+import FilteredRackGrid from "./FilteredRackGrid";
+import {
+  storageInputClass,
+  selectChevronBgStyle,
+  storageIconBtnClass,
+  storageBtnSecondaryClass,
+  storageBtnPrimaryClass,
+  storageBtnFilterActiveClass,
+  storagePaginationBarClass,
+  storageCompactSelectClass,
+} from "./storageUiClasses";
 import { fetchRackDetailsFromYarnApis } from "../utils/rackDetailsApi";
 import yarnBoxService, { YarnBox } from "@/shared/services/yarnBoxService";
 import { QZTrayStatus } from "@/shared/components/qzTray/QZTrayStatus";
@@ -126,6 +143,21 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
   const [searchResultRack, setSearchResultRack] = useState<RackLocation | null>(null);
   const [isSearchingByBarcode, setIsSearchingByBarcode] = useState(false);
 
+  // Advanced filters (yarn name / occupancy / section / QC status). Backed by /slots/with-contents.
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [filters, setFilters] = useState<RackFilters>(DEFAULT_RACK_FILTERS);
+  const [slotsWithContents, setSlotsWithContents] = useState<
+    SlotWithContents[] | null
+  >(null);
+  const [isLoadingContents, setIsLoadingContents] = useState(false);
+  const [contentsError, setContentsError] = useState<string | null>(null);
+  /** Client-side pagination over filtered racks (full zone is in memory; UI shows one page at a time). */
+  const [filterPage, setFilterPage] = useState(1);
+  const [filterLimit, setFilterLimit] = useState(52);
+
+  const activeFilterCount = countActiveFilters(filters);
+  const filtersActive = activeFilterCount > 0;
+
   const PAGE_SIZE_OPTIONS = [52, 100, 200, 500];
 
   // Global search: fetch slot by barcode/label so we find the rack even if it's on another page
@@ -187,6 +219,108 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
   useEffect(() => {
     fetchStorageSlots(storagePage, storageLimit);
   }, [storagePage, storageLimit]);
+
+  /**
+   * Lazy-fetch the full LT zone (slots + contents) the first time the user activates a filter.
+   * Re-fetched when the filter panel is reopened to pick up any new boxes.
+   */
+  useEffect(() => {
+    if (!filtersActive) return;
+    if (slotsWithContents !== null) return;
+    let cancelled = false;
+    setIsLoadingContents(true);
+    setContentsError(null);
+    storageSlotService
+      .getSlotsWithContents({ zone: "LT" })
+      .then((res) => {
+        if (cancelled) return;
+        setSlotsWithContents(res.results || []);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setContentsError(
+          err instanceof Error ? err.message : "Failed to load rack contents"
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingContents(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [filtersActive, slotsWithContents]);
+
+  /**
+   * Compute slots that match the active filters. Returns null when filters are inactive
+   * so callers can fall back to the paginated grid.
+   */
+  const filteredSlots = useMemo<SlotWithContents[] | null>(() => {
+    if (!filtersActive) return null;
+    if (!slotsWithContents) return [];
+
+    const yarnQ = filters.yarnName.trim().toLowerCase();
+
+    return slotsWithContents.filter((slot) => {
+      if (
+        filters.sectionCode !== "all" &&
+        (slot.sectionCode || "") !== filters.sectionCode
+      ) {
+        return false;
+      }
+
+      const boxes = slot.boxes || [];
+
+      if (filters.occupancy === "empty" && boxes.length > 0) return false;
+      if (filters.occupancy === "occupied" && boxes.length === 0) return false;
+
+      if (yarnQ) {
+        const hit = boxes.some((b) =>
+          (b.yarnName || "").toLowerCase().includes(yarnQ)
+        );
+        if (!hit) return false;
+      }
+
+      if (filters.occupancy !== "empty" && filters.qcStatus !== "all") {
+        if (boxes.length === 0) return false;
+        if (filters.qcStatus === "approved") {
+          if (!boxes.some((b) => b.qcData?.status === "qc_approved")) return false;
+        } else if (filters.qcStatus === "pending") {
+          if (!boxes.some((b) => b.qcData?.status !== "qc_approved")) return false;
+        }
+      }
+
+      return true;
+    });
+  }, [filtersActive, slotsWithContents, filters]);
+
+  const filterMatchCount = filteredSlots?.length ?? 0;
+  const filterTotalPages = Math.max(
+    1,
+    Math.ceil(filterMatchCount / filterLimit) || 1
+  );
+  const displayFilterPage = Math.min(filterPage, filterTotalPages);
+
+  const paginatedFilteredSlots = useMemo(() => {
+    if (!filtersActive || !filteredSlots) return [];
+    const start = (displayFilterPage - 1) * filterLimit;
+    return filteredSlots.slice(start, start + filterLimit);
+  }, [filtersActive, filteredSlots, displayFilterPage, filterLimit]);
+
+  /** Reset to first page when filter criteria change (not when only filterLimit changes). */
+  useEffect(() => {
+    if (!filtersActive) return;
+    setFilterPage(1);
+  }, [
+    filters.yarnName,
+    filters.occupancy,
+    filters.sectionCode,
+    filters.qcStatus,
+  ]);
+
+  const handleClearFilters = () => {
+    setFilters(DEFAULT_RACK_FILTERS);
+    setFilterPage(1);
+  };
 
   const handleAddRacksSubmit = async () => {
     const num = addRacksForm.numberOfRacksToAdd;
@@ -1141,8 +1275,8 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
   return (
     <div className="space-y-6">
       {/* Scanning Section */}
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-bold text-gray-800">Long-Term Storage</h2>
+      <div className="flex justify-end items-center mb-4">
+        {/* <h2 className="text-lg font-bold text-gray-800">Long-Term Storage</h2> */}
         <QZTrayStatus />
       </div>
 
@@ -1193,122 +1327,246 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
         </div>
       </div>
 
-      {/* Bulk Allocate via Excel (boxbarcode + rackcode) */}
-      <BulkAllocateExcelImport onComplete={onRefresh} />
+      {/* Bulk Allocate via Excel (boxbarcode + rackcode) — hidden for now
+      <BulkAllocateExcelImport onComplete={onRefresh} /> */}
 
       {/* 2D Grid Layout */}
       <div className="box">
-        <div className="box-header flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2 justify-between">
-            <div className="flex items-center gap-2 flex-1 min-w-[200px] max-w-md">
-              <span className="text-gray-500 text-sm whitespace-nowrap">
-                <i className="ri-search-line me-1"></i>Search rack
-              </span>
-              <input
-                type="text"
-                value={rackSearchQuery}
-                onChange={(e) => setRackSearchQuery(e.target.value)}
-                placeholder="Enter rack code or barcode"
-                className="ti-form-input text-sm flex-1 py-1.5 px-2 border border-gray-300 rounded"
-              />
-              {rackSearchQuery.trim() ? (
-                <button
-                  type="button"
-                  onClick={() => setRackSearchQuery("")}
-                  className="ti-btn ti-btn-light text-xs px-2 py-1.5 border border-gray-300 rounded"
-                  title="Clear search"
-                >
-                  <i className="ri-close-line"></i>
-                </button>
-              ) : null}
+        <div className="box-header flex flex-col gap-0 border-b border-gray-100 bg-white px-4 py-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+            <div className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+              <label
+                htmlFor="lt-storage-rack-search"
+                className="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-500"
+              >
+                Search rack
+              </label>
+              <div className="flex min-w-0 max-w-xl flex-1 items-center gap-2">
+                <input
+                  id="lt-storage-rack-search"
+                  type="text"
+                  value={rackSearchQuery}
+                  onChange={(e) => setRackSearchQuery(e.target.value)}
+                  placeholder="Rack code or barcode"
+                  className={`${storageInputClass} min-w-0 flex-1`}
+                  aria-label="Search rack by code or barcode"
+                />
+                {rackSearchQuery.trim() ? (
+                  <button
+                    type="button"
+                    onClick={() => setRackSearchQuery("")}
+                    className={storageIconBtnClass}
+                    title="Clear search"
+                    aria-label="Clear rack search"
+                  >
+                    <i className="ri-close-line text-base" aria-hidden />
+                  </button>
+                ) : null}
+              </div>
             </div>
-            <div className="flex justify-end items-center flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              <button
+                type="button"
+                onClick={() => setShowFilterPanel((v) => !v)}
+                className={
+                  filtersActive
+                    ? `${storageBtnFilterActiveClass} relative`
+                    : `${storageBtnSecondaryClass} relative`
+                }
+                title="Filter racks by yarn, empty status, section, QC"
+                aria-expanded={showFilterPanel}
+              >
+                <i className="ri-filter-3-line text-sm" aria-hidden />
+                Filters
+                {activeFilterCount > 0 ? (
+                  <span
+                    className={`ml-0.5 inline-flex min-h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full px-1 text-[10px] font-bold ${
+                      filtersActive
+                        ? "bg-white text-purple-700"
+                        : "bg-purple-600 text-white"
+                    }`}
+                  >
+                    {activeFilterCount}
+                  </span>
+                ) : null}
+              </button>
               <button
                 type="button"
                 onClick={() => setShowAddRacksDrawer(true)}
-                className="ti-btn ti-btn-light text-xs px-3 py-1.5 ml-2 border border-gray-300"
+                className={storageBtnSecondaryClass}
                 title="Add racks to a section"
               >
-                <i className="ri-add-line me-1"></i>
+                <i className="ri-add-line text-sm" aria-hidden />
                 Add Racks
               </button>
               <button
                 type="button"
                 onClick={handleDownloadRackExcel}
-                className="ti-btn ti-btn-light text-xs px-3 py-1.5 ml-2 border border-gray-300"
+                className={storageBtnSecondaryClass}
                 title="Download rack data as Excel"
               >
-                <i className="ri-file-excel-2-line me-1 text-green-600"></i>
+                <i className="ri-file-excel-2-line text-sm text-green-600" aria-hidden />
                 Download Excel
               </button>
               <button
                 type="button"
                 onClick={() => setShowReportDrawer(true)}
-                className="ti-btn ti-btn-light text-xs px-3 py-1.5 ml-2 border border-gray-300"
+                className={storageBtnSecondaryClass}
                 title="Open zone report"
               >
-                <i className="ri-file-list-3-line me-1 text-primary"></i>
+                <i className="ri-file-list-3-line text-sm text-purple-600" aria-hidden />
                 Report
               </button>
               <button
                 type="button"
                 onClick={() => setShowPrintBarcodeModal(true)}
-                className="ti-btn ti-btn-primary text-xs px-3 py-1.5 ml-2"
+                className={storageBtnPrimaryClass}
                 title="Print rack barcodes"
               >
-                <i className="ri-printer-line me-1"></i>
+                <i className="ri-printer-line text-sm" aria-hidden />
                 Print Barcode
               </button>
             </div>
           </div>
-          {/* Pagination: per-page + page nav */}
-          {!isLoadingSlots && storageTotalResults > 0 && (
-            <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-gray-200">
-              <span className="text-sm text-gray-600">
-                Showing {(storagePage - 1) * storageLimit + 1}–{Math.min(storagePage * storageLimit, storageTotalResults)} of {storageTotalResults} slots
-              </span>
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-gray-600">Per page:</label>
-                <select
-                  value={storageLimit}
-                  onChange={(e) => {
-                    const val = Number(e.target.value);
-                    setStorageLimit(val);
-                    setStoragePage(1);
-                  }}
-                  className="text-sm border border-gray-300 rounded pl-2 pr-8 py-1 bg-white appearance-none bg-[length:12px_12px] bg-[right_0.35rem_center] bg-no-repeat"
-                  style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E\")" }}
-                >
-                  {PAGE_SIZE_OPTIONS.map((n) => (
-                    <option key={n} value={n}>{n}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setStoragePage((p) => Math.max(1, p - 1))}
-                  disabled={storagePage <= 1}
-                  className="ti-btn ti-btn-light text-xs px-2 py-1 disabled:opacity-50"
-                >
-                  <i className="ri-arrow-left-s-line"></i>
-                </button>
-                <span className="text-sm text-gray-600 px-2">
-                  Page {storagePage} of {storageTotalPages}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setStoragePage((p) => Math.min(storageTotalPages, p + 1))}
-                  disabled={storagePage >= storageTotalPages}
-                  className="ti-btn ti-btn-light text-xs px-2 py-1 disabled:opacity-50"
-                >
-                  <i className="ri-arrow-right-s-line"></i>
-                </button>
-              </div>
-            </div>
-          )}
+
+          <RackFilterPanel
+            open={showFilterPanel}
+            filters={filters}
+            sections={LT_SECTIONS}
+            isLoading={isLoadingContents}
+            filteredCount={filtersActive ? filteredSlots?.length : undefined}
+            totalCount={slotsWithContents?.length}
+            onChange={setFilters}
+            onClear={handleClearFilters}
+            onClose={() => setShowFilterPanel(false)}
+          />
         </div>
         <div className="box-body relative">
+          {/* Pagination sits above the grid so it does not float in the header */}
+          {filtersActive &&
+          slotsWithContents !== null &&
+          !isLoadingContents &&
+          filterMatchCount > 0 ? (
+            <div className={storagePaginationBarClass}>
+              <span className="text-sm text-gray-700">
+                Showing {(displayFilterPage - 1) * filterLimit + 1}–
+                {Math.min(displayFilterPage * filterLimit, filterMatchCount)} of{" "}
+                {filterMatchCount.toLocaleString()} matching racks
+                {slotsWithContents?.length != null ? (
+                  <span className="text-gray-500">
+                    {" "}
+                    (zone {slotsWithContents.length.toLocaleString()} total)
+                  </span>
+                ) : null}
+              </span>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <label htmlFor="lt-filter-page-size" className="text-xs font-medium text-gray-600">
+                    Per page
+                  </label>
+                  <select
+                    id="lt-filter-page-size"
+                    value={filterLimit}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setFilterLimit(val);
+                      setFilterPage(1);
+                    }}
+                    className={storageCompactSelectClass}
+                    style={selectChevronBgStyle}
+                  >
+                    {PAGE_SIZE_OPTIONS.map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setFilterPage((p) => Math.max(1, p - 1))}
+                    disabled={displayFilterPage <= 1}
+                    className={`${storageBtnSecondaryClass} px-2 disabled:pointer-events-none disabled:opacity-40`}
+                    aria-label="Previous page of filtered racks"
+                  >
+                    <i className="ri-arrow-left-s-line text-base" aria-hidden />
+                  </button>
+                  <span className="min-w-[6.5rem] text-center text-sm text-gray-700">
+                    {displayFilterPage} / {filterTotalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFilterPage((p) => Math.min(filterTotalPages, p + 1))
+                    }
+                    disabled={displayFilterPage >= filterTotalPages}
+                    className={`${storageBtnSecondaryClass} px-2 disabled:pointer-events-none disabled:opacity-40`}
+                    aria-label="Next page of filtered racks"
+                  >
+                    <i className="ri-arrow-right-s-line text-base" aria-hidden />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : !filtersActive && !isLoadingSlots && storageTotalResults > 0 ? (
+            <div className={storagePaginationBarClass}>
+              <span className="text-sm text-gray-700">
+                Showing {(storagePage - 1) * storageLimit + 1}–
+                {Math.min(storagePage * storageLimit, storageTotalResults)} of{" "}
+                {storageTotalResults} slots
+              </span>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <label htmlFor="lt-storage-page-size" className="text-xs font-medium text-gray-600">
+                    Per page
+                  </label>
+                  <select
+                    id="lt-storage-page-size"
+                    value={storageLimit}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setStorageLimit(val);
+                      setStoragePage(1);
+                    }}
+                    className={storageCompactSelectClass}
+                    style={selectChevronBgStyle}
+                  >
+                    {PAGE_SIZE_OPTIONS.map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setStoragePage((p) => Math.max(1, p - 1))}
+                    disabled={storagePage <= 1}
+                    className={`${storageBtnSecondaryClass} px-2 disabled:pointer-events-none disabled:opacity-40`}
+                    aria-label="Previous page"
+                  >
+                    <i className="ri-arrow-left-s-line text-base" aria-hidden />
+                  </button>
+                  <span className="min-w-[6.5rem] text-center text-sm text-gray-700">
+                    {storagePage} / {storageTotalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setStoragePage((p) => Math.min(storageTotalPages, p + 1))
+                    }
+                    disabled={storagePage >= storageTotalPages}
+                    className={`${storageBtnSecondaryClass} px-2 disabled:pointer-events-none disabled:opacity-40`}
+                    aria-label="Next page"
+                  >
+                    <i className="ri-arrow-right-s-line text-base" aria-hidden />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
           {isLoadingSlots && rackGrid.length === 0 ? (
             <div className="flex justify-center items-center py-12">
               <div className="text-center">
@@ -1321,6 +1579,52 @@ const LongTermStorageLayout: React.FC<LongTermStorageLayoutProps> = ({
               <i className="ri-inbox-line text-4xl mb-4 block"></i>
               <p>No storage slots found</p>
             </div>
+          ) : filtersActive ? (
+            <FilteredRackGrid
+              isLoading={isLoadingContents && !slotsWithContents}
+              error={contentsError}
+              slots={paginatedFilteredSlots}
+              yarnQuery={filters.yarnName}
+              onSlotClick={(slot) => {
+                const rack: RackLocation = {
+                  id: slot._id,
+                  rackCode: slot.label,
+                  row: slot.shelfNumber,
+                  column: slot.floorNumber,
+                  shelf: slot.shelfNumber,
+                  sectionCode: slot.sectionCode,
+                  barcode: slot.barcode,
+                  capacity: 1,
+                  currentBoxes: slot.boxCount || (slot.boxes?.length ?? 0),
+                  status: (slot.boxCount || 0) > 0 ? "Occupied" : "Available",
+                };
+                // Prefill cache so modal opens instantly without refetch
+                setRackSlotDetails((prev) => {
+                  if (prev.has(slot._id)) return prev;
+                  const next = new Map(prev);
+                  next.set(slot._id, {
+                    storageSlot: {
+                      _id: slot._id,
+                      label: slot.label,
+                      barcode: slot.barcode,
+                      floorNumber: slot.floorNumber,
+                      shelfNumber: slot.shelfNumber,
+                      sectionCode: slot.sectionCode,
+                      zoneCode: slot.zoneCode,
+                      isActive: true,
+                      createdAt: "",
+                      updatedAt: "",
+                    },
+                    zoneType: slot.zoneType || "Long-Term Storage",
+                    type: "boxes",
+                    count: slot.boxes?.length ?? 0,
+                    data: slot.boxes ?? [],
+                  });
+                  return next;
+                });
+                handleRackClick(rack);
+              }}
+            />
           ) : rackSearchQuery.trim() && !isSearchingByBarcode && displayRacksForSearch.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
               <i className="ri-search-line text-4xl mb-4 block"></i>
