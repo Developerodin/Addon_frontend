@@ -13,6 +13,7 @@ import {
   ArticleFloorStrip,
   OrderFloorProgressSummary,
 } from "@/shared/components/production/YarnEstimationFloorProgressPanels";
+import { downloadYarnEstimationOrderExcel } from "@/shared/components/production/yarnEstimationOrderExcelExport";
 
 type View = "summary" | "order" | "article";
 
@@ -181,7 +182,7 @@ const YarnEstimationTab: React.FC = () => {
                   <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Status</th>
                   <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Articles</th>
                   <th className="px-1.5 py-2.5 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Planned qty</th>
-                  <th className="px-1.5 py-2.5 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Knitting completed</th>
+                  <th className="px-1.5 py-2.5 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Knitting floor qty</th>
                   <th className="px-1.5 py-2.5 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Batch weight (knitting)</th>
                   <th className="px-1.5 py-2.5 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Issued (Net Wt)</th>
                   <th className="px-1.5 py-2.5 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Returned (Net Wt)</th>
@@ -209,9 +210,21 @@ const YarnEstimationTab: React.FC = () => {
                         : "—"}
                     </td>
                     <td className="px-1.5 py-2.5 text-right text-[12px] text-gray-700 tabular-nums border border-gray-300">
-                      {typeof floor.knittingCompletedTotal === "number"
-                        ? floor.knittingCompletedTotal.toLocaleString()
-                        : "—"}
+                      {typeof floor.knittingCompletedTotal === "number" ? (
+                        <div className="inline-block text-right">
+                          <div className="font-semibold text-gray-900">
+                            {(floor.knittingCompletedTotal + (floor.knittingM4QuantityTotal ?? 0)).toLocaleString()}
+                          </div>
+                          {(floor.knittingM4QuantityTotal ?? 0) > 0 ? (
+                            <div className="text-[10px] text-gray-500 leading-tight mt-0.5">
+                              {floor.knittingCompletedTotal.toLocaleString()} +{" "}
+                              {(floor.knittingM4QuantityTotal ?? 0).toLocaleString()} (M4)
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="px-1.5 py-2.5 text-right text-[12px] text-gray-700 tabular-nums border border-gray-300">
                       {typeof floor.knittingBatchWeightTotal === "number"
@@ -278,12 +291,32 @@ const YarnEstimationTab: React.FC = () => {
       <>
         {/* breadcrumb + order header */}
         <div className="p-[10px] flex flex-wrap items-center gap-3 border-b border-gray-100">
-          <button onClick={goBack} className="flex items-center gap-1 text-[11px] font-bold text-purple-600 hover:underline">
-            <i className="ri-arrow-left-s-line text-sm"></i> Back
+          <div className="flex flex-wrap items-center gap-3 min-w-0">
+            <button onClick={goBack} className="flex items-center gap-1 text-[11px] font-bold text-purple-600 hover:underline">
+              <i className="ri-arrow-left-s-line text-sm"></i> Back
+            </button>
+            <div className="w-px h-4 bg-gray-200" aria-hidden />
+            <span className="text-[12px] font-bold text-gray-800">{orderNumber}</span>
+            <StatusBadge status={status} />
+          </div>
+          <button
+            type="button"
+            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-green-200 bg-green-50 text-[11px] font-bold text-green-800 hover:bg-green-100"
+            onClick={() => {
+              try {
+                downloadYarnEstimationOrderExcel(orderDetail);
+                toast.success("Excel report downloaded");
+              } catch (err: unknown) {
+                const msg = err instanceof Error ? err.message : "Failed to export Excel";
+                console.error("Yarn estimation Excel export:", err);
+                toast.error(msg);
+              }
+            }}
+            aria-label={`Download yarn estimation Excel for ${orderNumber}`}
+          >
+            <i className="ri-file-excel-2-line text-sm text-green-700" aria-hidden />
+            Download Excel
           </button>
-          <div className="w-px h-4 bg-gray-200" />
-          <span className="text-[12px] font-bold text-gray-800">{orderNumber}</span>
-          <StatusBadge status={status} />
         </div>
 
         {/* order totals cards */}

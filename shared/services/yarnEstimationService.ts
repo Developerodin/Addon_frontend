@@ -60,6 +60,8 @@ export interface OrderFloorProgress {
   plannedQuantityTotal: number;
   /** Sum of `floorProgress.knitting.completed` across articles. */
   knittingCompletedTotal: number;
+  /** Sum of `floorProgress.knitting.m4Quantity` across articles (knitting-floor M4 / defect bucket). */
+  knittingM4QuantityTotal?: number;
   knittingBatchWeightTotal: number;
 }
 
@@ -76,6 +78,7 @@ export interface OrderEstimation {
   orderId: string;
   orderNumber: string;
   status: string;
+  priority?: string;
   articles: EstimationArticle[];
   orderTotals: YarnTotals;
   orderFloorProgress?: OrderFloorProgress | null;
@@ -93,6 +96,7 @@ export interface SummaryOrder {
   orderFloorProgress?: OrderFloorProgress | null;
   plannedQuantityTotal?: number;
   knittingCompletedTotal?: number;
+  knittingM4QuantityTotal?: number;
   knittingBatchWeightTotal?: number;
   issued: YarnIssuedReturned;
   returned: YarnIssuedReturned;
@@ -103,6 +107,7 @@ export interface SummaryOrder {
 export function summaryOrderFloorTotals(row: SummaryOrder): {
   plannedQuantityTotal?: number;
   knittingCompletedTotal?: number;
+  knittingM4QuantityTotal?: number;
   knittingBatchWeightTotal?: number;
 } {
   const n = row.orderFloorProgress;
@@ -114,6 +119,7 @@ export function summaryOrderFloorTotals(row: SummaryOrder): {
   return {
     plannedQuantityTotal: pick(n?.plannedQuantityTotal, row.plannedQuantityTotal),
     knittingCompletedTotal: pick(n?.knittingCompletedTotal, row.knittingCompletedTotal),
+    knittingM4QuantityTotal: pick(n?.knittingM4QuantityTotal, row.knittingM4QuantityTotal),
     knittingBatchWeightTotal: pick(n?.knittingBatchWeightTotal, row.knittingBatchWeightTotal),
   };
 }
@@ -176,11 +182,14 @@ class YarnEstimationService {
       typeof ofp.plannedQuantityTotal === "number" ? ofp.plannedQuantityTotal : 0;
     const knittingCompletedTotal =
       typeof ofp.knittingCompletedTotal === "number" ? ofp.knittingCompletedTotal : 0;
+    const knittingM4QuantityTotal =
+      typeof ofp.knittingM4QuantityTotal === "number" ? ofp.knittingM4QuantityTotal : 0;
     return {
       ...raw,
       orderFloorProgress: {
         plannedQuantityTotal,
         knittingCompletedTotal,
+        knittingM4QuantityTotal,
         knittingBatchWeightTotal,
       },
     };

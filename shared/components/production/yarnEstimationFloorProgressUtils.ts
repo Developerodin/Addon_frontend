@@ -15,6 +15,13 @@ export function knittingCompletedForDisplay(fp: FloorProgress | null | undefined
   return fp.knitToLinking?.knittingCompleted;
 }
 
+/** Knitting-floor M4 quantity (`floorProgress.knitting.m4Quantity`). */
+export function knittingM4QuantityForDisplay(fp: FloorProgress | null | undefined): number | undefined {
+  if (!fp?.knitting) return undefined;
+  const m = fp.knitting.m4Quantity;
+  return typeof m === "number" && Number.isFinite(m) ? m : undefined;
+}
+
 export function linkingFloorActive(fp: FloorProgress | null | undefined): boolean {
   if (!fp) return true;
   return fp.linkingFloorInFlow !== false;
