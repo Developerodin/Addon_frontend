@@ -198,6 +198,8 @@ const ProcessOrderPage = () => {
     grossWeight: string;  // auto from scale
     boxWeight: string;   // user fills
     numberOfCones: string;
+    /** True when user explicitly chose a yarnName in the dropdown (prevents init from overriding). */
+    yarnNameEdited?: boolean;
   }>>({});
   const [showProcessedModal, setShowProcessedModal] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<PurchaseOrderStatus | ''>('');
@@ -551,12 +553,13 @@ const ProcessOrderPage = () => {
                 ? box.yarnName
                 : '';
 
-              // Auto-fill from lot PO items if lot number exists
+              // Auto-fill from lot PO items only when box doesn't already have a saved yarnName.
+              // If a lot has multiple yarns, defaulting to the first option confuses users when backend already saved a different yarnName.
               let autoFilledYarnName = yarnName;
               let autoFilledShadeCode = box.shadeCode || '';
               const boxLotNumber = box.lotNumber || '';
 
-              if (boxLotNumber && rawApiOrder) {
+              if (!autoFilledYarnName && boxLotNumber && rawApiOrder) {
                 const poItemOptions = getPOItemsDataFromLotNumber(boxLotNumber);
                 if (poItemOptions.length > 0) {
                   // Default to first yarn from lot's PO items
@@ -574,23 +577,76 @@ const ProcessOrderPage = () => {
                   lotNumber: boxLotNumber,
                   grossWeight: (box as any).grossWeight?.toString() || existingData.grossWeight || '',
                   boxWeight: box.boxWeight?.toString() || '',
-                  numberOfCones: box.numberOfCones?.toString() || ''
+                  numberOfCones: box.numberOfCones?.toString() || '',
+                  yarnNameEdited: false,
                 };
               } else {
+                const yarnNameEdited = existingData.yarnNameEdited === true;
+                const preferredYarnName = yarnNameEdited
+                  ? existingData.yarnName
+                  : (yarnName || existingData.yarnName || autoFilledYarnName);
+                const preferredShadeCode = yarnNameEdited
+                  ? (existingData.shadeCode || autoFilledShadeCode)
+                  : (box.shadeCode || existingData.shadeCode || autoFilledShadeCode);
                 // Preserve existing data, only update if server has new data
                 initialBoxData[boxId] = {
-                  yarnName: existingData.yarnName || autoFilledYarnName,
-                  shadeCode: existingData.shadeCode || autoFilledShadeCode,
+                  yarnName: preferredYarnName,
+                  shadeCode: preferredShadeCode,
                   lotNumber: existingData.lotNumber || boxLotNumber,
                   grossWeight: existingData.grossWeight || (box as any).grossWeight?.toString() || '',
                   boxWeight: existingData.boxWeight || box.boxWeight?.toString() || '',
-                  numberOfCones: existingData.numberOfCones || box.numberOfCones?.toString() || ''
+                  numberOfCones: existingData.numberOfCones || box.numberOfCones?.toString() || '',
+                  yarnNameEdited,
                 };
               }
             }
           });
           return initialBoxData;
         });
+
+        // Post-hydrate: for lots with multiple yarn options, refresh by barcode so the dropdown
+        // matches the server-saved yarnName even if the list payload is stale.
+        // (Respects yarnNameEdited so user selections aren't overwritten.)
+        if (rawApiOrder) {
+          const boxesNeedingRefresh = boxesData.filter((b) => {
+            const lot = b.lotNumber || '';
+            if (!lot) return false;
+            const opts = getPOItemsDataFromLotNumber(lot);
+            if (opts.length <= 1) return false;
+            if (!b.barcode) return false;
+            // Only refresh when server list doesn't already provide a concrete yarnName (or may be stale).
+            const listYarn = b.yarnName && !b.yarnName.startsWith('Yarn-PO-') ? b.yarnName : '';
+            return !listYarn || opts.some((o) => o.yarnName !== listYarn);
+          });
+
+          // Keep it light: refresh sequentially to avoid spiking the API.
+          (async () => {
+            for (const b of boxesNeedingRefresh) {
+              try {
+                const fresh = await yarnBoxService.getYarnBoxByBarcode(b.barcode, { includeInactive: true });
+                setBoxes((prev) => prev.map((x) => (x.barcode === fresh.barcode ? { ...x, ...fresh } : x)));
+                const freshKey = (fresh._id || fresh.id || fresh.boxId) as string;
+                setBoxData((prev) => {
+                  const current = prev[freshKey] || {};
+                  if (current.yarnNameEdited === true) return prev;
+                  return {
+                    ...prev,
+                    [freshKey]: {
+                      ...current,
+                      yarnName: fresh.yarnName || current.yarnName || "",
+                      shadeCode: fresh.shadeCode || current.shadeCode || "",
+                      lotNumber: fresh.lotNumber || current.lotNumber || "",
+                      yarnNameEdited: current.yarnNameEdited ?? false,
+                    },
+                  };
+                });
+              } catch (e) {
+                // Ignore hydration failures; UI still works and drawer can refetch on demand.
+                console.warn("Box hydration by barcode failed:", b.barcode, e);
+              }
+            }
+          })();
+        }
       } catch (error) {
         console.error('Failed to fetch boxes:', error);
         toast.error('Failed to load boxes');
@@ -747,20 +803,26 @@ const ProcessOrderPage = () => {
         const existingData = boxData[boxId];
         const lotNumber = existingData?.lotNumber?.trim() || foundBox.lotNumber?.trim() || '';
 
-        // Auto-fill data from lot PO items if lot number exists
-        let autoFilledData = {
-          yarnName: existingData?.yarnName || '',
-          shadeCode: existingData?.shadeCode || '',
-          lotNumber: lotNumber
+        const existingYarn = (existingData?.yarnName || '').trim();
+        const existingShade = (existingData?.shadeCode || '').trim();
+        const listYarn =
+          foundBox.yarnName && !foundBox.yarnName.startsWith('Yarn-PO-') ? foundBox.yarnName : '';
+        const listShade = foundBox.shadeCode || '';
+
+        // Auto-fill for activation:
+        // - Prefer already-saved value from server list (`foundBox.yarnName`)
+        // - Otherwise keep existing local state (if any)
+        // - Otherwise use lot PO items only when there's exactly 1 option (avoid defaulting to "first" when multiple)
+        const autoFilledData: { yarnName: string; shadeCode: string; lotNumber: string } = {
+          yarnName: listYarn || existingYarn || '',
+          shadeCode: listShade || existingShade || '',
+          lotNumber,
         };
 
-        if (lotNumber && rawApiOrder) {
-          const poItemOptions = getPOItemsDataFromLotNumber(lotNumber);
-          if (poItemOptions.length > 0) {
-            // Default to first yarn from lot's PO items
-            autoFilledData.yarnName = poItemOptions[0].yarnName;
-            autoFilledData.shadeCode = poItemOptions[0].shadeCode;
-          }
+        const poItemOptions = lotNumber && rawApiOrder ? getPOItemsDataFromLotNumber(lotNumber) : [];
+        if (!autoFilledData.yarnName && poItemOptions.length === 1) {
+          autoFilledData.yarnName = poItemOptions[0].yarnName;
+          autoFilledData.shadeCode = poItemOptions[0].shadeCode;
         }
 
         // Update boxData with auto-filled values
@@ -773,13 +835,41 @@ const ProcessOrderPage = () => {
             lotNumber: autoFilledData.lotNumber,
             grossWeight: prev[boxId]?.grossWeight || '',
             boxWeight: prev[boxId]?.boxWeight || '',
-            numberOfCones: prev[boxId]?.numberOfCones || ''
+            numberOfCones: prev[boxId]?.numberOfCones || '',
           }
         }));
 
         setActiveBoxId(boxId);
         setBarcodeScanValue('');
         toast.success(`Box ${foundBox.boxId} activated`);
+
+        // If lot has multiple yarn options and we still don't have a yarnName,
+        // hydrate by barcode to match the server-saved value (without forcing the drawer open).
+        if (!autoFilledData.yarnName && poItemOptions.length > 1) {
+          yarnBoxService
+            .getYarnBoxByBarcode(foundBox.barcode, { includeInactive: true })
+            .then((fresh) => {
+              setBoxes((prev) => prev.map((b) => (b.barcode === fresh.barcode ? { ...b, ...fresh } : b)));
+              const freshKey = (fresh._id || fresh.id || fresh.boxId) as string;
+              setBoxData((prev) => {
+                const current = prev[freshKey] || prev[boxId] || {};
+                if (current.yarnNameEdited === true) return prev;
+                return {
+                  ...prev,
+                  [freshKey]: {
+                    ...current,
+                    yarnName: fresh.yarnName || current.yarnName || "",
+                    shadeCode: fresh.shadeCode || current.shadeCode || "",
+                    lotNumber: fresh.lotNumber || current.lotNumber || lotNumber,
+                    yarnNameEdited: current.yarnNameEdited ?? false,
+                  },
+                };
+              });
+            })
+            .catch((err) => {
+              console.warn("Barcode hydration on activation failed:", foundBox.barcode, err);
+            });
+        }
       } else {
         toast.error('Barcode not found');
         setBarcodeScanValue('');
@@ -804,9 +894,51 @@ const ProcessOrderPage = () => {
       [boxId]: {
         ...prev[boxId],
         yarnName,
-        shadeCode: lotMatch?.shadeCode || getShadeCodeForYarn(yarnName)
+        shadeCode: lotMatch?.shadeCode || getShadeCodeForYarn(yarnName),
+        yarnNameEdited: true,
       }
     }));
+  };
+
+  /**
+   * Open the Box Details drawer using the latest server state (by barcode).
+   * Prevents confusion when a lot has multiple yarn names and local `boxData` may be stale.
+   */
+  const openBoxDetails = async (box: YarnBox) => {
+    const keyOf = (b: YarnBox) => b._id || b.id || b.boxId;
+    const boxKey = keyOf(box);
+    setSelectedBoxForDetails(box);
+    try {
+      const fresh = await yarnBoxService.getYarnBoxByBarcode(box.barcode, { includeInactive: true });
+      const freshKey = keyOf(fresh);
+      setSelectedBoxForDetails(fresh);
+
+      // Keep list in sync so table + drawer match.
+      setBoxes((prev) =>
+        prev.map((b) => (b.barcode === fresh.barcode ? { ...b, ...fresh } : b))
+      );
+
+      // Sync local boxData from server unless user explicitly edited the yarn dropdown.
+      setBoxData((prev) => {
+        const current = prev[freshKey] || prev[boxKey] || {};
+        if (current.yarnNameEdited === true) return prev;
+        // If we previously keyed this row differently (boxId vs _id), cleanly migrate to the fresh key.
+        const next: typeof prev = { ...prev };
+        if (freshKey !== boxKey && next[boxKey] && !next[freshKey]) delete next[boxKey];
+        return {
+          ...next,
+          [freshKey]: {
+            ...current,
+            yarnName: fresh.yarnName || current.yarnName || "",
+            shadeCode: fresh.shadeCode || current.shadeCode || "",
+            lotNumber: fresh.lotNumber || current.lotNumber || "",
+          },
+        };
+      });
+    } catch (err) {
+      // If fetch fails (auth/network), still show the drawer with existing data.
+      console.error("Failed to refresh box details by barcode:", err);
+    }
   };
 
 
@@ -2847,7 +2979,7 @@ const ProcessOrderPage = () => {
                                 <td className="px-1.5 py-2 border border-gray-200">
                                   <button
                                     type="button"
-                                    onClick={() => setSelectedBoxForDetails(box)}
+                                    onClick={() => openBoxDetails(box)}
                                     className="text-[12px] font-bold text-purple-600 hover:text-purple-700 hover:underline cursor-pointer"
                                     title="Click to view full details"
                                   >
@@ -2857,7 +2989,7 @@ const ProcessOrderPage = () => {
                                 <td className="px-1.5 py-2 border border-gray-200">
                                   <button
                                     type="button"
-                                    onClick={() => setSelectedBoxForDetails(box)}
+                                    onClick={() => openBoxDetails(box)}
                                     className="text-[12px] text-gray-900 font-mono text-purple-600 hover:text-purple-700 hover:underline cursor-pointer"
                                     title="Click to view full details"
                                   >
@@ -3146,7 +3278,7 @@ const ProcessOrderPage = () => {
                               <td className="px-1.5 py-2 border border-gray-200">
                                 <button
                                   type="button"
-                                  onClick={() => setSelectedBoxForDetails(box)}
+                                    onClick={() => openBoxDetails(box)}
                                   className="text-[12px] font-bold text-purple-600 hover:text-purple-700 hover:underline cursor-pointer"
                                   title="Click to view full details"
                                 >
@@ -3156,7 +3288,7 @@ const ProcessOrderPage = () => {
                               <td className="px-1.5 py-2 border border-gray-200">
                                 <button
                                   type="button"
-                                  onClick={() => setSelectedBoxForDetails(box)}
+                                    onClick={() => openBoxDetails(box)}
                                   className="text-[12px] text-gray-900 font-mono text-purple-600 hover:text-purple-700 hover:underline cursor-pointer"
                                   title="Click to view full details"
                                 >
