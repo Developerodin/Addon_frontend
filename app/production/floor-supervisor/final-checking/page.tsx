@@ -127,6 +127,9 @@ const FinalCheckingFloorSupervisorPage = () => {
   const [updateContainerNextFloor, setUpdateContainerNextFloor] = useState("Warehouse");
   const [updateContainerSubmitting, setUpdateContainerSubmitting] = useState(false);
 
+  /** When false (default): article view lists only articles with final checking remaining > 0. When true: all with received > 0. */
+  const [showAllArticles, setShowAllArticles] = useState(false);
+
   // Load final checking floor orders from API
   const loadOrders = async () => {
     setIsLoading(true);
@@ -235,23 +238,22 @@ const FinalCheckingFloorSupervisorPage = () => {
     return () => { cancelled = true; };
   }, [showUpdateContainerModal, updateContainerArticleId, selectedOrder?.articles]);
 
-  // Filter orders and articles based on received quantity
-  const filterOrdersByReceivedQuantity = (orders: ProductionOrder[]): ProductionOrder[] => {
-    return orders.map(order => {
-      // Filter articles that have received quantity > 0
-      const filteredArticles = order.articles.filter(article => {
-        const receivedQuantity = article.floorQuantities?.finalChecking?.received || 0;
-        return receivedQuantity > 0;
+  /**
+   * Article view / orders list slice: default remaining > 0 on Final Checking; show-all uses received > 0.
+   * @param orders - Raw floor orders
+   * @param showAll - If true, include articles with finalChecking received > 0; else only remaining > 0
+   */
+  const filterOrdersByReceivedQuantity = (orders: ProductionOrder[], showAll: boolean): ProductionOrder[] => {
+    return orders.map((order) => {
+      const filteredArticles = order.articles.filter((article) => {
+        const received = article.floorQuantities?.finalChecking?.received || 0;
+        const transferred = article.floorQuantities?.finalChecking?.transferred || 0;
+        const remaining = article.floorQuantities?.finalChecking?.remaining ?? (received - transferred);
+        if (showAll) return received > 0;
+        return remaining > 0;
       });
-      
-      return {
-        ...order,
-        articles: filteredArticles
-      };
-    }).filter(order => {
-      // Only show orders that have at least one article with received quantity > 0
-      return order.articles.length > 0;
-    });
+      return { ...order, articles: filteredArticles };
+    }).filter((order) => order.articles.length > 0);
   };
 
   /** Max M1 user can transfer = remaining (from backend). */
@@ -296,7 +298,7 @@ const FinalCheckingFloorSupervisorPage = () => {
   };
 
   // Apply filtering to orders
-  const paginatedOrders = filterOrdersByReceivedQuantity(orders);
+  const paginatedOrders = filterOrdersByReceivedQuantity(orders, showAllArticles);
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -1125,35 +1127,41 @@ const FinalCheckingFloorSupervisorPage = () => {
             </div>
           </div>
 
-          <div className="flex border-b border-gray-300 mb-0">
-            <button
-              type="button"
-              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "orders" ? "border-teal-600 text-teal-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-              onClick={() => setActiveTab("orders")}
-            >
-              Orders
-            </button>
-            <button
-              type="button"
-              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "article-view" ? "border-teal-600 text-teal-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-              onClick={() => setActiveTab("article-view")}
-            >
-              Article view
-            </button>
-            <button
-              type="button"
-              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "my-team" ? "border-teal-600 text-teal-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-              onClick={() => setActiveTab("my-team")}
-            >
-              My Team
-            </button>
-            <button
-              type="button"
-              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "upcoming" ? "border-teal-600 text-teal-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-              onClick={() => setActiveTab("upcoming")}
-            >
-              Upcoming
-            </button>
+          <div className="flex items-center justify-between border-b border-gray-300 mb-0">
+            <div className="flex">
+              <button
+                type="button"
+                className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "orders" ? "border-teal-600 text-teal-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+                onClick={() => setActiveTab("orders")}
+              >
+                Orders
+              </button>
+              <button
+                type="button"
+                className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "article-view" ? "border-teal-600 text-teal-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+                onClick={() => setActiveTab("article-view")}
+              >
+                Article view
+              </button>
+              <button
+                type="button"
+                className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "my-team" ? "border-teal-600 text-teal-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+                onClick={() => setActiveTab("my-team")}
+              >
+                My Team
+              </button>
+              <button
+                type="button"
+                className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "upcoming" ? "border-teal-600 text-teal-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+                onClick={() => setActiveTab("upcoming")}
+              >
+                Upcoming
+              </button>
+            </div>
+            <label className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-gray-700 border border-gray-200 rounded bg-white cursor-pointer hover:bg-gray-50 mr-2">
+              <input type="checkbox" checked={showAllArticles} onChange={(e) => setShowAllArticles(e.target.checked)} className="rounded border-gray-300" />
+              Show all
+            </label>
           </div>
         </div>
 
@@ -1172,6 +1180,7 @@ const FinalCheckingFloorSupervisorPage = () => {
               activeArticleId={activeArticleId}
               onAssignClick={handleOpenAssignDrawer}
               onScanContainerClick={handleScanContainerClick}
+              showAllArticles={showAllArticles}
             />
           ) : (
             <>

@@ -17,6 +17,7 @@ import {
 import AssignmentsCards, {
   sortMachineAssignmentsByYarnIssueTone,
 } from "@/app/catalog/needle-configuration/components/AssignmentsCards";
+import YarnSummaryDrawer from "@/app/yarn-management/yarn-issue/YarnSummaryDrawer";
 
 type RequirementStatus = "Not Issued" | "Partially Issued" | "Issued";
 
@@ -401,6 +402,7 @@ const YarnIssuePage = () => {
   const [submittingTransaction, setSubmittingTransaction] = useState(false);
   const [showScanIssuePanel, setShowScanIssuePanel] = useState(false);
   const [showActivityLogPanel, setShowActivityLogPanel] = useState(false);
+  const [showYarnSummaryPanel, setShowYarnSummaryPanel] = useState(false);
   const [completingYarnIssue, setCompletingYarnIssue] = useState(false);
   const [yarnTransactions, setYarnTransactions] = useState<YarnTransaction[]>([]);
   const [allYarnTransactions, setAllYarnTransactions] = useState<YarnTransaction[]>([]); // For order status calculations
@@ -1548,15 +1550,27 @@ const YarnIssuePage = () => {
                 </span>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowActivityLogPanel(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-[11px] font-bold text-gray-700 rounded hover:bg-gray-50 transition-colors"
-              title="View Issue Activity Log"
-            >
-              <i className="ri-file-list-3-line"></i>
-              Logs
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowYarnSummaryPanel(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-[11px] font-bold text-gray-700 rounded hover:bg-gray-50 transition-colors"
+                title="Outstanding yarn required for all queue orders where yarn issue is not completed"
+                aria-label="Open yarn summary drawer"
+              >
+                <i className="ri-pie-chart-2-line" aria-hidden />
+                Yarn summary
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowActivityLogPanel(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-[11px] font-bold text-gray-700 rounded hover:bg-gray-50 transition-colors"
+                title="View Issue Activity Log"
+              >
+                <i className="ri-file-list-3-line"></i>
+                Logs
+              </button>
+            </div>
           </div>
         </div>
 
@@ -2057,6 +2071,8 @@ const YarnIssuePage = () => {
           </div>
         </>
       )}
+
+      <YarnSummaryDrawer open={showYarnSummaryPanel} onClose={() => setShowYarnSummaryPanel(false)} />
 
       {/* Issue Activity Log Side Panel */}
       {showActivityLogPanel && (

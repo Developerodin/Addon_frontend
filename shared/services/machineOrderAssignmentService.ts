@@ -291,6 +291,58 @@ export async function getTopItemsAssignments(): Promise<MachineOrderAssignmentTo
   }));
 }
 
+/** One BOM yarn line for an order (outstanding = required − issued for that PO/article/yarn). */
+export interface YarnIssuePendingSummaryLine {
+  articleNumber: string;
+  yarnName: string;
+  requiredGrams: number;
+  issuedGrams: number;
+  outstandingGrams: number;
+}
+
+/** Aggregated outstanding requirement for one yarn catalog across pending queue lines. */
+export interface YarnIssuePendingSummaryByYarn {
+  yarnKey: string;
+  yarnCatalogId: string | null;
+  yarnName: string;
+  yarnType: string | null;
+  totalRequiredGrams: number;
+  totalIssuedGrams: number;
+  totalOutstandingGrams: number;
+  /** Net weight in short-term (ST) racks from available cones, grams */
+  shortTermNetGrams: number;
+  shortTermConeCount: number;
+}
+
+/** Per-order breakdown of outstanding yarn lines. */
+export interface YarnIssuePendingSummaryByOrder {
+  orderId: string;
+  orderNumber: string;
+  lines: YarnIssuePendingSummaryLine[];
+}
+
+/** Response from GET .../yarn-issue-pending-summary */
+export interface YarnIssuePendingSummary {
+  generatedAt: string;
+  pendingLineCount: number;
+  byYarn: YarnIssuePendingSummaryByYarn[];
+  byOrder: YarnIssuePendingSummaryByOrder[];
+  skippedArticles: { orderNumber: string; articleNumber: string; reason: string }[];
+}
+
+/**
+ * Outstanding yarn to issue: BOM requirement minus yarn_issued, for every machine-queue
+ * (PO+article) row whose yarn issue status is not Completed (excludes Completed/On Hold PO rows).
+ */
+export async function getYarnIssuePendingSummary(): Promise<YarnIssuePendingSummary> {
+  const res = await fetch(`${BASE}/yarn-issue-pending-summary`, { method: 'GET', headers: getAuthHeaders() });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { message?: string }).message || 'Failed to fetch yarn issue summary');
+  }
+  return res.json() as Promise<YarnIssuePendingSummary>;
+}
+
 /** GET /completed-items – assignments with completed PO items (populated). Used for yarn-return machine view. */
 export async function getCompletedItemsAssignments(): Promise<MachineOrderAssignmentTopItems[]> {
   const res = await fetch(`${BASE}/completed-items`, { method: 'GET', headers: getAuthHeaders() });

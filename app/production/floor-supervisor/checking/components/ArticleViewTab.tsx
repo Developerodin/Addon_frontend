@@ -9,7 +9,7 @@ export interface ArticleRow {
 }
 
 export interface ArticleViewTabProps {
-  /** Orders already filtered by checking received > 0. */
+  /** Orders already filtered by parent (remaining > 0 or received > 0 based on showAllArticles). */
   orders: ProductionOrder[];
   onViewOrder: (order: ProductionOrder, article?: Article) => void;
   onUpdateOrder: (order: ProductionOrder, article?: Article) => void;
@@ -19,17 +19,16 @@ export interface ArticleViewTabProps {
   activeArticleId?: string | null;
   onAssignClick?: () => void;
   onScanContainerClick?: () => void;
+  /** Mirrors parent "Show all" toggle (read-only here; parent filters orders). */
+  showAllArticles?: boolean;
 }
 
-/** Flattens orders into one row per article for checking floor (checking received > 0). */
+/** Flattens orders into rows; parent already applied checking-floor article filters. */
 function flattenOrdersToArticles(orders: ProductionOrder[]): ArticleRow[] {
   const rows: ArticleRow[] = [];
   for (const order of orders) {
     for (const article of order.articles) {
-      const received = (article as any).floorQuantities?.checking?.received ?? 0;
-      if (received > 0) {
-        rows.push({ article, order });
-      }
+      rows.push({ article, order });
     }
   }
   return rows;
