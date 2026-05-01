@@ -45,11 +45,15 @@ const RequisitionListPage = () => {
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - 90);
 
-        const requisitions = await yarnInventoryService.getYarnRequisitions({
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString(),
-          // Don't filter by poSent here - we'll filter in the UI
-        });
+        // Paginated API: unwrap `results` (and merge pages for the full 90-day window).
+        const { results: requisitionRows } =
+          await yarnInventoryService.getAllYarnRequisitions({
+            startDate: startDate.toISOString(),
+            endDate: endDate.toISOString(),
+          });
+        const requisitions = Array.isArray(requisitionRows)
+          ? requisitionRows
+          : [];
 
         // Transform API response to UI format
         // Filter out requisitions where PO is already sent
