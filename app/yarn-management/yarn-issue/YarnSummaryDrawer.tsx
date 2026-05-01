@@ -27,18 +27,38 @@ function formatKgDisplay(valueInGrams: number): string {
 
 type TabId = "yarn" | "order";
 
+export type YarnSummaryDrawerVariant = "default" | "shortTerm";
+
 export interface YarnSummaryDrawerProps {
   /** When true, panel is visible and data is (re)loaded. */
   open: boolean;
   /** Called when user closes the drawer (backdrop or close control). */
   onClose: () => void;
+  /**
+   * `shortTerm` — opened from ST storage: copy emphasizes transfer priority and flags rows where ST stock &lt; outstanding.
+   */
+  variant?: YarnSummaryDrawerVariant;
+}
+
+/**
+ * True when floor still needs more net yarn than what is available on ST racks (same yarn, warehouse-wide).
+ * @param row — aggregated by-yarn summary line
+ */
+function isShortOnStVersusOutstanding(row: {
+  totalOutstandingGrams: number;
+  shortTermNetGrams?: number;
+}): boolean {
+  const st = row.shortTermNetGrams ?? 0;
+  return row.totalOutstandingGrams > st + 1;
 }
 
 /**
  * Right-side drawer: total outstanding yarn required across all PO queue lines
  * where yarn issue is not marked Completed (BOM requirement minus issued weight).
  */
-const YarnSummaryDrawer: React.FC<YarnSummaryDrawerProps> = ({ open, onClose }) => {
+const YarnSummaryDrawer: React.FC<YarnSummaryDrawerProps> = ({ open, onClose, variant = "default" }) => {
+  const isShortTermContext = variant === "shortTerm";
+  const titleId = isShortTermContext ? "yarn-st-transfer-required-title" : "yarn-summary-drawer-title";
   const [tab, setTab] = useState<TabId>("yarn");
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<YarnIssuePendingSummary | null>(null);
@@ -77,23 +97,24 @@ const YarnSummaryDrawer: React.FC<YarnSummaryDrawerProps> = ({ open, onClose }) 
         className="fixed top-0 right-0 h-full w-full max-w-2xl bg-white shadow-2xl z-50 flex flex-col border-l border-gray-200"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="yarn-summary-drawer-title"
+        aria-labelledby={titleId}
       >
         <div className="flex-shrink-0 px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-3 bg-gray-50/80">
           <div className="min-w-0">
-            <h2 id="yarn-summary-drawer-title" className="text-sm font-bold text-gray-900 truncate">
-              Yarn summary (pending issue)
+            <h2 id={titleId} className="text-sm font-bold text-gray-900 truncate">
+              {isShortTermContext ? "Transfer required — yarn demand" : "Yarn summary (pending issue)"}
             </h2>
             <p className="text-[10px] text-gray-500 mt-0.5">
-              Queue rows without completed yarn issue · outstanding = BOM required − issued · ST stock = available cones on
-              short-term racks (same logic as live inventory)
+              {isShortTermContext
+                ? "Knitting queue still needs this yarn (yarn issue not completed). Compare Outstanding to ST stock — transfer from LT or receive more when ST is short."
+                : "Queue rows without completed yarn issue · outstanding = BOM required − issued · ST stock = available cones on short-term racks (same logic as live inventory)"}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="shrink-0 inline-flex items-center justify-center rounded-md p-1.5 text-gray-700 hover:bg-gray-100 transition-colors"
-            aria-label="Close yarn summary"
+            aria-label={isShortTermContext ? "Close transfer required summary" : "Close yarn summary"}
           >
             <i className="ri-close-line text-xl leading-none" />
           </button>
@@ -135,6 +156,21 @@ const YarnSummaryDrawer: React.FC<YarnSummaryDrawerProps> = ({ open, onClose }) 
           </button>
         </div>
 
+        {isShortTermContext && data && !loading && data.byYarn.length > 0 && (
+          <div
+            className="mx-4 mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[10px] text-amber-950 shrink-0"
+            role="status"
+          >
+            <p className="font-bold m-0 mb-0.5 flex items-center gap-1.5">
+              <i className="ri-error-warning-line text-amber-700" aria-hidden />
+              Short-term action
+            </p>
+            <p className="m-0 text-amber-900/90 leading-snug">
+              Rows marked <span className="font-semibold">Short on ST</span> need more net yarn on ST than is currently there — prioritize internal transfer from long-term or inbound so knitting can issue yarn.
+            </p>
+          </div>
+        )}
+
         <div className="flex-1 min-h-0 overflow-auto px-4 py-3">
           {loading && !data ? (
             <div className="flex flex-col items-center justify-center py-16 text-gray-500 text-[11px]">
@@ -170,9 +206,21 @@ const YarnSummaryDrawer: React.FC<YarnSummaryDrawerProps> = ({ open, onClose }) 
                 </thead>
                 <tbody>
                   {data.byYarn.map((row) => (
-                    <tr key={row.yarnKey} className="border-b border-gray-100 hover:bg-gray-50/80">
+                    <tr
+                      key={row.yarnKey}
+                      className={`border-b border-gray-100 hover:bg-gray-50/80 ${
+                        isShortTermContext && isShortOnStVersusOutstanding(row) ? "bg-amber-50/50" : ""
+                      }`}
+                    >
                       <td className="px-2 py-2 align-top">
-                        <div className="font-semibold text-gray-900">{row.yarnName}</div>
+                        <div className="font-semibold text-gray-900 flex flex-wrap items-center gap-1">
+                          <span>{row.yarnName}</span>
+                          {isShortTermContext && isShortOnStVersusOutstanding(row) && (
+                            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-amber-200 text-amber-950 border border-amber-400/60">
+                              Short on ST
+                            </span>
+                          )}
+                        </div>
                         {row.yarnType && <div className="text-[10px] text-gray-500">{row.yarnType}</div>}
                       </td>
                       <td className="px-2 py-2 text-right font-bold text-purple-700 tabular-nums whitespace-nowrap">

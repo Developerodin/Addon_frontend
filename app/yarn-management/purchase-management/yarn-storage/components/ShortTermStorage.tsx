@@ -40,6 +40,7 @@ import RackDetailsModal from "./RackDetailsModal";
 import RackTransferModal from "./RackTransferModal";
 import ConeTransferModal from "./ConeTransferModal";
 import ZoneReportDrawer from "./ZoneReportDrawer";
+import YarnSummaryDrawer from "@/app/yarn-management/yarn-issue/YarnSummaryDrawer";
 import {
   ShortTermInventory,
   PackedBox,
@@ -108,6 +109,8 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
   const [rackSlotDetails, setRackSlotDetails] = useState<Map<string, SlotDetailsResponse>>(new Map());
   const [loadingSlotDetails, setLoadingSlotDetails] = useState<Set<string>>(new Set());
   const [showReportDrawer, setShowReportDrawer] = useState(false);
+  /** Open on enter (tab mount) so ST users see yarn-issue demand like an alert; closes with backdrop or X. */
+  const [showTransferRequiredDrawer, setShowTransferRequiredDrawer] = useState(true);
   /** Box id for which we show “open process page” after scan (already internal-transfer / has cones) */
   const [resumeProcessBoxId, setResumeProcessBoxId] = useState<string | null>(
     null
@@ -1406,7 +1409,17 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
           <h2 className="text-xl font-bold text-gray-800">Short-Term Storage</h2>
           <p className="text-gray-600">Yarn inventory for knitting operations</p>
         </div> */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <button
+            type="button"
+            onClick={() => setShowTransferRequiredDrawer(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-amber-300 bg-amber-50 text-[11px] font-bold text-amber-950 rounded hover:bg-amber-100 transition-colors shadow-sm"
+            title="Yarn still required for knitting (yarn issue queue). Compare with ST stock to prioritize LT→ST or receipts."
+            aria-label="Open transfer required summary for yarn issue demand"
+          >
+            <i className="ri-alarm-warning-line" aria-hidden />
+            Transfer required
+          </button>
           <button
             onClick={() => setShowConeTransferModal(true)}
             className="ti-btn ti-btn-primary"
@@ -2645,6 +2658,12 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
           </div>
         </div>
       )}
+
+      <YarnSummaryDrawer
+        open={showTransferRequiredDrawer}
+        onClose={() => setShowTransferRequiredDrawer(false)}
+        variant="shortTerm"
+      />
     </div>
   );
 };
