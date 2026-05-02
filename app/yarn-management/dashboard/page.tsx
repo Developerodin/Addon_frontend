@@ -17,6 +17,7 @@ import {
   requisitionYarnId,
   type YarnInventorySummaryQueryParams,
 } from "./services/yarnInventoryService";
+import { useYarnDashboardExports } from "./hooks/useYarnDashboardExports";
 
 const DashboardPage = () => {
   const { hasSubPermission } = useNavigation();
@@ -55,8 +56,12 @@ const DashboardPage = () => {
   const globalSummaryDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const globalSummaryFirstLoadRef = useRef(true);
 
-  // Export state
-  const [exporting, setExporting] = useState(false);
+  const {
+    exporting,
+    exportingUnallocated,
+    handleExportExcel,
+    handleExportUnallocatedReport,
+  } = useYarnDashboardExports(searchTerm, statusFilter);
 
   const hasPermission = hasSubPermission("/yarn-management", "Dashboard");
 
@@ -348,90 +353,6 @@ const DashboardPage = () => {
     setStatusFilter(status);
   }, []);
 
-  /**
-   * Exports all inventory data to Excel
-   */
-  const handleExportExcel = useCallback(async () => {
-    try {
-      setExporting(true);
-
-      // Fetch all inventory data
-      const allInventory = await yarnInventoryService.getAllYarnInventories();
-
-      // Transform to export format matching table columns
-      const exportData = allInventory.map((item) => {
-        const totalWeight =
-          item.longTermStorage.totalWeight + item.shortTermStorage.totalWeight;
-        const totalNetWeight =
-          item.longTermStorage.netWeight + item.shortTermStorage.netWeight;
-        const unallocatedWeight = item.unallocatedStorage?.totalWeight || 0;
-        const blockedQty = item.blockedQty || 0;
-        const availableQty = Math.max(0, totalNetWeight - blockedQty);
-
-        let status = "In Stock";
-        if (
-          item.inventoryStatus === "low_stock" ||
-          item.inventoryStatus === "soon_to_be_low"
-        ) {
-          status = "Low Stock";
-        } else if (totalWeight === 0) {
-          status = "Out of Stock";
-        }
-
-        return {
-          "Yarn Name": item.yarnName,
-          "LTS (kg)": item.longTermStorage.totalWeight,
-          "STS (kg)": item.shortTermStorage.totalWeight,
-          "Unallocated (kg)": unallocatedWeight,
-          "Cones": item.shortTermStorage.numberOfCones,
-          "Blocked Qty (kg)": blockedQty,
-          "Available Qty (kg)": availableQty,
-          "Status": status,
-        };
-      });
-
-      // Generate CSV content
-      if (exportData.length === 0) {
-        alert("No data to export");
-        return;
-      }
-
-      const headers = Object.keys(exportData[0]);
-      const csvRows = [
-        headers.join(","),
-        ...exportData.map((row) =>
-          headers
-            .map((header) => {
-              const value = row[header as keyof typeof row];
-              // Escape commas and quotes in values
-              if (typeof value === "string" && (value.includes(",") || value.includes('"'))) {
-                return `"${value.replace(/"/g, '""')}"`;
-              }
-              return value;
-            })
-            .join(",")
-        ),
-      ];
-      const csvContent = csvRows.join("\n");
-
-      // Create and download file
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `yarn-inventory-${new Date().toISOString().split("T")[0]}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error("Error exporting inventory:", err);
-      alert("Failed to export inventory. Please try again.");
-    } finally {
-      setExporting(false);
-    }
-  }, []);
-
   // Track if alerts modal has been shown once (only auto-open on initial load)
   const alertsShownRef = useRef(false);
 
@@ -542,7 +463,9 @@ const DashboardPage = () => {
             onSearchChange={handleSearchChange}
             onStatusFilterChange={handleStatusFilterChange}
             onExportExcel={handleExportExcel}
+            onExportUnallocated={handleExportUnallocatedReport}
             exporting={exporting}
+            exportingUnallocated={exportingUnallocated}
           />
         )}
       </div>

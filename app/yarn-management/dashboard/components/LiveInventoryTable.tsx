@@ -17,7 +17,10 @@ interface LiveInventoryTableProps {
   onSearchChange: (term: string) => void;
   onStatusFilterChange: (status: string) => void;
   onExportExcel: () => void;
+  /** CSV export: one row per unallocated box (PO, lot, QC). */
+  onExportUnallocated: () => void;
   exporting?: boolean;
+  exportingUnallocated?: boolean;
 }
 
 type SortField = keyof YarnInventory;
@@ -39,7 +42,9 @@ const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
   onSearchChange,
   onStatusFilterChange,
   onExportExcel,
+  onExportUnallocated,
   exporting = false,
+  exportingUnallocated = false,
 }) => {
   const [sortField, setSortField] = useState<SortField>("yarnName");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
@@ -200,11 +205,11 @@ const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
             </select>
           </div>
 
-          {/* Export Excel button */}
+          {/* Export inventory + unallocated box report */}
           <button
             type="button"
             onClick={onExportExcel}
-            disabled={exporting || loading}
+            disabled={exporting || exportingUnallocated || loading}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-[11px] font-bold rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {exporting ? (
@@ -216,6 +221,26 @@ const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
               <>
                 <i className="ri-file-excel-2-line text-sm"></i>
                 Export
+              </>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={onExportUnallocated}
+            disabled={exporting || exportingUnallocated || loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-amber-300 text-amber-900 text-[11px] font-bold rounded hover:bg-amber-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title="CSV: one row per box without storage — PO, supplier, box id, lot, QC. Respects yarn search and status filter."
+            aria-label="Export unallocated boxes report as CSV"
+          >
+            {exportingUnallocated ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-amber-700 border-t-transparent rounded-full animate-spin"></div>
+                Exporting...
+              </>
+            ) : (
+              <>
+                <i className="ri-inbox-unarchive-line text-sm" aria-hidden></i>
+                Unallocated
               </>
             )}
           </button>

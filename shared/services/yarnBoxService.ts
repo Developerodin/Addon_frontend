@@ -22,6 +22,12 @@ export interface YarnBox {
   /** Display name (from API or supplier.brandName). */
   supplierName?: string;
   supplier?: { _id?: string; id?: string; brandName?: string; name?: string };
+  /** Present when API enriches from purchase order (e.g. without-storage-location). */
+  purchaseOrder?: {
+    poNumber: string;
+    supplierName?: string;
+    currentStatus?: string;
+  };
   orderQty?: number;
   lotNumber?: string;
   /** Gross weight from scale (auto-captured). */
