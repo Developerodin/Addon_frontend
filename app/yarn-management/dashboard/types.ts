@@ -23,11 +23,22 @@ export interface YarnInventory {
 }
 
 export interface InventorySummary {
-  totalStock: number; // total weight in kg
+  /** LT + ST + unallocated (net kg on hand); from GET /yarn-inventories/summary */
+  totalStock: number;
   purchaseYarn: number; // total purchase yarn quantity
   pendingDeliveries: number; // number of pending deliveries
   inventoryAlerts: number; // number of alerts
   inventoryValue: number; // total value of inventory
+  /** Net kg in long-term storage (LTS) */
+  longTermKg: number;
+  /** Net kg in short-term storage (STS) */
+  shortTermKg: number;
+  /** Net kg QC-approved without a storage slot */
+  unallocatedKg: number;
+  /** Issued / blocked for production (kg) */
+  blockedKg: number;
+  /** LT + ST only (excludes unallocated) */
+  ltPlusShortKg: number;
 }
 
 export interface POYarnItem {

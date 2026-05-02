@@ -15,6 +15,7 @@ import {
   yarnInventoryService,
   inventoryYarnId,
   requisitionYarnId,
+  type YarnInventorySummaryQueryParams,
 } from "./services/yarnInventoryService";
 
 const DashboardPage = () => {
@@ -26,12 +27,18 @@ const DashboardPage = () => {
     pendingDeliveries: 0,
     inventoryAlerts: 0,
     inventoryValue: 0,
+    longTermKg: 0,
+    shortTermKg: 0,
+    unallocatedKg: 0,
+    blockedKg: 0,
+    ltPlusShortKg: 0,
   });
   const [alerts, setAlerts] = useState<InventoryAlert[]>([]);
   const [showAlertsModal, setShowAlertsModal] = useState(false);
   
   const [inventoryLoading, setInventoryLoading] = useState(true);
   const [alertsLoading, setAlertsLoading] = useState(true);
+  const [globalSummaryLoading, setGlobalSummaryLoading] = useState(true);
   const [inventoryError, setInventoryError] = useState<string | null>(null);
   const [alertsError, setAlertsError] = useState<string | null>(null);
 
@@ -45,6 +52,8 @@ const DashboardPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const globalSummaryDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const globalSummaryFirstLoadRef = useRef(true);
 
   // Export state
   const [exporting, setExporting] = useState(false);
@@ -104,6 +113,43 @@ const DashboardPage = () => {
     };
   }, []);
 
+  /**
+   * Fetches global bucket totals (LTS / STS / unallocated / blocked) from GET /yarn-inventories/summary.
+   * Respects the same yarn name and inventory status filters as the table (full dataset, not paginated).
+   */
+  const fetchGlobalSummary = useCallback(async () => {
+    try {
+      setGlobalSummaryLoading(true);
+      const params: YarnInventorySummaryQueryParams = {};
+      if (searchTerm.trim()) {
+        params.yarn_name = searchTerm.trim();
+      }
+      if (statusFilter !== "all") {
+        if (statusFilter === "Low Stock") {
+          params.inventory_status = "low_stock";
+        } else if (statusFilter === "In Stock") {
+          params.inventory_status = "in_stock";
+        }
+      }
+      const data = await yarnInventoryService.getYarnInventoriesSummary(params);
+      const grand = data.totals.grandNetKgAllBuckets;
+      setSummary((prev) => ({
+        ...prev,
+        totalStock: grand,
+        purchaseYarn: grand,
+        longTermKg: data.totals.longTermKg,
+        shortTermKg: data.totals.shortTermKg,
+        unallocatedKg: data.totals.unallocatedKg,
+        blockedKg: data.totals.blockedKg,
+        ltPlusShortKg: data.totals.ltPlusShortKg,
+      }));
+    } catch (err) {
+      console.error("Error fetching yarn inventory summary:", err);
+    } finally {
+      setGlobalSummaryLoading(false);
+    }
+  }, [searchTerm, statusFilter]);
+
   const fetchInventory = useCallback(async (
     page: number = currentPage,
     limit: number = rowsPerPage,
@@ -138,15 +184,9 @@ const DashboardPage = () => {
 
       const transformedInventory = inventoryPage.results.map(transformInventoryItem);
 
-      const totalStockKg = inventoryPage.summary?.totalKg ?? 0;
       setInventory(transformedInventory);
       setTotalPages(inventoryPage.totalPages || 1);
       setTotalResults(inventoryPage.totalResults || 0);
-      setSummary((prev) => ({
-        ...prev,
-        totalStock: totalStockKg,
-        purchaseYarn: totalStockKg,
-      }));
     } catch (err) {
       console.error("Error fetching inventory:", err);
       setInventoryError(
@@ -230,11 +270,32 @@ const DashboardPage = () => {
     if (!hasPermission) {
       setInventoryLoading(false);
       setAlertsLoading(false);
+      setGlobalSummaryLoading(false);
+      globalSummaryFirstLoadRef.current = true;
       return;
     }
     fetchInventory(currentPage, rowsPerPage, searchTerm, statusFilter);
     fetchAlerts();
   }, [hasPermission, currentPage, rowsPerPage, fetchAlerts]);
+
+  useEffect(() => {
+    if (!hasPermission) {
+      return;
+    }
+    if (globalSummaryDebounceRef.current) {
+      clearTimeout(globalSummaryDebounceRef.current);
+    }
+    const delay = globalSummaryFirstLoadRef.current ? 0 : 400;
+    globalSummaryFirstLoadRef.current = false;
+    globalSummaryDebounceRef.current = setTimeout(() => {
+      void fetchGlobalSummary();
+    }, delay);
+    return () => {
+      if (globalSummaryDebounceRef.current) {
+        clearTimeout(globalSummaryDebounceRef.current);
+      }
+    };
+  }, [hasPermission, searchTerm, statusFilter, fetchGlobalSummary]);
 
   // Debounced search effect
   useEffect(() => {
@@ -254,7 +315,7 @@ const DashboardPage = () => {
         clearTimeout(searchDebounceRef.current);
       }
     };
-  }, [searchTerm, statusFilter, hasPermission, rowsPerPage]);
+  }, [searchTerm, statusFilter, hasPermission, rowsPerPage, fetchInventory]);
 
   /**
    * Handles page change from pagination controls
@@ -446,7 +507,10 @@ const DashboardPage = () => {
         </div>
 
         <div className="px-[10px] pb-[10px]">
-          <SummaryCards summary={summary} loading={inventoryLoading || alertsLoading} />
+          <SummaryCards
+            summary={summary}
+            loading={globalSummaryLoading || alertsLoading}
+          />
         </div>
 
         {inventoryError ? (

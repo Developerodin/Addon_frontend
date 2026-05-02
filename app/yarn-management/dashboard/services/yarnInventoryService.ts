@@ -90,6 +90,29 @@ export interface YarnInventoryQueryParams {
   page?: number;
 }
 
+/** Filters for GET /yarn-inventories/summary (no pagination). */
+export type YarnInventorySummaryQueryParams = Pick<
+  YarnInventoryQueryParams,
+  'yarn_id' | 'yarn_name' | 'inventory_status' | 'overbooked'
+>;
+
+/** Response from GET /yarn-inventories/summary — all SKUs, no paging. */
+export interface YarnInventoryGlobalSummaryResponse {
+  skuCount: number;
+  totals: {
+    longTermKg: number;
+    shortTermKg: number;
+    ltPlusShortKg: number;
+    unallocatedKg: number;
+    blockedKg: number;
+    grandNetKgAllBuckets: number;
+  };
+  cones: {
+    shortTerm: number;
+    blocked: number;
+  };
+}
+
 export interface YarnRequisitionResponse {
   _id: string;
   yarnName: string;
@@ -190,10 +213,34 @@ export interface YarnReportRow {
   amount: number;
 }
 
+/** Snapshot-level totals vs naive row-sum (opening/balance repeat per yarn when multiple shades/suppliers). */
+export interface YarnReportMetaSummary {
+  uniqueYarnOpeningKgSum: number;
+  uniqueYarnClosingKgSum: number;
+  snapshotOpeningYarnCatalogCount: number;
+  snapshotClosingYarnCatalogCount: number;
+  reportRowCount: number;
+  sumDisplayedOpeningAcrossRowsKg: number;
+  sumDisplayedBalanceAcrossRowsKg: number;
+}
+
+export interface YarnReportMeta {
+  openingSnapshotDate: string;
+  closingSnapshotDate: string;
+  summary?: YarnReportMetaSummary;
+  closingVariances?: {
+    yarnName: string;
+    snapshotClosingKg: number;
+    formulaClosingKg: number;
+    varianceKg: number;
+  }[];
+}
+
 export interface YarnReportResponse {
   results: YarnReportRow[];
   startDate: string;
   endDate: string;
+  meta?: YarnReportMeta;
 }
 
 /** GET /yarn-management/yarn-report/snapshot-bounds */
@@ -286,6 +333,24 @@ class YarnInventoryService {
     const endpoint = `/yarn-inventories${queryString ? `?${queryString}` : ''}`;
 
     return this.makeRequest<YarnInventoryListResponse>(endpoint);
+  }
+
+  /** Global totals (same live aggregation as list; skips pagination use-cases like dashboards). */
+  async getYarnInventoriesSummary(
+    params: YarnInventorySummaryQueryParams = {}
+  ): Promise<YarnInventoryGlobalSummaryResponse> {
+    const queryParams = new URLSearchParams();
+    if (params.yarn_id) queryParams.append('yarn_id', params.yarn_id);
+    if (params.yarn_name) queryParams.append('yarn_name', params.yarn_name);
+    if (params.inventory_status)
+      queryParams.append('inventory_status', params.inventory_status);
+    if (params.overbooked !== undefined)
+      queryParams.append('overbooked', params.overbooked.toString());
+
+    const q = queryParams.toString();
+    return this.makeRequest<YarnInventoryGlobalSummaryResponse>(
+      `/yarn-inventories/summary${q ? `?${q}` : ''}`
+    );
   }
 
   /**

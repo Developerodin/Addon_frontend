@@ -219,30 +219,90 @@ const YarnReportPage = () => {
       return;
     }
 
+    const blankExcelRow = (): Record<string, string | number> => ({
+      Store: "",
+      "HSN Code": "",
+      "Yarn Name": "",
+      Brand: "",
+      "Shade No": "",
+      "Yarn Type": "",
+      "Yarn Subtype": "",
+      Count: "",
+      "Color Family": "",
+      "Pantone Color": "",
+      Opening: "",
+      PUR: "",
+      "PUR Ret": "",
+      "Issue to Knitting": "",
+      "Returned from Knitting": "",
+      Balance: "",
+      Rate: "",
+      Unit: "",
+      "GST %": "",
+      Amount: "",
+    });
+
     setDownloading(true);
     try {
-      const sheetData = report.results.map((row) => ({
-        Store: row.store,
-        "HSN Code": row.hsnCode,
-        "Yarn Name": row.yarnName,
-        Brand: row.brand,
-        "Shade No": row.shadeNumber,
-        "Yarn Type": row.yarnType,
-        "Yarn Subtype": row.yarnSubtype,
-        Count: row.count,
-        "Color Family": row.colorFamily,
-        "Pantone Color": row.pantoneColorName,
-        Opening: row.opening,
-        PUR: row.pur,
-        "PUR Ret": row.purRet,
-        "Issue to Knitting": row.yarnIssueToKnitting,
-        "Returned from Knitting": row.yarnReturnedFromKnitting,
-        Balance: row.balance,
-        Rate: row.rate,
-        Unit: row.unit,
-        "GST %": row.gstPercent,
-        Amount: row.amount,
-      }));
+      const sheetData: Record<string, string | number>[] = report.results.map(
+        (row) => ({
+          Store: row.store,
+          "HSN Code": row.hsnCode,
+          "Yarn Name": row.yarnName,
+          Brand: row.brand,
+          "Shade No": row.shadeNumber,
+          "Yarn Type": row.yarnType,
+          "Yarn Subtype": row.yarnSubtype,
+          Count: row.count,
+          "Color Family": row.colorFamily,
+          "Pantone Color": row.pantoneColorName,
+          Opening: row.opening,
+          PUR: row.pur,
+          "PUR Ret": row.purRet,
+          "Issue to Knitting": row.yarnIssueToKnitting,
+          "Returned from Knitting": row.yarnReturnedFromKnitting,
+          Balance: row.balance,
+          Rate: row.rate,
+          Unit: row.unit,
+          "GST %": row.gstPercent,
+          Amount: row.amount,
+        })
+      );
+
+      const summary = report.meta?.summary;
+      if (summary) {
+        sheetData.push(blankExcelRow());
+        sheetData.push({
+          ...blankExcelRow(),
+          Store:
+            "— meta.summary totals (do not sum Balance column above) —",
+        });
+        sheetData.push({
+          ...blankExcelRow(),
+          Store: "uniqueYarnOpeningKgSum (dedup)",
+          Opening: summary.uniqueYarnOpeningKgSum,
+        });
+        sheetData.push({
+          ...blankExcelRow(),
+          Store: "sumDisplayedOpeningAcrossRowsKg (Σ table)",
+          Opening: summary.sumDisplayedOpeningAcrossRowsKg,
+        });
+        sheetData.push({
+          ...blankExcelRow(),
+          Store: "uniqueYarnClosingKgSum (dedup)",
+          Balance: summary.uniqueYarnClosingKgSum,
+        });
+        sheetData.push({
+          ...blankExcelRow(),
+          Store: "sumDisplayedBalanceAcrossRowsKg (Σ table)",
+          Balance: summary.sumDisplayedBalanceAcrossRowsKg,
+        });
+        sheetData.push({
+          ...blankExcelRow(),
+          Store: "snapshot yarns / report rows",
+          Balance: `${summary.snapshotClosingYarnCatalogCount} / ${summary.reportRowCount}`,
+        });
+      }
 
       const workbook = XLSX.utils.book_new();
       const worksheet = XLSX.utils.json_to_sheet(sheetData);
@@ -302,8 +362,9 @@ const YarnReportPage = () => {
               <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
               <h1 className="text-sm font-bold text-gray-800">Yarn Report</h1>
               <YarnReportCalcInfoPopover
-                startDate={startDate}
-                endDate={endDate}
+                startDate={report?.startDate ?? startDate}
+                endDate={report?.endDate ?? endDate}
+                totalsSummary={report?.meta?.summary ?? null}
               />
             </div>
           </div>
@@ -461,6 +522,47 @@ const YarnReportPage = () => {
               )}
             </button>
           </form>
+
+          {report?.meta?.summary ? (
+            <div
+              className="mx-[10px] mb-4 rounded border border-blue-100 bg-blue-50/90 px-3 py-2.5"
+              role="region"
+              aria-label="Dedup yarn snapshot totals"
+            >
+              <div className="text-[10px] font-extrabold text-blue-950 mb-1.5">
+                Snapshot totals (compare to inventory — not Σ Balance column)
+              </div>
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-blue-950">
+                <div className="flex flex-wrap gap-1 justify-between gap-x-2">
+                  <dt className="text-blue-900/90">Opening snapshot date</dt>
+                  <dd className="font-mono font-semibold">
+                    {report.meta.openingSnapshotDate}
+                  </dd>
+                </div>
+                <div className="flex flex-wrap gap-1 justify-between gap-x-2">
+                  <dt className="text-blue-900/90">Closing snapshot date</dt>
+                  <dd className="font-mono font-semibold">
+                    {report.meta.closingSnapshotDate}
+                  </dd>
+                </div>
+                <div className="flex flex-wrap gap-1 justify-between gap-x-2 sm:col-span-2">
+                  <dt className="text-blue-900/90">uniqueYarnClosingKgSum (dedup kg)</dt>
+                  <dd className="font-mono font-bold">
+                    {report.meta.summary.uniqueYarnClosingKgSum.toLocaleString()} kg
+                  </dd>
+                </div>
+                <div className="flex flex-wrap gap-1 justify-between gap-x-2 sm:col-span-2">
+                  <dt className="text-blue-900/90">Σ Balance across table rows</dt>
+                  <dd className="font-mono font-semibold">
+                    {report.meta.summary.sumDisplayedBalanceAcrossRowsKg.toLocaleString()} kg
+                    <span className="font-sans font-normal text-blue-900/80 ml-1">
+                      (inflates when one yarn spans multiple rows)
+                    </span>
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          ) : null}
 
           {/* Download button - shown when report loaded */}
           {report && (

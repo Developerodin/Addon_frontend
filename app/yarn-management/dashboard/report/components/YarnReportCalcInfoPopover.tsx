@@ -1,18 +1,27 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
+import type { YarnReportMetaSummary } from "../../services/yarnInventoryService";
 
 type Props = {
   startDate: string;
   endDate: string;
+  /** Populated after a successful report load — shows weighted vs dedup kg totals */
+  totalsSummary?: YarnReportMetaSummary | null;
 };
 
 /**
- * Subtracts a number of days from an ISO date string (YYYY-MM-DD).
+ * Subtracts calendar days from a YYYY-MM-DD string (browser local calendar; aligns with picker).
  */
-function subtractDays(isoDate: string, days: number): string {
-  const d = new Date(`${isoDate}T00:00:00.000Z`);
-  if (Number.isNaN(d.getTime())) return isoDate;
-  d.setUTCDate(d.getUTCDate() - days);
-  return d.toISOString().slice(0, 10);
+function subtractCalendarDays(isoDate: string, days: number): string {
+  const [yStr, mStr, dStr] = isoDate.split("-");
+  const y = Number(yStr);
+  const m = Number(mStr);
+  const d = Number(dStr);
+  if (!y || !m || !d) return isoDate;
+  const dt = new Date(y, m - 1, d - days);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
 }
 
 /**
@@ -21,6 +30,7 @@ function subtractDays(isoDate: string, days: number): string {
 export default function YarnReportCalcInfoPopover({
   startDate,
   endDate,
+  totalsSummary = null,
 }: Props) {
   const [open, setOpen] = useState(false);
   const buttonId = useId();
@@ -28,7 +38,7 @@ export default function YarnReportCalcInfoPopover({
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   const openingSnapshotDate = useMemo(
-    () => subtractDays(startDate, 1),
+    () => subtractCalendarDays(startDate, 1),
     [startDate]
   );
 
@@ -143,7 +153,8 @@ export default function YarnReportCalcInfoPopover({
                 <li>
                   <span className="font-bold">balance</span>: snapshotDate ={" "}
                   <span className="font-semibold">{endDate}</span>{" "}
-                  (YarnDailyClosingSnapshot)
+                  (YarnDailyClosingSnapshot <span className="font-semibold">closingKg</span>{" "}
+                  per yarnCatalogId — displayed value, not recomputed from the row-only columns)
                 </li>
                 <li>
                   <span className="font-bold">rate</span>: any date
@@ -151,6 +162,57 @@ export default function YarnReportCalcInfoPopover({
                 </li>
               </ul>
             </div>
+            <div
+              className="mt-3 rounded-md border border-amber-100 bg-amber-50/90 px-3 py-2 text-[10px] text-amber-950"
+              role="note"
+            >
+              <div className="font-bold text-amber-900 mb-1">Totals vs inventory</div>
+              <p className="leading-snug mb-2">
+                Rows are keyed by yarn + shade + supplier. Opening and Balance repeat the{" "}
+                <span className="font-semibold">same</span> snapshot kg per{" "}
+                <span className="font-semibold">yarnCatalogId</span> on each line. Summing Opening
+                or Balance in Excel duplicates stock — compare physical totals to{" "}
+                <span className="font-mono font-semibold">uniqueYarnClosingKgSum</span> in the API
+                response (<span className="font-mono">meta.summary</span>), not Σ(Balance).
+              </p>
+              {totalsSummary ? (
+                <ul className="space-y-1 font-mono text-[10px] text-amber-900/95 break-all">
+                  <li>
+                    uniqueYarnClosingKgSum (dedup kg):{" "}
+                    <span className="font-bold">{totalsSummary.uniqueYarnClosingKgSum}</span>
+                  </li>
+                  <li>
+                    sumDisplayedBalanceAcrossRowsKg (Σ table):{" "}
+                    <span className="font-bold">
+                      {totalsSummary.sumDisplayedBalanceAcrossRowsKg}
+                    </span>
+                  </li>
+                  <li>
+                    uniqueYarnOpeningKgSum / sumDisplayedOpeningAcrossRowsKg:{" "}
+                    <span className="font-bold">{totalsSummary.uniqueYarnOpeningKgSum}</span> /{" "}
+                    <span className="font-bold">
+                      {totalsSummary.sumDisplayedOpeningAcrossRowsKg}
+                    </span>
+                  </li>
+                  <li>
+                    snapshot rows ({totalsSummary.snapshotClosingYarnCatalogCount} yarns) vs report
+                    rows ({totalsSummary.reportRowCount})
+                  </li>
+                </ul>
+              ) : (
+                <p className="text-[10px] leading-snug text-amber-900/85">
+                  Run Submit to load totals in this panel.
+                </p>
+              )}
+            </div>
+            <p className="mt-2 text-[10px] text-gray-600 leading-snug">
+              Closing snapshot keys required:{" "}
+              <span className="font-mono font-semibold">{openingSnapshotDate}</span>{" "}
+              (opening day before start) and{" "}
+              <span className="font-mono font-semibold">{endDate}</span> (closing). Use GET{" "}
+              <span className="font-mono">/yarn-management/yarn-report/snapshot-bounds</span>{" "}
+              to see coverage.
+            </p>
           </div>
         </div>
       )}

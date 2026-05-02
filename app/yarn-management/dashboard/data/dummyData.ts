@@ -520,8 +520,16 @@ export const getInventorySummary = (
   pendingDeliveries: PendingDelivery[],
   alerts: InventoryAlert[]
 ): InventorySummary => {
-  const totalStock = inventory.reduce((sum, item) => sum + item.weight, 0);
-  const purchaseYarn = inventory.reduce((sum, item) => sum + item.weight, 0);
+  const totalStock = inventory.reduce(
+    (sum, item) => sum + item.longTermWeight + item.shortTermWeight + item.unallocatedWeight,
+    0
+  );
+  const purchaseYarn = totalStock;
+  const longTermKg = inventory.reduce((sum, item) => sum + item.longTermWeight, 0);
+  const shortTermKg = inventory.reduce((sum, item) => sum + item.shortTermWeight, 0);
+  const unallocatedKg = inventory.reduce((sum, item) => sum + item.unallocatedWeight, 0);
+  const blockedKg = inventory.reduce((sum, item) => sum + item.blockedQty, 0);
+  const ltPlusShortKg = longTermKg + shortTermKg;
   const inventoryValue = inventory.reduce(
     (sum, item) => sum + item.totalValue,
     0
@@ -533,6 +541,11 @@ export const getInventorySummary = (
     pendingDeliveries: pendingDeliveries.length,
     inventoryAlerts: alerts.length,
     inventoryValue,
+    longTermKg,
+    shortTermKg,
+    unallocatedKg,
+    blockedKg,
+    ltPlusShortKg,
   };
 };
 
