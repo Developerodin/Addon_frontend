@@ -179,6 +179,11 @@ const KnittingFloorSupervisorPage = () => {
   });
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
+  /** Wider order fetch for Article view so rows are not tied to the Orders-tab page size. */
+  const [articleViewOrders, setArticleViewOrders] = useState<ProductionOrder[]>([]);
+  const [articleViewLoading, setArticleViewLoading] = useState(false);
+  /** When true, list every knitting line with received > 0; when false, only remaining > 0. */
+  const [showAllKnittingArticles, setShowAllKnittingArticles] = useState(false);
   /** When set (e.g. 1), only articles before this index are editable in update modal (machine-edit: first row editable, rest read-only). */
   const [updateModalReadOnlyFromIndex, setUpdateModalReadOnlyFromIndex] = useState<number | undefined>(undefined);
   /** When update modal opened from machine view: assignment + items so we can call status/yarn APIs. */
@@ -188,6 +193,8 @@ const KnittingFloorSupervisorPage = () => {
   const [updateModalAssignmentItems, setUpdateModalAssignmentItems] = useState<ProductionOrderItem[] | null>(null);
   const [updatingStatusItemId, setUpdatingStatusItemId] = useState<string | null>(null);
   const [updatingYarnItemId, setUpdatingYarnItemId] = useState<string | null>(null);
+
+  const KNITTING_ARTICLE_VIEW_ORDER_LIMIT = 2000;
 
   // Load knitting floor orders from API
   const loadOrders = async () => {
@@ -220,6 +227,39 @@ const KnittingFloorSupervisorPage = () => {
     }
   };
 
+  /**
+   * Loads a large page of orders for Article view so article rows paginate by article, not by order count.
+   */
+  const loadArticleViewOrders = useCallback(async () => {
+    setArticleViewLoading(true);
+    try {
+      const apiFilters: FloorOrderFilters = {
+        page: 1,
+        limit: KNITTING_ARTICLE_VIEW_ORDER_LIMIT,
+        ...(filters.status && { status: filters.status }),
+        ...(filters.priority && { priority: filters.priority }),
+        ...(searchQuery && { search: searchQuery }),
+      };
+      const response = await productionService.getFloorOrders("Knitting", apiFilters);
+      if (response.success) {
+        setArticleViewOrders(response.data.results);
+      } else {
+        console.error("Failed to load knitting articles:", response.error);
+        toast.error(
+          typeof response.error === "object" && response.error && "message" in response.error
+            ? String((response.error as { message?: string }).message)
+            : "Failed to load article view"
+        );
+      }
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Failed to load article view";
+      console.error("Error loading article view orders:", error);
+      toast.error(msg);
+    } finally {
+      setArticleViewLoading(false);
+    }
+  }, [filters.status, filters.priority, searchQuery]);
+
   // When user role is "user", don't allow Orders tab – switch to machine-view if on orders
   useEffect(() => {
     if (isUserRole && activeTab === "orders") {
@@ -235,6 +275,15 @@ const KnittingFloorSupervisorPage = () => {
 
     return () => clearTimeout(timeoutId);
   }, [currentPage, itemsPerPage, filters, searchQuery]);
+
+  // Article view: separate wide fetch (not limited by Orders tab page size)
+  useEffect(() => {
+    if (activeTab !== "article-view") return;
+    const timeoutId = setTimeout(() => {
+      void loadArticleViewOrders();
+    }, 500);
+    return () => clearTimeout(timeoutId);
+  }, [activeTab, loadArticleViewOrders]);
 
   // When user enters/scans barcode in container modal, fetch container and check if free or same-floor (multi-article allowed)
   useEffect(() => {
@@ -330,8 +379,9 @@ const KnittingFloorSupervisorPage = () => {
     });
   };
 
-  // Apply filtering to orders
+  // Apply filtering to orders (Orders tab + shared shaping)
   const paginatedOrders = filterOrdersByReceivedQuantity(orders);
+  const articleTabOrders = filterOrdersByReceivedQuantity(articleViewOrders);
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -541,6 +591,7 @@ const KnittingFloorSupervisorPage = () => {
       setInitialUpdateData({});
       toast.success("Article marked as Completed");
       loadOrders();
+      if (activeTab === "article-view") void loadArticleViewOrders();
       setMachineViewRefreshTrigger((t) => t + 1);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to update status";
@@ -583,6 +634,7 @@ const KnittingFloorSupervisorPage = () => {
   const handleTransferSuccess = () => {
     // Reload orders to get updated data
     loadOrders();
+    if (activeTab === "article-view") void loadArticleViewOrders();
   };
 
   // Load article logs
@@ -763,6 +815,7 @@ const KnittingFloorSupervisorPage = () => {
 
       // Reload orders list and refresh machine view so both show updated data
       loadOrders();
+      if (activeTab === "article-view") void loadArticleViewOrders();
       setMachineViewRefreshTrigger((prev) => prev + 1);
     } catch (error: any) {
       console.error('Error updating order:', error);
@@ -934,11 +987,14 @@ const KnittingFloorSupervisorPage = () => {
               <button
                 type="button"
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
-                onClick={loadOrders}
-                disabled={isLoading}
+                onClick={() => {
+                  loadOrders();
+                  if (activeTab === "article-view") void loadArticleViewOrders();
+                }}
+                disabled={isLoading || (activeTab === "article-view" && articleViewLoading)}
                 title="Refresh Orders"
               >
-                <i className={`ri-refresh-line text-xs ${isLoading ? 'animate-spin' : ''}`}></i> Refresh
+                <i className={`ri-refresh-line text-xs ${isLoading || articleViewLoading ? 'animate-spin' : ''}`}></i> Refresh
               </button>
             </div>
           </div>
@@ -1006,9 +1062,13 @@ const KnittingFloorSupervisorPage = () => {
             <MachineArticlePlanningTab refreshTrigger={machineViewRefreshTrigger} />
           ) : activeTab === "article-view" ? (
             <ArticleViewTab
-              orders={paginatedOrders}
+              orders={articleTabOrders}
+              isLoading={articleViewLoading}
+              showAllArticles={showAllKnittingArticles}
+              onShowAllArticlesChange={setShowAllKnittingArticles}
+              itemsPerPage={itemsPerPage}
+              onItemsPerPageChange={handleItemsPerPageChange}
               onViewOrder={handleViewOrder}
-              onUpdateOrder={handleUpdateOrder}
               getStatusBadge={getStatusBadge}
               getPriorityBadge={getPriorityBadge}
             />

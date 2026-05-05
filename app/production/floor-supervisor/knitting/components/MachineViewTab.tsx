@@ -59,6 +59,21 @@ function getItemCounts(a: MachineOrderAssignment): { poCount: number; articleCou
   return { poCount: new Set(poIds).size, articleCount: items.length };
 }
 
+/**
+ * Prioritized queue item that is knitting "running" for this machine: first In Progress among prioritized non–on-hold items.
+ */
+function getRunningArticleLabel(a: MachineOrderAssignment): string {
+  const items = (a.productionOrderItems ?? [])
+    .filter((i) => i.priority != null && i.status !== OrderStatus.ON_HOLD)
+    .sort((x, y) => (x.priority ?? 999) - (y.priority ?? 999));
+  const running = items.find((i) => i.status === OrderStatus.IN_PROGRESS);
+  if (!running) return "";
+  const order = running.orderNumber?.trim();
+  const art = running.articleNumber?.trim();
+  if (order && art) return `${order} · ${art}`;
+  return art || order || "";
+}
+
 export interface MachineViewTabProps {
   /** When user clicks pencil on a machine card, open the same data-entry modal (priority order editable, upcoming read-only). */
   onOpenEditModal?: (assignment: MachineOrderAssignment) => void;
@@ -401,6 +416,12 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
                     <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Machine</th>
                     <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Active Needle</th>
                     <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Needle Options</th>
+                    <th
+                      className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 min-w-[140px] max-w-[220px]"
+                      title="Order · article with status In Progress on this machine queue"
+                    >
+                      Running article
+                    </th>
                     <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">POs</th>
                     <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Articles</th>
                     <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Status</th>
@@ -411,6 +432,7 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
                   {paginatedRows.map((row) => {
                     const { poCount, articleCount } = getItemCounts(row);
                     const needleCount = needleOptionsCount(row);
+                    const runningArticle = getRunningArticleLabel(row);
                     const isPlaceholder = row.id.startsWith("placeholder-");
                     const machineIdForLogs = getMachineIdFromRow(row);
                     return (
@@ -430,6 +452,20 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
                         </td>
                         <td className="px-2 py-1.5 text-center border-r border-gray-300 text-gray-700">
                           {needleCount}
+                        </td>
+                        <td
+                          className="px-2 py-1.5 text-left border-r border-gray-300 text-gray-800 min-w-[140px] max-w-[220px]"
+                          title={runningArticle || undefined}
+                        >
+                          {runningArticle ? (
+                            <span className="block truncate text-[11px] font-medium" aria-label={`Running article: ${runningArticle}`}>
+                              {runningArticle}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400" aria-label="No article in progress on this machine">
+                              —
+                            </span>
+                          )}
                         </td>
                         <td className="px-2 py-1.5 text-center border-r border-gray-300 text-gray-700">
                           {poCount}
