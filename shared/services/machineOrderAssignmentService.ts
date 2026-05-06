@@ -202,6 +202,7 @@ function normalizeAssignment(raw: any): MachineOrderAssignment {
           orderNumber: item.productionOrder?.orderNumber ?? undefined,
           articleNumber: item.article?.articleNumber ?? undefined,
           yarnIssueStatus: item.yarnIssueStatus,
+          yarnReturnStatus: item.yarnReturnStatus,
         }))
       : [],
     isActive: raw.isActive !== false,
@@ -558,21 +559,52 @@ export async function createMachineOrderAssignment(
 const MONGO_ID_REGEX = /^[a-fA-F0-9]{24}$/;
 
 /** Payload for PATCH: only fields API accepts. Only items with valid Mongo ids for productionOrder and article.
- * priority is managed by backend – do not send. */
+ * Omit empty optional fields so merge leaves existing yarn/status untouched.
+ * Priority is forwarded when explicitly set so machine moves can preserve queue position.
+ */
 function sanitizeProductionOrderItemsForApi(
   items: ProductionOrderItem[]
-): { productionOrder: string; article: string; status?: OrderStatusType }[] {
+): {
+  productionOrder: string;
+  article: string;
+  status?: OrderStatusType;
+  yarnIssueStatus?: string;
+  yarnReturnStatus?: string;
+  priority?: number;
+}[] {
   return items
     .map((item) => {
       const po = String(item.productionOrder ?? '').trim();
       const art = String(item.article ?? '').trim();
       if (!po || !art) return null;
       if (!MONGO_ID_REGEX.test(po) || !MONGO_ID_REGEX.test(art)) return null;
-      return {
+      const out: {
+        productionOrder: string;
+        article: string;
+        status?: OrderStatusType;
+        yarnIssueStatus?: string;
+        yarnReturnStatus?: string;
+        priority?: number;
+      } = {
         productionOrder: po,
         article: art,
-        status: item.status,
       };
+      const st = item.status;
+      if (st !== undefined && st !== null && String(st).trim() !== '') {
+        out.status = st;
+      }
+      const yis = item.yarnIssueStatus;
+      if (yis !== undefined && yis !== null && String(yis).trim() !== '') {
+        out.yarnIssueStatus = String(yis);
+      }
+      const yrs = item.yarnReturnStatus;
+      if (yrs !== undefined && yrs !== null && String(yrs).trim() !== '') {
+        out.yarnReturnStatus = String(yrs);
+      }
+      if (typeof item.priority === 'number' && Number.isFinite(item.priority) && item.priority >= 1) {
+        out.priority = Math.floor(item.priority);
+      }
+      return out;
     })
     .filter((x): x is NonNullable<typeof x> => x != null);
 }

@@ -701,7 +701,10 @@ const EditOrderContent = () => {
     }
   };
 
-  /** Only Pending or On Hold items can have their machine changed. In Progress / Completed cannot. */
+  /**
+   * Machine can be reassigned anytime except when the queue row is terminal (completed/cancelled),
+   * so yarn issue / production In Progress rows keep their statuses when moved to another needle assignment.
+   */
   const canChangeMachineForArticle = (article: Article): boolean => {
     const mid = typeof article.machineId === 'object' && article.machineId
       ? (article.machineId as { id?: string }).id ?? (article.machineId as { _id?: string })._id
@@ -712,7 +715,7 @@ const EditOrderContent = () => {
       (i) => String(i.productionOrder) === String(orderId) && String(i.article) === String(article.id)
     );
     const status = (item?.status ?? 'Pending').toString().toLowerCase();
-    return status === 'pending' || status === 'on hold';
+    return status !== 'completed' && status !== 'cancelled';
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1224,7 +1227,7 @@ const EditOrderContent = () => {
                                   !article.productId
                                     ? 'Select factory code first'
                                     : !canChangeMachineForArticle(article)
-                                    ? 'Cannot change machine: item is In Progress or Completed. Only Pending/On Hold can be reassigned.'
+                                    ? 'Cannot change machine: Completed or Cancelled queue rows cannot be reassigned.'
                                     : undefined
                                 }
                                 className="form-control form-control-sm w-full text-xs py-1 px-2 h-8 text-left bg-white border border-gray-300 rounded flex items-center justify-between gap-1 disabled:opacity-60 disabled:cursor-not-allowed"
