@@ -225,19 +225,29 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
               <button
                 type="button"
                 className="text-xs text-primary hover:text-primary-dark"
-                onClick={() => handleSelectAll('Yarn Management', ['Cataloguing', 'Purchase Order', 'Purchase Order Received', 'Inventory', 'Yarn Issue'])}
+                onClick={() =>
+                  handleSelectAll('Yarn Management', [
+                    'Dashboard',
+                    'Analytics & reports',
+                    'Cataloguing',
+                    'Inventory',
+                    'Yarn Issue',
+                    'Yarn Return',
+                  ])
+                }
               >
                 Toggle All
               </button>
             </div>
             <div className="space-y-2 ml-4">
               {[
+                { key: 'Dashboard', label: 'Dashboard' },
+                { key: 'Analytics & reports', label: 'Analytics & reports' },
                 { key: 'Cataloguing', label: 'Cataloguing' },
-                { key: 'Purchase Order', label: 'Purchase Order' },
-                { key: 'Purchase Order Received', label: 'Purchase Order Received' },
                 { key: 'Inventory', label: 'Inventory' },
-                { key: 'Yarn Issue', label: 'Yarn Issue' }
-              ].map(subsection => (
+                { key: 'Yarn Issue', label: 'Yarn Issue' },
+                { key: 'Yarn Return', label: 'Yarn Return' },
+              ].map((subsection) => (
                 <label key={subsection.key} className="flex items-center">
                   <input
                     type="checkbox"

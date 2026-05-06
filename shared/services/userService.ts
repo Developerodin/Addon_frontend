@@ -46,10 +46,13 @@ export interface NavigationPermissions {
     Dashboard: boolean;
     Inventory: boolean;
     Cataloguing: boolean;
+    'Analytics & reports': boolean;
     'Purchase Management': {
       'Requisition list': boolean;
       'Purchase Order': boolean;
       'Purchase Order Recevied': boolean;
+      'Draft POs': boolean;
+      'GRN History': boolean;
       'Yarn QC': boolean;
       'Yarn Storage': boolean;
     };

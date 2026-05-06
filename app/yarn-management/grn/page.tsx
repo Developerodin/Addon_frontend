@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { toast } from 'react-hot-toast';
 import Seo from '@/shared/layout-components/seo/seo';
+import { useNavigation } from '@/shared/contextapi/navigationContext';
 import { useGrns } from '@/shared/hooks/useGrns';
 import { downloadGrnHtml, printGrnDocument } from '@/shared/utils/grnPrint';
 import yarnGrnService, { YarnGrn } from '@/shared/services/yarnGrnService';
@@ -18,6 +19,11 @@ import GrnDetailDrawer from '@/shared/components/grn/GrnDetailDrawer';
  * so historical reprints look identical to the day the GRN was issued.
  */
 export default function YarnGrnHistoryPage() {
+  const { hasSubPermission, isLoading: navLoading } = useNavigation();
+  const hasPermission = hasSubPermission(
+    '/yarn-management/purchase-management',
+    'GRN History'
+  );
   const grns = useGrns();
   const [active, setActive] = useState<YarnGrn | null>(null);
 
@@ -59,6 +65,20 @@ export default function YarnGrnHistoryPage() {
     <>
       <Seo title="Yarn GRN History" />
       <div className="main-content !p-[10px]">
+        {navLoading ? (
+          <div className="flex justify-center py-16" role="status" aria-label="Loading">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600" />
+          </div>
+        ) : !hasPermission ? (
+          <div className="box border border-gray-100">
+            <div className="box-body text-center py-12">
+              <p className="text-sm text-gray-600">
+                You don&apos;t have permission to access GRN History.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
         <header className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <div className="w-[3px] h-5 bg-purple-600 rounded-full" aria-hidden />
@@ -98,6 +118,8 @@ export default function YarnGrnHistoryPage() {
             void grns.refresh();
           }}
         />
+          </>
+        )}
       </div>
     </>
   );

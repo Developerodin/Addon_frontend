@@ -950,7 +950,7 @@ const PurchasePage = () => {
 
   return (
     <div className="main-content !p-[10px]">
-      <Seo title="Purchase Order" />
+      <Seo title="All POs" />
 
       <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
         <div className="p-[10px]">
@@ -958,7 +958,7 @@ const PurchasePage = () => {
           <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
             <div className="flex items-center gap-2">
               <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
-              <h1 className="text-sm font-bold text-gray-800">Purchase Order</h1>
+              <h1 className="text-sm font-bold text-gray-800">All POs</h1>
               <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
                 {filteredOrders.length}
               </span>

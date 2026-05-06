@@ -49,6 +49,7 @@ interface NavigationPermissions {
     'Purchase Order': boolean;
     'Purchase Order Received': boolean;
     'Inventory': boolean;
+    'Analytics & reports': boolean;
     'Yarn Issue': boolean;
     'Yarn Return': boolean;
     'Yarn Master': {
@@ -62,6 +63,8 @@ interface NavigationPermissions {
       'Requisition list': boolean;
       'Purchase Order': boolean;
       'Purchase Order Recevied': boolean;
+      'Draft POs': boolean;
+      'GRN History': boolean;
       'Yarn QC': boolean;
       'Yarn Storage': boolean;
     };
@@ -145,6 +148,7 @@ const defaultPermissions: NavigationPermissions = {
     'Purchase Order': false,
     'Purchase Order Received': false,
     'Inventory': false,
+    'Analytics & reports': false,
     'Yarn Issue': false,
     'Yarn Return': false,
     'Yarn Master': {
@@ -158,6 +162,8 @@ const defaultPermissions: NavigationPermissions = {
       'Requisition list': false,
       'Purchase Order': false,
       'Purchase Order Recevied': false,
+      'Draft POs': false,
+      'GRN History': false,
       'Yarn QC': false,
       'Yarn Storage': false,
     },

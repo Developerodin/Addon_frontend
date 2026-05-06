@@ -16,18 +16,32 @@ const PurchaseManagementPage = () => {
       permission: "Requisition list"
     },
     {
-      title: "Purchase Order",
+      title: "All POs",
       description: "Handle yarn procurement and purchase orders",
       icon: "ri-shopping-cart-line",
       path: "/yarn-management/purchase-management/purchase",
       permission: "Purchase Order"
     },
     {
-      title: "Purchase Order Recevied",
+      title: "PO Received",
       description: "Track and manage received purchase orders",
       icon: "ri-inbox-line",
       path: "/yarn-management/purchase-management/purchase-order-received",
       permission: "Purchase Order Recevied"
+    },
+    {
+      title: "Draft POs",
+      description: "Purchase orders saved before supplier submission",
+      icon: "ri-draft-line",
+      path: "/yarn-management/purchase-management/draft-pos",
+      permission: "Draft POs"
+    },
+    {
+      title: "GRN History",
+      description: "Search and reprint yarn goods received notes",
+      icon: "ri-file-text-line",
+      path: "/yarn-management/grn",
+      permission: "GRN History"
     },
     {
       title: "Yarn QC",
@@ -35,13 +49,6 @@ const PurchaseManagementPage = () => {
       icon: "ri-checkbox-circle-line",
       path: "/yarn-management/purchase-management/yarn-qc",
       permission: "Yarn QC"
-    },
-    {
-      title: "Yarn Storage",
-      description: "Manage yarn storage locations and inventory",
-      icon: "ri-stack-line",
-      path: "/yarn-management/purchase-management/yarn-storage",
-      permission: "Yarn Storage"
     }
   ];
 
@@ -68,7 +75,7 @@ const PurchaseManagementPage = () => {
             <div className="box-header">
               <h1 className="box-title text-2xl font-semibold">Purchase Management</h1>
               <p className="text-gray-600 mt-2">
-                Manage yarn procurement, purchase orders, quality control, and storage.
+                Manage yarn procurement, purchase orders, and quality control.
               </p>
             </div>
           </div>

@@ -51,6 +51,7 @@ const RaiseIcon = <i className="ri ri-upload-2-line side-menu__icon" style={{ ma
 const ReceiveIcon = <i className="ri ri-download-2-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const CheckingIcon = <i className="ri ri-check-double-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const GRNIcon = <i className="ri ri-file-text-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const DraftPOIcon = <i className="ri ri-draft-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const BrandingIcon = <i className="ri ri-price-tag-3-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const FinalCheckIcon = <i className="ri ri-task-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const DispatchIcon = <i className="ri ri-truck-fill side-menu__icon" style={{ marginTop: "-10px" }}></i>;
@@ -449,7 +450,7 @@ const BaseMenuItems: any = [
             type: "link",
             active: false,
             selected: false,
-            title: "Purchase Order",
+            title: "All POs",
           },
           {
             icon: PurchaseReceivedIcon,
@@ -457,7 +458,15 @@ const BaseMenuItems: any = [
             type: "link",
             active: false,
             selected: false,
-            title: "Purchase Order Recevied",
+            title: "PO Received",
+          },
+          {
+            icon: DraftPOIcon,
+            path: "/yarn-management/purchase-management/draft-pos",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "Draft POs",
           },
           {
             icon: PurchaseReceivedIcon,
@@ -474,14 +483,6 @@ const BaseMenuItems: any = [
             active: false,
             selected: false,
             title: "Yarn QC",
-          },
-          {
-            icon: StorageIcon,
-            path: "/yarn-management/purchase-management/yarn-storage",
-            type: "link",
-            active: false,
-            selected: false,
-            title: "Yarn Storage",
           },
         ],
       },
@@ -500,6 +501,22 @@ const BaseMenuItems: any = [
         active: false,
         selected: false,
         title: "Yarn Return",
+      },
+      {
+        icon: StorageIcon,
+        path: "/yarn-management/purchase-management/yarn-storage",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Yarn Storage",
+      },
+      {
+        icon: ReportsIcon,
+        path: "/yarn-management/dashboard/report",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Analytics & reports",
       },
     ],
   },

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'react-hot-toast';
 import Seo from '@/shared/layout-components/seo/seo';
+import { useNavigation } from '@/shared/contextapi/navigationContext';
 import yarnGrnService, { YarnGrn } from '@/shared/services/yarnGrnService';
 import { downloadGrnHtml, printGrnDocument } from '@/shared/utils/grnPrint';
 import GrnDetailDrawer from '@/shared/components/grn/GrnDetailDrawer';
@@ -16,12 +17,24 @@ export default function YarnGrnDetailPage() {
   const params = useParams<{ grnId: string }>();
   const grnId = params?.grnId;
   const router = useRouter();
+  const { hasSubPermission, isLoading: navLoading } = useNavigation();
+  const hasPermission = hasSubPermission(
+    '/yarn-management/purchase-management',
+    'GRN History'
+  );
   const [grn, setGrn] = useState<YarnGrn | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!grnId) return;
+    if (!grnId || navLoading || !hasPermission) {
+      if (!navLoading && !hasPermission) {
+        setIsLoading(false);
+        setGrn(null);
+        setError(null);
+      }
+      return;
+    }
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -35,7 +48,7 @@ export default function YarnGrnDetailPage() {
       })
       .finally(() => { if (!cancelled) setIsLoading(false); });
     return () => { cancelled = true; };
-  }, [grnId]);
+  }, [grnId, hasPermission, navLoading]);
 
   const handlePrint = async () => {
     if (!grn) return;
@@ -60,6 +73,20 @@ export default function YarnGrnDetailPage() {
     <>
       <Seo title={grn?.grnNumber ? `GRN ${grn.grnNumber}` : 'Yarn GRN'} />
       <div className="main-content !p-[10px]">
+        {navLoading ? (
+          <div className="flex justify-center py-16" role="status" aria-label="Loading">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600" />
+          </div>
+        ) : !hasPermission ? (
+          <div className="box border border-gray-100">
+            <div className="box-body text-center py-12">
+              <p className="text-sm text-gray-600">
+                You don&apos;t have permission to access GRN History.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
         <header className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <button
@@ -137,6 +164,8 @@ export default function YarnGrnDetailPage() {
               />
             </div>
           </div>
+        )}
+          </>
         )}
       </div>
     </>

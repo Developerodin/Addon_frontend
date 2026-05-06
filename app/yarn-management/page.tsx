@@ -17,7 +17,7 @@ const YarnManagementPage = () => {
     },
     {
       title: "Purchase Management",
-      description: "Manage yarn procurement, purchase orders, quality control, and storage",
+      description: "Manage yarn procurement, purchase orders, and quality control",
       icon: "ri-shopping-bag-line",
       path: "/yarn-management/purchase-management",
       permission: "Purchase Management"
@@ -42,6 +42,14 @@ const YarnManagementPage = () => {
       icon: "ri-arrow-go-back-line",
       path: "/yarn-management/yarn-return",
       permission: "Yarn Return"
+    },
+    {
+      title: "Yarn Storage",
+      description: "Manage yarn storage locations and inventory",
+      icon: "ri-stack-line",
+      path: "/yarn-management/purchase-management/yarn-storage",
+      permission: "Yarn Storage",
+      permissionParent: "/yarn-management/purchase-management",
     },
     {
       title: "Yarn Master",
@@ -71,7 +79,11 @@ const YarnManagementPage = () => {
           {/* Modules Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {yarnManagementModules.map((module) => {
-              const hasPermission = hasSubPermission('/yarn-management', module.permission);
+              const permParent =
+                "permissionParent" in module && module.permissionParent
+                  ? module.permissionParent
+                  : "/yarn-management";
+              const hasPermission = hasSubPermission(permParent, module.permission);
               
               return (
                 <div key={module.title} className="box group hover:shadow-lg transition-shadow duration-300">

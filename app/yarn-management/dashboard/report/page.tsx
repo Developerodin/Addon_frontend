@@ -75,7 +75,7 @@ const YarnReportPage = () => {
   const [boundsLoading, setBoundsLoading] = useState(false);
   const [boundsError, setBoundsError] = useState<string | null>(null);
 
-  const hasPermission = hasSubPermission("/yarn-management", "Dashboard");
+  const hasPermission = hasSubPermission("/yarn-management", "Analytics & reports");
 
   const endMaxUi = useMemo(() => {
     if (!snapshotBounds?.datePicker.endMax) return todayStr;

@@ -28,7 +28,9 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
     // For purchase management items, map display titles to permission keys
     if (path.startsWith('/yarn-management/purchase-management/')) {
       const titleMap: { [key: string]: string } = {
-        'Purchase Order Recevied': 'Purchase Order Recevied', // Keep typo as per user's permission structure
+        'PO Received': 'Purchase Order Recevied',
+        'All POs': 'Purchase Order',
+        'Purchase Order Recevied': 'Purchase Order Recevied',
       };
       return titleMap[displayTitle] || displayTitle;
     }
@@ -124,6 +126,9 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                   const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
                   return hasSubPermission('/yarn-management/yarn-master', permissionKey);
                 }
+                if (nestedChild.path === '/yarn-management/grn') {
+                  return hasSubPermission('/yarn-management/purchase-management', 'GRN History');
+                }
                 if (nestedChild.path.startsWith('/yarn-management/purchase-management/')) {
                   const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
                   return hasSubPermission('/yarn-management/purchase-management', permissionKey);
@@ -151,6 +156,9 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               // Handle Dashboard permission
               if (child.path === '/yarn-management/dashboard') {
                 return hasSubPermission('/yarn-management', 'Dashboard');
+              }
+              if (child.path.startsWith('/yarn-management/dashboard/')) {
+                return hasSubPermission('/yarn-management', 'Analytics & reports');
               }
               // Handle Cataloguing permission (shown under catalog but uses yarn-management permissions)
               if (child.path === '/yarn-management/cataloguing') {
@@ -222,6 +230,9 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                     const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
                     return hasSubPermission('/yarn-management/yarn-master', permissionKey);
                   }
+                  if (nestedChild.path === '/yarn-management/grn') {
+                    return hasSubPermission('/yarn-management/purchase-management', 'GRN History');
+                  }
                   if (nestedChild.path.startsWith('/yarn-management/purchase-management/')) {
                     const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
                     return hasSubPermission('/yarn-management/purchase-management', permissionKey);
@@ -288,6 +299,9 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                   const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
                   return hasSubPermission('/yarn-management/yarn-master', permissionKey);
                 }
+                if (nestedChild.path === '/yarn-management/grn') {
+                  return hasSubPermission('/yarn-management/purchase-management', 'GRN History');
+                }
                 if (nestedChild.path.startsWith('/yarn-management/purchase-management/')) {
                   const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
                   return hasSubPermission('/yarn-management/purchase-management', permissionKey);
@@ -314,6 +328,9 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               // Handle Dashboard permission
               if (child.path === '/yarn-management/dashboard') {
                 return hasSubPermission('/yarn-management', 'Dashboard');
+              }
+              if (child.path.startsWith('/yarn-management/dashboard/')) {
+                return hasSubPermission('/yarn-management', 'Analytics & reports');
               }
               // Handle Cataloguing permission (shown under catalog but uses yarn-management permissions)
               if (child.path === '/yarn-management/cataloguing') {
@@ -390,6 +407,9 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                   if (nestedChild.path.startsWith('/yarn-management/yarn-master/')) {
                     const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
                     return hasSubPermission('/yarn-management/yarn-master', permissionKey);
+                  }
+                  if (nestedChild.path === '/yarn-management/grn') {
+                    return hasSubPermission('/yarn-management/purchase-management', 'GRN History');
                   }
                   if (nestedChild.path.startsWith('/yarn-management/purchase-management/')) {
                     const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);

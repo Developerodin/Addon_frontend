@@ -64,6 +64,10 @@ const DashboardPage = () => {
   } = useYarnDashboardExports(searchTerm, statusFilter);
 
   const hasPermission = hasSubPermission("/yarn-management", "Dashboard");
+  const hasReportPermission = hasSubPermission(
+    "/yarn-management",
+    "Analytics & reports"
+  );
 
   /**
    * Transforms API response item to YarnInventory format
@@ -399,13 +403,15 @@ const DashboardPage = () => {
               )}
             </div>
             <div className="flex items-center gap-1.5">
-              <Link
-                href="/yarn-management/dashboard/report"
-                className="w-9 h-9 flex items-center justify-center rounded border border-gray-200 hover:bg-gray-50 transition-colors text-gray-600"
-                aria-label="Yarn report"
-              >
-                <i className="ri-file-chart-line text-lg"></i>
-              </Link>
+              {hasReportPermission ? (
+                <Link
+                  href="/yarn-management/dashboard/report"
+                  className="w-9 h-9 flex items-center justify-center rounded border border-gray-200 hover:bg-gray-50 transition-colors text-gray-600"
+                  aria-label="Open yarn analytics and report"
+                >
+                  <i className="ri-file-chart-line text-lg"></i>
+                </Link>
+              ) : null}
               <button
                 type="button"
                 onClick={() => setShowAlertsModal(true)}

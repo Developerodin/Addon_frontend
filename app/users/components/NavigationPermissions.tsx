@@ -56,6 +56,7 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
 
   const yarnManagementSections = [
     { key: 'Dashboard', label: 'Dashboard' },
+    { key: 'Analytics & reports', label: 'Analytics & reports' },
     { key: 'Inventory', label: 'Inventory' },
     { key: 'Cataloguing', label: 'Cataloguing' },
     { key: 'Yarn Issue', label: 'Yarn Issue' },
@@ -64,8 +65,10 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
 
   const purchaseManagementSections = [
     { key: 'Requisition list', label: 'Requisition list' },
-    { key: 'Purchase Order', label: 'Purchase Order' },
-    { key: 'Purchase Order Recevied', label: 'Purchase Order Recevied' },
+    { key: 'Purchase Order', label: 'All POs' },
+    { key: 'Purchase Order Recevied', label: 'PO Received' },
+    { key: 'Draft POs', label: 'Draft POs' },
+    { key: 'GRN History', label: 'GRN History' },
     { key: 'Yarn QC', label: 'Yarn QC' },
     { key: 'Yarn Storage', label: 'Yarn Storage' }
   ]
