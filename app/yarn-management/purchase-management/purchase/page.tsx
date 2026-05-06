@@ -88,6 +88,7 @@ interface PurchaseItem {
 // Helper function to convert API status code to display format
 const convertStatusFromAPI = (statusCode: string): PurchaseOrderStatus => {
   const statusMap: Record<string, PurchaseOrderStatus> = {
+    draft: 'draft',
     'submitted_to_supplier': 'submitted to supplier',
     'in_transit': 'in transit',
     'delivered': 'delivered',
@@ -107,6 +108,7 @@ const convertStatusFromAPI = (statusCode: string): PurchaseOrderStatus => {
 // Helper function to convert display status to API status code
 const convertStatusToAPI = (status: PurchaseOrderStatus): string => {
   const statusMap: Record<PurchaseOrderStatus, string> = {
+    'draft': 'draft',
     'submitted to supplier': 'submitted_to_supplier',
     'in transit': 'in_transit',
     'delivered': 'delivered',
@@ -846,7 +848,10 @@ const PurchasePage = () => {
     }
   };
 
-  const filteredOrders = orders.filter(order => {
+  const filteredOrders = orders.filter((order) => {
+    if (order.status === "draft") {
+      return false;
+    }
     const matchesSearch =
       order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.supplier.toLowerCase().includes(searchTerm.toLowerCase());
@@ -914,6 +919,7 @@ const PurchasePage = () => {
 
   const getStatusColor = (status: PurchaseOrderStatus) => {
     switch (status) {
+      case 'draft': return 'bg-slate-100 text-slate-700';
       case 'submitted to supplier': return 'bg-blue-100 text-blue-800';
       case 'in transit': return 'bg-purple-100 text-purple-800';
       case 'delivered': return 'bg-green-100 text-green-800';
@@ -1006,27 +1012,29 @@ const PurchasePage = () => {
                 <i className="ri-arrow-down-s-line absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none group-hover:text-gray-600 transition-colors"></i>
               </div>
 
-              {/* Status Filter as Sort-like dropdown */}
+              {/* Status filter (backend yarnPurchaseOrderStatuses) */}
               <div className="relative group">
                 <select
-                  className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-10 focus:ring-0 focus:border-gray-300 appearance-none cursor-pointer min-w-[80px]"
+                  className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-10 pl-8 focus:ring-0 focus:border-gray-300 appearance-none cursor-pointer min-w-[80px]"
                   value={statusFilter}
+                  aria-label="Filter purchase orders by status"
                   onChange={(e) => {
                     setStatusFilter(e.target.value);
                     setCurrentPage(1);
                   }}
                 >
-                  <option value="all">Sort</option>
+                  <option value="all">All statuses</option>
                   <option value="submitted to supplier">Submitted</option>
-                  <option value="in transit">In Transit</option>
-                  <option value="delivered">Delivered</option>
+                  <option value="in transit">In transit</option>
+                  <option value="goods partially received">Partially received</option>
                   <option value="goods received">Received</option>
-                  <option value="QC pending">QC Pending</option>
-                  <option value="stocked">Stocked</option>
+                  <option value="QC pending">QC pending</option>
+                  <option value="PO accepted">PO accepted</option>
+                  <option value="PO accepted partially">PO accepted (partial)</option>
                   <option value="rejected">Rejected</option>
                 </select>
                 <i className="ri-arrow-down-s-line absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none group-hover:text-gray-600 transition-colors"></i>
-                <i className="ri-sort-desc absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none"></i>
+                <i className="ri-filter-3-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none" aria-hidden></i>
               </div>
 
               {/* New Order Button */}

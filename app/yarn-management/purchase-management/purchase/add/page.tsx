@@ -17,6 +17,40 @@ import {
 } from "@/app/yarn-management/dashboard/services/yarnInventoryService";
 
 /**
+ * Resolves count/size label for a PO line (aligns with PurchaseForm submit mapping).
+ * @param item - Form line item
+ */
+function resolvePurchaseLineSizeCount(item: YarnPurchaseItem): string {
+  const selectedDetail = item.selectedYarnDetail;
+  if (item.selectedCatalog?.countSize) {
+    const catalogCountSize = item.selectedCatalog.countSize as { name?: string; label?: string };
+    const catalogCountSizeName = catalogCountSize?.name || catalogCountSize?.label;
+    if (catalogCountSizeName) {
+      return catalogCountSizeName;
+    }
+  }
+  if (!selectedDetail) {
+    return String(item.sizeCountName || item.sizeCount || "-");
+  }
+  const rawCountSize =
+    (selectedDetail as { countSize?: unknown }).countSize ||
+    (typeof selectedDetail.yarnsubtype === "object" && selectedDetail.yarnsubtype !== null
+      ? (selectedDetail.yarnsubtype as { countSize?: unknown }).countSize
+      : undefined);
+  const countSizeArray = Array.isArray(rawCountSize) ? rawCountSize : [];
+  const matched = countSizeArray.find((cs: { _id?: string; id?: string }) => {
+    const c = cs as { _id?: string; id?: string };
+    const csId = c?._id || c?.id;
+    return csId && String(csId) === String(item.sizeCount);
+  });
+  if (matched) {
+    const m = matched as { name?: string; label?: string };
+    return String(m?.name || m?.label || item.sizeCount || "-");
+  }
+  return String(item.sizeCountName || item.sizeCount || "-");
+}
+
+/**
  * Loads optional draft-queue yarns for `?fromDraftQueue=1` (from Draft POs).
  */
 function AddPurchasePageInner() {
@@ -25,6 +59,7 @@ function AddPurchasePageInner() {
   const fromDraftQueue = searchParams.get("fromDraftQueue") === "1";
   const { hasSubPermission, isLoading } = useNavigation();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [draftReady, setDraftReady] = useState(!fromDraftQueue);
   const [draftInitialItems, setDraftInitialItems] = useState<YarnPurchaseItem[]>([]);
 
@@ -89,7 +124,7 @@ function AddPurchasePageInner() {
         setDraftInitialItems(items);
         if (items.length === 0) {
           toast(
-            "No yarns in draft queue yet. Stage them from the requisition list (Mark PO Sent) or add lines manually."
+            "No yarns in draft queue yet. Stage them from the requisition list (Send to PO draft) or add lines manually."
           );
         }
       } catch (error) {
@@ -286,7 +321,6 @@ function AddPurchasePageInner() {
       }
 
       const poItems: CreatePurchaseOrderPayload["poItems"] = itemsWithResolvedIds.map((item) => {
-        const selectedDetail = item.selectedYarnDetail;
         const yarnId = item.yarnId as string;
         console.log('[AddPurchasePage] Preparing PO item', {
           index: item.id,
@@ -295,46 +329,10 @@ function AddPurchasePageInner() {
           sizeCountName: item.sizeCountName,
         });
 
-        const resolveSizeCount = () => {
-          // Prioritize catalog countSize if available (from matched catalog)
-          if (item.selectedCatalog?.countSize) {
-            const catalogCountSize = item.selectedCatalog.countSize as any;
-            const catalogCountSizeName = catalogCountSize?.name || catalogCountSize?.label;
-            if (catalogCountSizeName) {
-              return catalogCountSizeName;
-            }
-          }
-
-          if (!selectedDetail) {
-            return item.sizeCountName || item.sizeCount;
-          }
-
-          const rawCountSize =
-            (selectedDetail as any)?.countSize ||
-            (typeof selectedDetail.yarnsubtype === "object"
-              ? (selectedDetail.yarnsubtype as any)?.countSize
-              : undefined);
-
-          const countSizeArray = Array.isArray(rawCountSize)
-            ? rawCountSize
-            : [];
-
-          const matched = countSizeArray.find((cs: any) => {
-            const csId = cs?._id || cs?.id || cs;
-            return csId && String(csId) === String(item.sizeCount);
-          });
-
-          if (matched) {
-            return matched?.name || matched?.label || item.sizeCount;
-          }
-
-          return item.sizeCountName || item.sizeCount;
-        };
-
         const poItem: PurchaseOrderItemPayload = {
           yarn: yarnId,
           yarnName: item.yarnName,
-          sizeCount: String(resolveSizeCount()),
+          sizeCount: resolvePurchaseLineSizeCount(item),
           shadeCode: item.shadeCode || undefined,
           rate: item.rate,
           quantity: item.qty,
@@ -356,7 +354,7 @@ function AddPurchasePageInner() {
         subTotal: data.subTotal,
         gst: data.totalGst,
         total: data.total,
-        currentStatus: data.status.replace(/\s+/g, "_").toLowerCase(),
+        currentStatus: "submitted_to_supplier",
       };
       console.log('[AddPurchasePage] Final payload', payload);
 
@@ -387,6 +385,79 @@ function AddPurchasePageInner() {
     } finally {
       setIsSubmitting(false);
       console.log('[AddPurchasePage] Submission state reset');
+    }
+  };
+
+  /**
+   * Creates a yarn PO in `draft` state so the user can finish it later from the PO list.
+   * @param data - Latest form values from PurchaseForm
+   */
+  const handleSaveDraft = async (data: PurchaseOrderData) => {
+    setIsSavingDraft(true);
+    try {
+      const generatePoNumber = () => {
+        const year = new Date().getFullYear();
+        const randomPart = String(Math.floor(Math.random() * 1000)).padStart(3, "0");
+        return `PO-${year}-${randomPart}`;
+      };
+
+      const subTotal = Number.isFinite(data.subTotal) ? data.subTotal : 0;
+      const gst = Number.isFinite(data.totalGst) ? data.totalGst : 0;
+      const total = Number.isFinite(data.total) ? data.total : 0;
+
+      const poItems: PurchaseOrderItemPayload[] = data.items.map((item) => {
+        const yarnId = item.yarnId?.trim();
+        const poItem: PurchaseOrderItemPayload = {
+          yarnName: item.yarnName?.trim() || "Pending",
+          sizeCount: resolvePurchaseLineSizeCount(item),
+          shadeCode: item.shadeCode || undefined,
+          rate: Math.max(0, Number(item.rate) || 0),
+          quantity: Math.max(0, Number(item.qty) || 0),
+          estimatedDeliveryDate: item.estimatedDeliveryDate?.trim()
+            ? item.estimatedDeliveryDate
+            : null,
+          gstRate: item.gst ?? 0,
+        };
+        if (yarnId) {
+          poItem.yarn = yarnId;
+        }
+        return poItem;
+      });
+
+      const payload: CreatePurchaseOrderPayload = {
+        poNumber: generatePoNumber(),
+        supplierName: data.supplierName?.trim() || "Draft",
+        supplier: data.supplierId?.trim() || null,
+        creditDays: data.creditDays ?? 0,
+        estimatedOrderDeliveryDate: data.estimatedOrderDeliveryDate?.trim()
+          ? data.estimatedOrderDeliveryDate
+          : null,
+        poItems,
+        notes: data.notes,
+        subTotal,
+        gst,
+        total,
+        currentStatus: "draft",
+      };
+
+      const created = await yarnPurchaseOrderService.createPurchaseOrder(payload);
+      const newId =
+        (created as unknown as { id?: string; _id?: string }).id ??
+        (created as unknown as { _id?: string })._id;
+
+      toast.success("Draft saved. You can submit it to the supplier anytime from Edit PO.");
+      if (newId) {
+        router.push(`/yarn-management/purchase-management/purchase/edit/${newId}`);
+      } else {
+        router.push("/yarn-management/purchase-management/purchase");
+      }
+    } catch (error: unknown) {
+      console.error("Failed to save draft purchase order:", error);
+      const message =
+        error instanceof Error ? error.message : "Failed to save draft purchase order";
+      toast.error(message);
+    } finally {
+      setIsSavingDraft(false);
     }
   };
 
@@ -443,6 +514,8 @@ function AddPurchasePageInner() {
             }
             initialData={purchaseInitialData}
             onSubmit={handleSubmit}
+            onSaveDraft={handleSaveDraft}
+            isSavingDraft={isSavingDraft}
             onCancel={handleCancel}
             isSubmitting={isSubmitting}
             submitButtonText="Submit to Supplier"

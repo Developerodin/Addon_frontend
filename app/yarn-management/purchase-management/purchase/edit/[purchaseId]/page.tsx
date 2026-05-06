@@ -5,7 +5,7 @@ import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast } from "react-hot-toast";
-import PurchaseForm, { PurchaseOrderData, PurchaseOrderStatus } from "../../components/PurchaseForm";
+import PurchaseForm, { PurchaseOrderData, PurchaseOrderStatus, YarnPurchaseItem } from "../../components/PurchaseForm";
 import yarnPurchaseOrderService, {
   PurchaseOrderItemPayload,
   UpdatePurchaseOrderPayload,
@@ -14,6 +14,7 @@ import yarnCatalogService, { YarnCatalogQueryParams } from "@/shared/services/ya
 
 const statusFromAPI = (statusCode: string): PurchaseOrderStatus => {
   const map: Record<string, PurchaseOrderStatus> = {
+    draft: "draft",
     submitted_to_supplier: "submitted to supplier",
     in_transit: "in transit",
     delivered: "delivered",
@@ -25,12 +26,14 @@ const statusFromAPI = (statusCode: string): PurchaseOrderStatus => {
     goods_partially_received: "goods partially received",
     po_accepted: "PO accepted",
     po_accepted_partially: "PO accepted partially",
+    po_rejected: "rejected",
   };
   return map[statusCode] || "submitted to supplier";
 };
 
 const statusToAPI = (status: PurchaseOrderStatus): string => {
   const map: Record<PurchaseOrderStatus, string> = {
+    draft: "draft",
     "submitted to supplier": "submitted_to_supplier",
     "in transit": "in_transit",
     delivered: "delivered",
@@ -58,6 +61,40 @@ const toDateInputValue = (value?: string): string => {
 
 /** True if string is a 24-char hex MongoDB ObjectId. New items have client ids (e.g. timestamp) and must not send _id. */
 const isValidMongoId = (id: string): boolean => /^[a-fA-F0-9]{24}$/.test(id);
+
+/**
+ * Resolves count/size label for a PO line (aligns with add/edit submit mapping).
+ * @param item - Form line item
+ */
+function resolvePurchaseLineSizeCount(item: YarnPurchaseItem): string {
+  const selectedDetail = item.selectedYarnDetail;
+  if (item.selectedCatalog?.countSize) {
+    const catalogCountSize = item.selectedCatalog.countSize as { name?: string; label?: string };
+    const catalogCountSizeName = catalogCountSize?.name || catalogCountSize?.label;
+    if (catalogCountSizeName) {
+      return catalogCountSizeName;
+    }
+  }
+  if (!selectedDetail) {
+    return String(item.sizeCountName || item.sizeCount || "-");
+  }
+  const rawCountSize =
+    (selectedDetail as { countSize?: unknown }).countSize ||
+    (typeof selectedDetail.yarnsubtype === "object" && selectedDetail.yarnsubtype !== null
+      ? (selectedDetail.yarnsubtype as { countSize?: unknown }).countSize
+      : undefined);
+  const countSizeArray = Array.isArray(rawCountSize) ? rawCountSize : [];
+  const matched = countSizeArray.find((cs: { _id?: string; id?: string }) => {
+    const c = cs as { _id?: string; id?: string };
+    const csId = c?._id || c?.id;
+    return csId && String(csId) === String(item.sizeCount);
+  });
+  if (matched) {
+    const m = matched as { name?: string; label?: string };
+    return String(m?.name || m?.label || item.sizeCount || "-");
+  }
+  return String(item.sizeCountName || item.sizeCount || "-");
+}
 
 const mapApiOrderToFormData = (apiOrder: any): { formData: PurchaseOrderData; orderId: string; poNumber: string } => {
   if (!apiOrder) {
@@ -107,7 +144,20 @@ const mapApiOrderToFormData = (apiOrder: any): { formData: PurchaseOrderData; or
       const yarn = item?.yarn || {};
       const yarnType = yarn?.yarnType || item?.yarnType;
       const yarnSubtype = yarn?.yarnSubtype || item?.yarnSubtype || (yarn as any)?.yarnsubtype;
-      const yarnIdRaw = yarn?.id || yarn?._id || item?.yarnId || item?.yarn_id || "";
+      const yarnCat = item?.yarnCatalogId;
+      const yarnIdFromCatalog =
+        yarnCat && typeof yarnCat === "object"
+          ? String((yarnCat as { _id?: string; id?: string })._id || (yarnCat as { id?: string }).id || "")
+          : yarnCat
+            ? String(yarnCat)
+            : "";
+      const yarnIdRaw =
+        yarnIdFromCatalog ||
+        yarn?.id ||
+        yarn?._id ||
+        item?.yarnId ||
+        item?.yarn_id ||
+        "";
       const yarnId = yarnIdRaw ? String(yarnIdRaw) : "";
       const sizeCountRaw = item?.sizeCount || item?.size_count || item?.countSize || "";
       const sizeCount =
@@ -172,6 +222,7 @@ const EditPurchasePage = () => {
   const purchaseId = params?.purchaseId as string;
   const { hasSubPermission, isLoading: isLoadingPermissions } = useNavigation();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [purchaseData, setPurchaseData] = useState<PurchaseOrderData | null>(null);
   const [orderMetadata, setOrderMetadata] = useState<{ orderId: string; poNumber: string } | null>(null);
@@ -465,47 +516,11 @@ const EditPurchasePage = () => {
       }
 
       const poItems: PurchaseOrderItemPayload[] = itemsWithResolvedIds.map((item) => {
-        const resolveSizeCount = () => {
-          if (item.selectedCatalog?.countSize) {
-            const catalogCountSize = item.selectedCatalog.countSize as any;
-            return (
-              catalogCountSize?.name ||
-              catalogCountSize?.label ||
-              catalogCountSize?.id ||
-              item.sizeCountName ||
-              item.sizeCount
-            );
-          }
-
-          if (!item.selectedYarnDetail) {
-            return item.sizeCountName || item.sizeCount;
-          }
-
-          const rawCountSize =
-            (item.selectedYarnDetail as any)?.countSize ||
-            (typeof item.selectedYarnDetail.yarnsubtype === "object"
-              ? (item.selectedYarnDetail.yarnsubtype as any)?.countSize
-              : undefined);
-
-          const countSizeArray = Array.isArray(rawCountSize) ? rawCountSize : [];
-
-          const matched = countSizeArray.find((cs: any) => {
-            const csId = cs?._id || cs?.id || cs;
-            return csId && String(csId) === String(item.sizeCount);
-          });
-
-          if (matched) {
-            return matched?.name || matched?.label || item.sizeCount;
-          }
-
-          return item.sizeCountName || item.sizeCount;
-        };
-
         return {
           ...(item.id && isValidMongoId(String(item.id)) && { _id: String(item.id) }),
           yarn: String(item.yarnId),
           yarnName: item.yarnName,
-          sizeCount: String(resolveSizeCount()),
+          sizeCount: resolvePurchaseLineSizeCount(item),
           shadeCode: item.shadeCode || undefined,
           rate: item.rate,
           quantity: item.qty,
@@ -528,7 +543,8 @@ const EditPurchasePage = () => {
         subTotal: data.subTotal,
         gst: data.totalGst,
         total: data.total,
-        currentStatus: statusToAPI(data.status),
+        currentStatus:
+          purchaseData.status === "draft" ? "submitted_to_supplier" : statusToAPI(data.status),
       };
 
       await yarnPurchaseOrderService.updatePurchaseOrder(orderMetadata.orderId, payload);
@@ -540,6 +556,77 @@ const EditPurchasePage = () => {
       toast.error(error instanceof Error ? error.message : 'Failed to update purchase order');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  /**
+   * Persists edits to a draft PO without submitting to the supplier.
+   * @param data - Latest form values
+   */
+  const handleSaveDraft = async (data: PurchaseOrderData) => {
+    if (!orderMetadata?.orderId) {
+      toast.error('Unable to determine purchase order ID');
+      return;
+    }
+    if (purchaseData.status !== 'draft') {
+      toast.error('Only draft POs can be saved with Save draft. Use Update for submitted orders.');
+      return;
+    }
+
+    setIsSavingDraft(true);
+    try {
+      const subTotal = Number.isFinite(data.subTotal) ? data.subTotal : 0;
+      const gst = Number.isFinite(data.totalGst) ? data.totalGst : 0;
+      const total = Number.isFinite(data.total) ? data.total : 0;
+
+      const poItems: PurchaseOrderItemPayload[] = data.items.map((item) => {
+        const yarnId = item.yarnId?.trim();
+        const line: PurchaseOrderItemPayload = {
+          ...(item.id && isValidMongoId(String(item.id)) && { _id: String(item.id) }),
+          yarnName: item.yarnName?.trim() || 'Pending',
+          sizeCount: resolvePurchaseLineSizeCount(item),
+          shadeCode: item.shadeCode || undefined,
+          rate: Math.max(0, Number(item.rate) || 0),
+          quantity: Math.max(0, Number(item.qty) || 0),
+          estimatedDeliveryDate: item.estimatedDeliveryDate?.trim()
+            ? item.estimatedDeliveryDate
+            : null,
+          gstRate: item.gst ?? 0,
+        };
+        if (yarnId) {
+          line.yarn = yarnId;
+        }
+        return line;
+      });
+
+      const existingPoNumber =
+        orderMetadata.poNumber ||
+        `PO-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
+
+      const payload: UpdatePurchaseOrderPayload = {
+        poNumber: existingPoNumber,
+        supplierName: data.supplierName?.trim() || 'Draft',
+        supplier: data.supplierId?.trim() || null,
+        creditDays: data.creditDays ?? 0,
+        estimatedOrderDeliveryDate: data.estimatedOrderDeliveryDate?.trim()
+          ? data.estimatedOrderDeliveryDate
+          : null,
+        poItems,
+        notes: data.notes,
+        subTotal,
+        gst,
+        total,
+        currentStatus: 'draft',
+      };
+
+      await yarnPurchaseOrderService.updatePurchaseOrder(orderMetadata.orderId, payload);
+      toast.success('Draft saved');
+      setPurchaseData({ ...data, status: 'draft' });
+    } catch (error) {
+      console.error('Failed to save draft:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to save draft');
+    } finally {
+      setIsSavingDraft(false);
     }
   };
 
@@ -582,10 +669,14 @@ const EditPurchasePage = () => {
           <PurchaseForm
             initialData={purchaseData}
             onSubmit={handleSubmit}
+            onSaveDraft={purchaseData.status === 'draft' ? handleSaveDraft : undefined}
+            isSavingDraft={isSavingDraft}
             onCancel={handleCancel}
             isSubmitting={isSubmitting}
-            submitButtonText="Update Purchase Order"
-            showEditWarning
+            submitButtonText={
+              purchaseData.status === 'draft' ? 'Submit to Supplier' : 'Update Purchase Order'
+            }
+            showEditWarning={purchaseData.status !== 'draft'}
           />
         </div>
       </div>

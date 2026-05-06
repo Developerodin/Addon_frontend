@@ -37,6 +37,7 @@ export interface PacklistDetails {
 }
 
 export type PurchaseOrderStatus =
+  | 'draft'
   | 'submitted to supplier'
   | 'in transit'
   | 'delivered'
@@ -89,22 +90,24 @@ export interface PurchaseOrderQueryParams {
 
 export interface PurchaseOrderItemPayload {
   _id?: string; // Required for PATCH: existing line items must include _id so backend can update them
-  yarn: string;
+  /** Yarn catalog id; optional for draft PO lines until yarn is matched. */
+  yarn?: string;
   yarnName: string;
   sizeCount: string;
   shadeCode?: string;
   rate: number;
   quantity: number;
-  estimatedDeliveryDate: string;
+  estimatedDeliveryDate?: string | null;
   gstRate: number;
 }
 
 export interface CreatePurchaseOrderPayload {
   poNumber: string;
   supplierName: string;
-  supplier: string;
+  /** Omit or null when saving an incomplete draft without supplier. */
+  supplier?: string | null;
   creditDays: number;
-  estimatedOrderDeliveryDate: string;
+  estimatedOrderDeliveryDate?: string | null;
   poItems: PurchaseOrderItemPayload[];
   notes?: string;
   subTotal: number;
@@ -116,9 +119,9 @@ export interface CreatePurchaseOrderPayload {
 export interface UpdatePurchaseOrderPayload {
   poNumber: string;
   supplierName: string;
-  supplier: string;
+  supplier?: string | null;
   creditDays: number;
-  estimatedOrderDeliveryDate: string;
+  estimatedOrderDeliveryDate?: string | null;
   poItems: PurchaseOrderItemPayload[];
   notes?: string;
   subTotal: number;
@@ -389,17 +392,20 @@ class YarnPurchaseOrderService {
 
   private convertStatusToAPI(status: PurchaseOrderStatus): string {
     const statusMap: Record<PurchaseOrderStatus, string> = {
+      draft: 'draft',
       'submitted to supplier': 'submitted_to_supplier',
       'in transit': 'in_transit',
-      'delivered': 'delivered',
-      'rejected': 'po_rejected',
+      delivered: 'delivered',
+      rejected: 'po_rejected',
       'QC pending': 'qc_pending',
       'partially delivered': 'partially_delivered',
-      'stocked': 'stocked',
+      stocked: 'stocked',
       'goods received': 'goods_received',
       'goods partially received': 'goods_partially_received',
-      'po_accepted': 'po_accepted',
-      'po_rejected': 'po_rejected',
+      'PO accepted': 'po_accepted',
+      'PO accepted partially': 'po_accepted_partially',
+      po_accepted: 'po_accepted',
+      po_rejected: 'po_rejected',
     };
     return statusMap[status] || 'submitted_to_supplier';
   }
@@ -416,10 +422,24 @@ class YarnPurchaseOrderService {
       throw new Error('Order ID is required');
     }
 
-    return this.makeRequest<PurchaseOrder>(`/${orderId}`, {
+    const raw = await this.makeRequest<
+      PurchaseOrder | { purchaseOrder?: PurchaseOrder; message?: string }
+    >(`/${orderId}`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
     });
+
+    if (
+      raw &&
+      typeof raw === 'object' &&
+      'purchaseOrder' in raw &&
+      raw.purchaseOrder &&
+      typeof raw.purchaseOrder === 'object'
+    ) {
+      return raw.purchaseOrder as PurchaseOrder;
+    }
+
+    return raw as PurchaseOrder;
   }
 
   async updatePurchaseOrderWithReceivedLots(

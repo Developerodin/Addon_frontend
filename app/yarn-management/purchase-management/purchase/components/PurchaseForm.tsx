@@ -13,6 +13,7 @@ import {
 } from "../utils/purchaseYarnExcel";
 
 export type PurchaseOrderStatus =
+  | 'draft'
   | 'submitted to supplier'
   | 'in transit'
   | 'delivered'
@@ -73,6 +74,9 @@ interface PurchaseFormProps {
   onSubmit: (data: PurchaseOrderData) => Promise<void>;
   onCancel: () => void;
   isSubmitting?: boolean;
+  /** When provided, shows “Save draft” (incomplete POs allowed — parent persists as status draft). */
+  onSaveDraft?: (data: PurchaseOrderData) => Promise<void>;
+  isSavingDraft?: boolean;
   submitButtonText?: string;
   /** When true, shows a red warning that updating PO may affect lots/packlist data. Used on edit page. */
   showEditWarning?: boolean;
@@ -118,6 +122,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   onSubmit,
   onCancel,
   isSubmitting = false,
+  onSaveDraft,
+  isSavingDraft = false,
   submitButtonText = "Submit to Supplier",
   showEditWarning = false,
 }) => {
@@ -1789,19 +1795,30 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
   const calculateTotals = () => {
     const subTotal = formData.items.reduce((sum, item) => {
-      const baseAmount = item.rate * item.qty;
-      return sum + baseAmount;
+      const rate = Number(item.rate);
+      const qty = Number(item.qty);
+      const r = Number.isFinite(rate) ? rate : 0;
+      const q = Number.isFinite(qty) ? qty : 0;
+      return sum + r * q;
     }, 0);
 
     const totalGst = formData.items.reduce((sum, item) => {
-      const baseAmount = item.rate * item.qty;
-      const gstAmount = (baseAmount * item.gst) / 100;
-      return sum + gstAmount;
+      const rate = Number(item.rate);
+      const qty = Number(item.qty);
+      const gstPct = Number(item.gst);
+      const r = Number.isFinite(rate) ? rate : 0;
+      const q = Number.isFinite(qty) ? qty : 0;
+      const g = Number.isFinite(gstPct) ? gstPct : 0;
+      const baseAmount = r * q;
+      return sum + (baseAmount * g) / 100;
     }, 0);
 
-    const total = subTotal + totalGst;
+    const safeSub = Number.isFinite(subTotal) ? subTotal : 0;
+    const safeGst = Number.isFinite(totalGst) ? totalGst : 0;
+    const total = safeSub + safeGst;
+    const safeTotal = Number.isFinite(total) ? total : 0;
 
-    return { subTotal, totalGst, total };
+    return { subTotal: safeSub, totalGst: safeGst, total: safeTotal };
   };
 
   useEffect(() => {
@@ -1963,6 +1980,33 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       await onSubmit(dataToSubmit);
     } catch (error) {
       console.error("Form submission error:", error);
+    }
+  };
+
+  /**
+   * Persists the current form as a draft (minimal validation; incomplete lines allowed).
+   */
+  const handleSaveDraft = async () => {
+    if (!onSaveDraft) {
+      return;
+    }
+
+    const totals = calculateTotals();
+    const purchaseDate =
+      formData.purchaseDate?.trim() ||
+      new Date().toISOString().split("T")[0];
+    const dataToSubmit: PurchaseOrderData = {
+      ...formData,
+      purchaseDate,
+      ...totals,
+      status: "draft",
+    };
+
+    try {
+      await onSaveDraft(dataToSubmit);
+    } catch (error) {
+      console.error("Draft save error:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to save draft");
     }
   };
 
@@ -2566,19 +2610,44 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       </div>
 
       {/* Form Actions */}
-      <div className="flex justify-end gap-2 pt-4 border-t">
+      <div className="flex justify-end flex-wrap gap-2 pt-4 border-t">
         <button
           type="button"
           onClick={onCancel}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-600 text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm"
-          disabled={isSubmitting}
+          disabled={isSubmitting || isSavingDraft}
+          aria-label="Cancel and go back"
         >
           Cancel
         </button>
+        {onSaveDraft && (
+          <button
+            type="button"
+            onClick={() => {
+              void handleSaveDraft();
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 text-[11px] font-bold rounded border border-gray-300 hover:bg-gray-50 transition-colors shadow-sm"
+            disabled={isSubmitting || isSavingDraft}
+            aria-label="Save purchase order as draft without sending to supplier"
+          >
+            {isSavingDraft ? (
+              <>
+                <i className="ri-loader-4-line animate-spin text-xs"></i>
+                Saving draft…
+              </>
+            ) : (
+              <>
+                <i className="ri-draft-line text-xs"></i>
+                Save draft
+              </>
+            )}
+          </button>
+        )}
         <button
           type="submit"
           className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
-          disabled={isSubmitting}
+          disabled={isSubmitting || isSavingDraft}
+          aria-label={submitButtonText}
         >
           {isSubmitting ? (
             <>
@@ -2587,7 +2656,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
             </>
           ) : (
             <>
-              <i className="ri-save-line text-xs"></i>
+              <i className="ri-send-plane-line text-xs"></i>
               {submitButtonText}
             </>
           )}

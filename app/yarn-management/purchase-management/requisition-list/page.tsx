@@ -223,7 +223,7 @@ const RequisitionListPage = () => {
     if (!yarn) return;
 
     const confirmed = window.confirm(
-      `Mark ${yarn.yarnName} as PO sent and add it to the Draft PO queue? It will disappear from this list until you raise a yarn purchase order from Draft POs.`
+      `Send ${yarn.yarnName} to the Draft PO queue for drafting? It will disappear from this requisition list until you raise a yarn PO from Draft POs.`
     );
 
     if (!confirmed) {
@@ -477,8 +477,10 @@ const RequisitionListPage = () => {
                         type="button"
                         onClick={() => handleMarkPoSent(yarn.id)}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-purple-200 text-purple-700 text-[11px] font-bold rounded hover:bg-purple-50 transition-colors"
+                        aria-label={`Send ${yarn.yarnName} to PO draft queue`}
                       >
-                        <i className="ri-mail-send-line text-sm"></i> Mark PO Sent
+                        <i className="ri-draft-line text-sm" aria-hidden />
+                        Send to PO draft
                       </button>
                     </td>
                   </tr>
