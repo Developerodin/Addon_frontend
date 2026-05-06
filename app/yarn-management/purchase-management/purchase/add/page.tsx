@@ -1,20 +1,110 @@
 "use client";
-import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import PurchaseForm, { PurchaseOrderData, YarnPurchaseItem } from "../components/PurchaseForm";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast } from "react-hot-toast";
-import PurchaseForm, { PurchaseOrderData } from "../components/PurchaseForm";
-import yarnPurchaseOrderService, { CreatePurchaseOrderPayload, PurchaseOrderItemPayload } from "@/shared/services/yarnPurchaseOrderService";
+import yarnPurchaseOrderService, {
+  CreatePurchaseOrderPayload,
+  PurchaseOrderItemPayload,
+} from "@/shared/services/yarnPurchaseOrderService";
+import {
+  yarnInventoryService,
+  requisitionMongoId,
+  requisitionYarnId,
+} from "@/app/yarn-management/dashboard/services/yarnInventoryService";
 
-const AddPurchasePage = () => {
+/**
+ * Loads optional draft-queue yarns for `?fromDraftQueue=1` (from Draft POs).
+ */
+function AddPurchasePageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromDraftQueue = searchParams.get("fromDraftQueue") === "1";
   const { hasSubPermission, isLoading } = useNavigation();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [draftReady, setDraftReady] = useState(!fromDraftQueue);
+  const [draftInitialItems, setDraftInitialItems] = useState<YarnPurchaseItem[]>([]);
 
-  // Check permission
-  const hasPermission = hasSubPermission('/yarn-management/purchase-management', 'Purchase Order');
+  /** Stable key fragment for remount once draft yarns are loaded */
+  const draftKeySuffix = useMemo(
+    () => draftInitialItems.map((i) => i.sourceRequisitionId ?? i.id).join("-"),
+    [draftInitialItems]
+  );
+
+  const purchaseInitialData = useMemo((): Partial<PurchaseOrderData> => {
+    if (!fromDraftQueue) return {};
+    return { items: draftInitialItems };
+  }, [fromDraftQueue, draftInitialItems]);
+
+  const hasPermission = hasSubPermission(
+    "/yarn-management/purchase-management",
+    "Purchase Order"
+  );
+
+  useEffect(() => {
+    if (!fromDraftQueue) {
+      setDraftReady(true);
+      setDraftInitialItems([]);
+      return;
+    }
+
+    let cancelled = false;
+    setDraftReady(false);
+
+    (async () => {
+      try {
+        const rows = await yarnInventoryService.getAllDraftQueueRequisitions();
+        if (cancelled) return;
+
+        const items: YarnPurchaseItem[] = rows.map((req) => {
+          const yarnId = requisitionYarnId(req) || "";
+          const docId = requisitionMongoId(req) ?? "";
+          const shortage = Math.max(0, (req.minQty ?? 0) - (req.availableQty ?? 0));
+          const qty = shortage > 0 ? shortage : 1;
+          const id =
+            typeof crypto !== "undefined" && crypto.randomUUID
+              ? crypto.randomUUID()
+              : `draft-${docId || "row"}-${Math.random().toString(36).slice(2, 11)}`;
+          return {
+            id,
+            yarnName: req.yarnName,
+            yarnId,
+            sourceRequisitionId: docId,
+            sizeCount: "",
+            shadeCode: "",
+            rate: 0,
+            qty,
+            estimatedDeliveryDate: "",
+            gst: 0,
+            subTotal: 0,
+            displayQty: String(qty),
+            displayRate: "",
+            displayGst: "",
+          };
+        });
+
+        setDraftInitialItems(items);
+        if (items.length === 0) {
+          toast(
+            "No yarns in draft queue yet. Stage them from the requisition list (Mark PO Sent) or add lines manually."
+          );
+        }
+      } catch (error) {
+        console.error("[AddPurchasePage] Failed to load draft queue", error);
+        toast.error("Failed to load yarns from the draft queue.");
+        setDraftInitialItems([]);
+      } finally {
+        if (!cancelled) setDraftReady(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fromDraftQueue]);
 
   if (isLoading) {
     return (
@@ -273,6 +363,21 @@ const AddPurchasePage = () => {
       await yarnPurchaseOrderService.createPurchaseOrder(payload);
       console.log('[AddPurchasePage] Purchase order creation request sent successfully');
 
+      const requisitionIds = itemsWithResolvedIds
+        .map((item) => item.sourceRequisitionId)
+        .filter((id): id is string => Boolean(id));
+
+      if (requisitionIds.length > 0) {
+        try {
+          await yarnInventoryService.clearRequisitionDraftFlags(requisitionIds);
+        } catch (clearErr) {
+          console.error("[AddPurchasePage] clearRequisitionDraftFlags failed", clearErr);
+          toast.error(
+            "PO created, but clearing the draft queue failed. Rows may still show under Draft POs."
+          );
+        }
+      }
+
       toast.success("Purchase order created successfully");
       router.push("/yarn-management/purchase-management/purchase");
     } catch (error: any) {
@@ -288,6 +393,22 @@ const AddPurchasePage = () => {
   const handleCancel = () => {
     router.push('/yarn-management/purchase-management/purchase');
   };
+
+  if (fromDraftQueue && !draftReady) {
+    return (
+      <div className="main-content !p-[10px]">
+        <Seo title="Add Purchase Order" />
+        <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0 p-10 flex flex-col items-center justify-center gap-3">
+          <div
+            className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600"
+            role="status"
+            aria-label="Loading draft yarns"
+          />
+          <p className="text-xs text-gray-500 font-medium">Loading draft queue yarns…</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="main-content !p-[10px]">
@@ -317,6 +438,10 @@ const AddPurchasePage = () => {
         {/* Form Content */}
         <div className="px-[10px] pb-[10px]">
           <PurchaseForm
+            key={
+              !fromDraftQueue ? "new-purchase" : `draft-queue-${draftKeySuffix || "empty"}`
+            }
+            initialData={purchaseInitialData}
             onSubmit={handleSubmit}
             onCancel={handleCancel}
             isSubmitting={isSubmitting}
@@ -326,6 +451,25 @@ const AddPurchasePage = () => {
       </div>
     </div>
   );
-};
+}
 
-export default AddPurchasePage;
+/**
+ * Wrapped for `useSearchParams` — required Suspense boundary in the App Router.
+ */
+export default function AddPurchasePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="main-content !p-[10px] flex justify-center py-16">
+          <div
+            className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600"
+            role="status"
+            aria-label="Loading page"
+          />
+        </div>
+      }
+    >
+      <AddPurchasePageInner />
+    </Suspense>
+  );
+}

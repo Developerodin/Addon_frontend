@@ -4,7 +4,7 @@ import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast } from "react-hot-toast";
-import { yarnInventoryService } from "@/app/yarn-management/dashboard/services/yarnInventoryService";
+import { yarnInventoryService, requisitionMongoId } from "@/app/yarn-management/dashboard/services/yarnInventoryService";
 
 interface YarnInventory {
   id: string;
@@ -60,7 +60,7 @@ const RequisitionListPage = () => {
         const transformedYarns: YarnInventory[] = requisitions
           .filter((req) => !req.poSent) // Only show pending requisitions
           .map((req) => ({
-            id: req._id,
+            id: requisitionMongoId(req) ?? "",
             yarnName: req.yarnName,
             minimumQty: req.minQty,
             availableQty: req.availableQty,
@@ -223,7 +223,7 @@ const RequisitionListPage = () => {
     if (!yarn) return;
 
     const confirmed = window.confirm(
-      `Are you sure you want to mark ${yarn.yarnName} as PO Sent? This will remove it from the list.`
+      `Mark ${yarn.yarnName} as PO sent and add it to the Draft PO queue? It will disappear from this list until you raise a yarn purchase order from Draft POs.`
     );
 
     if (!confirmed) {
@@ -231,14 +231,17 @@ const RequisitionListPage = () => {
     }
 
     try {
-      // Update requisition status via API
+      // Update requisition: acknowledged off critical list + staged for drafting a PO
       await yarnInventoryService.updateRequisitionStatus(id, {
         poSent: true,
+        draftForPo: true,
       });
 
       // Remove from list (it will be filtered out since poSent is now true)
       setYarns((prev) => prev.filter((item) => item.id !== id));
-      toast.success(`${yarn.yarnName} marked as PO sent and removed from the list.`);
+      toast.success(
+        `${yarn.yarnName} added to Draft PO queue. Create a PO from Purchase Management → Draft POs.`
+      );
     } catch (err) {
       console.error('Error updating requisition status:', err);
       toast.error(

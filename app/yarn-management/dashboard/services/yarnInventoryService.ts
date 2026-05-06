@@ -114,7 +114,9 @@ export interface YarnInventoryGlobalSummaryResponse {
 }
 
 export interface YarnRequisitionResponse {
-  _id: string;
+  _id?: string;
+  /** Present when API uses toJSON transform (replaces _id). */
+  id?: string;
   yarnName: string;
   /** Embedded catalog when populated; otherwise use top-level yarnId. */
   yarn?: YarnCatalogInfo | string;
@@ -124,6 +126,7 @@ export interface YarnRequisitionResponse {
   blockedQty: number;
   alertStatus: 'below_minimum' | 'overbooked' | null;
   poSent: boolean;
+  draftForPo?: boolean;
   created: string;
   lastUpdated: string;
 }
@@ -147,6 +150,8 @@ export interface YarnRequisitionListResponse {
 
 export interface UpdateRequisitionStatusRequest {
   poSent: boolean;
+  /** When true, requisition appears in draft PO queue until a PO is raised. */
+  draftForPo?: boolean;
 }
 
 function normalizePossibleId(value: unknown): string | undefined {
@@ -173,6 +178,13 @@ export function requisitionYarnId(req: YarnRequisitionResponse): string | undefi
   const byYarn = normalizePossibleId(req.yarn);
   if (byYarn) return byYarn;
   return normalizePossibleId(req.yarnId);
+}
+
+/** Requisition document Mongo id (`_id`, or API `id` after toJSON). */
+export function requisitionMongoId(
+  req: Pick<YarnRequisitionResponse, 'id' | '_id'>
+): string | undefined {
+  return normalizePossibleId(req._id) ?? normalizePossibleId(req.id);
 }
 
 /** Resolve inventory yarn id whether API returns top-level yarnId or embedded yarn object. */
@@ -400,6 +412,7 @@ class YarnInventoryService {
     startDate: string;
     endDate: string;
     poSent?: boolean;
+    draftForPo?: boolean;
     alertStatus?: 'below_minimum' | 'overbooked' | 'has_alert';
     page?: number;
     limit?: number;
@@ -410,6 +423,8 @@ class YarnInventoryService {
     queryParams.append('endDate', params.endDate);
     if (params.poSent !== undefined)
       queryParams.append('poSent', params.poSent.toString());
+    if (params.draftForPo !== undefined)
+      queryParams.append('draftForPo', params.draftForPo.toString());
     if (params.alertStatus)
       queryParams.append('alertStatus', params.alertStatus);
     if (params.page) queryParams.append('page', params.page.toString());
@@ -429,13 +444,19 @@ class YarnInventoryService {
     startDate: string;
     endDate: string;
     poSent?: boolean;
+    draftForPo?: boolean;
+    skipRecalculation?: boolean;
   }): Promise<{ results: YarnRequisitionResponse[]; alertSummary: RequisitionAlertSummary }> {
     const pageSize = 100;
     const allResults: YarnRequisitionResponse[] = [];
     let alertSummary: RequisitionAlertSummary = { total: 0, pendingDeliveries: 0, alertCount: 0, belowMinimumCount: 0, overbookedCount: 0 };
 
     for (let page = 1; page <= 100; page++) {
-      const res = await this.getYarnRequisitions({ ...params, page, limit: pageSize });
+      const res = await this.getYarnRequisitions({
+        ...params,
+        page,
+        limit: pageSize,
+      });
       allResults.push(...res.results);
       alertSummary = res.alertSummary;
       if (res.results.length < pageSize || page >= res.totalPages) break;
@@ -455,6 +476,36 @@ class YarnInventoryService {
         body: JSON.stringify(data),
       }
     );
+  }
+
+  /**
+   * Clears draft-queue flags after yarns are converted into a PO (or removed from staging).
+   * @param requisitionIds - Mongo ids of YarnRequisition documents
+   */
+  async clearRequisitionDraftFlags(
+    requisitionIds: string[]
+  ): Promise<{ cleared: number }> {
+    return this.makeRequest<{ cleared: number }>('/yarn-requisitions/clear-draft', {
+      method: 'PATCH',
+      body: JSON.stringify({ requisitionIds }),
+    });
+  }
+
+  /**
+   * All requisitions currently staged for drafting a yarn PO (wide date window, paginated merge).
+   */
+  async getAllDraftQueueRequisitions(): Promise<YarnRequisitionResponse[]> {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setFullYear(startDate.getFullYear() - 10);
+    const { results } = await this.getAllYarnRequisitions({
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+      draftForPo: true,
+      skipRecalculation: true,
+    });
+    /** Server already applies `draftForPo: true`; keep rows if flag is truthy only (handles string/omit). */
+    return results.filter((r) => Boolean((r as { draftForPo?: unknown }).draftForPo));
   }
 
   /** Yarn report for date range (YYYY-MM-DD) */

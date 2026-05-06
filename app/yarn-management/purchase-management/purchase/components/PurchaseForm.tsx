@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { toast } from "react-hot-toast";
 import supplierService, { Supplier, SupplierYarnDetail } from "@/shared/services/supplierService";
 import yarnTypeService, { YarnType } from "@/shared/services/yarnTypeService";
@@ -42,6 +42,8 @@ export interface YarnPurchaseItem {
   subTotal: number;
   selectedYarnDetail?: SupplierYarnDetail; // Store the full yarn detail for count sizes
   selectedCatalog?: YarnCatalog;
+  /** YarnRequisition id when row came from Draft PO queue; cleared after PO submit. */
+  sourceRequisitionId?: string;
   /** Set when item was imported from Excel but yarn name is not in supplier data. */
   notInSupplierData?: boolean;
   /** Raw input string for rate (allows typing "10." without losing decimal). */
@@ -87,6 +89,30 @@ interface SupplierYarnOption {
   metadataSummary?: string;
 }
 
+/**
+ * Shallow-clones yarn PO lines so supplier filter / restore cannot mutate snapshots.
+ * @param items - Line items to clone
+ */
+function cloneYarnPurchaseItems(items: YarnPurchaseItem[]): YarnPurchaseItem[] {
+  return items.map((row) => ({ ...row }));
+}
+
+/**
+ * Loose-safe comparison for YarnCatalog ids from different API shapes.
+ * @param a - Candidate id string
+ * @param b - Other id string
+ */
+function yarnCatalogIdsEquivalent(a?: string | null, b?: string | null): boolean {
+  const x = String(a ?? "").trim();
+  const y = String(b ?? "").trim();
+  return x.length > 0 && y.length > 0 && x === y;
+}
+
+/** Collapses whitespace for fuzzy yarn-name comparison. */
+function normalizeYarnLabel(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 const PurchaseForm: React.FC<PurchaseFormProps> = ({
   initialData = {},
   onSubmit,
@@ -104,6 +130,12 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
   const supplierYarnDetailsRef = useRef<SupplierYarnDetail[]>([]);
   const isTypingRef = useRef<Record<string, boolean>>({});
+  /** Full yarn table while no supplier is selected; restored when supplier field is cleared. */
+  const itemsSnapshotWithoutSupplierRef = useRef<YarnPurchaseItem[]>(
+    cloneYarnPurchaseItems(initialData.items || [])
+  );
+  /** Suppliers overlapping draft yarns — used to rank matches, but search scans the full supplier list. */
+  const draftPreferredSupplierIdsRef = useRef<Set<string>>(new Set());
 
   const [formData, setFormData] = useState<PurchaseOrderData>({
     purchaseDate: initialData.purchaseDate || new Date().toISOString().split('T')[0],
@@ -118,6 +150,12 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     status: initialData.status || 'submitted to supplier',
     notes: initialData.notes || ""
   });
+
+  /** Latest line items for handlers that must not depend on stale render closures. */
+  const formDataItemsRef = useRef(formData.items);
+  useEffect(() => {
+    formDataItemsRef.current = formData.items;
+  }, [formData.items]);
 
   // Autocomplete state for yarn names - initialize with existing items to prevent auto-showing suggestions
   const [autocompleteStates, setAutocompleteStates] = useState<Record<string, {
@@ -162,11 +200,28 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
   const supplierAutocompleteRef = useRef<HTMLDivElement | null>(null);
   const excelFileInputRef = useRef<HTMLInputElement>(null);
+  /** Invalidates in-flight async catalog→supplier matching when supplier or line keys change. */
+  const yarnCatalogHydrateRunIdRef = useRef(0);
+  /** Cancels stale line→supplier binds when supplier changes mid-flight. */
+  const supplierBindGenerationRef = useRef(0);
+  /** Latest binder for initial supplier hydrate (runs after suppliers load API response). */
+  const bindUnresolvedYarnLinesRef = useRef<
+    (generation: number, rows: YarnPurchaseItem[]) => Promise<void>
+  >(async () => {});
   const [isImportingExcel, setIsImportingExcel] = useState(false);
 
   useEffect(() => {
     supplierYarnDetailsRef.current = supplierYarnDetails;
   }, [supplierYarnDetails]);
+
+  /**
+   * Keeps an unfiltered copy of yarn lines whenever supplier is not chosen (add rows, draft preload, after clear).
+   */
+  useEffect(() => {
+    if (!formData.supplierId) {
+      itemsSnapshotWithoutSupplierRef.current = cloneYarnPurchaseItems(formData.items);
+    }
+  }, [formData.items, formData.supplierId]);
 
   const extractIdFromValue = useCallback((value: unknown): string | undefined => {
     if (!value) return undefined;
@@ -263,9 +318,70 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     return "";
   }, []);
 
-  // Build supplier yarn options from supplier yarn details
-  const buildSupplierYarnOptions = useCallback((): SupplierYarnOption[] => {
-    const yarnDetails = supplierYarnDetailsRef.current;
+  /**
+   * Yarn catalog ObjectId carried on supplier.yarnDetails entries (when populated).
+   * @param d - Supplier yarn detail payload
+   * @returns Normalized YarnCatalog id or undefined
+   */
+  const catalogIdFromSupplierDetail = useCallback(
+    (d: SupplierYarnDetail): string | undefined => {
+      if (d.yarnCatalogId) return String(d.yarnCatalogId).trim();
+      const yc = d.yarnCatalog;
+      if (typeof yc === "string" && yc.trim()) return yc.trim();
+      if (yc && typeof yc === "object") {
+        const cid = extractIdFromValue(yc);
+        if (cid) return cid;
+      }
+      const rawYarn = (d as { yarn?: unknown }).yarn;
+      const fromYarn = extractIdFromValue(rawYarn);
+      if (fromYarn) return fromYarn;
+      return undefined;
+    },
+    [extractIdFromValue]
+  );
+
+  /**
+   * Whether a line item matches a supplier yarn row (catalog id first, then exact yarn name).
+   * @param detail - Supplier yarn detail
+   * @param item - PO line
+   * @returns True if the supplier lists this yarn for the line
+   */
+  const supplierDetailMatchesDraftItem = useCallback(
+    (detail: SupplierYarnDetail, item: YarnPurchaseItem): boolean => {
+      const cid = catalogIdFromSupplierDetail(detail);
+      if (item.yarnId && cid && String(item.yarnId) === String(cid)) {
+        return true;
+      }
+      const supplierName = (detail.yarnName || "").trim().toLowerCase();
+      const itemName = (item.yarnName || "").trim().toLowerCase();
+      return Boolean(itemName && supplierName === itemName);
+    },
+    [catalogIdFromSupplierDetail]
+  );
+
+  /**
+   * Keeps only yarn rows the supplier actually lists.
+   * @param items - Current line items
+   * @param yarnDetails - Supplier yarnDetails from API
+   * @returns Filtered items
+   */
+  const filterItemsForSupplierYarns = useCallback(
+    (items: YarnPurchaseItem[], yarnDetails: SupplierYarnDetail[]): YarnPurchaseItem[] => {
+      if (!yarnDetails.length) return [];
+      return items.filter((item) =>
+        yarnDetails.some((detail) => supplierDetailMatchesDraftItem(detail, item))
+      );
+    },
+    [supplierDetailMatchesDraftItem]
+  );
+
+  /**
+   * Maps supplier.yarnDetails rows to selectable yarn options for this form.
+   * @param explicitDetails - When passed, builds from this snapshot instead of supplierYarnDetailsRef.
+   */
+  const buildSupplierYarnOptions = useCallback((explicitDetails?: SupplierYarnDetail[]): SupplierYarnOption[] => {
+    const yarnDetails =
+      explicitDetails !== undefined ? explicitDetails : supplierYarnDetailsRef.current;
     if (!yarnDetails || yarnDetails.length === 0) {
       return [];
     }
@@ -334,6 +450,81 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
     return options;
   }, [extractIdFromValue, extractShadeCodeFromDetail]);
+
+  /**
+   * Resolves the supplier yarn option for a line using catalog id, normalized name, then prefix match.
+   * @param item - PO line
+   * @param yarnDetailsSnapshot - Optional supplier yarnDetails snapshot (e.g. right after hydrate)
+   * @returns Best matching supplier yarn option, if any
+   */
+  const resolveSupplierYarnOptionForItem = useCallback(
+    (
+      item: YarnPurchaseItem,
+      yarnDetailsSnapshot?: SupplierYarnDetail[],
+    ): SupplierYarnOption | undefined => {
+      if (!item.yarnName?.trim() && !String(item.yarnId || "").trim()) {
+        return undefined;
+      }
+      const options =
+        yarnDetailsSnapshot !== undefined
+          ? buildSupplierYarnOptions(yarnDetailsSnapshot)
+          : buildSupplierYarnOptions();
+      if (options.length === 0) {
+        return undefined;
+      }
+
+      const itemShadeNorm = item.shadeCode?.trim().toLowerCase() || "";
+
+      const matchByCatalog =
+        item.yarnId &&
+        (options.find((option) => {
+          const cid = catalogIdFromSupplierDetail(option.supplierDetail);
+          if (!cid || !yarnCatalogIdsEquivalent(item.yarnId, cid)) {
+            return false;
+          }
+          if (itemShadeNorm && option.shadeCode?.trim().toLowerCase() !== itemShadeNorm) {
+            return false;
+          }
+          return true;
+        }) ||
+          options.find((option) => {
+            const cid = catalogIdFromSupplierDetail(option.supplierDetail);
+            return Boolean(cid && yarnCatalogIdsEquivalent(item.yarnId, cid));
+          }));
+
+      return (
+        matchByCatalog ??
+        (item.yarnName
+          ? options.find((option) => {
+              const optionYarnName = normalizeYarnLabel(option.displayName);
+              const itemYarnName = normalizeYarnLabel(item.yarnName);
+              if (!itemYarnName || optionYarnName !== itemYarnName) {
+                return false;
+              }
+              if (itemShadeNorm && option.shadeCode?.trim().toLowerCase() !== itemShadeNorm) {
+                return false;
+              }
+              return true;
+            }) ??
+            options.find((option) => {
+              const optionYarnName = option.displayName.trim().toLowerCase();
+              const itemYarnName = item.yarnName.trim().toLowerCase();
+              return itemYarnName && optionYarnName === itemYarnName;
+            }) ??
+            options.find((option) => {
+              const dn = normalizeYarnLabel(option.displayName);
+              const inm = normalizeYarnLabel(item.yarnName);
+              if (dn.length < 8 || inm.length < 8) {
+                return false;
+              }
+              const maxPrefix = Math.min(60, dn.length, inm.length);
+              return dn.startsWith(inm.slice(0, maxPrefix)) || inm.startsWith(dn.slice(0, maxPrefix));
+            })
+          : undefined)
+      );
+    },
+    [buildSupplierYarnOptions, catalogIdFromSupplierDetail],
+  );
 
   /** True if the given yarn name exactly matches one of the current supplier's yarn details (case-insensitive). */
   const isYarnInSupplierData = useCallback(
@@ -433,7 +624,57 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
           yarnCountSizeService.getCountSizes({ status: 'active', limit: 1000, page: 1 })
         ]);
 
-        setSuppliers(suppliersResponse.results || []);
+        const allSuppliers = suppliersResponse.results || [];
+
+        /**
+         * Resolves YarnCatalog ObjectId string from supplier `yarnDetails` row.
+         */
+        const catalogIdFromSupplierDetailRow = (d: SupplierYarnDetail): string | undefined => {
+          if (d.yarnCatalogId) return String(d.yarnCatalogId).trim();
+          const yc = d.yarnCatalog;
+          if (typeof yc === 'string' && yc.trim()) return yc.trim();
+          if (yc && typeof yc === 'object') {
+            const obj = yc as Record<string, unknown>;
+            const nid = obj._id ?? obj.id;
+            if (nid != null) return String(nid);
+          }
+          const rawYarn = (d as { yarn?: unknown }).yarn;
+          if (typeof rawYarn === 'string' && rawYarn.trim()) return rawYarn.trim();
+          if (rawYarn && typeof rawYarn === 'object') {
+            const obj = rawYarn as Record<string, unknown>;
+            const nid = obj._id ?? obj.id;
+            if (nid != null) return String(nid);
+          }
+          return undefined;
+        };
+
+        let supplierResults = allSuppliers;
+        const draftCatalogIds = new Set(
+          (initialData.items || [])
+            .map((row) => row.yarnId)
+            .filter((x): x is string => Boolean(x))
+            .map((x) => String(x))
+        );
+        const draftYarnNames = new Set(
+          (initialData.items || [])
+            .map((row) => row.yarnName?.trim().toLowerCase())
+            .filter(Boolean) as string[]
+        );
+        draftPreferredSupplierIdsRef.current = new Set();
+        if (draftCatalogIds.size > 0 || draftYarnNames.size > 0) {
+          supplierResults.forEach((supplier) => {
+            const details = supplier.yarnDetails || [];
+            const hit = details.some((d) => {
+              const cid = catalogIdFromSupplierDetailRow(d);
+              if (cid && draftCatalogIds.has(String(cid))) return true;
+              const dn = (d.yarnName || "").trim().toLowerCase();
+              return Boolean(dn && draftYarnNames.has(dn));
+            });
+            if (hit) draftPreferredSupplierIdsRef.current.add(supplier.id);
+          });
+        }
+
+        setSuppliers(supplierResults);
         setCountSizes(countSizesResponse.results || []);
 
         const types = typesResponse.results || [];
@@ -472,7 +713,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
         // Load initial supplier if provided
         if (initialData.supplierId) {
-          const supplier = suppliersResponse.results?.find(s => s.id === initialData.supplierId);
+          const supplier = allSuppliers.find(s => s.id === initialData.supplierId);
           if (supplier) {
             setSelectedSupplier(supplier);
             // Set initial state from supplier object (in case yarnDetails are already populated)
@@ -489,8 +730,19 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
             supplierService.getSupplierById(supplier.id)
               .then((fullSupplier) => {
                 const yarnDetails = fullSupplier.yarnDetails || [];
+
+                supplierBindGenerationRef.current += 1;
+                const bindGen = supplierBindGenerationRef.current;
+
                 setSupplierYarnDetails(yarnDetails);
                 supplierYarnDetailsRef.current = yarnDetails;
+
+                queueMicrotask(() => {
+                  void bindUnresolvedYarnLinesRef.current(bindGen, [
+                    ...formDataItemsRef.current,
+                  ]);
+                });
+
                 console.log("[PurchaseForm] Initial supplier loaded with yarn details", {
                   supplierId: supplier.id,
                   supplierName: supplier.brandName,
@@ -517,7 +769,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     };
 
     loadOptions();
-  }, [initialData.supplierId]);
+  }, [initialData.supplierId, initialData.items]);
 
   useEffect(() => {
     if (!selectedSupplier || supplierYarnDetails.length === 0) {
@@ -564,14 +816,15 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     });
   }, [selectedSupplier, supplierYarnDetails, filterSupplierYarnOptions]);
 
-  // Filter suppliers based on query
+  // Filter suppliers based on query (always search full supplier list; boost draft-compatible vendors).
   const filterSuppliers = useCallback((query: string): Supplier[] => {
     if (!query || !query.trim()) {
       return [];
     }
 
     const normalizedQuery = query.trim().toLowerCase();
-    const filtered = suppliers.filter(supplier => {
+    const preferred = draftPreferredSupplierIdsRef.current;
+    const filtered = suppliers.filter((supplier) => {
       const brandName = supplier.brandName?.toLowerCase() || "";
       const contactPerson = supplier.contactPersonName?.toLowerCase() || "";
       const email = supplier.email?.toLowerCase() || "";
@@ -585,19 +838,24 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       );
     });
 
-    // Sort by relevance (exact brand name match first, then starts with, then contains)
-    return filtered.sort((a, b) => {
-      const aBrand = a.brandName?.toLowerCase() || "";
-      const bBrand = b.brandName?.toLowerCase() || "";
+    return filtered
+      .sort((a, b) => {
+        const pa = preferred.has(a.id) ? 1 : 0;
+        const pb = preferred.has(b.id) ? 1 : 0;
+        if (pb !== pa) return pb - pa;
 
-      const aStartsWith = aBrand.startsWith(normalizedQuery);
-      const bStartsWith = bBrand.startsWith(normalizedQuery);
+        const aBrand = a.brandName?.toLowerCase() || "";
+        const bBrand = b.brandName?.toLowerCase() || "";
 
-      if (aStartsWith && !bStartsWith) return -1;
-      if (!aStartsWith && bStartsWith) return 1;
+        const aStartsWith = aBrand.startsWith(normalizedQuery);
+        const bStartsWith = bBrand.startsWith(normalizedQuery);
 
-      return aBrand.localeCompare(bBrand);
-    }).slice(0, 10);
+        if (aStartsWith && !bStartsWith) return -1;
+        if (!aStartsWith && bStartsWith) return 1;
+
+        return aBrand.localeCompare(bBrand);
+      })
+      .slice(0, 12);
   }, [suppliers]);
 
   // Handle supplier input
@@ -615,31 +873,40 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       setSelectedSupplier(null);
       setSupplierYarnDetails([]);
       supplierYarnDetailsRef.current = [];
-      setFormData(prev => ({
+      const restored = cloneYarnPurchaseItems(itemsSnapshotWithoutSupplierRef.current);
+      setFormData((prev) => ({
         ...prev,
         supplierId: "",
         supplierName: "",
-        items: [],
+        items: restored,
       }));
-      setAutocompleteStates({});
+      setAutocompleteStates(() => {
+        const next: Record<
+          string,
+          { query: string; suggestions: SupplierYarnOption[]; showSuggestions: boolean }
+        > = {};
+        restored.forEach((row) => {
+          next[row.id] = {
+            query: row.yarnName,
+            suggestions: [],
+            showSuggestions: false,
+          };
+        });
+        return next;
+      });
     }
   };
 
   // Select supplier suggestion
   const selectSupplierSuggestion = async (supplier: Supplier) => {
+    supplierBindGenerationRef.current += 1;
+    const bindGen = supplierBindGenerationRef.current;
+
     setSelectedSupplier(supplier);
 
-    // Set initial state from supplier object (in case yarnDetails are already populated)
     const initialYarnDetails = supplier.yarnDetails || [];
     setSupplierYarnDetails(initialYarnDetails);
     supplierYarnDetailsRef.current = initialYarnDetails;
-
-    setFormData(prev => ({
-      ...prev,
-      supplierId: supplier.id,
-      supplierName: supplier.brandName,
-      items: prev.supplierId && prev.supplierId !== supplier.id ? [] : prev.items,
-    }));
 
     setSupplierAutocomplete({
       query: supplier.brandName,
@@ -647,14 +914,11 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       showSuggestions: false,
     });
 
-    if (!formData.supplierId || formData.supplierId !== supplier.id) {
-      setAutocompleteStates({});
-    }
+    let yarnDetails: SupplierYarnDetail[] = initialYarnDetails;
 
-    // Fetch full supplier details to ensure yarnDetails are loaded
     try {
       const fullSupplier = await supplierService.getSupplierById(supplier.id);
-      const yarnDetails = fullSupplier.yarnDetails || [];
+      yarnDetails = fullSupplier.yarnDetails || [];
 
       setSupplierYarnDetails(yarnDetails);
       supplierYarnDetailsRef.current = yarnDetails;
@@ -666,13 +930,66 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       });
     } catch (error) {
       console.error("[PurchaseForm] Failed to fetch full supplier details", error);
-      // Keep using initial yarnDetails if fetch fails
+      yarnDetails = initialYarnDetails;
       console.log("[PurchaseForm] Supplier selected (using initial yarn details)", {
         supplierId: supplier.id,
         supplierName: supplier.brandName,
         yarnDetailsCount: initialYarnDetails.length,
       });
     }
+
+    let filteredSnapshot: YarnPurchaseItem[] = [];
+    setFormData((prev) => {
+      const sourceItems =
+        itemsSnapshotWithoutSupplierRef.current.length > 0
+          ? cloneYarnPurchaseItems(itemsSnapshotWithoutSupplierRef.current)
+          : cloneYarnPurchaseItems(prev.items);
+
+      filteredSnapshot = filterItemsForSupplierYarns(sourceItems, yarnDetails);
+
+      const removedLines = sourceItems.filter(
+        (item) => !filteredSnapshot.some((kept) => kept.id === item.id)
+      );
+      const removedNames = removedLines
+        .map((i) => i.yarnName.trim() || "Unnamed yarn")
+        .filter(Boolean);
+
+      if (!yarnDetails.length && sourceItems.length > 0) {
+        toast.error(
+          `${supplier.brandName} has no yarn lineup on record. Add yarns to this supplier or pick another vendor.`,
+          { duration: 8500 }
+        );
+      } else if (removedNames.length > 0) {
+        toast.error(
+          `${supplier.brandName} does not list: ${removedNames.join(", ")}`,
+          { duration: 8500 }
+        );
+      }
+
+      return {
+        ...prev,
+        supplierId: supplier.id,
+        supplierName: supplier.brandName,
+        items: filteredSnapshot,
+      };
+    });
+
+    setAutocompleteStates((prev) => {
+      const next: typeof prev = {};
+      filteredSnapshot.forEach((it) => {
+        const prevRow = prev[it.id];
+        next[it.id] = {
+          ...(prevRow ?? {}),
+          query: it.yarnName,
+          suggestions: [],
+          showSuggestions: false,
+        };
+      });
+      return next;
+    });
+
+    isTypingRef.current = {};
+    void bindUnresolvedYarnLinesRef.current(bindGen, filteredSnapshot);
   };
 
   useEffect(() => {
@@ -1103,67 +1420,6 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     }));
   }, []);
 
-  const handleYarnNameInput = useCallback((itemId: string, value: string) => {
-    // Mark as typing to prevent click outside handler from closing dropdown
-    isTypingRef.current[itemId] = true;
-
-    // Get suggestions if supplier is selected and we have yarn details
-    // Similar to supplier autocomplete - simple and direct
-    const hasYarnDetails = supplierYarnDetailsRef.current.length > 0 || supplierYarnDetails.length > 0;
-    const suggestions = (selectedSupplier && value.trim() && hasYarnDetails)
-      ? filterSupplierYarnOptions(value)
-      : [];
-
-    console.log("[PurchaseForm] handleYarnNameInput", {
-      itemId,
-      rawValue: value,
-      hasSupplier: Boolean(selectedSupplier),
-      supplierName: selectedSupplier?.brandName,
-      supplierId: selectedSupplier?.id,
-      yarnDetailsCount: supplierYarnDetails.length,
-      supplierYarnDetailsRefCount: supplierYarnDetailsRef.current.length,
-      hasYarnDetails,
-      suggestionsCount: suggestions.length,
-      suggestionSamples: suggestions.map(s => s.displayName).slice(0, 5),
-    });
-
-    // Update autocomplete state - this should happen first
-    // Always show suggestions if they exist, regardless of previous state
-    setAutocompleteStates(prev => {
-      const currentState = prev[itemId];
-      return {
-        ...prev,
-        [itemId]: {
-          query: value,
-          suggestions,
-          // Show suggestions if there are any (like supplier autocomplete)
-          // Force show if suggestions exist and user is typing
-          showSuggestions: suggestions.length > 0,
-        },
-      };
-    });
-
-    // Update form data - this may cause re-render but autocomplete state should persist
-    updateItem(itemId, {
-      yarnName: value,
-      yarnId: "",
-      selectedYarnDetail: undefined,
-      selectedCatalog: undefined,
-      sizeCount: '',
-      sizeCountName: '',
-      yarnTypeId: undefined,
-      yarnSubtypeId: undefined,
-      shadeCode: "",
-      // Clear stale import mismatch flag while user edits manually.
-      notInSupplierData: undefined,
-    });
-
-    // Clear typing flag after a longer delay to allow for rapid typing and dropdown interaction
-    setTimeout(() => {
-      isTypingRef.current[itemId] = false;
-    }, 500);
-  }, [selectedSupplier, supplierYarnDetails, filterSupplierYarnOptions, updateItem]);
-
   const selectYarnSuggestion = useCallback(async (itemId: string, option: SupplierYarnOption) => {
     const { supplierDetail, displayName } = option;
 
@@ -1262,6 +1518,136 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     }));
   }, [extractCountSizeOptionsFromDetail, extractIdFromValue, updateItem]);
 
+  /**
+   * After supplier.yarnDetails hydrate: binds count size + shade for lines matching the lineup.
+   * @param generation - Must match supplierBindGenerationRef or the run aborts (supplier changed).
+   * @param rows - Items to reconcile (supplier selection uses vendor-filtered lines; initial hydrate uses full form lines).
+   */
+  const bindUnresolvedYarnLines = useCallback(
+    async (generation: number, rows: YarnPurchaseItem[]) => {
+      const yarnSnapshot = supplierYarnDetailsRef.current;
+      if (!yarnSnapshot.length) {
+        return;
+      }
+
+      for (const row of rows) {
+        if (generation !== supplierBindGenerationRef.current) {
+          return;
+        }
+        if (row.selectedYarnDetail) {
+          continue;
+        }
+        if (!row.yarnName?.trim() && !String(row.yarnId || "").trim()) {
+          continue;
+        }
+        const match = resolveSupplierYarnOptionForItem(row, yarnSnapshot);
+        if (match) {
+          await selectYarnSuggestion(row.id, match);
+          if (generation !== supplierBindGenerationRef.current) {
+            return;
+          }
+        }
+      }
+    },
+    [resolveSupplierYarnOptionForItem, selectYarnSuggestion],
+  );
+
+  bindUnresolvedYarnLinesRef.current = bindUnresolvedYarnLines;
+
+  /**
+   * Yarn name field: on real edits, clears resolved supplier binding; on same-value refresh (focus), keeps it and tries to bind.
+   * @param itemId - Line item id
+   * @param value - Input value
+   */
+  const handleYarnNameInput = useCallback(
+    (itemId: string, value: string) => {
+      isTypingRef.current[itemId] = true;
+
+      const prevItem = formDataItemsRef.current.find((i) => i.id === itemId);
+      const nameUnchanged = Boolean(prevItem && value.trim() === (prevItem.yarnName || "").trim());
+
+      const hasYarnDetails =
+        supplierYarnDetailsRef.current.length > 0 || supplierYarnDetails.length > 0;
+      const suggestions =
+        selectedSupplier && value.trim() && hasYarnDetails ? filterSupplierYarnOptions(value) : [];
+
+      console.log("[PurchaseForm] handleYarnNameInput", {
+        itemId,
+        rawValue: value,
+        nameUnchanged,
+        hasSupplier: Boolean(selectedSupplier),
+        supplierName: selectedSupplier?.brandName,
+        supplierId: selectedSupplier?.id,
+        yarnDetailsCount: supplierYarnDetails.length,
+        supplierYarnDetailsRefCount: supplierYarnDetailsRef.current.length,
+        hasYarnDetails,
+        suggestionsCount: suggestions.length,
+        suggestionSamples: suggestions.map((s) => s.displayName).slice(0, 5),
+      });
+
+      setAutocompleteStates((prev) => ({
+        ...prev,
+        [itemId]: {
+          query: value,
+          suggestions,
+          showSuggestions: suggestions.length > 0,
+        },
+      }));
+
+      if (nameUnchanged) {
+        if (prevItem && !prevItem.selectedYarnDetail && value.trim()) {
+          const match = resolveSupplierYarnOptionForItem(prevItem);
+          if (match) {
+            void selectYarnSuggestion(itemId, match);
+          }
+        }
+        setTimeout(() => {
+          isTypingRef.current[itemId] = false;
+        }, 500);
+        return;
+      }
+
+      updateItem(itemId, {
+        yarnName: value,
+        yarnId: "",
+        selectedYarnDetail: undefined,
+        selectedCatalog: undefined,
+        sizeCount: "",
+        sizeCountName: "",
+        yarnTypeId: undefined,
+        yarnSubtypeId: undefined,
+        shadeCode: "",
+        notInSupplierData: undefined,
+      });
+
+      setTimeout(() => {
+        isTypingRef.current[itemId] = false;
+      }, 500);
+    },
+    [
+      selectedSupplier,
+      supplierYarnDetails,
+      filterSupplierYarnOptions,
+      updateItem,
+      resolveSupplierYarnOptionForItem,
+      selectYarnSuggestion,
+    ],
+  );
+
+  /**
+   * Recompute when line catalog link or supplier-yarn binding changes (draft preload often lacks selectedYarnDetail).
+   */
+  const yarnLineHydrationKey = useMemo(
+    () =>
+      formData.items
+        .map(
+          (i) =>
+            `${i.id}:${String(i.yarnId ?? "")}:${i.selectedYarnDetail ? "1" : "0"}:${normalizeYarnLabel(i.yarnName || "").slice(0, 80)}`,
+        )
+        .join("|"),
+    [formData.items],
+  );
+
   useEffect(() => {
     if (!selectedSupplier || supplierYarnDetails.length === 0) {
       return;
@@ -1270,27 +1656,14 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     formData.items.forEach((item) => {
       if (!item) return;
       if (item.selectedYarnDetail) return;
-      if (!item.yarnName) return;
+      if (!item.yarnName && !item.yarnId) return;
 
       // Skip if user is currently typing in this input
       if (isTypingRef.current[item.id]) {
         return;
       }
 
-      const options = buildSupplierYarnOptions();
-      // Match by yarn name; when item has shadeCode, prefer option with same shade so we don't overwrite user's selection
-      const itemShadeNorm = item.shadeCode?.trim().toLowerCase() || "";
-      const match = options.find((option) => {
-        const optionYarnName = option.displayName.trim().toLowerCase();
-        const itemYarnName = item.yarnName.trim().toLowerCase();
-        if (!itemYarnName || optionYarnName !== itemYarnName) return false;
-        if (itemShadeNorm && option.shadeCode?.trim().toLowerCase() !== itemShadeNorm) return false;
-        return true;
-      }) ?? options.find((option) => {
-        const optionYarnName = option.displayName.trim().toLowerCase();
-        const itemYarnName = item.yarnName.trim().toLowerCase();
-        return itemYarnName && optionYarnName === itemYarnName;
-      });
+      const match = resolveSupplierYarnOptionForItem(item);
 
       if (match) {
         // Update autocomplete state without showing suggestions
@@ -1318,7 +1691,101 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       }
       // Removed the else block that was closing suggestions - let user typing control it
     });
-  }, [formData.items, selectedSupplier, supplierYarnDetails, buildSupplierYarnOptions, selectYarnSuggestion]);
+  }, [formData.items, selectedSupplier, supplierYarnDetails, resolveSupplierYarnOptionForItem, selectYarnSuggestion]);
+
+  /**
+   * Fetches canonical catalog yarnName for rows with yarnId but no supplier detail match (truncated UI labels).
+   * Then binds the correct supplier line so SIZE options populate.
+   */
+  useEffect(() => {
+    if (!selectedSupplier || supplierYarnDetails.length === 0) {
+      return undefined;
+    }
+
+    const needsHydration = formData.items.filter(
+      (i) =>
+        String(i.yarnId || "").trim().length > 0 &&
+        !i.selectedYarnDetail &&
+        (i.yarnName || "").trim().length > 0,
+    );
+
+    if (needsHydration.length === 0) {
+      return undefined;
+    }
+
+    const runId = ++yarnCatalogHydrateRunIdRef.current;
+
+    void (async () => {
+      for (const item of needsHydration) {
+        if (yarnCatalogHydrateRunIdRef.current !== runId) {
+          return;
+        }
+        try {
+          const catalog = await yarnCatalogService.getYarnCatalogById(String(item.yarnId));
+          if (yarnCatalogHydrateRunIdRef.current !== runId || !catalog?.yarnName) {
+            continue;
+          }
+
+          const options = buildSupplierYarnOptions();
+          if (options.length === 0) {
+            continue;
+          }
+
+          const canon = normalizeYarnLabel(catalog.yarnName);
+          const shadeNorm = item.shadeCode?.trim().toLowerCase() || "";
+
+          const byCatalogId = options.find((o) => {
+            const cid = catalogIdFromSupplierDetail(o.supplierDetail);
+            return Boolean(cid && yarnCatalogIdsEquivalent(cid, catalog.id));
+          });
+
+          const byNameExact = options.find((o) => {
+            if (normalizeYarnLabel(o.displayName) !== canon) {
+              return false;
+            }
+            if (shadeNorm && o.shadeCode?.trim().toLowerCase() !== shadeNorm) {
+              return false;
+            }
+            return true;
+          });
+
+          const byNameFuzzy = options.find((o) => {
+            const dn = normalizeYarnLabel(o.displayName);
+            if (dn.length < 8 || canon.length < 8) {
+              return false;
+            }
+            const prefix = Math.min(60, dn.length, canon.length);
+            const prefixMatch =
+              dn.startsWith(canon.slice(0, prefix)) || canon.startsWith(dn.slice(0, prefix));
+            if (!prefixMatch) {
+              return false;
+            }
+            if (shadeNorm && o.shadeCode?.trim().toLowerCase() !== shadeNorm) {
+              return false;
+            }
+            return true;
+          });
+
+          const winner = byCatalogId ?? byNameExact ?? byNameFuzzy;
+
+          if (winner && yarnCatalogHydrateRunIdRef.current === runId) {
+            await selectYarnSuggestion(item.id, winner);
+          }
+        } catch (err) {
+          console.warn("[PurchaseForm] Yarn catalog hydrate for SIZE failed", item.yarnId, err);
+        }
+      }
+    })();
+
+    return undefined;
+  }, [
+    selectedSupplier?.id,
+    supplierYarnDetails.length,
+    yarnLineHydrationKey,
+    buildSupplierYarnOptions,
+    catalogIdFromSupplierDetail,
+    selectYarnSuggestion,
+  ]);
 
   const calculateTotals = () => {
     const subTotal = formData.items.reduce((sum, item) => {
@@ -1545,11 +2012,20 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
               type="text"
               value={supplierAutocomplete.query || formData.supplierName}
               onChange={(e) => handleSupplierInput(e.target.value)}
-              onFocus={() => {
-                if (supplierAutocomplete.suggestions.length > 0) {
-                  setSupplierAutocomplete(prev => ({
+              onFocus={(e) => {
+                const value = e.target.value;
+                if (value.trim()) {
+                  const suggestions = filterSuppliers(value);
+                  setSupplierAutocomplete((prev) => ({
                     ...prev,
-                    showSuggestions: true
+                    query: value,
+                    suggestions,
+                    showSuggestions: suggestions.length > 0,
+                  }));
+                } else if (supplierAutocomplete.suggestions.length > 0) {
+                  setSupplierAutocomplete((prev) => ({
+                    ...prev,
+                    showSuggestions: true,
                   }));
                 }
               }}
@@ -1558,7 +2034,11 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
               required
             />
             {supplierAutocomplete.showSuggestions && supplierAutocomplete.suggestions.length > 0 && (
-              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
+              <div
+                role="listbox"
+                aria-label="Supplier suggestions"
+                className="absolute z-[100] w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto"
+              >
                 {supplierAutocomplete.suggestions.map((supplier) => (
                   <div
                     key={supplier.id}
