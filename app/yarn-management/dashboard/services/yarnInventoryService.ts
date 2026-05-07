@@ -271,6 +271,92 @@ export interface YarnReportSnapshotBoundsResponse {
   yarnReportHelp: string;
 }
 
+/** GET /yarn-management/yarn-report/po-analytics */
+export interface PoAnalyticsCards {
+  poCount: number;
+  draftCount: number;
+  qcPendingPoCount: number;
+  orderedKg: number;
+  receivedAcceptedKg: number;
+  outstandingKg: number;
+  rejectedKg: number;
+}
+
+export interface PoAnalyticsBySupplier {
+  supplierId: string | null;
+  supplierName: string;
+  poCount: number;
+  orderedKg: number;
+  receivedAcceptedKg: number;
+  outstandingKg: number;
+}
+
+export interface PoAnalyticsByStatus {
+  status: string;
+  count: number;
+}
+
+export interface PoAnalyticsByYarn {
+  yarnCatalogId: string;
+  yarnName: string;
+  orderedKg: number;
+}
+
+export interface PoAnalyticsLotsSummary {
+  totalLots: number;
+  lot_pending: number;
+  lot_qc_pending: number;
+  lot_rejected: number;
+  lot_accepted: number;
+}
+
+export interface PoAnalyticsResponse {
+  startDate: string;
+  endDate: string;
+  dateMode: 'created' | 'received';
+  cards: PoAnalyticsCards;
+  bySupplier: PoAnalyticsBySupplier[];
+  byStatus: PoAnalyticsByStatus[];
+  byYarn: PoAnalyticsByYarn[];
+  lotsSummary: PoAnalyticsLotsSummary;
+}
+
+export interface PoAnalyticsLineRow {
+  purchaseOrderId: string;
+  poNumber: string;
+  supplierName: string;
+  supplierId: string | null;
+  currentStatus: string;
+  createDate: string;
+  goodsReceivedDate: string | null;
+  lastUpdateDate: string | null;
+  orderedKg: number;
+  receivedAcceptedKg: number;
+  outstandingKg: number;
+  lotCount: number;
+}
+
+export interface PoAnalyticsLinesResponse {
+  results: PoAnalyticsLineRow[];
+  page: number;
+  limit: number;
+  totalResults: number;
+  totalPages: number;
+}
+
+export interface YarnClosingTrendResponse {
+  yarnCatalogId: string;
+  startDate: string;
+  endDate: string;
+  series: { date: string; closingKg: number }[];
+}
+
+export interface YarnTransactionAnalyticsResponse {
+  startDate: string;
+  endDate: string;
+  byType: { transactionType: string; kg: number; count: number }[];
+}
+
 class YarnInventoryService {
   private baseURL = `${API_BASE_URL}/yarn-management`;
 
@@ -527,6 +613,100 @@ class YarnInventoryService {
   async getYarnReportSnapshotBounds(): Promise<YarnReportSnapshotBoundsResponse> {
     return this.makeRequest<YarnReportSnapshotBoundsResponse>(
       '/yarn-report/snapshot-bounds'
+    );
+  }
+
+  /**
+   * Aggregated PO metrics for yarn analytics dashboard.
+   * @param params - date_mode: created = PO createDate in range; received = receipt/rejection activity in range.
+   */
+  async getPoAnalytics(params: {
+    start_date: string;
+    end_date: string;
+    date_mode: 'created' | 'received';
+    supplier_id?: string;
+    yarn_catalog_id?: string;
+    status?: string;
+    include_draft?: boolean;
+  }): Promise<PoAnalyticsResponse> {
+    const q = new URLSearchParams();
+    q.append('start_date', params.start_date);
+    q.append('end_date', params.end_date);
+    q.append('date_mode', params.date_mode);
+    if (params.supplier_id) q.append('supplier_id', params.supplier_id);
+    if (params.yarn_catalog_id) q.append('yarn_catalog_id', params.yarn_catalog_id);
+    if (params.status) q.append('status', params.status);
+    if (params.include_draft) q.append('include_draft', 'true');
+    return this.makeRequest<PoAnalyticsResponse>(
+      `/yarn-report/po-analytics?${q.toString()}`
+    );
+  }
+
+  /**
+   * Paginated PO rows for analytics drill-down.
+   */
+  async getPoAnalyticsLines(params: {
+    start_date: string;
+    end_date: string;
+    date_mode: 'created' | 'received';
+    supplier_id?: string;
+    yarn_catalog_id?: string;
+    status?: string;
+    include_draft?: boolean;
+    group_by?: 'supplier' | 'status' | 'yarn';
+    group_id?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<PoAnalyticsLinesResponse> {
+    const q = new URLSearchParams();
+    q.append('start_date', params.start_date);
+    q.append('end_date', params.end_date);
+    q.append('date_mode', params.date_mode);
+    if (params.supplier_id) q.append('supplier_id', params.supplier_id);
+    if (params.yarn_catalog_id) q.append('yarn_catalog_id', params.yarn_catalog_id);
+    if (params.status) q.append('status', params.status);
+    if (params.include_draft) q.append('include_draft', 'true');
+    if (params.group_by) q.append('group_by', params.group_by);
+    if (params.group_id) q.append('group_id', params.group_id);
+    if (params.page != null) q.append('page', String(params.page));
+    if (params.limit != null) q.append('limit', String(params.limit));
+    return this.makeRequest<PoAnalyticsLinesResponse>(
+      `/yarn-report/po-analytics/lines?${q.toString()}`
+    );
+  }
+
+  /**
+   * Daily closing kg from snapshots for one yarn (YYYY-MM-DD keys).
+   */
+  async getYarnClosingTrend(params: {
+    yarn_catalog_id: string;
+    start_date: string;
+    end_date: string;
+  }): Promise<YarnClosingTrendResponse> {
+    const q = new URLSearchParams({
+      yarn_catalog_id: params.yarn_catalog_id,
+      start_date: params.start_date,
+      end_date: params.end_date,
+    });
+    return this.makeRequest<YarnClosingTrendResponse>(
+      `/yarn-report/yarn-closing-trend?${q.toString()}`
+    );
+  }
+
+  /**
+   * Yarn movement totals by transaction type for a date range.
+   */
+  async getYarnTransactionAnalytics(params: {
+    start_date: string;
+    end_date: string;
+    yarn_catalog_id?: string;
+  }): Promise<YarnTransactionAnalyticsResponse> {
+    const q = new URLSearchParams();
+    q.append('start_date', params.start_date);
+    q.append('end_date', params.end_date);
+    if (params.yarn_catalog_id) q.append('yarn_catalog_id', params.yarn_catalog_id);
+    return this.makeRequest<YarnTransactionAnalyticsResponse>(
+      `/yarn-report/transaction-analytics?${q.toString()}`
     );
   }
 }

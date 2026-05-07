@@ -1,8 +1,9 @@
 "use client";
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import SummaryCards from "./components/SummaryCards";
 import LiveInventoryTable from "./components/LiveInventoryTable";
 import InventoryAlertsModal from "./components/InventoryAlertsModal";
@@ -21,6 +22,8 @@ import { useYarnDashboardExports } from "./hooks/useYarnDashboardExports";
 
 const DashboardPage = () => {
   const { hasSubPermission } = useNavigation();
+  const searchParams = useSearchParams();
+  const appliedUrlSearchRef = useRef(false);
   const [inventory, setInventory] = useState<YarnInventory[]>([]);
   const [summary, setSummary] = useState<InventorySummary>({
     totalStock: 0,
@@ -68,6 +71,22 @@ const DashboardPage = () => {
     "/yarn-management",
     "Analytics & reports"
   );
+
+  /**
+   * Deep links from yarn analytics (`?yarn_name=` / `?yarn_id=`) prefill the inventory search once.
+   */
+  useEffect(() => {
+    if (appliedUrlSearchRef.current) return;
+    const yarnName = searchParams?.get("yarn_name")?.trim();
+    const yarnId = searchParams?.get("yarn_id")?.trim();
+    if (yarnName) {
+      appliedUrlSearchRef.current = true;
+      setSearchTerm(yarnName);
+    } else if (yarnId) {
+      appliedUrlSearchRef.current = true;
+      setSearchTerm(yarnId);
+    }
+  }, [searchParams]);
 
   /**
    * Transforms API response item to YarnInventory format
@@ -405,9 +424,9 @@ const DashboardPage = () => {
             <div className="flex items-center gap-1.5">
               {hasReportPermission ? (
                 <Link
-                  href="/yarn-management/dashboard/report"
+                  href="/yarn-management/dashboard/analytics"
                   className="w-9 h-9 flex items-center justify-center rounded border border-gray-200 hover:bg-gray-50 transition-colors text-gray-600"
-                  aria-label="Open yarn analytics and report"
+                  aria-label="Open yarn PO analytics"
                 >
                   <i className="ri-file-chart-line text-lg"></i>
                 </Link>
@@ -486,4 +505,18 @@ const DashboardPage = () => {
   );
 };
 
-export default DashboardPage;
+function YarnDashboardWithSearchParams() {
+  return (
+    <Suspense
+      fallback={
+        <div className="main-content !p-[10px] text-[11px] text-gray-500">
+          Loading dashboard…
+        </div>
+      }
+    >
+      <DashboardPage />
+    </Suspense>
+  );
+}
+
+export default YarnDashboardWithSearchParams;

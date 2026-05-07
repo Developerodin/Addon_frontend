@@ -512,7 +512,7 @@ const BaseMenuItems: any = [
       },
       {
         icon: ReportsIcon,
-        path: "/yarn-management/dashboard/report",
+        path: "/yarn-management/dashboard/analytics",
         type: "link",
         active: false,
         selected: false,

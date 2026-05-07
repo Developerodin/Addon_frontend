@@ -13,44 +13,15 @@ import {
   YarnReportResponse,
   YarnReportSnapshotBoundsResponse,
 } from "../services/yarnInventoryService";
-import PaginationControls from "../components/PaginationControls";
-
-const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
-const DEFAULT_PAGE_SIZE = 20;
-
-/** Local calendar YYYY-MM-DD (avoid UTC drift from `toISOString()` on date inputs). */
-const formatLocalYmd = (d: Date): string => {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-};
-
-const minYmd = (a: string, b: string) => (a <= b ? a : b);
-const maxYmd = (a: string, b: string) => (a >= b ? a : b);
-
-const YARN_REPORT_COLUMNS: { key: keyof YarnReportRow; label: string }[] = [
-  { key: "store", label: "Store" },
-  { key: "hsnCode", label: "HSN Code" },
-  { key: "yarnName", label: "Yarn Name" },
-  { key: "brand", label: "Brand" },
-  { key: "shadeNumber", label: "Shade No" },
-  { key: "yarnType", label: "Yarn Type" },
-  { key: "yarnSubtype", label: "Yarn Subtype" },
-  { key: "count", label: "Count" },
-  { key: "colorFamily", label: "Color Family" },
-  { key: "pantoneColorName", label: "Pantone Color" },
-  { key: "opening", label: "Opening" },
-  { key: "pur", label: "PUR" },
-  { key: "purRet", label: "PUR Ret" },
-  { key: "yarnIssueToKnitting", label: "Issue to Knitting" },
-  { key: "yarnReturnedFromKnitting", label: "Returned from Knitting" },
-  { key: "balance", label: "Balance" },
-  { key: "rate", label: "Rate" },
-  { key: "unit", label: "Unit" },
-  { key: "gstPercent", label: "GST %" },
-  { key: "amount", label: "Amount" },
-];
+import {
+  PAGE_SIZE_OPTIONS,
+  DEFAULT_PAGE_SIZE,
+  formatLocalYmd,
+  minYmd,
+  maxYmd,
+} from "./yarnReportConstants";
+import { YarnReportDataTable } from "./components/YarnReportDataTable";
+import { YarnReportSnapshotControls } from "./components/YarnReportSnapshotControls";
 
 const YarnReportPage = () => {
   const { hasSubPermission } = useNavigation();
@@ -366,317 +337,50 @@ const YarnReportPage = () => {
                 endDate={report?.endDate ?? endDate}
                 totalsSummary={report?.meta?.summary ?? null}
               />
+              <Link
+                href="/yarn-management/dashboard/analytics"
+                className="ml-2 text-[10px] font-bold text-purple-700 hover:underline"
+              >
+                PO analytics &amp; charts
+              </Link>
             </div>
           </div>
 
-          {/* Date range form */}
-          {submitError && (
-            <div
-              className="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-800"
-              role="alert"
-              aria-live="polite"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-extrabold text-red-900 mb-0.5">
-                    Failed to load yarn report
-                  </div>
-                  <div className="break-words">{submitError}</div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSubmitError(null)}
-                  className="shrink-0 w-7 h-7 inline-flex items-center justify-center rounded hover:bg-red-100 text-red-700 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                  aria-label="Dismiss error"
-                >
-                  <i className="ri-close-line text-base" aria-hidden></i>
-                </button>
-              </div>
-            </div>
-          )}
-          <form
+          <YarnReportSnapshotControls
+            submitError={submitError}
+            onDismissError={() => setSubmitError(null)}
+            snapshotBounds={snapshotBounds}
+            boundsLoading={boundsLoading}
+            boundsError={boundsError}
+            startDate={startDate}
+            endDate={endDate}
+            startMinUi={startMinUi}
+            startMaxUi={startMaxUi}
+            endMinUi={endMinUi}
+            endMaxUi={endMaxUi}
+            onStartDateChange={handleStartDateChange}
+            onEndDateChange={handleEndDateChange}
             onSubmit={handleSubmit}
-            className="flex flex-wrap items-end gap-3 mb-4 p-3 bg-gray-50 rounded border border-gray-100"
-          >
-            <div className="w-full basis-full space-y-1.5">
-              {boundsLoading && (
-                <p className="text-[10px] text-gray-500" role="status">
-                  Loading snapshot coverage…
-                </p>
-              )}
-              {boundsError && (
-                <p
-                  className="text-[10px] text-amber-800 bg-amber-50 border border-amber-100 rounded px-2 py-1.5"
-                  role="status"
-                >
-                  {boundsError} — date limits fall back to calendar only.
-                </p>
-              )}
-              {snapshotBounds &&
-                !boundsLoading &&
-                snapshotBounds.earliestSnapshotDate &&
-                snapshotBounds.latestSnapshotDate && (
-                  <p
-                    className="text-[11px] leading-snug text-emerald-900 bg-emerald-50 border border-emerald-100 rounded px-2.5 py-2"
-                    role="note"
-                  >
-                    <span className="font-bold text-emerald-950">
-                      Closing snapshot dates on file:{" "}
-                    </span>
-                    <span className="font-mono font-semibold">
-                      {snapshotBounds.earliestSnapshotDate}
-                    </span>
-                    {" → "}
-                    <span className="font-mono font-semibold">
-                      {snapshotBounds.latestSnapshotDate}
-                    </span>
-                    <span className="text-emerald-800">
-                      {" "}
-                      ({snapshotBounds.distinctSnapshotDates} day
-                      {snapshotBounds.distinctSnapshotDates === 1 ? "" : "s"},{" "}
-                      {snapshotBounds.totalSnapshotRows.toLocaleString()} rows).{" "}
-                    </span>
-                    {snapshotBounds.widestValidReportRange ? (
-                      <span className="text-emerald-800">
-                        Widest valid range:{" "}
-                        <span className="font-mono font-semibold">
-                          {snapshotBounds.widestValidReportRange.start_date}
-                        </span>
-                        {" — "}
-                        <span className="font-mono font-semibold">
-                          {snapshotBounds.widestValidReportRange.end_date}
-                        </span>
-                        .{" "}
-                      </span>
-                    ) : null}
-                    <span className="text-emerald-800/95">
-                      {snapshotBounds.yarnReportHelp}
-                    </span>
-                  </p>
-                )}
-              {snapshotBounds &&
-                !boundsLoading &&
-                !snapshotBounds.earliestSnapshotDate && (
-                  <p
-                    className="text-[11px] text-amber-900 bg-amber-50 border border-amber-100 rounded px-2.5 py-2"
-                    role="note"
-                  >
-                    No yarn daily closing snapshots yet — run the nightly snapshot job or
-                    backfill before this report can load.
-                  </p>
-                )}
-            </div>
-            <div>
-              <label
-                htmlFor="yarn-report-start-date"
-                className="block text-[10px] font-bold text-gray-500 mb-1"
-              >
-                Start Date
-              </label>
-              <input
-                id="yarn-report-start-date"
-                type="date"
-                value={startDate}
-                onChange={(e) => handleStartDateChange(e.target.value)}
-                max={startMaxUi}
-                min={startMinUi}
-                className="text-xs py-1.5 px-2 border border-gray-200 rounded bg-white focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none"
-                required
-                aria-label="Report start date"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="yarn-report-end-date"
-                className="block text-[10px] font-bold text-gray-500 mb-1"
-              >
-                End Date
-              </label>
-              <input
-                id="yarn-report-end-date"
-                type="date"
-                value={endDate}
-                onChange={(e) => handleEndDateChange(e.target.value)}
-                min={endMinUi}
-                max={endMaxUi}
-                className="text-xs py-1.5 px-2 border border-gray-200 rounded bg-white focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none"
-                required
-                aria-label="Report end date"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {loading ? (
-                <>
-                  <i className="ri-loader-4-line animate-spin text-xs"></i>
-                  Loading
-                </>
-              ) : (
-                <>
-                  <i className="ri-file-list-3-line text-xs"></i>
-                  Submit
-                </>
-              )}
-            </button>
-          </form>
-
-          {report?.meta?.summary ? (
-            <div
-              className="mx-[10px] mb-4 rounded border border-blue-100 bg-blue-50/90 px-3 py-2.5"
-              role="region"
-              aria-label="Dedup yarn snapshot totals"
-            >
-              <div className="text-[10px] font-extrabold text-blue-950 mb-1.5">
-                Snapshot totals (compare to inventory — not Σ Balance column)
-              </div>
-              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-blue-950">
-                <div className="flex flex-wrap gap-1 justify-between gap-x-2">
-                  <dt className="text-blue-900/90">Opening snapshot date</dt>
-                  <dd className="font-mono font-semibold">
-                    {report.meta.openingSnapshotDate}
-                  </dd>
-                </div>
-                <div className="flex flex-wrap gap-1 justify-between gap-x-2">
-                  <dt className="text-blue-900/90">Closing snapshot date</dt>
-                  <dd className="font-mono font-semibold">
-                    {report.meta.closingSnapshotDate}
-                  </dd>
-                </div>
-                <div className="flex flex-wrap gap-1 justify-between gap-x-2 sm:col-span-2">
-                  <dt className="text-blue-900/90">uniqueYarnClosingKgSum (dedup kg)</dt>
-                  <dd className="font-mono font-bold">
-                    {report.meta.summary.uniqueYarnClosingKgSum.toLocaleString()} kg
-                  </dd>
-                </div>
-                <div className="flex flex-wrap gap-1 justify-between gap-x-2 sm:col-span-2">
-                  <dt className="text-blue-900/90">Σ Balance across table rows</dt>
-                  <dd className="font-mono font-semibold">
-                    {report.meta.summary.sumDisplayedBalanceAcrossRowsKg.toLocaleString()} kg
-                    <span className="font-sans font-normal text-blue-900/80 ml-1">
-                      (inflates when one yarn spans multiple rows)
-                    </span>
-                  </dd>
-                </div>
-              </dl>
-            </div>
-          ) : null}
-
-          {/* Download button - shown when report loaded */}
-          {report && (
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-              <div className="flex items-center gap-2">
-                <label
-                  htmlFor="yarn-report-page-size"
-                  className="text-[10px] font-bold text-gray-500 whitespace-nowrap"
-                >
-                  Rows per page
-                </label>
-                <select
-                  id="yarn-report-page-size"
-                  value={pageSize}
-                  onChange={(e) =>
-                    handlePageSizeChange(Number(e.target.value))
-                  }
-                  className="text-xs py-1.5 px-2 border border-gray-200 rounded bg-white focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none"
-                  aria-label="Rows per page"
-                >
-                  {PAGE_SIZE_OPTIONS.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <button
-                type="button"
-                onClick={handleDownloadExcel}
-                disabled={downloading || !report.results?.length}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {downloading ? (
-                  <>
-                    <i className="ri-loader-4-line animate-spin text-xs"></i>
-                    Downloading
-                  </>
-                ) : (
-                  <>
-                    <i className="ri-download-2-line text-xs"></i>
-                    Download Excel
-                  </>
-                )}
-              </button>
-            </div>
-          )}
+            loading={loading}
+            report={report}
+            pageSize={pageSize}
+            onPageSizeChange={handlePageSizeChange}
+            downloading={downloading}
+            onDownloadExcel={handleDownloadExcel}
+          />
         </div>
 
         {/* Excel-like table - read-only */}
-        <div className="overflow-x-auto">
-          {report ? (
-            report.results?.length > 0 ? (
-              <table className="min-w-full text-[11px] border-collapse">
-                <thead>
-                  <tr className="bg-gray-100 border-b border-gray-200">
-                    {YARN_REPORT_COLUMNS.map((col) => (
-                      <th
-                        key={col.key}
-                        className="px-2 py-2 text-left font-bold text-gray-700 whitespace-nowrap border-r border-gray-200 last:border-r-0"
-                      >
-                        {col.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedRows.map((row, idx) => (
-                    <tr
-                      key={(currentPage - 1) * pageSize + idx}
-                      className="border-b border-gray-100 hover:bg-gray-50/50"
-                    >
-                      {YARN_REPORT_COLUMNS.map((col) => (
-                        <td
-                          key={col.key}
-                          className="px-2 py-1.5 text-gray-800 border-r border-gray-100 last:border-r-0"
-                        >
-                          {typeof row[col.key] === "number"
-                            ? (row[col.key] as number).toLocaleString()
-                            : String(row[col.key] ?? "")}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <i className="ri-file-list-line text-4xl text-gray-300 mb-3"></i>
-                <p className="text-xs text-gray-500">No data for selected date range</p>
-              </div>
-            )
-          ) : (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <i className="ri-file-chart-line text-4xl text-gray-300 mb-3"></i>
-              <p className="text-xs text-gray-500">
-                Select date range and click Submit to view report
-              </p>
-            </div>
-          )}
-        </div>
-
-        {report && report.results && report.results.length > 0 && (
-          <div className="border-t border-gray-100 px-3 py-3 bg-gray-50/50">
-            <PaginationControls
-              currentPage={currentPage}
-              totalPages={totalPages}
-              totalResults={totalResults}
-              pageSize={pageSize}
-              loading={loading}
-              onPageChange={setCurrentPage}
-            />
-          </div>
-        )}
+        <YarnReportDataTable
+          report={report}
+          paginatedRows={paginatedRows}
+          currentPage={currentPage}
+          pageSize={pageSize}
+          totalPages={totalPages}
+          totalResults={totalResults}
+          loading={loading}
+          onPageChange={setCurrentPage}
+        />
       </div>
     </div>
   );
