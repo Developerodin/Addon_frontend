@@ -21,6 +21,7 @@ import {
   YarnYarnDetailPanel,
   type YarnOption,
 } from "./components/YarnYarnDetailPanel";
+import { YarnPoHistorySection } from "./components/YarnPoHistorySection";
 import { PoDrillDownDrawer } from "./components/PoDrillDownDrawer";
 import HelpIcon from "@/shared/components/HelpIcon";
 
@@ -442,6 +443,13 @@ function YarnAnalyticsPageContent() {
                 selected={selectedYarn}
                 onSelectedChange={setSelectedYarn}
               />
+
+              {selectedYarn && (
+                <YarnPoHistorySection
+                  yarnCatalogId={selectedYarn.value}
+                  yarnName={selectedYarn.label}
+                />
+              )}
 
               <YarnPoAnalyticsCharts
                 analytics={null}
