@@ -62,7 +62,7 @@ export function YarnPoAnalyticsCharts({
         color: "purple",
         type: "bar",
         height: chartHeight,
-        span: "xl:col-span-7 col-span-12",
+        span: "col-span-12",
         options: {
           chart: {
             type: "bar",
@@ -118,7 +118,7 @@ export function YarnPoAnalyticsCharts({
         color: "indigo",
         type: "donut",
         height: 340,
-        span: "xl:col-span-5 col-span-12",
+        span: "col-span-12",
         options: {
           chart: { type: "donut", toolbar: { show: false } },
           labels,
@@ -160,7 +160,7 @@ export function YarnPoAnalyticsCharts({
         color: "blue",
         type: "bar",
         height: yarnChartHeight,
-        span: "xl:col-span-6 col-span-12",
+        span: "col-span-12",
         options: {
           chart: { type: "bar", toolbar: { show: true, tools: { download: true, selection: false, zoom: false, zoomin: false, zoomout: false, pan: false, reset: false } } },
           plotOptions: { bar: { horizontal: true, borderRadius: 4, barHeight: "70%" } },
@@ -196,7 +196,7 @@ export function YarnPoAnalyticsCharts({
         color: "teal",
         type: "bar",
         height: 360,
-        span: "xl:col-span-6 col-span-12",
+        span: "col-span-12",
         options: {
           chart: { type: "bar", toolbar: { show: false } },
           plotOptions: { bar: { horizontal: true, borderRadius: 4, barHeight: "65%" } },
