@@ -503,6 +503,18 @@ class YarnInventoryService {
     page?: number;
     limit?: number;
     skipRecalculation?: boolean;
+    /** Case-insensitive substring (server-side). */
+    yarnName?: string;
+    lastUpdatedFrom?: string;
+    lastUpdatedTo?: string;
+    sortBy?:
+      | 'yarnName'
+      | 'created'
+      | 'lastUpdated'
+      | 'minQty'
+      | 'availableQty'
+      | 'blockedQty';
+    sortOrder?: 'asc' | 'desc';
   }): Promise<YarnRequisitionListResponse> {
     const queryParams = new URLSearchParams();
     queryParams.append('startDate', params.startDate);
@@ -517,6 +529,14 @@ class YarnInventoryService {
     if (params.limit) queryParams.append('limit', params.limit.toString());
     if (params.skipRecalculation)
       queryParams.append('skipRecalculation', 'true');
+    if (params.yarnName?.trim())
+      queryParams.append('yarnName', params.yarnName.trim());
+    if (params.lastUpdatedFrom)
+      queryParams.append('lastUpdatedFrom', params.lastUpdatedFrom);
+    if (params.lastUpdatedTo)
+      queryParams.append('lastUpdatedTo', params.lastUpdatedTo);
+    if (params.sortBy) queryParams.append('sortBy', params.sortBy);
+    if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
 
     return this.makeRequest<YarnRequisitionListResponse>(
       `/yarn-requisitions?${queryParams.toString()}`

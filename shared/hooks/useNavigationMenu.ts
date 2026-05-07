@@ -116,9 +116,17 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               return false;
             }
             
+            // Check if this is the Analytics & reports submenu
+            if (child.path === '/yarn-management/dashboard') {
+              const hasAnalytics = hasSubPermission('/yarn-management', 'Analytics & reports');
+              const hasDashboard = hasSubPermission('/yarn-management', 'Dashboard');
+              if (!hasAnalytics && !hasDashboard) return false;
+            }
+
             // Check if nested submenu has any visible children
             const hasVisibleChildren = child.children.some(nestedChild => {
               if (nestedChild.type === 'link' && nestedChild.path) {
+                const nestedPathBase = nestedChild.path.split('?')[0];
                 if (nestedChild.path.startsWith('/vendor-po/purchase-management/') || nestedChild.path === '/vendor-po/vendor-list') {
                   return hasVendorPOPurchaseManagementChildPermission(nestedChild.path);
                 }
@@ -133,6 +141,13 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                   const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
                   return hasSubPermission('/yarn-management/purchase-management', permissionKey);
                 }
+                // Handle Analytics & reports children (Live Inventory, reports, analytics tabs)
+                if (nestedPathBase === '/yarn-management/dashboard') {
+                  return hasSubPermission('/yarn-management', 'Dashboard');
+                }
+                if (nestedPathBase.startsWith('/yarn-management/dashboard/')) {
+                  return hasSubPermission('/yarn-management', 'Analytics & reports');
+                }
                 // Handle Purchase Order and Purchase Order Received which are direct links
                 if (nestedChild.path === '/yarn-management/purchase') {
                   return hasSubPermission('/yarn-management/purchase-management', 'Purchase Order');
@@ -143,11 +158,11 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               }
               return false;
             });
-            
+
             // Only show nested submenu if it has visible children
             return hasVisibleChildren;
           }
-          
+
           if (child.type === 'link' && child.path) {
             // Map paths to parent/child structure
             // Handle yarn-management items that are shown under catalog
@@ -218,11 +233,12 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
         if (filteredChildren.length > 0) {
           // Process filtered children to handle nested submenus
           const processedChildren = filteredChildren.map(child => {
-            // Handle nested submenus (e.g., Yarn Master, Purchase Management within Yarn Management)
+            // Handle nested submenus (e.g., Yarn Master, Purchase Management, Analytics & reports within Yarn Management)
             if (child.type === 'sub' && child.children) {
               // Filter nested children
               const nestedFilteredChildren = child.children.filter(nestedChild => {
                 if (nestedChild.type === 'link' && nestedChild.path) {
+                  const nestedPathBase = nestedChild.path.split('?')[0];
                   if (nestedChild.path.startsWith('/vendor-po/purchase-management/') || nestedChild.path === '/vendor-po/vendor-list') {
                     return hasVendorPOPurchaseManagementChildPermission(nestedChild.path);
                   }
@@ -236,6 +252,13 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                   if (nestedChild.path.startsWith('/yarn-management/purchase-management/')) {
                     const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
                     return hasSubPermission('/yarn-management/purchase-management', permissionKey);
+                  }
+                  // Analytics & reports children
+                  if (nestedPathBase === '/yarn-management/dashboard') {
+                    return hasSubPermission('/yarn-management', 'Dashboard');
+                  }
+                  if (nestedPathBase.startsWith('/yarn-management/dashboard/')) {
+                    return hasSubPermission('/yarn-management', 'Analytics & reports');
                   }
                   // Handle Purchase Order and Purchase Order Received which are direct links
                   if (nestedChild.path === '/yarn-management/purchase') {
@@ -269,7 +292,7 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
       // For sub-menu items, return the filtered version
       if (item.type === 'sub' && item.children) {
         const filteredChildren = item.children.filter(child => {
-          // Handle nested submenus (e.g., Yarn Master, Purchase Management within Yarn Management)
+          // Handle nested submenus (e.g., Yarn Master, Purchase Management, Analytics & reports within Yarn Management)
           if (child.type === 'sub' && child.children) {
             // First check if user has permission to see the Yarn Master submenu itself
             if (child.path === '/yarn-management/yarn-master') {
@@ -285,13 +308,20 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                 return false;
               }
             }
+            // Check Analytics & reports submenu
+            if (child.path === '/yarn-management/dashboard') {
+              const hasAnalytics = hasSubPermission('/yarn-management', 'Analytics & reports');
+              const hasDashboard = hasSubPermission('/yarn-management', 'Dashboard');
+              if (!hasAnalytics && !hasDashboard) return false;
+            }
             if (child.path === '/vendor-po/purchase-management' && !hasVendorPOPurchaseManagementPermission()) {
               return false;
             }
-            
+
             // Check if nested submenu has any visible children
             const hasVisibleChildren = child.children.some(nestedChild => {
               if (nestedChild.type === 'link' && nestedChild.path) {
+                const nestedPathBase = nestedChild.path.split('?')[0];
                 if (nestedChild.path.startsWith('/vendor-po/purchase-management/') || nestedChild.path === '/vendor-po/vendor-list') {
                   return hasVendorPOPurchaseManagementChildPermission(nestedChild.path);
                 }
@@ -306,6 +336,13 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                   const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
                   return hasSubPermission('/yarn-management/purchase-management', permissionKey);
                 }
+                // Analytics & reports children
+                if (nestedPathBase === '/yarn-management/dashboard') {
+                  return hasSubPermission('/yarn-management', 'Dashboard');
+                }
+                if (nestedPathBase.startsWith('/yarn-management/dashboard/')) {
+                  return hasSubPermission('/yarn-management', 'Analytics & reports');
+                }
                 // Handle Purchase Order and Purchase Order Received which are direct links
                 if (nestedChild.path === '/yarn-management/purchase') {
                   return hasSubPermission('/yarn-management/purchase-management', 'Purchase Order');
@@ -316,7 +353,7 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               }
               return false;
             });
-            
+
             // Only show nested submenu if it has visible children
             return hasVisibleChildren;
           }
@@ -396,11 +433,12 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
 
         // Process filtered children to handle nested submenus
         const processedChildren = filteredChildren.map(child => {
-            // Handle nested submenus (e.g., Yarn Master, Purchase Management within Yarn Management)
+            // Handle nested submenus (e.g., Yarn Master, Purchase Management, Analytics & reports within Yarn Management)
             if (child.type === 'sub' && child.children) {
               // Filter nested children
               const nestedFilteredChildren = child.children.filter(nestedChild => {
                 if (nestedChild.type === 'link' && nestedChild.path) {
+                  const nestedPathBase = nestedChild.path.split('?')[0];
                   if (nestedChild.path.startsWith('/vendor-po/purchase-management/') || nestedChild.path === '/vendor-po/vendor-list') {
                     return hasVendorPOPurchaseManagementChildPermission(nestedChild.path);
                   }
@@ -414,6 +452,13 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                   if (nestedChild.path.startsWith('/yarn-management/purchase-management/')) {
                     const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
                     return hasSubPermission('/yarn-management/purchase-management', permissionKey);
+                  }
+                  // Analytics & reports children
+                  if (nestedPathBase === '/yarn-management/dashboard') {
+                    return hasSubPermission('/yarn-management', 'Dashboard');
+                  }
+                  if (nestedPathBase.startsWith('/yarn-management/dashboard/')) {
+                    return hasSubPermission('/yarn-management', 'Analytics & reports');
                   }
                   // Handle Purchase Order and Purchase Order Received which are direct links
                   if (nestedChild.path === '/yarn-management/purchase') {

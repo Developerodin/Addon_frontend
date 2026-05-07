@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
@@ -9,12 +9,10 @@ import * as XLSX from "xlsx";
 import YarnReportCalcInfoPopover from "./components/YarnReportCalcInfoPopover";
 import {
   yarnInventoryService,
-  YarnReportRow,
   YarnReportResponse,
   YarnReportSnapshotBoundsResponse,
 } from "../services/yarnInventoryService";
 import {
-  PAGE_SIZE_OPTIONS,
   DEFAULT_PAGE_SIZE,
   formatLocalYmd,
   minYmd,
@@ -46,7 +44,53 @@ const YarnReportPage = () => {
   const [boundsLoading, setBoundsLoading] = useState(false);
   const [boundsError, setBoundsError] = useState<string | null>(null);
 
+  /** Prevents repeat automatic loads when dates change; manual Submit always runs. */
+  const autoFetchDoneRef = useRef(false);
+
   const hasPermission = hasSubPermission("/yarn-management", "Analytics & reports");
+
+  /**
+   * Loads yarn report rows from the API for the given snapshot date range.
+   * @param sd - Start date YYYY-MM-DD
+   * @param ed - End date YYYY-MM-DD
+   * @param options - UI toggles for clearing the grid and success toast
+   */
+  const runReportFetch = useCallback(
+    async (
+      sd: string,
+      ed: string,
+      options?: { clearReport?: boolean; toastOnOk?: boolean }
+    ) => {
+      const clearReport = options?.clearReport ?? true;
+      const toastOnOk = options?.toastOnOk ?? true;
+      setSubmitError(null);
+      if (clearReport) {
+        setReport(null);
+      }
+      setLoading(true);
+      try {
+        const data = await yarnInventoryService.getYarnReport({
+          start_date: sd,
+          end_date: ed,
+        });
+        setReport(data);
+        setCurrentPage(1);
+        if (toastOnOk) {
+          toast.success("Report loaded");
+        }
+      } catch (err) {
+        console.error("Yarn report error:", err);
+        const message =
+          err instanceof Error ? err.message : "Failed to load yarn report";
+        setSubmitError(message);
+        toast.error(message);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
 
   const endMaxUi = useMemo(() => {
     if (!snapshotBounds?.datePicker.endMax) return todayStr;
@@ -111,6 +155,28 @@ const YarnReportPage = () => {
     };
   }, [hasPermission]);
 
+  /** Once snapshot bounds are ready, load the report immediately (no Submit required). */
+  useEffect(() => {
+    if (!hasPermission || boundsLoading || autoFetchDoneRef.current) return;
+    if (!startDate || !endDate) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        await runReportFetch(startDate, endDate, { toastOnOk: false });
+        if (!cancelled) {
+          autoFetchDoneRef.current = true;
+        }
+      } catch {
+        /* Errors surfaced via submitError / toast inside runReportFetch */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasPermission, boundsLoading, startDate, endDate, runReportFetch]);
+
   /**
    * Updates rows-per-page and resets to the first page so the slice stays valid.
    */
@@ -163,24 +229,10 @@ const YarnReportPage = () => {
       return;
     }
 
-    setLoading(true);
-    setReport(null);
     try {
-      const data = await yarnInventoryService.getYarnReport({
-        start_date: startDate,
-        end_date: endDate,
-      });
-      setReport(data);
-      setCurrentPage(1);
-      toast.success("Report loaded");
-    } catch (err) {
-      console.error("Yarn report error:", err);
-      const message =
-        err instanceof Error ? err.message : "Failed to load yarn report";
-      setSubmitError(message);
-      toast.error(message);
-    } finally {
-      setLoading(false);
+      await runReportFetch(startDate, endDate, { toastOnOk: true });
+    } catch {
+      /* Errors handled inside runReportFetch */
     }
   };
 
@@ -379,6 +431,7 @@ const YarnReportPage = () => {
           totalPages={totalPages}
           totalResults={totalResults}
           loading={loading}
+          boundsLoading={boundsLoading}
           onPageChange={setCurrentPage}
         />
       </div>

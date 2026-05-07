@@ -208,6 +208,10 @@ export function YarnReportSnapshotControls({
             </>
           )}
         </button>
+        <p className="w-full basis-full text-[10px] text-gray-500 leading-snug">
+          The report loads automatically for the selected range once snapshot coverage is ready.
+          Use Submit after you change dates.
+        </p>
       </form>
 
       {report?.meta?.summary ? (

@@ -6,7 +6,7 @@ import Link from "next/link";
 import store from "@/shared/redux/store";
 import SimpleBar from 'simplebar-react';
 import Menuloop from "./menuloop";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMenuItems } from "./nav";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 
@@ -193,6 +193,8 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 
 	const router = useRouter();
 	const pathname = usePathname()
+	const searchParams = useSearchParams();
+	const searchString = searchParams?.toString() || '';
 
 	function Onhover() {
 
@@ -611,16 +613,21 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 		}
 	}
 
-	function setMenuUsingUrl(currentPath: any) {
+	function setMenuUsingUrl(currentPath: any, currentFullUrl?: string) {
 		console.log('🔵 ========== setMenuUsingUrl CALLED ==========');
-		console.log('🔵 setMenuUsingUrl() called', { currentPath });
+		console.log('🔵 setMenuUsingUrl() called', { currentPath, currentFullUrl });
 		hasParent = false;
 		hasParentLevel = 1;
 		// Check current url and trigger the setSidemenu method to active the menu.
 		const setSubmenuRecursively = (items: any) => {
 			items?.forEach((item: any) => {
+				const itemPathBase = item.path?.split('?')[0] || '';
+				const itemHasQuery = item.path?.includes('?');
+				const isMatch = itemHasQuery
+					? item.path === currentFullUrl
+					: itemPathBase === currentPath;
 				if (item.path == '') { }
-				else if (item.path === currentPath) {
+				else if (isMatch) {
 					console.log('🔵 ✅ Found matching path:', item.title, item.path);
 					// Mark this item as selected and active, and keep parent menus open
 					item.selected = true;
@@ -631,6 +638,10 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 					// But don't reset if it's a parent menu without a path (like Master Catalog)
 					if (item.path || item.type !== 'sub') {
 						item.selected = false;
+					}
+					// For link items, also reset active so siblings don't stay highlighted
+					if (item.type === 'link') {
+						item.active = false;
 					}
 				}
 				if (item.children) {
@@ -699,17 +710,18 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 		// Start observing the target element
 		observer.observe(targetElement, config);
 		let currentPath = pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
-		if (currentPath !== previousUrl) {
+		const currentFullUrl = searchString ? `${currentPath}?${searchString}` : currentPath;
+		if (currentFullUrl !== previousUrl) {
 			console.log('🔄 Path changed, calling setMenuUsingUrl:', {
 				oldPath: previousUrl,
-				newPath: currentPath
+				newPath: currentFullUrl
 			});
-			setMenuUsingUrl(currentPath);
-			setPreviousUrl(currentPath);
+			setMenuUsingUrl(currentPath, currentFullUrl);
+			setPreviousUrl(currentFullUrl);
 		} else {
 			console.log('🔄 Path unchanged, skipping setMenuUsingUrl');
 		}
-	}, [pathname]);
+	}, [pathname, searchString]);
 
 	function toggleSidemenu(event: any, targetObject: any, menuItems = menuitems) {
 		console.log('🟣 ========== toggleSidemenu CALLED ==========');
@@ -918,7 +930,8 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 				if (newValue == 'vertical') {
 					let currentPath = pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
 					currentPath = !currentPath ? '/dashboard/ecommerce' : currentPath;
-					setMenuUsingUrl(currentPath);
+					const fullUrl = typeof window !== 'undefined' ? currentPath + (window.location.search || '') : currentPath;
+					setMenuUsingUrl(currentPath, fullUrl);
 				} else {
 					closeMenu(true); // Keep selected menus open
 				}

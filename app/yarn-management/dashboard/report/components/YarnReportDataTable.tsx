@@ -13,6 +13,8 @@ export interface YarnReportDataTableProps {
   totalPages: number;
   totalResults: number;
   loading: boolean;
+  /** True while snapshot date-picker bounds are still fetching */
+  boundsLoading?: boolean;
   onPageChange: (p: number) => void;
 }
 
@@ -27,8 +29,11 @@ export function YarnReportDataTable({
   totalPages,
   totalResults,
   loading,
+  boundsLoading = false,
   onPageChange,
 }: YarnReportDataTableProps) {
+  const awaitingSnapshots = boundsLoading && !report;
+  const fetchingRows = !boundsLoading && loading && !report;
   return (
     <>
       <div className="overflow-x-auto">
@@ -81,11 +86,39 @@ export function YarnReportDataTable({
             </div>
           )
         ) : (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <i className="ri-file-chart-line text-4xl text-gray-300 mb-3" />
-            <p className="text-xs text-gray-500">
-              Select date range and click Submit to view report
-            </p>
+          <div className="flex flex-col items-center justify-center py-16 text-center px-4">
+            {awaitingSnapshots ? (
+              <>
+                <div
+                  className="animate-spin rounded-full h-9 w-9 border-b-2 border-purple-600 mb-3 opacity-70"
+                  role="status"
+                  aria-label="Loading snapshot coverage"
+                />
+                <p className="text-xs font-semibold text-gray-600">
+                  Loading snapshot coverage…
+                </p>
+                <p className="text-[11px] text-gray-500 mt-1 max-w-sm">
+                  Date limits and the first report load start after this finishes.
+                </p>
+              </>
+            ) : fetchingRows ? (
+              <>
+                <div
+                  className="animate-spin rounded-full h-9 w-9 border-b-2 border-purple-600 mb-3 opacity-70"
+                  role="status"
+                  aria-label="Loading yarn report"
+                />
+                <p className="text-xs font-semibold text-gray-600">Loading report…</p>
+              </>
+            ) : (
+              <>
+                <i className="ri-file-chart-line text-4xl text-gray-300 mb-3" aria-hidden />
+                <p className="text-xs font-semibold text-gray-600">No report loaded</p>
+                <p className="text-[11px] text-gray-500 mt-1 max-w-sm mx-auto">
+                  If loading failed, fix the error above or choose dates and press Submit.
+                </p>
+              </>
+            )}
           </div>
         )}
       </div>
