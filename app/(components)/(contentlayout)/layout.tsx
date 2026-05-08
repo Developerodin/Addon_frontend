@@ -7,7 +7,7 @@ import Sidebar from "@/shared/layout-components/sidebar/sidebar"
 import Switcher from "@/shared/layout-components/switcher/switcher"
 import { ThemeChanger } from "@/shared/redux/action"
 import store from "@/shared/redux/store"
-import { Fragment, useState } from "react"
+import { Fragment, Suspense, useState } from "react"
 import { connect } from "react-redux"
 import { NavigationProvider } from "@/shared/contextapi/navigationContext"
 
@@ -36,7 +36,21 @@ const Layout = ({ children, }: any) => {
         <div className='page'>
           <NavigationProvider>
             <Header />
-            <Sidebar />
+            <Suspense
+              fallback={
+                <aside
+                  className="app-sidebar"
+                  id="sidebar"
+                  aria-busy="true"
+                  aria-label="Loading navigation"
+                >
+                  <div className="main-sidebar-header" />
+                  <div className="main-sidebar min-h-[200px]" />
+                </aside>
+              }
+            >
+              <Sidebar />
+            </Suspense>
             <div className='content'>
               <div className='main-content' style={{ paddingLeft: 0, paddingRight: 0 }}
                 onClick={Bodyclickk}
