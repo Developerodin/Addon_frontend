@@ -94,6 +94,9 @@ function productionOrderNoForApi(order: ProductionOrder): string {
   return String(order.productionOrder ?? order.orderNumber ?? "").trim();
 }
 
+/** Gross scale weight at or below this (kg) treats the batch as empty return (no short-term rack). */
+const EMPTY_CONE_MAX_GROSS_WEIGHT_KG = 0.125;
+
 /** Article row for article-wise display. Links to parent order for cones. */
 interface ArticleRow {
   rowId: string;
@@ -470,15 +473,11 @@ const YarnReturnPage = () => {
   const [scannedBarcodes, setScannedBarcodes] = useState<string[]>([]);
   const [scannedConeData, setScannedConeData] = useState<Map<string, any>>(new Map());
   const [rackBarcodes, setRackBarcodes] = useState<Map<string, string>>(new Map()); // Map cone barcode to rack barcode
-  const [scanningMode, setScanningMode] = useState<"cone" | "rack">("cone"); // Track if scanning cone or rack
-  const [currentConeBarcode, setCurrentConeBarcode] = useState<string | null>(null); // Track which cone needs rack
   const [barcodeLoading, setBarcodeLoading] = useState(false);
   const [storingCone, setStoringCone] = useState(false);
-  const [emptyCones, setEmptyCones] = useState<Set<string>>(new Set()); // Track which cones are empty (no yarn left)
   const [showReturnModal, setShowReturnModal] = useState(false);
-  const [showConeTypeModal, setShowConeTypeModal] = useState(false);
-  const [pendingConeBarcode, setPendingConeBarcode] = useState<string | null>(null);
-  const [pendingConeData, setPendingConeData] = useState<any>(null);
+  /** Draft rack barcode typed in the Return modal before Apply (keyed by cone barcode). */
+  const [rackInputByCone, setRackInputByCone] = useState<Record<string, string>>({});
   const [transactionForm, setTransactionForm] = useState({
     totalWeight: "",
     numberOfCones: "1",
@@ -553,6 +552,21 @@ const YarnReturnPage = () => {
     })();
     return () => { cancelled = true; };
   }, [showReturnModal, scannedBarcodes, scannedConeData]);
+
+  /** Parsed gross total weight (kg) from the Return modal scale field; invalid/blank counts as 0. */
+  const grossReturnBatchWeight = useMemo(() => {
+    const g = parseFloat(transactionForm.totalWeight);
+    return Number.isFinite(g) ? g : 0;
+  }, [transactionForm.totalWeight]);
+
+  const batchIsEmptyByGross = grossReturnBatchWeight <= EMPTY_CONE_MAX_GROSS_WEIGHT_KG;
+
+  /** Clear rack assignments when gross weight indicates an empty batch (no ST storage). */
+  useEffect(() => {
+    if (!showReturnModal) return;
+    if (grossReturnBatchWeight > EMPTY_CONE_MAX_GROSS_WEIGHT_KG) return;
+    setRackBarcodes((prev) => (prev.size > 0 ? new Map() : prev));
+  }, [showReturnModal, grossReturnBatchWeight]);
 
   /** Fetch cones + return tx for one order. Used when loading orders from completed-items. */
   const fetchOrderWithCones = useCallback(
@@ -955,7 +969,7 @@ const YarnReturnPage = () => {
   useEffect(() => {
     if (!showScanReturnPanel && !showQuickReturnDrawer) return;
     if (showScanReturnPanel && !selectedOrderId) return;
-    if (showConeTypeModal || showReturnModal) return;
+    if (showReturnModal) return;
     if (barcodeLoading || storingCone || loadingQuickReturnOrder) return;
     const ref = showQuickReturnDrawer ? quickReturnBarcodeInputRef : scanBarcodeInputRef;
     const t = window.setTimeout(() => {
@@ -966,10 +980,7 @@ const YarnReturnPage = () => {
     showScanReturnPanel,
     showQuickReturnDrawer,
     selectedOrderId,
-    showConeTypeModal,
     showReturnModal,
-    scanningMode,
-    currentConeBarcode,
     scannedBarcodes.length,
     barcodeLoading,
     storingCone,
@@ -1413,12 +1424,7 @@ const YarnReturnPage = () => {
     setScannedBarcodes([]);
     setScannedConeData(new Map());
     setRackBarcodes(new Map());
-    setEmptyCones(new Set());
-    setShowConeTypeModal(false);
-    setPendingConeBarcode(null);
-    setPendingConeData(null);
-    setScanningMode("cone");
-    setCurrentConeBarcode(null);
+    setRackInputByCone({});
     setActiveConeId(null);
     setTransactionForm({
       totalWeight: "",
@@ -1436,12 +1442,7 @@ const YarnReturnPage = () => {
     setScannedBarcodes([]);
     setScannedConeData(new Map());
     setRackBarcodes(new Map());
-    setEmptyCones(new Set());
-    setShowConeTypeModal(false);
-    setPendingConeBarcode(null);
-    setPendingConeData(null);
-    setScanningMode("cone");
-    setCurrentConeBarcode(null);
+    setRackInputByCone({});
     setActiveConeId(null);
     setTransactionForm({
       totalWeight: "",
@@ -1464,6 +1465,9 @@ const YarnReturnPage = () => {
     resetQuickReturnScanState();
   };
 
+  /**
+   * Validates short-term (ST) rack slot, updates the cone storage id, and stores the mapping for submit.
+   */
   const handleStoreConeInRack = async (coneBarcode: string, rackBarcode: string) => {
     console.log("🏪 Storing cone in rack:", {
       coneBarcode,
@@ -1581,66 +1585,6 @@ const YarnReturnPage = () => {
       });
 
       toast.success(`Cone stored in rack ${rackBarcode}`);
-      
-      // Check if all cones have been scanned and stored (or are empty)
-      const numberOfCones = parseInt(transactionForm.numberOfCones) || 1;
-      const conesNeedingRack = scannedBarcodes.filter(b => !emptyCones.has(b));
-      const allConesScanned = scannedBarcodes.length >= numberOfCones;
-      const allConesStored = newRackBarcodes.size >= conesNeedingRack.length;
-      const shouldOpenModal = allConesScanned && allConesStored;
-      
-      console.log("🔢 Checking if all cones processed:", {
-        scannedCount: scannedBarcodes.length,
-        storedCount: newRackBarcodes.size,
-        requiredCount: numberOfCones,
-        emptyConesCount: emptyCones.size,
-        conesNeedingRackCount: conesNeedingRack.length,
-        scannedBarcodes: Array.from(scannedBarcodes),
-        rackBarcodes: Array.from(newRackBarcodes.entries()),
-        emptyCones: Array.from(emptyCones),
-      });
-      
-      console.log("📋 Modal check:", {
-        allConesScanned,
-        allConesStored,
-        shouldOpenModal,
-      });
-      
-      if (shouldOpenModal) {
-        // All cones scanned and stored (or empty), open modal
-        console.log("✅ All cones scanned and processed, opening modal");
-        
-        // Auto-fill form with cone weights
-        const totalConeWeight = scannedBarcodes.reduce((sum, barcode) => {
-          const coneData = scannedConeData.get(barcode);
-          const coneWeight = coneData?.coneWeight || coneData?.coneDetails?.coneWeight || 0;
-          return sum + coneWeight;
-        }, 0);
-        
-        setTransactionForm((prev) => ({
-          ...prev,
-          totalWeight: totalConeWeight > 0 ? totalConeWeight.toFixed(2) : prev.totalWeight,
-          totalNetWeight: totalConeWeight > 0 ? totalConeWeight.toFixed(2) : prev.totalNetWeight,
-        }));
-        
-        setShowReturnModal(true);
-        toast.success(`All ${numberOfCones} cone(s) scanned and processed. Fill in the transaction details.`);
-      } else {
-        // Find next cone that needs rack barcode
-        const nextConeNeedingRack = scannedBarcodes.find(b => !emptyCones.has(b) && !newRackBarcodes.has(b));
-        if (nextConeNeedingRack) {
-          console.log("🔄 Switching to next cone needing rack:", nextConeNeedingRack);
-          setScanningMode("rack");
-          setCurrentConeBarcode(nextConeNeedingRack);
-          setBarcodeInput("");
-        } else {
-          // All cones that need rack have been stored, continue scanning more cones
-          console.log("🔄 All rack cones stored, continuing to scan more cones");
-          setScanningMode("cone");
-          setCurrentConeBarcode(null);
-          setBarcodeInput("");
-        }
-      }
     } catch (error) {
       console.error("❌ Error storing cone in rack:", {
         error,
@@ -1655,103 +1599,27 @@ const YarnReturnPage = () => {
     }
   };
 
-  const handleConeTypeSelection = (isEmpty: boolean) => {
-    if (!pendingConeBarcode || !pendingConeData) {
-      toast.error("Cone data not found.");
-      setShowConeTypeModal(false);
+  /**
+   * Applies a short-term rack barcode from the Return modal draft field for the given cone.
+   */
+  const applyRackFromModalDraft = async (coneBarcode: string) => {
+    const raw = (rackInputByCone[coneBarcode] ?? "").trim();
+    if (!raw) {
+      toast.error("Enter or scan a rack barcode.");
       return;
     }
-
-    const { coneDetails, cone, coneWeight } = pendingConeData;
-    const value = pendingConeBarcode;
-
-    // Get coneWeight from coneDetails (remaining yarn weight)
-    const storedConeWeight = coneDetails?.coneWeight || coneWeight || 0;
-
-    // Add to scanned barcodes and store cone data
-    const newScannedBarcodes = [...scannedBarcodes, value];
-    const newScannedConeData = new Map(scannedConeData);
-    newScannedConeData.set(value, { 
-      ...coneDetails, 
-      cone, 
-      isConeEmpty: isEmpty, 
-      coneWeight: storedConeWeight,
-      coneDetails: coneDetails, // Keep full coneDetails for reference
-    });
-    
-    console.log("💾 Storing cone with coneWeight:", {
-      barcode: value,
-      coneWeight: storedConeWeight,
-      fromConeDetails: coneDetails?.coneWeight,
-    });
-    
-    // Update empty cones set
-    const newEmptyCones = new Set(emptyCones);
-    if (isEmpty) {
-      newEmptyCones.add(value);
-    } else {
-      newEmptyCones.delete(value);
+    if (batchIsEmptyByGross) {
+      toast.error(
+        `Gross weight is at or below ${EMPTY_CONE_MAX_GROSS_WEIGHT_KG} kg (empty batch); rack is not used.`
+      );
+      return;
     }
-    setEmptyCones(newEmptyCones);
-    
-    console.log("💾 Storing cone data:", {
-      barcode: value,
-      scannedBarcodesCount: newScannedBarcodes.length,
-      coneId: cone.id,
-      coneStatus: cone.status,
-      isConeEmpty: isEmpty,
+    await handleStoreConeInRack(coneBarcode, raw);
+    setRackInputByCone((prev) => {
+      const next = { ...prev };
+      delete next[coneBarcode];
+      return next;
     });
-    
-    setScannedBarcodes(newScannedBarcodes);
-    setScannedConeData(newScannedConeData);
-
-    // Close modal and reset pending data
-    setShowConeTypeModal(false);
-    setPendingConeBarcode(null);
-    setPendingConeData(null);
-
-    // If cone is empty, skip rack scanning and proceed directly
-    if (isEmpty) {
-      console.log("📦 Cone is empty, skipping rack scanning");
-      toast.success(`Empty cone scanned. No rack barcode needed.`);
-      
-      // Check if all cones have been scanned
-      const numberOfCones = parseInt(transactionForm.numberOfCones) || 1;
-      if (newScannedBarcodes.length >= numberOfCones) {
-        // All cones scanned, check if any need rack barcode
-        const conesNeedingRack = newScannedBarcodes.filter(b => !newEmptyCones.has(b));
-        if (conesNeedingRack.length === 0) {
-          // All cones are empty, open modal directly
-          console.log("✅ All cones scanned and are empty, opening modal");
-          
-          // Auto-fill form with 0 weights for empty cones
-          setTransactionForm((prev) => ({
-            ...prev,
-            totalWeight: "0",
-            totalTearWeight: "0",
-            totalNetWeight: "0",
-          }));
-          
-          setShowReturnModal(true);
-          toast.success(`All ${numberOfCones} cone(s) scanned. Fill in the transaction details.`);
-        } else {
-          // Some cones need rack barcode
-          setScanningMode("rack");
-          setCurrentConeBarcode(conesNeedingRack[0]);
-          toast.success(`Cone scanned. Now scan the rack barcode for remaining cones.`);
-        }
-      } else {
-        // More cones to scan, continue with next cone
-        setScanningMode("cone");
-        setCurrentConeBarcode(null);
-      }
-    } else {
-      // Cone has remaining yarn, require rack barcode
-      console.log("🔄 Switching to rack scanning mode for cone:", value);
-      setScanningMode("rack");
-      setCurrentConeBarcode(value);
-      toast.success(`Cone scanned. Now scan the rack barcode for this cone.`);
-    }
   };
 
   const handleBarcodeSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -1763,13 +1631,7 @@ const YarnReturnPage = () => {
 
     const value = barcodeInput.trim();
     if (!value) {
-      toast.error(scanningMode === "cone" ? "Scan a cone barcode to continue." : "Scan a rack barcode to continue.");
-      return;
-    }
-
-    // Handle rack barcode scanning
-    if (scanningMode === "rack" && currentConeBarcode) {
-      await handleStoreConeInRack(currentConeBarcode, value);
+      toast.error("Scan or enter a cone barcode to continue.");
       return;
     }
 
@@ -2089,18 +1951,36 @@ const YarnReturnPage = () => {
       // Get cone weight from API response
       const coneWeight = coneDetails.coneWeight || 0;
       
-      console.log("🔍 Cone scanned, showing type selection modal:", {
+      console.log("🔍 Cone scanned, opening Return flow when quota met:", {
         barcode: value,
         coneWeight,
         issuedWeight: coneDetails.issueWeight || cone.issuedWeight || 0,
       });
 
-      // Store pending cone data and show modal for user to select type
+      const storedConeWeight = coneDetails?.coneWeight || coneWeight || 0;
+      const newScannedBarcodes = [...scannedBarcodes, value];
+      const newScannedConeData = new Map(scannedConeData);
+      newScannedConeData.set(value, {
+        ...coneDetails,
+        cone,
+        coneWeight: storedConeWeight,
+        coneDetails,
+      });
+
       setScanError(null);
-      setPendingConeBarcode(value);
-      setPendingConeData({ coneDetails, cone, coneWeight });
+      setScannedBarcodes(newScannedBarcodes);
+      setScannedConeData(newScannedConeData);
       setBarcodeInput("");
-      setShowConeTypeModal(true);
+
+      const numCones = parseInt(transactionForm.numberOfCones || "1", 10) || 1;
+      if (newScannedBarcodes.length >= numCones) {
+        setShowReturnModal(true);
+        toast.success(
+          `All ${numCones} cone(s) scanned. Enter gross weight — empty batch if ≤ ${EMPTY_CONE_MAX_GROSS_WEIGHT_KG} kg, otherwise assign short-term racks.`
+        );
+      } else {
+        toast.success(`Cone scanned (${newScannedBarcodes.length}/${numCones}).`);
+      }
     } catch (error) {
       console.error("Error fetching cone:", error);
       setScanError("Failed to fetch cone details. Please check the barcode.");
@@ -2137,6 +2017,10 @@ const YarnReturnPage = () => {
     const totalTearWeight = parseFloat(transactionForm.totalTearWeight) || 0;
     const totalNetWeight = parseFloat(transactionForm.totalNetWeight) || 0;
 
+    /** Same rule as Return modal UX: gross weight at or below threshold means empty batch (no racks). */
+    const batchEmptyByThreshold =
+      Number.isFinite(totalWeight) && totalWeight <= EMPTY_CONE_MAX_GROSS_WEIGHT_KG;
+
     if (Number.isNaN(totalWeight) || totalWeight < 0) {
       toast.error("Enter a valid total weight.");
       return;
@@ -2147,12 +2031,13 @@ const YarnReturnPage = () => {
       return;
     }
 
-    // Check if all non-empty cones have been stored in racks
-    const conesNeedingRack = scannedBarcodes.filter(barcode => !emptyCones.has(barcode));
-    const allConesStored = conesNeedingRack.every(barcode => rackBarcodes.has(barcode));
+    const conesNeedingRack = batchEmptyByThreshold ? [] : scannedBarcodes;
+    const allConesStored = conesNeedingRack.every((barcode) => rackBarcodes.has(barcode));
     if (!allConesStored) {
-      const missingRackCones = conesNeedingRack.filter(barcode => !rackBarcodes.has(barcode));
-      toast.error(`All cones with remaining yarn must be stored in racks. Missing rack for: ${missingRackCones.join(", ")}`);
+      const missingRackCones = conesNeedingRack.filter((barcode) => !rackBarcodes.has(barcode));
+      toast.error(
+        `Enter gross weight above ${EMPTY_CONE_MAX_GROSS_WEIGHT_KG} kg and assign short-term racks for each cone. Missing rack for: ${missingRackCones.join(", ")}`
+      );
       return;
     }
 
@@ -2170,8 +2055,7 @@ const YarnReturnPage = () => {
           throw new Error(`Cone data not found for barcode: ${barcode}`);
         }
 
-        // Check if this cone is empty
-        const isConeEmpty = emptyCones.has(barcode);
+        const isConeEmpty = batchEmptyByThreshold;
         
         // Get original cone weight, issued weight, and tear weight
         const originalConeWeight = coneDataFromMap?.coneWeight || 
@@ -2519,10 +2403,7 @@ const YarnReturnPage = () => {
         setScannedBarcodes([]);
         setScannedConeData(new Map());
         setRackBarcodes(new Map());
-        setEmptyCones(new Set());
-        setScanningMode("cone");
-        setCurrentConeBarcode(null);
-        setActiveConeId(null);
+        setRackInputByCone({});
         setTransactionForm({
           totalWeight: "",
           numberOfCones: "1",
@@ -3103,12 +2984,7 @@ const YarnReturnPage = () => {
                 setScannedBarcodes([]);
                 setScannedConeData(new Map());
                 setRackBarcodes(new Map());
-                setEmptyCones(new Set());
-                setShowConeTypeModal(false);
-                setPendingConeBarcode(null);
-                setPendingConeData(null);
-                setScanningMode("cone");
-                setCurrentConeBarcode(null);
+                setRackInputByCone({});
               }}
             />
             <div
@@ -3143,12 +3019,7 @@ const YarnReturnPage = () => {
                         setScannedBarcodes([]);
                         setScannedConeData(new Map());
                         setRackBarcodes(new Map());
-                        setEmptyCones(new Set());
-                        setShowConeTypeModal(false);
-                        setPendingConeBarcode(null);
-                        setPendingConeData(null);
-                        setScanningMode("cone");
-                        setCurrentConeBarcode(null);
+                        setRackInputByCone({});
                         setActiveConeId(null);
                       }}
                       className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -3243,7 +3114,7 @@ const YarnReturnPage = () => {
                                 setScannedBarcodes([]);
                                 setScannedConeData(new Map());
                                 setRackBarcodes(new Map());
-                                setEmptyCones(new Set());
+                                setRackInputByCone({});
                               }
                             }}
                             disabled={scannedBarcodes.length > 0}
@@ -3273,52 +3144,38 @@ const YarnReturnPage = () => {
                             </div>
                             {scannedBarcodes.length > 0 && (
                               <div className="mt-2 space-y-1">
-                                <p className="text-xs font-medium text-blue-900">Scanned Cones & Racks:</p>
+                                <p className="text-xs font-medium text-blue-900">Scanned cones:</p>
                                 <div className="flex flex-wrap gap-1">
-                                  {scannedBarcodes.map((barcode, index) => {
-                                    const rackBarcode = rackBarcodes.get(barcode);
-                                    const isConeEmpty = emptyCones.has(barcode);
-                                    return (
+                                  {scannedBarcodes.map((barcode, index) => (
                                       <span
                                         key={index}
-                                        className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                          isConeEmpty ? "bg-gray-100 text-gray-800" : "bg-blue-100 text-blue-800"
-                                        }`}
+                                        className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800"
                                       >
                                         Cone: {barcode}
-                                        {isConeEmpty ? (
-                                          <span className="ml-1 text-gray-600">(Empty)</span>
-                                        ) : rackBarcode ? (
-                                          <span className="ml-1 text-green-700">→ Rack: {rackBarcode}</span>
-                                        ) : (
-                                          <span className="ml-1 text-orange-600">(Needs Rack)</span>
-                                        )}
                                         <button
                                           type="button"
+                                          aria-label={`Remove scanned cone ${barcode}`}
                                           onClick={() => {
                                             const newBarcodes = scannedBarcodes.filter((_, i) => i !== index);
                                             const newConeData = new Map(scannedConeData);
                                             const newRackBarcodes = new Map(rackBarcodes);
-                                            const newEmptyCones = new Set(emptyCones);
                                             newConeData.delete(barcode);
                                             newRackBarcodes.delete(barcode);
-                                            newEmptyCones.delete(barcode);
                                             setScannedBarcodes(newBarcodes);
                                             setScannedConeData(newConeData);
                                             setRackBarcodes(newRackBarcodes);
-                                            setEmptyCones(newEmptyCones);
-                                            if (currentConeBarcode === barcode) {
-                                              setCurrentConeBarcode(null);
-                                              setScanningMode("cone");
-                                            }
+                                            setRackInputByCone((prev) => {
+                                              const next = { ...prev };
+                                              delete next[barcode];
+                                              return next;
+                                            });
                                           }}
                                           className="ml-1 text-blue-600 hover:text-blue-800"
                                         >
                                           <i className="ri-close-line text-xs"></i>
                                         </button>
                                       </span>
-                                    );
-                                  })}
+                                    ))}
                                 </div>
                               </div>
                             )}
@@ -3327,20 +3184,15 @@ const YarnReturnPage = () => {
 
                         <form onSubmit={handleBarcodeSubmit} className="space-y-2">
                           <label className="form-label text-sm font-semibold text-gray-700">
-                            {scanningMode === "cone" ? "Scan Cone Barcode" : "Scan Rack Barcode (Short-Term Storage)"}
+                            Scan cone barcode
                           </label>
-                          {scanningMode === "rack" && currentConeBarcode && (
-                            <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
-                              <i className="ri-information-line me-1"></i>
-                              Scanning rack for cone: <strong>{currentConeBarcode}</strong>
-                            </div>
-                          )}
                           <div className="relative">
                             <input
                               ref={scanBarcodeInputRef}
                               type="text"
+                              aria-label="Scan or enter cone barcode"
                               className={`form-control ps-10 ${scanError ? "border-red-500 focus:border-red-500" : ""}`}
-                              placeholder={scanningMode === "cone" ? "Scan or enter cone barcode" : "Scan or enter rack barcode"}
+                              placeholder="Scan or enter cone barcode"
                               value={barcodeInput}
                               onChange={(event) => {
                                 setBarcodeInput(event.target.value);
@@ -3349,13 +3201,12 @@ const YarnReturnPage = () => {
                               disabled={
                                 barcodeLoading ||
                                 storingCone ||
-                                (scanningMode === "cone" &&
-                                  scannedBarcodes.length >= parseInt(transactionForm.numberOfCones || "1"))
+                                scannedBarcodes.length >= parseInt(transactionForm.numberOfCones || "1")
                               }
                             />
                             <i className="ri-barcode-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                           </div>
-                          {scanError && scanningMode === "cone" && (
+                          {scanError && (
                             <div className="flex items-center gap-2 text-red-600 text-sm font-medium">
                               <i className="ri-error-warning-line text-base"></i>
                               {scanError}
@@ -3367,10 +3218,9 @@ const YarnReturnPage = () => {
                             disabled={
                               barcodeLoading ||
                               storingCone ||
-                              (scanningMode === "cone" &&
-                                (scannedBarcodes.length >= parseInt(transactionForm.numberOfCones || "1") ||
-                                  !transactionForm.numberOfCones ||
-                                  parseInt(transactionForm.numberOfCones) < 1))
+                              scannedBarcodes.length >= parseInt(transactionForm.numberOfCones || "1") ||
+                              !transactionForm.numberOfCones ||
+                              parseInt(transactionForm.numberOfCones) < 1
                             }
                           >
                             {barcodeLoading ? (
@@ -3383,12 +3233,10 @@ const YarnReturnPage = () => {
                                 <span className="animate-spin inline-block mr-2">⟳</span>
                                 Storing Cone...
                               </>
-                            ) : scanningMode === "rack" ? (
-                              "Scan Rack Barcode"
                             ) : scannedBarcodes.length >= parseInt(transactionForm.numberOfCones || "1") ? (
-                              "All Barcodes Scanned"
+                              "All barcodes scanned"
                             ) : (
-                              "Scan Cone Barcode"
+                              "Scan cone barcode"
                             )}
                           </button>
                         </form>
@@ -3525,7 +3373,7 @@ const YarnReturnPage = () => {
                               setScannedBarcodes([]);
                               setScannedConeData(new Map());
                               setRackBarcodes(new Map());
-                              setEmptyCones(new Set());
+                              setRackInputByCone({});
                             }
                           }}
                           disabled={scannedBarcodes.length > 0}
@@ -3555,52 +3403,38 @@ const YarnReturnPage = () => {
                           </div>
                           {scannedBarcodes.length > 0 && (
                             <div className="mt-2 space-y-1">
-                              <p className="text-xs font-medium text-blue-900">Scanned Cones & Racks:</p>
+                              <p className="text-xs font-medium text-blue-900">Scanned cones:</p>
                               <div className="flex flex-wrap gap-1">
-                                {scannedBarcodes.map((barcode, index) => {
-                                  const rackBarcode = rackBarcodes.get(barcode);
-                                  const isConeEmpty = emptyCones.has(barcode);
-                                  return (
+                                {scannedBarcodes.map((barcode, index) => (
                                     <span
                                       key={index}
-                                      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                        isConeEmpty ? "bg-gray-100 text-gray-800" : "bg-blue-100 text-blue-800"
-                                      }`}
+                                      className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800"
                                     >
                                       Cone: {barcode}
-                                      {isConeEmpty ? (
-                                        <span className="ml-1 text-gray-600">(Empty)</span>
-                                      ) : rackBarcode ? (
-                                        <span className="ml-1 text-green-700">→ Rack: {rackBarcode}</span>
-                                      ) : (
-                                        <span className="ml-1 text-orange-600">(Needs Rack)</span>
-                                      )}
                                       <button
                                         type="button"
+                                        aria-label={`Remove scanned cone ${barcode}`}
                                         onClick={() => {
                                           const newBarcodes = scannedBarcodes.filter((_, i) => i !== index);
                                           const newConeData = new Map(scannedConeData);
                                           const newRackBarcodes = new Map(rackBarcodes);
-                                          const newEmptyCones = new Set(emptyCones);
                                           newConeData.delete(barcode);
                                           newRackBarcodes.delete(barcode);
-                                          newEmptyCones.delete(barcode);
                                           setScannedBarcodes(newBarcodes);
                                           setScannedConeData(newConeData);
                                           setRackBarcodes(newRackBarcodes);
-                                          setEmptyCones(newEmptyCones);
-                                          if (currentConeBarcode === barcode) {
-                                            setCurrentConeBarcode(null);
-                                            setScanningMode("cone");
-                                          }
+                                          setRackInputByCone((prev) => {
+                                            const next = { ...prev };
+                                            delete next[barcode];
+                                            return next;
+                                          });
                                         }}
                                         className="ml-1 text-blue-600 hover:text-blue-800"
                                       >
                                         <i className="ri-close-line text-xs"></i>
                                       </button>
                                     </span>
-                                  );
-                                })}
+                                  ))}
                               </div>
                             </div>
                           )}
@@ -3609,20 +3443,15 @@ const YarnReturnPage = () => {
 
                       <form onSubmit={handleBarcodeSubmit} className="space-y-2">
                         <label className="form-label text-sm font-semibold text-gray-700">
-                          {scanningMode === "cone" ? "Scan Cone Barcode" : "Scan Rack Barcode (Short-Term Storage)"}
+                          Scan cone barcode
                         </label>
-                        {scanningMode === "rack" && currentConeBarcode && (
-                          <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
-                            <i className="ri-information-line me-1"></i>
-                            Scanning rack for cone: <strong>{currentConeBarcode}</strong>
-                          </div>
-                        )}
                         <div className="relative">
                           <input
                             ref={quickReturnBarcodeInputRef}
                             type="text"
+                            aria-label="Scan or enter cone barcode"
                             className={`form-control ps-10 ${scanError ? "border-red-500 focus:border-red-500" : ""}`}
-                            placeholder={scanningMode === "cone" ? "Scan or enter cone barcode" : "Scan or enter rack barcode"}
+                            placeholder="Scan or enter cone barcode"
                             value={barcodeInput}
                             onChange={(event) => {
                               setBarcodeInput(event.target.value);
@@ -3632,13 +3461,12 @@ const YarnReturnPage = () => {
                               loadingQuickReturnOrder ||
                               barcodeLoading ||
                               storingCone ||
-                              (scanningMode === "cone" &&
-                                scannedBarcodes.length >= parseInt(transactionForm.numberOfCones || "1"))
+                              scannedBarcodes.length >= parseInt(transactionForm.numberOfCones || "1")
                             }
                           />
                           <i className="ri-barcode-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                         </div>
-                        {scanError && scanningMode === "cone" && (
+                        {scanError && (
                           <div className="flex items-center gap-2 text-red-600 text-sm font-medium">
                             <i className="ri-error-warning-line text-base"></i>
                             {scanError}
@@ -3651,10 +3479,9 @@ const YarnReturnPage = () => {
                             loadingQuickReturnOrder ||
                             barcodeLoading ||
                             storingCone ||
-                            (scanningMode === "cone" &&
-                              (scannedBarcodes.length >= parseInt(transactionForm.numberOfCones || "1") ||
-                                !transactionForm.numberOfCones ||
-                                parseInt(transactionForm.numberOfCones) < 1))
+                            scannedBarcodes.length >= parseInt(transactionForm.numberOfCones || "1") ||
+                            !transactionForm.numberOfCones ||
+                            parseInt(transactionForm.numberOfCones) < 1
                           }
                         >
                           {loadingQuickReturnOrder ? (
@@ -3672,12 +3499,10 @@ const YarnReturnPage = () => {
                               <span className="animate-spin inline-block mr-2">⟳</span>
                               Storing Cone...
                             </>
-                          ) : scanningMode === "rack" ? (
-                            "Scan Rack Barcode"
                           ) : scannedBarcodes.length >= parseInt(transactionForm.numberOfCones || "1") ? (
-                            "All Barcodes Scanned"
+                            "All barcodes scanned"
                           ) : (
-                            "Scan Cone Barcode"
+                            "Scan cone barcode"
                           )}
                         </button>
                       </form>
@@ -3704,9 +3529,7 @@ const YarnReturnPage = () => {
                     setScannedBarcodes([]);
                     setScannedConeData(new Map());
                     setRackBarcodes(new Map());
-                    setEmptyCones(new Set());
-                    setScanningMode("cone");
-                    setCurrentConeBarcode(null);
+                    setRackInputByCone({});
                     setActiveConeId(null);
                   }}
                   className="text-gray-400 hover:text-gray-600"
@@ -3733,7 +3556,7 @@ const YarnReturnPage = () => {
                         const coneData = scannedConeData.get(barcode);
                         const cone = coneData?.cone;
                         const rackBarcode = rackBarcodes.get(barcode);
-                        const isConeEmpty = emptyCones.has(barcode);
+                        const isConeEmpty = batchIsEmptyByGross;
                         return (
                           <div key={index} className={`border rounded p-3 ${
                             isConeEmpty ? "bg-gray-50 border-gray-300" : "bg-white border-gray-200"
@@ -3805,6 +3628,7 @@ const YarnReturnPage = () => {
                           inputMode="decimal"
                           className="form-control flex-1"
                           placeholder="Enter total weight"
+                          aria-describedby="yarn-return-gross-hint"
                           value={transactionForm.totalWeight}
                           onChange={(e) => handleTransactionFormChange("totalWeight", e.target.value)}
                         />
@@ -3842,7 +3666,69 @@ const YarnReturnPage = () => {
                           {fetchingWeight ? "…" : "From scale"}
                         </button>
                       </div>
+                      <p className="text-xs text-gray-500 mt-2" id="yarn-return-gross-hint">
+                        Gross total weight ≤ {EMPTY_CONE_MAX_GROSS_WEIGHT_KG} kg is treated as an empty batch (no short-term
+                        rack). Above that, assign one validated ST-zone rack per cone below.
+                      </p>
                     </div>
+
+                    {!batchIsEmptyByGross && (
+                      <div
+                        className="rounded-md border border-amber-200 bg-amber-50/95 p-4 space-y-3"
+                        role="region"
+                        aria-label="Short-term rack assignments"
+                      >
+                        <p className="text-sm font-semibold text-gray-900">Short-term storage rack</p>
+                        <p className="text-xs text-gray-600">
+                          Enter or scan a short-term rack barcode for each cone, then Apply. Required when gross weight is
+                          above {EMPTY_CONE_MAX_GROSS_WEIGHT_KG} kg.
+                        </p>
+                        <ul className="space-y-3 list-none m-0 p-0">
+                          {scannedBarcodes.map((barcode) => {
+                            const mapped = rackBarcodes.get(barcode);
+                            const draftVal = rackInputByCone[barcode] ?? "";
+                            return (
+                              <li key={barcode} className="rounded border border-amber-100 bg-white p-3">
+                                <p className="text-xs font-medium text-gray-700 mb-2">
+                                  Cone <span className="font-mono">{barcode}</span>
+                                  {mapped ? (
+                                    <span className="ml-2 text-green-700">
+                                      Stored: <span className="font-mono">{mapped}</span>
+                                    </span>
+                                  ) : (
+                                    <span className="ml-2 text-amber-800">Rack pending</span>
+                                  )}
+                                </p>
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                  <input
+                                    type="text"
+                                    className="form-control flex-1 font-mono text-sm"
+                                    placeholder="Scan or enter rack barcode"
+                                    aria-label={`Rack barcode for cone ${barcode}`}
+                                    value={draftVal}
+                                    onChange={(e) =>
+                                      setRackInputByCone((prev) => ({
+                                        ...prev,
+                                        [barcode]: e.target.value,
+                                      }))
+                                    }
+                                    disabled={storingCone}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="ti-btn ti-btn-outline-primary shrink-0"
+                                    disabled={storingCone || submittingReturn}
+                                    onClick={() => void applyRackFromModalDraft(barcode)}
+                                  >
+                                    {storingCone ? "…" : "Apply rack"}
+                                  </button>
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    )}
 
                     <div>
                       <label className="form-label text-sm font-semibold text-gray-700">
@@ -3914,9 +3800,7 @@ const YarnReturnPage = () => {
                         setScannedBarcodes([]);
                         setScannedConeData(new Map());
                         setRackBarcodes(new Map());
-                        setEmptyCones(new Set());
-                        setScanningMode("cone");
-                        setCurrentConeBarcode(null);
+                        setRackInputByCone({});
                         setActiveConeId(null);
                       }}
                       className="ti-btn ti-btn-outline"
@@ -3942,75 +3826,6 @@ const YarnReturnPage = () => {
                 </>
               )}
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* Cone Type Selection Modal */}
-      {showConeTypeModal && pendingConeBarcode && pendingConeData && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10090]">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="box-header border-b border-gray-200 px-6 py-4">
-              <div className="flex justify-between items-center">
-                <h3 className="box-title text-lg">Select Cone Type</h3>
-                <button
-                  onClick={() => {
-                    setShowConeTypeModal(false);
-                    setPendingConeBarcode(null);
-                    setPendingConeData(null);
-                  }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <i className="ri-close-line text-xl"></i>
-                </button>
-              </div>
-            </div>
-            <div className="box-body p-6">
-              <div className="mb-4">
-                <p className="text-sm text-gray-600 mb-2">
-                  <span className="font-semibold">Barcode:</span> {pendingConeBarcode}
-                </p>
-                {pendingConeData.cone && (
-                  <>
-                    <p className="text-sm text-gray-600 mb-2">
-                      <span className="font-semibold">Yarn Name:</span> {pendingConeData.cone.yarnName || "N/A"}
-                    </p>
-                    <p className="text-sm text-gray-600 mb-2">
-                      <span className="font-semibold">Issued Weight:</span> {pendingConeData.cone.issuedWeight?.toFixed(2) || "N/A"} kg
-                    </p>
-                    <p className="text-sm text-gray-600 mb-2">
-                      <span className="font-semibold">Cone Weight:</span> {(pendingConeData.coneWeight ?? pendingConeData.coneDetails?.coneWeight ?? 0).toFixed(2)} kg
-                    </p>
-                  </>
-                )}
-              </div>
-              
-              <p className="text-sm font-semibold text-gray-900 mb-4">
-                Is this cone empty or does it have remaining yarn?
-              </p>
-
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  type="button"
-                  onClick={() => handleConeTypeSelection(true)}
-                  className="p-6 border-2 border-gray-300 rounded-lg hover:border-primary hover:bg-primary/5 transition-colors text-center"
-                >
-                  <div className="text-4xl mb-2">📦</div>
-                  <div className="text-lg font-semibold text-gray-900">Empty</div>
-                  <div className="text-xs text-gray-500 mt-1">No yarn left</div>
-                </button>
-                
-                <button
-                  type="button"
-                  onClick={() => handleConeTypeSelection(false)}
-                  className="p-6 border-2 border-gray-300 rounded-lg hover:border-primary hover:bg-primary/5 transition-colors text-center"
-                >
-                  <div className="text-4xl mb-2">🧵</div>
-                  <div className="text-lg font-semibold text-gray-900">Remaining Yarn</div>
-                  <div className="text-xs text-gray-500 mt-1">Has yarn left</div>
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       )}
