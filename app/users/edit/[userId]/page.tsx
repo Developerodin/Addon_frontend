@@ -6,6 +6,10 @@ import { useRouter, useParams } from 'next/navigation'
 import { useUsers } from '@/shared/hooks/useUsers';
 import { UpdateUserRequest, User } from '@/shared/services/userService';
 import NavigationPermissions from '@/app/users/components/NavigationPermissions';
+import {
+  mergeYarnIssuePermissions,
+  EMPTY_YARN_ISSUE_NAV_DEFAULTS,
+} from '@/shared/contextapi/navigationContext';
 import { toast } from 'react-hot-toast';
 
 const EditUserPage = () => {
@@ -81,7 +85,21 @@ const EditUserPage = () => {
                 country: currentUser.country || '',
                 timezone: currentUser.timezone
             });
-            setNavigation(currentUser.navigation);
+            const rawNav = currentUser.navigation;
+            const ym = rawNav['Yarn Management'] as Record<string, unknown> | undefined;
+            const navigationNormalized: Partial<User['navigation']> = ym
+                ? {
+                    ...rawNav,
+                    'Yarn Management': {
+                        ...(ym as object),
+                        'Yarn Issue': mergeYarnIssuePermissions(
+                            ym['Yarn Issue'] as Parameters<typeof mergeYarnIssuePermissions>[0],
+                            EMPTY_YARN_ISSUE_NAV_DEFAULTS
+                        ),
+                    } as User['navigation']['Yarn Management'],
+                }
+                : rawNav;
+            setNavigation(navigationNormalized);
         }
     }, [currentUser]);
 
@@ -100,15 +118,24 @@ const EditUserPage = () => {
             const newNav = { ...prev };
             
             if (subsubsection) {
-                // Handle triple-nested sections like Yarn Management -> Yarn Master -> Brand
+                // Handle triple-nested sections like Yarn Management -> Yarn Issue / Yarn Master -> leaf key
                 if (!newNav[section as keyof typeof newNav]) {
                     newNav[section as keyof typeof newNav] = {} as any;
                 }
                 const sectionObj = (newNav[section as keyof typeof newNav] as any);
-                if (!sectionObj[subsection]) {
-                    sectionObj[subsection] = {} as any;
+                if (section === 'Yarn Management' && subsection === 'Yarn Issue') {
+                    const prevYi = sectionObj[subsection];
+                    const base = mergeYarnIssuePermissions(
+                        prevYi as Parameters<typeof mergeYarnIssuePermissions>[0],
+                        EMPTY_YARN_ISSUE_NAV_DEFAULTS
+                    );
+                    sectionObj[subsection] = { ...base, [subsubsection]: value };
+                } else {
+                    if (!sectionObj[subsection]) {
+                        sectionObj[subsection] = {} as any;
+                    }
+                    sectionObj[subsection][subsubsection] = value;
                 }
-                sectionObj[subsection][subsubsection] = value;
             } else if (subsection) {
                 // Handle nested sections like Catalog.Items
                 if (!newNav[section as keyof typeof newNav]) {

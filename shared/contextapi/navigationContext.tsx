@@ -50,15 +50,6 @@ interface NavigationPermissions {
     'Purchase Order Received': boolean;
     'Inventory': boolean;
     'Analytics & reports': boolean;
-    'Yarn Issue': boolean;
-    'Yarn Return': boolean;
-    'Yarn Master': {
-      'Brand': boolean;
-      'Yarn Type': boolean;
-      'Count/Size': boolean;
-      'Color': boolean;
-      'Blend': boolean;
-    };
     'Purchase Management': {
       'Requisition list': boolean;
       'Purchase Order': boolean;
@@ -67,6 +58,18 @@ interface NavigationPermissions {
       'GRN History': boolean;
       'Yarn QC': boolean;
       'Yarn Storage': boolean;
+    };
+    'Yarn Issue': {
+      'Issue for orders': boolean;
+      'Linking & sampling': boolean;
+    };
+    'Yarn Return': boolean;
+    'Yarn Master': {
+      'Brand': boolean;
+      'Yarn Type': boolean;
+      'Count/Size': boolean;
+      'Color': boolean;
+      'Blend': boolean;
     };
   };
   'Warehouse Management': {
@@ -98,6 +101,29 @@ interface NavigationContextType {
   hasPermission: (path: string) => boolean;
   hasSubPermission: (parent: string, child: string) => boolean;
   isLoading: boolean;
+}
+
+/**
+ * Normalizes legacy boolean `Yarn Issue` flags and partial objects from the API into the nested shape.
+ */
+export function mergeYarnIssuePermissions(
+  raw: boolean | NavigationPermissions['Yarn Management']['Yarn Issue'] | undefined,
+  defaults: NavigationPermissions['Yarn Management']['Yarn Issue']
+): NavigationPermissions['Yarn Management']['Yarn Issue'] {
+  if (raw === true) {
+    return { 'Issue for orders': true, 'Linking & sampling': true };
+  }
+  if (raw && typeof raw === 'object') {
+    const r = raw as Record<string, boolean | undefined>;
+    const linkingSampling =
+      Boolean(r['Linking & sampling']) || Boolean(r.Linking) || Boolean(r.Sampling);
+    return {
+      ...defaults,
+      'Issue for orders': Boolean(r['Issue for orders']),
+      'Linking & sampling': linkingSampling,
+    };
+  }
+  return { ...defaults };
 }
 
 const NavigationContext = createContext<NavigationContextType | undefined>(undefined);
@@ -149,15 +175,6 @@ const defaultPermissions: NavigationPermissions = {
     'Purchase Order Received': false,
     'Inventory': false,
     'Analytics & reports': false,
-    'Yarn Issue': false,
-    'Yarn Return': false,
-    'Yarn Master': {
-      'Brand': false,
-      'Yarn Type': false,
-      'Count/Size': false,
-      'Color': false,
-      'Blend': false,
-    },
     'Purchase Management': {
       'Requisition list': false,
       'Purchase Order': false,
@@ -166,6 +183,18 @@ const defaultPermissions: NavigationPermissions = {
       'GRN History': false,
       'Yarn QC': false,
       'Yarn Storage': false,
+    },
+    'Yarn Issue': {
+      'Issue for orders': false,
+      'Linking & sampling': false,
+    },
+    'Yarn Return': false,
+    'Yarn Master': {
+      'Brand': false,
+      'Yarn Type': false,
+      'Count/Size': false,
+      'Color': false,
+      'Blend': false,
     },
   },
   'Warehouse Management': {
@@ -191,6 +220,9 @@ const defaultPermissions: NavigationPermissions = {
     'GRN': false,
   },
 };
+
+/** Defaults for Yarn Issue submenu keys — used when normalizing legacy user documents. */
+export const EMPTY_YARN_ISSUE_NAV_DEFAULTS = defaultPermissions['Yarn Management']['Yarn Issue'];
 
 interface NavigationProviderProps {
   children: ReactNode;
@@ -266,7 +298,14 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
           'Purchase Management': {
             ...defaultPermissions['Yarn Management']['Purchase Management'],
             ...(user.navigation['Yarn Management']?.['Purchase Management'] || {})
-          }
+          },
+          'Yarn Issue': mergeYarnIssuePermissions(
+            user.navigation['Yarn Management']?.['Yarn Issue'] as
+              | boolean
+              | NavigationPermissions['Yarn Management']['Yarn Issue']
+              | undefined,
+            defaultPermissions['Yarn Management']['Yarn Issue']
+          ),
         },
         'Warehouse Management': {
           ...defaultPermissions['Warehouse Management'],
@@ -385,6 +424,19 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
       return false;
     }
 
+    // Yarn Issue hub (nested submenu: orders / linking / sampling)
+    if (path === '/yarn-management/yarn-issue') {
+      const yarnManagement = permissions['Yarn Management'];
+      if (yarnManagement && typeof yarnManagement === 'object') {
+        const yarnIssue = (yarnManagement as any)['Yarn Issue'];
+        if (yarnIssue === true) return true;
+        if (yarnIssue && typeof yarnIssue === 'object') {
+          return Object.values(yarnIssue).some((permission: any) => permission === true);
+        }
+      }
+      return false;
+    }
+
     // Special handling for sub-menus - check if user has any permission for the sub-menu
     if (path === '/catalog' || path === '/sales' || path === '/production' || path === '/yarn-management' || path === '/warehouse-management') {
       let subMenuKey: keyof NavigationPermissions;
@@ -401,24 +453,39 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
         // For Yarn Management, also check nested Yarn Master permissions
         if (subMenuKey === 'Yarn Management') {
           const yarnMgmt = subMenuPermissions as any;
-          // Check direct permissions (Cataloguing, Purchase Order, etc.)
           const hasDirectPermission = Object.entries(yarnMgmt)
-            .filter(([key]) => key !== 'Yarn Master')
+            .filter(([key]) =>
+              key !== 'Yarn Master' &&
+              key !== 'Purchase Management' &&
+              key !== 'Yarn Issue'
+            )
             .some(([, value]) => value === true);
-          
+
+          const yarnIssue = yarnMgmt['Yarn Issue'];
+          const hasYarnIssuePermission =
+            yarnIssue === true ||
+            (yarnIssue &&
+              typeof yarnIssue === 'object' &&
+              Object.values(yarnIssue).some((permission: any) => permission === true));
+
           // Check Yarn Master permissions
           const yarnMaster = yarnMgmt['Yarn Master'];
-          const hasYarnMasterPermission = yarnMaster && typeof yarnMaster === 'object' 
+          const hasYarnMasterPermission = yarnMaster && typeof yarnMaster === 'object'
             ? Object.values(yarnMaster).some((permission: any) => permission === true)
             : false;
-          
+
           // Check Purchase Management permissions
           const purchaseManagement = yarnMgmt['Purchase Management'];
-          const hasPurchaseManagementPermission = purchaseManagement && typeof purchaseManagement === 'object' 
+          const hasPurchaseManagementPermission = purchaseManagement && typeof purchaseManagement === 'object'
             ? Object.values(purchaseManagement).some((permission: any) => permission === true)
             : false;
-          
-          return hasDirectPermission || hasYarnMasterPermission || hasPurchaseManagementPermission;
+
+          return (
+            hasDirectPermission ||
+            hasYarnIssuePermission ||
+            hasYarnMasterPermission ||
+            hasPurchaseManagementPermission
+          );
         }
         return Object.values(subMenuPermissions).some(permission => permission === true);
       }
@@ -485,6 +552,21 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
       return false;
     }
 
+    // Yarn Issue sub-routes (orders / linking / sampling)
+    if (parent === '/yarn-management/yarn-issue') {
+      const yarnManagement = permissions['Yarn Management'];
+      if (yarnManagement && typeof yarnManagement === 'object') {
+        const yarnIssue = (yarnManagement as any)['Yarn Issue'];
+        if (yarnIssue === true) {
+          return true;
+        }
+        if (yarnIssue && typeof yarnIssue === 'object') {
+          return yarnIssue[child] === true;
+        }
+      }
+      return false;
+    }
+
     // Map parent paths to permission objects
     const parentMap: { [key: string]: keyof NavigationPermissions } = {
       '/catalog': 'Catalog',
@@ -517,7 +599,18 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
         }
         return false;
       }
-      
+
+      if (parent === '/yarn-management' && child === 'Yarn Issue') {
+        const yarnIssue = subPermissions['Yarn Issue'];
+        if (yarnIssue === true) {
+          return true;
+        }
+        if (yarnIssue && typeof yarnIssue === 'object') {
+          return Object.values(yarnIssue).some((permission: any) => permission === true);
+        }
+        return false;
+      }
+
       return subPermissions[child] === true;
     }
 

@@ -37,6 +37,27 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
     return displayTitle;
   };
 
+  /**
+   * Maps sidebar URLs under Yarn Issue to nested permission keys (includes add/edit under orders).
+   */
+  const yarnIssuePathAllowed = (path: string): boolean => {
+    const base = path.split('?')[0];
+    if (
+      base === '/yarn-management/yarn-issue' ||
+      base.startsWith('/yarn-management/yarn-issue/edit') ||
+      base.startsWith('/yarn-management/yarn-issue/add')
+    ) {
+      return hasSubPermission('/yarn-management/yarn-issue', 'Issue for orders');
+    }
+    if (
+      base === '/yarn-management/yarn-issue/linking-sampling' ||
+      base.startsWith('/yarn-management/yarn-issue/linking-sampling/')
+    ) {
+      return hasSubPermission('/yarn-management/yarn-issue', 'Linking & sampling');
+    }
+    return false;
+  };
+
   const hasVendorPOPurchaseManagementPermission = (): boolean =>
     hasSubPermission('/vendor-po', 'Vendor List') ||
     hasSubPermission('/vendor-po', 'Vendor PO Raise') ||
@@ -112,6 +133,11 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                 return false;
               }
             }
+            if (child.path === '/yarn-management/yarn-issue') {
+              if (!hasSubPermission('/yarn-management', 'Yarn Issue')) {
+                return false;
+              }
+            }
             if (child.path === '/vendor-po/purchase-management' && !hasVendorPOPurchaseManagementPermission()) {
               return false;
             }
@@ -129,6 +155,12 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                 const nestedPathBase = nestedChild.path.split('?')[0];
                 if (nestedChild.path.startsWith('/vendor-po/purchase-management/') || nestedChild.path === '/vendor-po/vendor-list') {
                   return hasVendorPOPurchaseManagementChildPermission(nestedChild.path);
+                }
+                if (
+                  nestedChild.path === '/yarn-management/yarn-issue' ||
+                  nestedChild.path.startsWith('/yarn-management/yarn-issue/')
+                ) {
+                  return yarnIssuePathAllowed(nestedChild.path);
                 }
                 if (nestedChild.path.startsWith('/yarn-management/yarn-master/')) {
                   const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
@@ -188,6 +220,12 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                 const permissionKey = getPermissionKey(childName, child.path);
                 return hasSubPermission('/yarn-management/yarn-master', permissionKey);
               }
+              if (
+                child.path === '/yarn-management/yarn-issue' ||
+                child.path.startsWith('/yarn-management/yarn-issue/')
+              ) {
+                return yarnIssuePathAllowed(child.path);
+              }
               // Handle Purchase Management
               if (child.path === '/yarn-management/purchase-management') {
                 return hasSubPermission('/yarn-management', 'Purchase Management');
@@ -241,6 +279,12 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                   const nestedPathBase = nestedChild.path.split('?')[0];
                   if (nestedChild.path.startsWith('/vendor-po/purchase-management/') || nestedChild.path === '/vendor-po/vendor-list') {
                     return hasVendorPOPurchaseManagementChildPermission(nestedChild.path);
+                  }
+                  if (
+                    nestedChild.path === '/yarn-management/yarn-issue' ||
+                    nestedChild.path.startsWith('/yarn-management/yarn-issue/')
+                  ) {
+                    return yarnIssuePathAllowed(nestedChild.path);
                   }
                   if (nestedChild.path.startsWith('/yarn-management/yarn-master/')) {
                     const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
@@ -308,6 +352,11 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                 return false;
               }
             }
+            if (child.path === '/yarn-management/yarn-issue') {
+              if (!hasSubPermission('/yarn-management', 'Yarn Issue')) {
+                return false;
+              }
+            }
             // Check Analytics & reports submenu
             if (child.path === '/yarn-management/dashboard') {
               const hasAnalytics = hasSubPermission('/yarn-management', 'Analytics & reports');
@@ -324,6 +373,12 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                 const nestedPathBase = nestedChild.path.split('?')[0];
                 if (nestedChild.path.startsWith('/vendor-po/purchase-management/') || nestedChild.path === '/vendor-po/vendor-list') {
                   return hasVendorPOPurchaseManagementChildPermission(nestedChild.path);
+                }
+                if (
+                  nestedChild.path === '/yarn-management/yarn-issue' ||
+                  nestedChild.path.startsWith('/yarn-management/yarn-issue/')
+                ) {
+                  return yarnIssuePathAllowed(nestedChild.path);
                 }
                 if (nestedChild.path.startsWith('/yarn-management/yarn-master/')) {
                   const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);
@@ -387,6 +442,12 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                 const permissionKey = getPermissionKey(childName, child.path);
                 return hasSubPermission('/yarn-management/yarn-master', permissionKey);
               }
+              if (
+                child.path === '/yarn-management/yarn-issue' ||
+                child.path.startsWith('/yarn-management/yarn-issue/')
+              ) {
+                return yarnIssuePathAllowed(child.path);
+              }
               // If path starts with /yarn-management/purchase-management/, check nested permissions
               if (child.path.startsWith('/yarn-management/purchase-management/')) {
                 const permissionKey = getPermissionKey(childName, child.path);
@@ -441,6 +502,12 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                   const nestedPathBase = nestedChild.path.split('?')[0];
                   if (nestedChild.path.startsWith('/vendor-po/purchase-management/') || nestedChild.path === '/vendor-po/vendor-list') {
                     return hasVendorPOPurchaseManagementChildPermission(nestedChild.path);
+                  }
+                  if (
+                    nestedChild.path === '/yarn-management/yarn-issue' ||
+                    nestedChild.path.startsWith('/yarn-management/yarn-issue/')
+                  ) {
+                    return yarnIssuePathAllowed(nestedChild.path);
                   }
                   if (nestedChild.path.startsWith('/yarn-management/yarn-master/')) {
                     const permissionKey = getPermissionKey(nestedChild.title, nestedChild.path);

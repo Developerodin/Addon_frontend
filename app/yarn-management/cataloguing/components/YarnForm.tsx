@@ -22,6 +22,8 @@ interface YarnCatalogFormData {
   remark?: string;
   hsnCode?: string;
   minQuantity?: number;
+  linking: boolean;
+  sampling: boolean;
   status: 'active' | 'inactive' | 'suspended';
 }
 
@@ -31,6 +33,53 @@ interface YarnFormProps {
   onCancel: () => void;
   isSubmitting?: boolean;
   submitButtonText?: string;
+}
+
+/**
+ * iOS-style on/off toggle built only from Tailwind (`peer`), so it does not depend on
+ * global `.ti-switch` SCSS (which was rendering as a broken circle in this app).
+ */
+function CatalogWorkflowToggle({
+  id,
+  name,
+  checked,
+  disabled,
+  onChange,
+}: {
+  id: string;
+  name: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}) {
+  return (
+    <label
+      htmlFor={id}
+      className={`relative inline-flex h-7 w-[3.25rem] shrink-0 select-none items-center ${
+        disabled ? "pointer-events-none cursor-not-allowed opacity-45" : "cursor-pointer"
+      }`}
+    >
+      <input
+        id={id}
+        name={name}
+        type="checkbox"
+        role="switch"
+        aria-checked={checked}
+        className="peer sr-only"
+        checked={checked}
+        onChange={onChange}
+        disabled={disabled}
+      />
+      <span
+        aria-hidden
+        className="pointer-events-none block h-7 w-[3.25rem] rounded-full border border-gray-200 bg-gray-300 transition-colors duration-200 peer-checked:border-primary/40 peer-checked:bg-primary dark:border-white/10 dark:bg-neutral-600 dark:peer-checked:bg-primary"
+      />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute left-0.5 top-1/2 h-6 w-6 -translate-y-1/2 rounded-full bg-white shadow-md ring-1 ring-black/10 transition-all duration-200 ease-out peer-checked:left-[calc(100%-1.625rem)] dark:ring-white/15"
+      />
+    </label>
+  );
 }
 
 const YarnForm: React.FC<YarnFormProps> = ({
@@ -61,6 +110,8 @@ const YarnForm: React.FC<YarnFormProps> = ({
     remark: initialData.remark || "",
     hsnCode: initialData.hsnCode || "",
     minQuantity: initialData.minQuantity,
+    linking: initialData.linking ?? false,
+    sampling: initialData.sampling ?? false,
     status: initialData.status || 'active',
   });
 
@@ -170,6 +221,21 @@ const YarnForm: React.FC<YarnFormProps> = ({
     setFormData((prev) => ({
       ...prev,
       [name]: value,
+    }));
+  };
+
+  /**
+   * Persists optional catalog boolean flags from checkbox controls.
+   * @param e - Checkbox change event; `name` must be `linking` or `sampling`.
+   */
+  const handleCatalogBooleanChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, checked } = e.target;
+    if (name !== "linking" && name !== "sampling") {
+      return;
+    }
+    setFormData((prev) => ({
+      ...prev,
+      [name]: checked,
     }));
   };
 
@@ -286,6 +352,8 @@ const YarnForm: React.FC<YarnFormProps> = ({
         remark: formData.remark?.trim() || undefined,
         hsnCode: formData.hsnCode?.trim() || undefined,
         minQuantity: formData.minQuantity,
+        linking: formData.linking,
+        sampling: formData.sampling,
         status: formData.status,
       };
 
@@ -531,6 +599,82 @@ const YarnForm: React.FC<YarnFormProps> = ({
             </select>
           </div>
         </div>
+
+        {/* Optional workflow toggles — full width for clearer layout */}
+        <section
+          className="rounded-xl border border-defaultborder dark:border-white/10 bg-white dark:bg-bodybg shadow-sm overflow-hidden"
+          aria-labelledby="yarn-catalog-workflow-heading"
+        >
+          <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-defaultborder/80 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.03]">
+            <h3
+              id="yarn-catalog-workflow-heading"
+              className="text-sm font-semibold text-defaulttextcolor dark:text-white tracking-tight"
+            >
+              Linking &amp; Sampling
+            </h3>
+            <p className="mt-1 text-xs text-gray-500 dark:text-white/50 leading-relaxed max-w-2xl">
+              Optional flags for downstream workflows. Leave off if this catalog entry is not used for linking or sampling.
+            </p>
+          </div>
+          <div className="divide-y divide-defaultborder dark:divide-white/10">
+            <div className="flex items-start sm:items-center justify-between gap-4 px-4 py-4 sm:px-5 sm:py-4">
+              <div className="min-w-0 flex-1 pt-0.5 sm:pt-0">
+                <label
+                  htmlFor="yarn-catalog-linking"
+                  className="text-sm font-medium text-defaulttextcolor dark:text-white cursor-pointer"
+                >
+                  Linking
+                </label>
+                <p className="text-xs text-gray-500 dark:text-white/45 mt-1 leading-snug">
+                  Enable when this yarn is part of linking operations.
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2 sm:mt-0 mt-1">
+                <span
+                  className="text-xs font-semibold tabular-nums text-gray-500 dark:text-white/55 min-w-[1.75rem] text-end"
+                  aria-hidden
+                >
+                  {formData.linking ? "On" : "Off"}
+                </span>
+                <CatalogWorkflowToggle
+                  id="yarn-catalog-linking"
+                  name="linking"
+                  checked={formData.linking}
+                  onChange={handleCatalogBooleanChange}
+                  disabled={isLoadingOptions}
+                />
+              </div>
+            </div>
+            <div className="flex items-start sm:items-center justify-between gap-4 px-4 py-4 sm:px-5 sm:py-4">
+              <div className="min-w-0 flex-1 pt-0.5 sm:pt-0">
+                <label
+                  htmlFor="yarn-catalog-sampling"
+                  className="text-sm font-medium text-defaulttextcolor dark:text-white cursor-pointer"
+                >
+                  Sampling
+                </label>
+                <p className="text-xs text-gray-500 dark:text-white/45 mt-1 leading-snug">
+                  Enable when this yarn is part of sampling workflows.
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2 sm:mt-0 mt-1">
+                <span
+                  className="text-xs font-semibold tabular-nums text-gray-500 dark:text-white/55 min-w-[1.75rem] text-end"
+                  aria-hidden
+                >
+                  {formData.sampling ? "On" : "Off"}
+                </span>
+                <CatalogWorkflowToggle
+                  id="yarn-catalog-sampling"
+                  name="sampling"
+                  checked={formData.sampling}
+                  onChange={handleCatalogBooleanChange}
+                  disabled={isLoadingOptions}
+                />
+              </div>
+            </div>
+          </div>
+        </section>
 
         {/* Remarks */}
         <div>

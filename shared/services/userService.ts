@@ -56,7 +56,10 @@ export interface NavigationPermissions {
       'Yarn QC': boolean;
       'Yarn Storage': boolean;
     };
-    'Yarn Issue': boolean;
+    'Yarn Issue': {
+      'Issue for orders': boolean;
+      'Linking & sampling': boolean;
+    };
     'Yarn Return': boolean;
     'Yarn Master': {
       Brand: boolean;

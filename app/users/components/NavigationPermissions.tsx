@@ -59,8 +59,12 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
     { key: 'Analytics & reports', label: 'Analytics & reports' },
     { key: 'Inventory', label: 'Inventory' },
     { key: 'Cataloguing', label: 'Cataloguing' },
-    { key: 'Yarn Issue', label: 'Yarn Issue' },
     { key: 'Yarn Return', label: 'Yarn Return' }
+  ]
+
+  const yarnIssueSections = [
+    { key: 'Issue for orders', label: 'Issue for orders' },
+    { key: 'Linking & sampling', label: 'Linking & sampling' }
   ]
 
   const purchaseManagementSections = [
@@ -192,6 +196,27 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
                 <span className="ml-2 text-sm text-gray-700">{subsection.label}</span>
               </label>
             ))}
+          </div>
+
+          <div className="mt-4 ml-8">
+            <h5 className="text-sm font-medium text-gray-800 mb-2">Yarn Issue</h5>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-4">
+              {yarnIssueSections.map((subsubsection) => (
+                <label key={subsubsection.key} className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={(() => {
+                      const yi = (navigation['Yarn Management'] as any)?.['Yarn Issue'];
+                      if (typeof yi === 'boolean') return yi === true;
+                      return yi?.[subsubsection.key] === true;
+                    })()}
+                    onChange={(e) => onChange('Yarn Management', 'Yarn Issue', subsubsection.key, e.target.checked)}
+                    className="rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">{subsubsection.label}</span>
+                </label>
+              ))}
+            </div>
           </div>
 
           <div className="mt-4 ml-8">

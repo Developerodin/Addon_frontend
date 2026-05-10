@@ -1,5 +1,17 @@
 import { NavigationPermissions } from '@/shared/contextapi/navigationContext';
 
+/**
+ * True if user may open Yarn Issue flows for production orders (legacy flat flag or nested key).
+ */
+function canAccessYarnIssueForOrders(permissions: NavigationPermissions | null): boolean {
+  const yi = permissions?.['Yarn Management']?.['Yarn Issue'];
+  if (yi === true) return true;
+  if (yi && typeof yi === 'object') {
+    return (yi as { 'Issue for orders'?: boolean })['Issue for orders'] === true;
+  }
+  return false;
+}
+
 export const getFirstAvailableRoute = (permissions: NavigationPermissions | null): string => {
   if (!permissions) {
     return '/auth/login';
@@ -41,7 +53,7 @@ export const getFirstAvailableRoute = (permissions: NavigationPermissions | null
     { path: '/yarn-management/cataloguing', permission: permissions['Yarn Management']?.['Cataloguing'] },
     { path: '/yarn-management/purchase', permission: permissions['Yarn Management']?.['Purchase'] },
     { path: '/yarn-management/inventory', permission: permissions['Yarn Management']?.['Inventory'] },
-    { path: '/yarn-management/yarn-issue', permission: permissions['Yarn Management']?.['Yarn Issue'] },
+    { path: '/yarn-management/yarn-issue', permission: canAccessYarnIssueForOrders(permissions) },
     { path: '/yarn-management/yarn-master/brand', permission: permissions['Yarn Management']?.['Yarn Master']?.['Brand'] },
     { path: '/yarn-management/yarn-master/yarn-type', permission: permissions['Yarn Management']?.['Yarn Master']?.['Yarn Type'] },
     { path: '/yarn-management/yarn-master/count-size', permission: permissions['Yarn Management']?.['Yarn Master']?.['Count/Size'] },

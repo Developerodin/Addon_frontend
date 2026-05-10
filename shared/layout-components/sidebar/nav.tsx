@@ -480,11 +480,29 @@ const BaseMenuItems: any = [
       },
       {
         icon: IssueIcon,
-        path: "/yarn-management/yarn-issue",
-        type: "link",
+        title: "Yarn Issue",
+        type: "sub",
         active: false,
         selected: false,
-        title: "Yarn Issue",
+        path: "/yarn-management/yarn-issue",
+        children: [
+          {
+            icon: IssueIcon,
+            path: "/yarn-management/yarn-issue",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "Issue for orders",
+          },
+          {
+            icon: IssueIcon,
+            path: "/yarn-management/yarn-issue/linking-sampling",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "Linking & sampling",
+          },
+        ],
       },
       {
         icon: ReturnIcon,

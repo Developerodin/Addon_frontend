@@ -420,7 +420,7 @@ const YarnIssuePage = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  const hasPermission = hasSubPermission("/yarn-management", "Yarn Issue");
+  const hasPermission = hasSubPermission("/yarn-management/yarn-issue", "Issue for orders");
 
   // When issue modal opens, fetch latest weight (cones) via weightApi (LAN + localhost) and pre-fill
   useEffect(() => {
@@ -1485,7 +1485,7 @@ const YarnIssuePage = () => {
               <i className="ri-lock-line text-5xl"></i>
             </div>
             <h3 className="text-xs font-bold text-gray-400 mb-1">Access Restricted</h3>
-            <p className="text-[11px] text-gray-500 mb-4">You don't have permission to access Yarn Issue.</p>
+            <p className="text-[11px] text-gray-500 mb-4">You don't have permission for Yarn Issue — Issue for orders.</p>
             <Link href="/yarn-management" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700">
               <i className="ri-arrow-left-line"></i> Back to Yarn Management
             </Link>

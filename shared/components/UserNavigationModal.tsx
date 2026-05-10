@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { User, UpdateNavigationRequest } from '@/shared/services/userService';
+import {
+  mergeYarnIssuePermissions,
+  EMPTY_YARN_ISSUE_NAV_DEFAULTS,
+} from '@/shared/contextapi/navigationContext';
 
 interface UserNavigationModalProps {
   user: User | null;
@@ -22,26 +26,65 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
     if (user && isOpen) {
       console.log('Setting navigation for user:', user.id, user.name);
       console.log('User navigation data:', user.navigation);
-      setNavigation(user.navigation);
+      const rawNav = user.navigation as Partial<User['navigation']>;
+      const ym = rawNav['Yarn Management'] as Record<string, unknown> | undefined;
+      const normalized: Partial<User['navigation']> = ym
+        ? {
+            ...rawNav,
+            'Yarn Management': {
+              ...(ym as object),
+              'Yarn Issue': mergeYarnIssuePermissions(
+                ym['Yarn Issue'] as Parameters<typeof mergeYarnIssuePermissions>[0],
+                EMPTY_YARN_ISSUE_NAV_DEFAULTS
+              ),
+            } as User['navigation']['Yarn Management'],
+          }
+        : rawNav;
+      setNavigation(normalized);
     }
   }, [user, isOpen]);
 
-  const handleNavigationChange = (section: string, subsection: string | null, value: boolean) => {
+  /**
+   * Updates flat sections (catalog, dashboard) or nested Yarn Issue submenu keys when `fourth` is supplied.
+   */
+  const handleNavigationChange = (
+    section: string,
+    subsection: string | null,
+    third: boolean | string,
+    fourth?: boolean
+  ) => {
     setNavigation(prev => {
-      const newNav = { ...prev };
-      
-      if (subsection) {
-        // Handle nested sections like Catalog.Items
-        if (!newNav[section as keyof typeof newNav]) {
-          newNav[section as keyof typeof newNav] = {} as any;
-        }
-        (newNav[section as keyof typeof newNav] as any)[subsection] = value;
-      } else {
-        // Handle top-level sections
-        (newNav as any)[section] = value;
+      const newNav = { ...(prev as Record<string, unknown>) } as Record<string, unknown>;
+
+      if (
+        fourth !== undefined &&
+        typeof third === 'string' &&
+        subsection !== null &&
+        section === 'Yarn Management' &&
+        subsection === 'Yarn Issue'
+      ) {
+        if (!newNav['Yarn Management']) newNav['Yarn Management'] = {};
+        const ym = newNav['Yarn Management'] as Record<string, unknown>;
+        const prevYi = ym['Yarn Issue'];
+        const base = mergeYarnIssuePermissions(
+          prevYi as Parameters<typeof mergeYarnIssuePermissions>[0],
+          EMPTY_YARN_ISSUE_NAV_DEFAULTS
+        );
+        ym['Yarn Issue'] = { ...base, [third]: fourth };
+        return newNav as Partial<User['navigation']>;
       }
-      
-      return newNav;
+
+      const value = third as boolean;
+      if (subsection) {
+        if (!newNav[section]) {
+          newNav[section] = {};
+        }
+        (newNav[section] as Record<string, unknown>)[subsection] = value;
+      } else {
+        newNav[section] = value;
+      }
+
+      return newNav as Partial<User['navigation']>;
     });
   };
 
@@ -231,7 +274,6 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
                     'Analytics & reports',
                     'Cataloguing',
                     'Inventory',
-                    'Yarn Issue',
                     'Yarn Return',
                   ])
                 }
@@ -245,7 +287,6 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
                 { key: 'Analytics & reports', label: 'Analytics & reports' },
                 { key: 'Cataloguing', label: 'Cataloguing' },
                 { key: 'Inventory', label: 'Inventory' },
-                { key: 'Yarn Issue', label: 'Yarn Issue' },
                 { key: 'Yarn Return', label: 'Yarn Return' },
               ].map((subsection) => (
                 <label key={subsection.key} className="flex items-center">
@@ -258,6 +299,30 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
                   <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">{subsection.label}</span>
                 </label>
               ))}
+            </div>
+            <div className="space-y-2 ml-6 mt-3">
+              <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Yarn Issue</p>
+              {[
+                { key: 'Issue for orders', label: 'Issue for orders' },
+                { key: 'Linking & sampling', label: 'Linking & sampling' },
+              ].map((row) => {
+                const yi = (navigation['Yarn Management'] as any)?.['Yarn Issue'];
+                const checked =
+                  typeof yi === 'boolean' ? yi === true : yi?.[row.key] === true;
+                return (
+                  <label key={row.key} className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) =>
+                        handleNavigationChange('Yarn Management', 'Yarn Issue', row.key, e.target.checked)
+                      }
+                      className="rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">{row.label}</span>
+                  </label>
+                );
+              })}
             </div>
           </div>
 

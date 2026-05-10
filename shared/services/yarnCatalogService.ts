@@ -26,6 +26,10 @@ export interface YarnCatalog {
   remark?: string;
   hsnCode?: string;
   minQuantity?: number;
+  /** Optional catalog workflow flag */
+  linking?: boolean;
+  /** Optional catalog workflow flag */
+  sampling?: boolean;
   status: 'active' | 'inactive' | 'suspended';
   createdAt?: string;
   updatedAt?: string;
@@ -66,6 +70,8 @@ export interface CreateYarnCatalogRequest {
   remark?: string;
   hsnCode?: string;
   minQuantity?: number;
+  linking?: boolean;
+  sampling?: boolean;
   status?: 'active' | 'inactive' | 'suspended';
 }
 
@@ -83,6 +89,8 @@ export interface UpdateYarnCatalogRequest {
   remark?: string;
   hsnCode?: string;
   minQuantity?: number;
+  linking?: boolean;
+  sampling?: boolean;
   status?: 'active' | 'inactive' | 'suspended';
 }
 
@@ -101,6 +109,8 @@ export interface BulkImportYarnCatalogRequest {
     remark?: string;
     hsnCode?: string;
     minQuantity?: number;
+    linking?: boolean;
+    sampling?: boolean;
     status?: 'active' | 'inactive' | 'suspended';
   }>;
   batchSize?: number;

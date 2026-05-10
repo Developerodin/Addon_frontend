@@ -49,7 +49,7 @@ const EditYarnIssuePage: React.FC<EditYarnIssuePageProps> = ({ params }) => {
   const [items, setItems] = useState<IssueItem[]>([]);
 
   // Check permission
-  const hasPermission = hasSubPermission('/yarn-management', 'Yarn Issue');
+  const hasPermission = hasSubPermission('/yarn-management/yarn-issue', 'Issue for orders');
 
   const floors = [
     'Knitting Floor',
