@@ -406,7 +406,7 @@ export function useCriticalRequisitionList(hasPermission: boolean) {
           draftForPo: true,
         });
         toast.success(
-          `${yarnName} staged—merged into supplier draft PO if one exists or queued globally. Open Draft POs / New Purchase Order using the supplier.`
+          `${yarnName} added to supplier draft PO (new draft created if none existed). Open Draft POs to review.`
         );
         await fetchPage();
       } catch (err) {

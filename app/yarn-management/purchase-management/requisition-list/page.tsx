@@ -125,14 +125,12 @@ const RequisitionListPage = () => {
 
   const onSendToDraft = (yarn: CriticalRow) => {
     if (!yarn.preferredSupplierId) {
-      const go = window.confirm(
-        `${yarn.yarnName} has no vendor yet—staging will enqueue globally rather than merging into an existing supplier draft. Continue?`
-      );
-      if (!go) return;
+      toast.error("Select a vendor before sending to draft PO.");
+      return;
     }
 
     const confirmed = window.confirm(
-      `Stage ${yarn.yarnName} toward a draft PO (auto-merge onto supplier draft when vendor + draft exist)?`
+      `Create or merge ${yarn.yarnName} into the draft PO for this vendor (one draft per supplier until submitted)?`
     );
     if (!confirmed) return;
     void rq.handleMarkPoSent(yarn.id, yarn.yarnName);
@@ -493,7 +491,16 @@ const RequisitionListPage = () => {
                         <button
                           type="button"
                           onClick={() => onSendToDraft(yarn)}
-                          disabled={rq.loading || !rq.canStageRow(yarn)}
+                          disabled={
+                            rq.loading ||
+                            !rq.canStageRow(yarn) ||
+                            !yarn.preferredSupplierId
+                          }
+                          title={
+                            !yarn.preferredSupplierId
+                              ? "Select a vendor for this row before sending to draft PO."
+                              : undefined
+                          }
                           className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 border border-purple-200 text-purple-700 text-[11px] font-bold rounded hover:bg-purple-50 transition-colors disabled:opacity-50"
                           aria-label={`Send ${yarn.yarnName} to PO draft`}
                         >

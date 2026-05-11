@@ -17,8 +17,6 @@ type DraftPoSummaryRow = {
   total: number;
 };
 
-type HubTab = "draft" | "history";
-
 /** Normalizes yarn PO docs from list APIs into grouped table rows. */
 function mapApiOrderToDraftPoSummary(
   apiOrder: Record<string, unknown>
@@ -72,7 +70,7 @@ const formatPoDate = (iso: string): string => {
 };
 
 /**
- * Hub for drafting yarn POs; draft tab groups open buckets by supplier, history showcases recently submitted drafts.
+ * Hub for drafting yarn POs; groups open draft buckets by supplier.
  */
 export default function DraftPOsPage() {
   const { hasSubPermission, isLoading } = useNavigation();
@@ -81,7 +79,6 @@ export default function DraftPOsPage() {
     "Draft POs"
   );
 
-  const [hubTab, setHubTab] = useState<HubTab>("draft");
   const [draftPoRows, setDraftPoRows] = useState<DraftPoSummaryRow[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [viewModalOrderId, setViewModalOrderId] = useState<string | null>(null);
@@ -98,10 +95,8 @@ export default function DraftPOsPage() {
     setListLoading(true);
     try {
       const { start_date, end_date } = getDraftPoQueryDateBounds();
-      const status_code =
-        hubTab === "draft" ? "draft" : "submitted_to_supplier";
       const raw = await yarnPurchaseOrderService.getPurchaseOrders({
-        status_code,
+        status_code: "draft",
         start_date,
         end_date,
       });
@@ -117,7 +112,7 @@ export default function DraftPOsPage() {
     } finally {
       setListLoading(false);
     }
-  }, [hubTab]);
+  }, []);
 
   useEffect(() => {
     if (!canAccess || isLoading) return;
@@ -193,38 +188,6 @@ export default function DraftPOsPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2 items-center justify-end">
-            <div
-              className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5"
-              role="tablist"
-              aria-label="Draft PO tabs"
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={hubTab === "draft"}
-                className={`px-3 py-1 rounded-md text-[11px] font-bold transition-colors ${
-                  hubTab === "draft"
-                    ? "bg-purple-600 text-white shadow-sm"
-                    : "text-gray-600 hover:bg-gray-50"
-                }`}
-                onClick={() => setHubTab("draft")}
-              >
-                Draft
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={hubTab === "history"}
-                className={`px-3 py-1 rounded-md text-[11px] font-bold transition-colors ${
-                  hubTab === "history"
-                    ? "bg-purple-600 text-white shadow-sm"
-                    : "text-gray-600 hover:bg-gray-50"
-                }`}
-                onClick={() => setHubTab("history")}
-              >
-                Recent submitted
-              </button>
-            </div>
             <Link
               href="/yarn-management/purchase-management/purchase/add?fromDraftQueue=1"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
@@ -232,20 +195,6 @@ export default function DraftPOsPage() {
             >
               <i className="ri-draft-line text-xs" aria-hidden />
               New staged PO
-            </Link>
-            <Link
-              href="/yarn-management/purchase-management/requisition-list"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 bg-white text-gray-800 text-[11px] font-bold rounded hover:bg-gray-50"
-            >
-              <i className="ri-list-check text-xs" aria-hidden />
-              Requisition list
-            </Link>
-            <Link
-              href="/yarn-management/purchase-management/purchase"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 bg-white text-gray-800 text-[11px] font-bold rounded hover:bg-gray-50"
-            >
-              <i className="ri-file-list-line text-xs" aria-hidden />
-              All POs
             </Link>
           </div>
         </div>
@@ -286,14 +235,14 @@ export default function DraftPOsPage() {
             <div className="rounded-md border border-dashed border-gray-200 bg-gray-50/50 px-4 py-8 text-center text-sm text-gray-600">
               <p className="font-medium text-gray-800">Nothing matches this slice</p>
               <p className="text-[12px] text-gray-500 mt-1">
-                Adjust filters or revisit the procurement queue from Requisition list.
+                Adjust filters or start a new staged PO when you are ready.
               </p>
             </div>
           ) : (
             <div className="space-y-8">
               {supplierGroups.map(([supplierName, rows]) => (
                 <section
-                  key={`${hubTab}-${supplierName}`}
+                  key={supplierName}
                   aria-labelledby={`supplier-heading-${encodeURIComponent(supplierName)}`}
                   className="border border-gray-100 rounded-lg overflow-hidden"
                 >
