@@ -99,6 +99,8 @@ export interface PurchaseOrderItemPayload {
   quantity: number;
   estimatedDeliveryDate?: string | null;
   gstRate: number;
+  /** Optional YarnRequisition id when line originated from the procurement queue. */
+  sourceRequisitionId?: string;
 }
 
 export interface CreatePurchaseOrderPayload {

@@ -23,6 +23,7 @@ const BrandPage = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [yarnNameQuery, setYarnNameQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | Supplier['status']>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -257,7 +258,7 @@ const BrandPage = () => {
   useEffect(() => {
     fetchBrands();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, itemsPerPage, searchQuery, statusFilter]);
+  }, [currentPage, itemsPerPage, searchQuery, yarnNameQuery, statusFilter]);
 
   // Debug effect to track error state changes
   useEffect(() => {
@@ -276,6 +277,10 @@ const BrandPage = () => {
 
       if (searchQuery.trim()) {
         params.brandName = searchQuery.trim();
+      }
+
+      if (yarnNameQuery.trim()) {
+        params.yarnName = yarnNameQuery.trim();
       }
 
       if (statusFilter !== 'all') {
@@ -1250,18 +1255,35 @@ const BrandPage = () => {
                 <option value="suspended">Suspended</option>
               </select>
             </div>
-            <div className="relative">
-              <input
-                type="text"
-                className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-48 min-w-[120px] placeholder:text-gray-400 font-medium"
-                placeholder="Search brands..."
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setCurrentPage(1);
-                }}
-              />
-              <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+            <div className="flex flex-wrap items-center gap-2 justify-end">
+              <div className="relative">
+                <input
+                  type="text"
+                  className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-44 min-w-[120px] placeholder:text-gray-400 font-medium"
+                  placeholder="Search brand / vendor..."
+                  aria-label="Search suppliers by brand or vendor name"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                />
+                <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none" aria-hidden />
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-indigo-300 w-52 min-w-[140px] placeholder:text-gray-400 font-medium"
+                  placeholder="Yarn name (who stocks it)..."
+                  aria-label="Filter suppliers that carry this yarn name"
+                  value={yarnNameQuery}
+                  onChange={(e) => {
+                    setYarnNameQuery(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                />
+                <i className="ri-store-2-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none" aria-hidden />
+              </div>
             </div>
           </div>
 

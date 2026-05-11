@@ -212,11 +212,13 @@ export function PoDraftQueueDrawerTrigger({
               </button>
               <Link
                 href="/yarn-management/purchase-management/purchase/add?fromDraftQueue=1"
+                title="You will choose the supplier gate first so yarns filter to that vendor bucket"
+                aria-label="Open new draft PO from queue with supplier picker"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 shadow-sm"
                 onClick={() => setOpen(false)}
               >
                 <i className="ri-add-line text-xs" aria-hidden />
-                Open new draft PO
+                Open staged PO wizard
               </Link>
             </footer>
           </aside>

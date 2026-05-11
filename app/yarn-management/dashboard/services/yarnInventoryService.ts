@@ -118,6 +118,7 @@ export interface YarnRequisitionResponse {
   /** Present when API uses toJSON transform (replaces _id). */
   id?: string;
   yarnName: string;
+  yarnCatalogId?: YarnCatalogInfo | string;
   /** Embedded catalog when populated; otherwise use top-level yarnId. */
   yarn?: YarnCatalogInfo | string;
   yarnId?: string;
@@ -127,9 +128,23 @@ export interface YarnRequisitionResponse {
   alertStatus: 'below_minimum' | 'overbooked' | null;
   poSent: boolean;
   draftForPo?: boolean;
+  /** Manual supplier choice for drafts / merge semantics. */
+  preferredSupplierId?: YarnCatalogInfo | string | null;
+  preferredSupplierName?: string;
+  dismissed?: boolean;
+  dismissedAt?: string;
+  linkedPurchaseOrderId?: string | YarnCatalogInfo;
+  attachedDraftPoId?: string | YarnCatalogInfo;
   created: string;
   lastUpdated: string;
 }
+
+/** Client-visible workflow buckets aligned with procurement spec. */
+export type RequisitionWorkflowStageUi =
+  | 'in_requisition'
+  | 'sent_to_draft'
+  | 'order_placed'
+  | 'dismissed';
 
 export interface RequisitionAlertSummary {
   total: number;
@@ -149,9 +164,10 @@ export interface YarnRequisitionListResponse {
 }
 
 export interface UpdateRequisitionStatusRequest {
-  poSent: boolean;
-  /** When true, requisition appears in draft PO queue until a PO is raised. */
+  poSent?: boolean;
   draftForPo?: boolean;
+  preferredSupplierId?: string | null;
+  preferredSupplierName?: string;
 }
 
 function normalizePossibleId(value: unknown): string | undefined {
@@ -173,10 +189,19 @@ function normalizePossibleId(value: unknown): string | undefined {
   return undefined;
 }
 
+/** Resolve yarn catalog id when populated on `yarnCatalogId`. */
+export function requisitionYarnCatalogId(req: YarnRequisitionResponse): string | undefined {
+  const cid = normalizePossibleId(req.yarnCatalogId);
+  if (cid) return cid;
+  return requisitionYarnId(req);
+}
+
 /** Resolve yarn id whether API returns embedded `yarn`, a string id, or top-level `yarnId`. */
 export function requisitionYarnId(req: YarnRequisitionResponse): string | undefined {
   const byYarn = normalizePossibleId(req.yarn);
   if (byYarn) return byYarn;
+  const byCatalog = normalizePossibleId(req.yarnCatalogId);
+  if (byCatalog) return byCatalog;
   return normalizePossibleId(req.yarnId);
 }
 
@@ -185,6 +210,19 @@ export function requisitionMongoId(
   req: Pick<YarnRequisitionResponse, 'id' | '_id'>
 ): string | undefined {
   return normalizePossibleId(req._id) ?? normalizePossibleId(req.id);
+}
+
+/** Derives procurement workflow label from persisted YarnRequisition fields. */
+export function deriveRequisitionWorkflowStage(
+  row: YarnRequisitionResponse
+): RequisitionWorkflowStageUi {
+  if (row.dismissed) return 'dismissed';
+  const linked = normalizePossibleId(row.linkedPurchaseOrderId as unknown);
+  if (linked) return 'order_placed';
+  if (row.draftForPo) return 'sent_to_draft';
+  const attachedDraft = normalizePossibleId(row.attachedDraftPoId as unknown);
+  if (attachedDraft) return 'sent_to_draft';
+  return 'in_requisition';
 }
 
 /** Resolve inventory yarn id whether API returns top-level yarnId or embedded yarn object. */
@@ -503,10 +541,17 @@ class YarnInventoryService {
     page?: number;
     limit?: number;
     skipRecalculation?: boolean;
-    /** Case-insensitive substring (server-side). */
     yarnName?: string;
     lastUpdatedFrom?: string;
     lastUpdatedTo?: string;
+    workflowStage?:
+      | 'in_requisition'
+      | 'sent_to_draft'
+      | 'order_placed'
+      | 'dismissed';
+    includeDismissed?: boolean;
+    preferredSupplierId?: string;
+    supplierName?: string;
     sortBy?:
       | 'yarnName'
       | 'created'
@@ -537,6 +582,20 @@ class YarnInventoryService {
       queryParams.append('lastUpdatedTo', params.lastUpdatedTo);
     if (params.sortBy) queryParams.append('sortBy', params.sortBy);
     if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
+    if (params.workflowStage)
+      queryParams.append('workflowStage', params.workflowStage);
+    if (params.includeDismissed !== undefined) {
+      queryParams.append('includeDismissed', String(params.includeDismissed));
+    }
+    if (params.preferredSupplierId?.trim()) {
+      queryParams.append(
+        'preferredSupplierId',
+        params.preferredSupplierId.trim()
+      );
+    }
+    if (params.supplierName?.trim()) {
+      queryParams.append('supplierName', params.supplierName.trim());
+    }
 
     return this.makeRequest<YarnRequisitionListResponse>(
       `/yarn-requisitions?${queryParams.toString()}`
@@ -552,6 +611,14 @@ class YarnInventoryService {
     poSent?: boolean;
     draftForPo?: boolean;
     skipRecalculation?: boolean;
+    workflowStage?:
+      | 'in_requisition'
+      | 'sent_to_draft'
+      | 'order_placed'
+      | 'dismissed';
+    includeDismissed?: boolean;
+    preferredSupplierId?: string;
+    supplierName?: string;
   }): Promise<{ results: YarnRequisitionResponse[]; alertSummary: RequisitionAlertSummary }> {
     const pageSize = 100;
     const allResults: YarnRequisitionResponse[] = [];
@@ -589,18 +656,37 @@ class YarnInventoryService {
    * @param requisitionIds - Mongo ids of YarnRequisition documents
    */
   async clearRequisitionDraftFlags(
-    requisitionIds: string[]
+    requisitionIds: string[],
+    linkedPurchaseOrderId?: string
   ): Promise<{ cleared: number }> {
     return this.makeRequest<{ cleared: number }>('/yarn-requisitions/clear-draft', {
       method: 'PATCH',
-      body: JSON.stringify({ requisitionIds }),
+      body: JSON.stringify({
+        requisitionIds,
+        ...(linkedPurchaseOrderId?.trim()
+          ? { linkedPurchaseOrderId: linkedPurchaseOrderId.trim() }
+          : {}),
+      }),
     });
   }
 
   /**
-   * All requisitions currently staged for drafting a yarn PO (wide date window, paginated merge).
+   * Soft-dismiss a requisition so it disappears from procurement lists unless filtered explicitly.
    */
-  async getAllDraftQueueRequisitions(): Promise<YarnRequisitionResponse[]> {
+  async dismissYarnRequisition(requisitionId: string): Promise<YarnRequisitionResponse> {
+    return this.makeRequest<YarnRequisitionResponse>(
+      `/yarn-requisitions/${requisitionId}/dismiss`,
+      { method: 'PATCH', body: JSON.stringify({}) }
+    );
+  }
+
+  /**
+   * All yarns still in the staging queue (`draftForPo`).
+   * @param preferredSupplierId - When set only rows assigned to this supplier merge into their draft flow.
+   */
+  async getAllDraftQueueRequisitions(options?: {
+    preferredSupplierId?: string;
+  }): Promise<YarnRequisitionResponse[]> {
     const endDate = new Date();
     const startDate = new Date();
     startDate.setFullYear(startDate.getFullYear() - 10);
@@ -609,6 +695,7 @@ class YarnInventoryService {
       endDate: endDate.toISOString(),
       draftForPo: true,
       skipRecalculation: true,
+      preferredSupplierId: options?.preferredSupplierId?.trim() || undefined,
     });
     /** Server already applies `draftForPo: true`; keep rows if flag is truthy only (handles string/omit). */
     return results.filter((r) => Boolean((r as { draftForPo?: unknown }).draftForPo));

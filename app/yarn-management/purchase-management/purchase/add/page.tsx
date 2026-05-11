@@ -1,11 +1,13 @@
 "use client";
 import React, { Suspense, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import PurchaseForm, { PurchaseOrderData, YarnPurchaseItem } from "../components/PurchaseForm";
+import { DraftQueueSupplierGate } from "./components/DraftQueueSupplierGate";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast } from "react-hot-toast";
+import supplierService, { type Supplier } from "@/shared/services/supplierService";
 import yarnPurchaseOrderService, {
   CreatePurchaseOrderPayload,
   PurchaseOrderItemPayload,
@@ -13,7 +15,7 @@ import yarnPurchaseOrderService, {
 import {
   yarnInventoryService,
   requisitionMongoId,
-  requisitionYarnId,
+  requisitionYarnCatalogId,
 } from "@/app/yarn-management/dashboard/services/yarnInventoryService";
 
 /**
@@ -55,13 +57,19 @@ function resolvePurchaseLineSizeCount(item: YarnPurchaseItem): string {
  */
 function AddPurchasePageInner() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const fromDraftQueue = searchParams.get("fromDraftQueue") === "1";
+  const supplierDraftId = searchParams.get("supplierId")?.trim() || "";
   const { hasSubPermission, isLoading } = useNavigation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [draftReady, setDraftReady] = useState(!fromDraftQueue);
   const [draftInitialItems, setDraftInitialItems] = useState<YarnPurchaseItem[]>([]);
+  const [gateSupplierSelection, setGateSupplierSelection] = useState("");
+  const [stagingSuppliers, setStagingSuppliers] = useState<Supplier[]>([]);
+  const [stagingSuppliersLoading, setStagingSuppliersLoading] = useState(false);
+  const [stagingSupplierName, setStagingSupplierName] = useState("");
 
   /** Stable key fragment for remount once draft yarns are loaded */
   const draftKeySuffix = useMemo(
@@ -71,8 +79,20 @@ function AddPurchasePageInner() {
 
   const purchaseInitialData = useMemo((): Partial<PurchaseOrderData> => {
     if (!fromDraftQueue) return {};
-    return { items: draftInitialItems };
-  }, [fromDraftQueue, draftInitialItems]);
+    if (!supplierDraftId) {
+      return { items: [] };
+    }
+    return {
+      supplierId: supplierDraftId,
+      supplierName: stagingSupplierName || "",
+      items: draftInitialItems,
+    };
+  }, [
+    fromDraftQueue,
+    supplierDraftId,
+    stagingSupplierName,
+    draftInitialItems,
+  ]);
 
   const hasPermission = hasSubPermission(
     "/yarn-management/purchase-management",
@@ -80,10 +100,65 @@ function AddPurchasePageInner() {
   );
 
   useEffect(() => {
+    if (!fromDraftQueue || !hasPermission || isLoading) {
+      return undefined;
+    }
+    let cancelled = false;
+    const load = async () => {
+      setStagingSuppliersLoading(true);
+      try {
+        const res = await supplierService.getSuppliers({ limit: 250, page: 1 });
+        if (!cancelled) {
+          setStagingSuppliers(res.results ?? []);
+        }
+      } catch (error) {
+        console.error("[AddPurchasePage] supplier options", error);
+        if (!cancelled) toast.error("Unable to load suppliers for the draft queue gate.");
+      } finally {
+        if (!cancelled) setStagingSuppliersLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [fromDraftQueue, hasPermission, isLoading]);
+
+  useEffect(() => {
+    if (!supplierDraftId) {
+      setStagingSupplierName("");
+      return undefined;
+    }
+    let cancelled = false;
+    supplierService
+      .getSupplierById(supplierDraftId)
+      .then((supplier) => {
+        if (!cancelled) {
+          setStagingSupplierName(supplier.brandName || "");
+        }
+      })
+      .catch((error) => {
+        console.error("[AddPurchasePage] supplier lookup", error);
+        if (!cancelled) {
+          setStagingSupplierName("");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [supplierDraftId]);
+
+  useEffect(() => {
     if (!fromDraftQueue) {
       setDraftReady(true);
       setDraftInitialItems([]);
-      return;
+      return undefined;
+    }
+
+    if (!supplierDraftId) {
+      setDraftReady(true);
+      setDraftInitialItems([]);
+      return undefined;
     }
 
     let cancelled = false;
@@ -91,11 +166,13 @@ function AddPurchasePageInner() {
 
     (async () => {
       try {
-        const rows = await yarnInventoryService.getAllDraftQueueRequisitions();
+        const rows = await yarnInventoryService.getAllDraftQueueRequisitions({
+          preferredSupplierId: supplierDraftId,
+        });
         if (cancelled) return;
 
         const items: YarnPurchaseItem[] = rows.map((req) => {
-          const yarnId = requisitionYarnId(req) || "";
+          const yarnId = requisitionYarnCatalogId(req) || "";
           const docId = requisitionMongoId(req) ?? "";
           const shortage = Math.max(0, (req.minQty ?? 0) - (req.availableQty ?? 0));
           const qty = shortage > 0 ? shortage : 1;
@@ -123,9 +200,7 @@ function AddPurchasePageInner() {
 
         setDraftInitialItems(items);
         if (items.length === 0) {
-          toast(
-            "No yarns in draft queue yet. Stage them from the requisition list (Send to PO draft) or add lines manually."
-          );
+          toast(`No yarns currently queued for this supplier.`, { icon: "ℹ️" });
         }
       } catch (error) {
         console.error("[AddPurchasePage] Failed to load draft queue", error);
@@ -139,7 +214,7 @@ function AddPurchasePageInner() {
     return () => {
       cancelled = true;
     };
-  }, [fromDraftQueue]);
+  }, [fromDraftQueue, supplierDraftId]);
 
   if (isLoading) {
     return (
@@ -168,6 +243,28 @@ function AddPurchasePageInner() {
             Back to Purchase
           </Link>
         </div>
+      </div>
+    );
+  }
+
+  if (fromDraftQueue && !supplierDraftId) {
+    return (
+      <div className="main-content !p-[10px]">
+        <Seo title="Draft queue supplier" />
+        <DraftQueueSupplierGate
+          suppliers={stagingSuppliers}
+          suppliersLoading={stagingSuppliersLoading}
+          selectedSupplierId={gateSupplierSelection}
+          queueHydrating={false}
+          onSelectedSupplierChange={(id) => setGateSupplierSelection(id)}
+          onContinue={() => {
+            if (!gateSupplierSelection) {
+              toast.error("Pick a yarn supplier before loading staged lines.");
+              return;
+            }
+            router.replace(`${pathname}?fromDraftQueue=1&supplierId=${gateSupplierSelection}`);
+          }}
+        />
       </div>
     );
   }
@@ -339,6 +436,9 @@ function AddPurchasePageInner() {
           estimatedDeliveryDate: item.estimatedDeliveryDate,
           gstRate: item.gst,
         };
+        if (item.sourceRequisitionId) {
+          poItem.sourceRequisitionId = item.sourceRequisitionId;
+        }
 
         return poItem;
       });
@@ -358,8 +458,11 @@ function AddPurchasePageInner() {
       };
       console.log('[AddPurchasePage] Final payload', payload);
 
-      await yarnPurchaseOrderService.createPurchaseOrder(payload);
-      console.log('[AddPurchasePage] Purchase order creation request sent successfully');
+      const createdPo = await yarnPurchaseOrderService.createPurchaseOrder(payload);
+      const createdId =
+        (createdPo as unknown as { id?: string; _id?: string }).id ??
+        (createdPo as unknown as { _id?: string })._id;
+      const poId = createdId ? String(createdId) : undefined;
 
       const requisitionIds = itemsWithResolvedIds
         .map((item) => item.sourceRequisitionId)
@@ -367,7 +470,10 @@ function AddPurchasePageInner() {
 
       if (requisitionIds.length > 0) {
         try {
-          await yarnInventoryService.clearRequisitionDraftFlags(requisitionIds);
+          await yarnInventoryService.clearRequisitionDraftFlags(
+            requisitionIds,
+            poId
+          );
         } catch (clearErr) {
           console.error("[AddPurchasePage] clearRequisitionDraftFlags failed", clearErr);
           toast.error(
@@ -421,6 +527,9 @@ function AddPurchasePageInner() {
         if (yarnId) {
           poItem.yarn = yarnId;
         }
+        if (item.sourceRequisitionId) {
+          poItem.sourceRequisitionId = item.sourceRequisitionId;
+        }
         return poItem;
       });
 
@@ -444,6 +553,18 @@ function AddPurchasePageInner() {
       const newId =
         (created as unknown as { id?: string; _id?: string }).id ??
         (created as unknown as { _id?: string })._id;
+
+      const requisitionIds = data.items
+        .map((item) => item.sourceRequisitionId)
+        .filter((id): id is string => Boolean(id));
+      if (requisitionIds.length > 0) {
+        try {
+          await yarnInventoryService.clearRequisitionDraftFlags(requisitionIds);
+        } catch (clearErr) {
+          console.error("[AddPurchasePage] clear draft flags after save draft", clearErr);
+          toast.error("Draft saved, but clearing queue flags failed—rows may look still staged.");
+        }
+      }
 
       toast.success("Draft saved. You can submit it to the supplier anytime from Edit PO.");
       if (newId) {
@@ -510,7 +631,9 @@ function AddPurchasePageInner() {
         <div className="px-[10px] pb-[10px]">
           <PurchaseForm
             key={
-              !fromDraftQueue ? "new-purchase" : `draft-queue-${draftKeySuffix || "empty"}`
+              !fromDraftQueue
+                ? "new-purchase"
+                : `draft-queue-${supplierDraftId || "none"}-${draftKeySuffix || "empty"}`
             }
             initialData={purchaseInitialData}
             onSubmit={handleSubmit}

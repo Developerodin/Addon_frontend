@@ -4,20 +4,32 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-hot-toast";
 import {
   yarnInventoryService,
+  deriveRequisitionWorkflowStage,
   requisitionMongoId,
+  requisitionYarnCatalogId,
+  type RequisitionWorkflowStageUi,
   type YarnRequisitionResponse,
 } from "@/app/yarn-management/dashboard/services/yarnInventoryService";
 
 export interface CriticalRow {
   id: string;
   yarnName: string;
+  /** Catalog id when API sends it — used to match supplier yarn lines. */
+  yarnCatalogId?: string;
   minimumQty: number;
   availableQty: number;
   blockedQty: number;
   lastUpdated: string;
+  workflowStage: RequisitionWorkflowStageUi;
+  preferredSupplierId?: string;
+  preferredSupplierDisplayName: string;
 }
 
 export type AlertStatusFilter = "all" | "belowMin" | "overblocked";
+
+export type WorkflowStatusFilter =
+  | "all"
+  | RequisitionWorkflowStageUi;
 
 /**
  * Converts UI alert filter to yarn-requisitions API `alertStatus`.
@@ -25,10 +37,11 @@ export type AlertStatusFilter = "all" | "belowMin" | "overblocked";
  */
 function statusFilterToAlert(
   filter: AlertStatusFilter
-): "has_alert" | "below_minimum" | "overbooked" {
+): "has_alert" | "below_minimum" | "overbooked" | undefined {
   if (filter === "belowMin") return "below_minimum";
   if (filter === "overblocked") return "overbooked";
-  return "has_alert";
+  if (filter === "all") return "has_alert";
+  return undefined;
 }
 
 /**
@@ -61,26 +74,97 @@ function sortKeyToApi(
 }
 
 /**
+ * Resolves manual supplier Mongo id whether API populated nested object.
+ */
+function normalizeSupplierId(row: YarnRequisitionResponse): string | undefined {
+  const raw = row.preferredSupplierId as unknown;
+  if (!raw || typeof raw === "string") {
+    const s = (raw || "").trim();
+    return s || undefined;
+  }
+  if (typeof raw === "object") {
+    const o = raw as Record<string, unknown>;
+    const id =
+      normalizeSupplierIdScalar(o._id) ?? normalizeSupplierIdScalar(o.id);
+    if (id) return id;
+  }
+  return undefined;
+}
+
+/** @param val - Possible ObjectId-ish value */
+function normalizeSupplierIdScalar(val: unknown): string | undefined {
+  if (val === null || val === undefined || val === "") {
+    return undefined;
+  }
+  if (typeof val === "string") {
+    const trimmed = val.trim();
+    return trimmed || undefined;
+  }
+  if (typeof val === "number" && Number.isFinite(val)) {
+    return String(val);
+  }
+  if (typeof val === "object" && val !== null) {
+    const boxed = val as Record<string, unknown>;
+    if (typeof boxed.$oid === "string") {
+      return boxed.$oid.trim() || undefined;
+    }
+    if (boxed._id !== undefined || boxed.id !== undefined) {
+      const nested =
+        normalizeSupplierIdScalar(boxed._id) ?? normalizeSupplierIdScalar(boxed.id);
+      if (nested) return nested;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Maps API requisition document into table row shape.
  * @param req - Raw requisition from GET yarn-requisitions.
  */
 export function mapRequisitionToCriticalRow(
   req: YarnRequisitionResponse
 ): CriticalRow {
+  const wf = deriveRequisitionWorkflowStage(req);
+  let supplierName = String(req.preferredSupplierName ?? "").trim();
+  if (!supplierName && req.preferredSupplierId && typeof req.preferredSupplierId === "object") {
+    const branded = req.preferredSupplierId as Record<string, unknown>;
+    supplierName =
+      typeof branded.brandName === "string" ? branded.brandName.trim() : "";
+  }
+  const catalogId = requisitionYarnCatalogId(req);
   return {
     id: requisitionMongoId(req) ?? "",
     yarnName: req.yarnName,
+    yarnCatalogId: catalogId,
     minimumQty: req.minQty,
     availableQty: req.availableQty,
     blockedQty: req.blockedQty,
     lastUpdated: req.lastUpdated || req.created,
+    workflowStage: wf,
+    preferredSupplierId: normalizeSupplierId(req),
+    preferredSupplierDisplayName: supplierName,
   };
 }
 
 /** Maximum CSV rows pulled via sequential paging (matches backend limit max pages). */
 export const CRITICAL_EXPORT_ROW_CAP = 5000;
 
-const LIST_DATE_WINDOW_DAYS = 90;
+const LIST_DATE_WINDOW_DAYS = 400;
+
+/** Human labels for procurement workflow badges. */
+const WORKFLOW_LABELS: Record<RequisitionWorkflowStageUi, string> = {
+  in_requisition: "In requisition",
+  sent_to_draft: "Sent to draft",
+  order_placed: "Order placed",
+  dismissed: "Dismissed",
+};
+
+/**
+ * @param stage - Server-derived workflow bucket
+ */
+export function workflowStageLabel(stage: RequisitionWorkflowStageUi): string {
+  return WORKFLOW_LABELS[stage] ?? stage;
+}
 
 /**
  * Server-backed critical yarn requisitions list (paginated, skip heavy recalculation).
@@ -101,8 +185,11 @@ export function useCriticalRequisitionList(hasPermission: boolean) {
     from: "",
     to: "",
   });
-  const [statusFilter, setStatusFilter] =
-    useState<AlertStatusFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<AlertStatusFilter>("all");
+  const [workflowFilter, setWorkflowFilter] = useState<WorkflowStatusFilter>("all");
+  const [vendorSupplierIdFilter, setVendorSupplierIdFilter] = useState<string>("");
+  const [vendorNameQuery, setVendorNameQuery] = useState("");
+  const [debouncedVendorName, setDebouncedVendorName] = useState("");
   const [sortConfig, setSortConfig] = useState<{
     key: keyof CriticalRow;
     direction: "asc" | "desc";
@@ -114,8 +201,22 @@ export function useCriticalRequisitionList(hasPermission: boolean) {
   }, [searchTerm]);
 
   useEffect(() => {
+    const t = setTimeout(() => setDebouncedVendorName(vendorNameQuery.trim()), 350);
+    return () => clearTimeout(t);
+  }, [vendorNameQuery]);
+
+  useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, dateFilter.from, dateFilter.to, statusFilter, limit]);
+  }, [
+    debouncedSearch,
+    dateFilter.from,
+    dateFilter.to,
+    statusFilter,
+    workflowFilter,
+    vendorSupplierIdFilter,
+    debouncedVendorName,
+    limit,
+  ]);
 
   const dateIsoBounds = useMemo(() => {
     const lastUpdatedFrom = dateFilter.from
@@ -144,19 +245,27 @@ export function useCriticalRequisitionList(hasPermission: boolean) {
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - LIST_DATE_WINDOW_DAYS);
 
+      const wf =
+        workflowFilter === "all" ? undefined : (workflowFilter as RequisitionWorkflowStageUi);
+
       const res = await yarnInventoryService.getYarnRequisitions({
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
-        poSent: false,
         alertStatus: statusFilterToAlert(statusFilter),
         page,
         limit,
         skipRecalculation: true,
         yarnName: debouncedSearch || undefined,
+        preferredSupplierId: vendorSupplierIdFilter || undefined,
+        supplierName:
+          vendorSupplierIdFilter || !debouncedVendorName
+            ? undefined
+            : debouncedVendorName,
         lastUpdatedFrom: dateIsoBounds.lastUpdatedFrom,
         lastUpdatedTo: dateIsoBounds.lastUpdatedTo,
         sortBy: sortKeyToApi(effectiveSort.key),
         sortOrder: effectiveSort.direction,
+        workflowStage: wf,
       });
 
       setRows(res.results.map(mapRequisitionToCriticalRow));
@@ -177,9 +286,12 @@ export function useCriticalRequisitionList(hasPermission: boolean) {
     page,
     limit,
     debouncedSearch,
+    debouncedVendorName,
+    vendorSupplierIdFilter,
     dateIsoBounds.lastUpdatedFrom,
     dateIsoBounds.lastUpdatedTo,
     statusFilter,
+    workflowFilter,
     effectiveSort.key,
     effectiveSort.direction,
   ]);
@@ -193,7 +305,10 @@ export function useCriticalRequisitionList(hasPermission: boolean) {
    * @param key - Sortable column key.
    */
   const handleSort = useCallback((key: keyof CriticalRow) => {
-    if (key === "id") return;
+    if (key === "id" || key === "workflowStage" || key === "preferredSupplierDisplayName") {
+      toast("Sorting by supplier or workflow is handled via filters.", { icon: "ℹ️" });
+      return;
+    }
     setSortConfig((prev) => {
       if (prev?.key === key) {
         const nextDirection = prev.direction === "asc" ? "desc" : "asc";
@@ -212,6 +327,9 @@ export function useCriticalRequisitionList(hasPermission: boolean) {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - LIST_DATE_WINDOW_DAYS);
 
+    const wf =
+      workflowFilter === "all" ? undefined : (workflowFilter as RequisitionWorkflowStageUi);
+
     const merged: CriticalRow[] = [];
     let apiPage = 1;
     const pageSize = 200;
@@ -220,22 +338,24 @@ export function useCriticalRequisitionList(hasPermission: boolean) {
       const res = await yarnInventoryService.getYarnRequisitions({
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
-        poSent: false,
         alertStatus: statusFilterToAlert(statusFilter),
         page: apiPage,
         limit: pageSize,
         skipRecalculation: true,
         yarnName: debouncedSearch || undefined,
+        preferredSupplierId: vendorSupplierIdFilter || undefined,
+        supplierName:
+          vendorSupplierIdFilter || !debouncedVendorName
+            ? undefined
+            : debouncedVendorName,
         lastUpdatedFrom: dateIsoBounds.lastUpdatedFrom,
         lastUpdatedTo: dateIsoBounds.lastUpdatedTo,
         sortBy: sortKeyToApi(effectiveSort.key),
         sortOrder: effectiveSort.direction,
+        workflowStage: wf,
       });
       merged.push(...res.results.map(mapRequisitionToCriticalRow));
-      if (
-        res.results.length < pageSize ||
-        apiPage >= (res.totalPages || 1)
-      ) {
+      if (res.results.length < pageSize || apiPage >= (res.totalPages || 1)) {
         break;
       }
       apiPage += 1;
@@ -244,15 +364,38 @@ export function useCriticalRequisitionList(hasPermission: boolean) {
     return merged.slice(0, CRITICAL_EXPORT_ROW_CAP);
   }, [
     debouncedSearch,
+    debouncedVendorName,
+    vendorSupplierIdFilter,
     dateIsoBounds.lastUpdatedFrom,
     dateIsoBounds.lastUpdatedTo,
     statusFilter,
+    workflowFilter,
     effectiveSort.key,
     effectiveSort.direction,
   ]);
 
   /**
-   * Marks requisition as sent to PO draft and refreshes the page slice.
+   * Persists supplier choice against a requisition line.
+   * @param rowId - YarnRequisition mongo id.
+   */
+  const updateRowVendor = useCallback(async (rowId: string, supplierId: string) => {
+    try {
+      const body =
+        supplierId.trim() === ""
+          ? { preferredSupplierId: null as string | null }
+          : { preferredSupplierId: supplierId.trim() };
+      await yarnInventoryService.updateRequisitionStatus(rowId, body);
+      await fetchPage();
+    } catch (err) {
+      console.error("Error updating supplier on requisition:", err);
+      toast.error(
+        err instanceof Error ? err.message : "Failed to update supplier on row"
+      );
+    }
+  }, [fetchPage]);
+
+  /**
+   * Sends line to staging + optional merge onto supplier draft bucket.
    * @param id - Requisition Mongo id.
    */
   const handleMarkPoSent = useCallback(
@@ -263,7 +406,7 @@ export function useCriticalRequisitionList(hasPermission: boolean) {
           draftForPo: true,
         });
         toast.success(
-          `${yarnName} added to Draft PO queue. Create a PO from Purchase Management → Draft POs.`
+          `${yarnName} staged—merged into supplier draft PO if one exists or queued globally. Open Draft POs / New Purchase Order using the supplier.`
         );
         await fetchPage();
       } catch (err) {
@@ -275,6 +418,32 @@ export function useCriticalRequisitionList(hasPermission: boolean) {
     },
     [fetchPage]
   );
+
+  /**
+   * Soft-dismiss procurement row — removes noise when client says “delete”.
+   * @param id - Requisition Mongo id.
+   */
+  const dismissRow = useCallback(
+    async (id: string, yarnLabel: string) => {
+      try {
+        await yarnInventoryService.dismissYarnRequisition(id);
+        toast.success(`${yarnLabel} dismissed from active lists`);
+        await fetchPage();
+      } catch (err) {
+        console.error("Error dismissing requisition:", err);
+        toast.error(
+          err instanceof Error ? err.message : "Failed to dismiss requisition row"
+        );
+      }
+    },
+    [fetchPage]
+  );
+
+  const canStageRow = useCallback((row: CriticalRow) => row.workflowStage === "in_requisition", []);
+
+  const canDismissRow = useCallback((row: CriticalRow) => {
+    return row.workflowStage !== "dismissed" && row.workflowStage !== "order_placed";
+  }, []);
 
   return {
     rows,
@@ -292,9 +461,19 @@ export function useCriticalRequisitionList(hasPermission: boolean) {
     setDateFilter,
     statusFilter,
     setStatusFilter,
+    workflowFilter,
+    setWorkflowFilter,
+    vendorSupplierIdFilter,
+    setVendorSupplierIdFilter,
+    vendorNameQuery,
+    setVendorNameQuery,
     sortConfig,
     handleSort,
     exportMatchingCsv,
     handleMarkPoSent,
+    updateRowVendor,
+    dismissRow,
+    canStageRow,
+    canDismissRow,
   };
 }

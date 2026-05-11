@@ -59,6 +59,8 @@ export interface SupplierQueryParams {
   brandName?: string;
   email?: string;
   status?: 'active' | 'inactive' | 'suspended';
+  /** Partial match on yarn carried by the supplier (yarnDetails.yarnName) */
+  yarnName?: string;
   sortBy?: string;
   limit?: number;
   page?: number;

@@ -1,22 +1,56 @@
 "use client";
-import React from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast } from "react-hot-toast";
+import supplierService, { type Supplier } from "@/shared/services/supplierService";
 import { PoDraftQueueDrawerTrigger } from "./components/PoDraftQueueDrawer";
 import { RequisitionListPagination } from "./components/RequisitionListPagination";
 import {
   CRITICAL_EXPORT_ROW_CAP,
   useCriticalRequisitionList,
+  workflowStageLabel,
   type CriticalRow,
 } from "./hooks/useCriticalRequisitionList";
+import { vendorsForCriticalRow } from "./utils/vendorsForCriticalRow";
 
 const RequisitionListPage = () => {
   const { hasSubPermission } = useNavigation();
   const hasPermission = hasSubPermission("/yarn-management/purchase-management", "Requisition list");
 
   const rq = useCriticalRequisitionList(hasPermission);
+
+  const [supplierOptions, setSupplierOptions] = useState<Supplier[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadSuppliers = async () => {
+      if (!hasPermission) return;
+      try {
+        const res = await supplierService.getSuppliers({ limit: 250, page: 1 });
+        if (cancelled) return;
+        setSupplierOptions(res.results ?? []);
+      } catch (error) {
+        console.error("[RequisitionList] supplier load:", error);
+        toast.error(
+          error instanceof Error ? error.message : "Could not load suppliers for dropdowns"
+        );
+      }
+    };
+    void loadSuppliers();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasPermission]);
+
+  /**
+   * Suppliers who list this requisition yarn in `yarnDetails` (plus legacy saved vendor if needed).
+   */
+  const vendorsForRow = useCallback(
+    (row: CriticalRow) => vendorsForCriticalRow(row, supplierOptions),
+    [supplierOptions]
+  );
 
   const isBelowMinimum = (yarn: CriticalRow) => yarn.availableQty < yarn.minimumQty;
   const isOverblocked = (yarn: CriticalRow) => yarn.blockedQty > yarn.availableQty;
@@ -48,10 +82,27 @@ const RequisitionListPage = () => {
         });
       }
 
-      const headers = ["Yarn Name", "Minimum Qty", "Available Qty", "Blocked Qty", "Status"];
+      const headers = [
+        "Yarn Name",
+        "Minimum Qty",
+        "Available Qty",
+        "Blocked Qty",
+        "Alert inventory",
+        "Procurement workflow",
+        "Vendor snapshot",
+      ];
       const rows = merged.map((yarn) => {
-        const badges = getStatusBadges(yarn).map((badge) => badge.label).join(" | ") || "Healthy";
-        return [yarn.yarnName, yarn.minimumQty.toString(), yarn.availableQty.toString(), yarn.blockedQty.toString(), badges];
+        const badges =
+          getStatusBadges(yarn).map((badge) => badge.label).join(" | ") || "Healthy";
+        return [
+          yarn.yarnName,
+          yarn.minimumQty.toString(),
+          yarn.availableQty.toString(),
+          yarn.blockedQty.toString(),
+          badges,
+          workflowStageLabel(yarn.workflowStage),
+          yarn.preferredSupplierDisplayName || "",
+        ];
       });
       const csvContent = [headers, ...rows]
         .map((row) => row.map((value) => `"${value.replace(/"/g, '""')}"`).join(","))
@@ -73,11 +124,32 @@ const RequisitionListPage = () => {
   };
 
   const onSendToDraft = (yarn: CriticalRow) => {
+    if (!yarn.preferredSupplierId) {
+      const go = window.confirm(
+        `${yarn.yarnName} has no vendor yet—staging will enqueue globally rather than merging into an existing supplier draft. Continue?`
+      );
+      if (!go) return;
+    }
+
     const confirmed = window.confirm(
-      `Send ${yarn.yarnName} to the Draft PO queue for drafting? It will disappear from this requisition list until you raise a yarn PO from Draft POs.`
+      `Stage ${yarn.yarnName} toward a draft PO (auto-merge onto supplier draft when vendor + draft exist)?`
     );
     if (!confirmed) return;
     void rq.handleMarkPoSent(yarn.id, yarn.yarnName);
+  };
+
+  const workflowTone = (workflow: CriticalRow["workflowStage"]) => {
+    switch (workflow) {
+      case "in_requisition":
+        return "border border-slate-200 bg-slate-50 text-slate-800";
+      case "sent_to_draft":
+        return "border border-amber-200 bg-amber-50 text-amber-950";
+      case "order_placed":
+        return "border border-emerald-200 bg-emerald-50 text-emerald-900";
+      case "dismissed":
+      default:
+        return "border border-gray-200 bg-gray-50 text-gray-600";
+    }
   };
 
   const SortIcon = ({ field }: { field: keyof CriticalRow }) => {
@@ -228,6 +300,45 @@ const RequisitionListPage = () => {
               <option value="belowMin">Below minimum</option>
               <option value="overblocked">Overblocked</option>
             </select>
+            <select
+              className="bg-white border border-gray-200 text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 min-w-[148px]"
+              value={rq.workflowFilter}
+              onChange={(e) =>
+                rq.setWorkflowFilter(e.target.value as typeof rq.workflowFilter)
+              }
+              aria-label="Workflow status filter"
+            >
+              <option value="all">All statuses</option>
+              <option value="in_requisition">In requisition</option>
+              <option value="sent_to_draft">Sent to draft</option>
+              <option value="order_placed">Order placed</option>
+              <option value="dismissed">Dismissed</option>
+            </select>
+            <select
+              className="bg-white border border-gray-200 text-[11px] font-medium rounded px-2 py-1.5 pr-7 focus:ring-0 focus:border-gray-300 max-w-[200px]"
+              value={rq.vendorSupplierIdFilter}
+              onChange={(e) => rq.setVendorSupplierIdFilter(e.target.value)}
+              aria-label="Filter rows by staged vendor ID"
+              title="Filter by vendor explicitly chosen on rows"
+            >
+              <option value="">All staged vendors</option>
+              {supplierOptions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.brandName || s.id}
+                </option>
+              ))}
+            </select>
+            <div className="relative">
+              <input
+                type="text"
+                className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-44 min-w-[120px] placeholder:text-gray-400 font-medium"
+                placeholder="Vendor name contains…"
+                value={rq.vendorNameQuery}
+                onChange={(e) => rq.setVendorNameQuery(e.target.value)}
+                aria-label="Filter staged vendor snapshot by substring"
+              />
+              <i className="ri-user-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
+            </div>
           </div>
         </div>
 
@@ -294,6 +405,12 @@ const RequisitionListPage = () => {
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
                     Alert Status
                   </th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                    Status
+                  </th>
+                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                    Vendor
+                  </th>
                   <th
                     className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100/50"
                     onClick={() => rq.handleSort("lastUpdated")}
@@ -304,7 +421,7 @@ const RequisitionListPage = () => {
                     </div>
                   </th>
                   <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    Action
+                    Actions
                   </th>
                 </tr>
               </thead>
@@ -335,6 +452,33 @@ const RequisitionListPage = () => {
                         ))}
                       </div>
                     </td>
+                    <td className="px-1.5 py-2.5 border border-gray-200">
+                      <span
+                        className={`inline-flex px-2 py-0.5 text-[10px] font-bold rounded capitalize ${workflowTone(
+                          yarn.workflowStage
+                        )}`}
+                      >
+                        {workflowStageLabel(yarn.workflowStage)}
+                      </span>
+                    </td>
+                    <td className="px-1.5 py-2.5 border border-gray-200 min-w-[170px]">
+                      <select
+                        className="w-full bg-white border border-gray-200 text-[11px] font-medium rounded px-2 py-1 focus:ring-0 focus:border-purple-300 disabled:bg-gray-100"
+                        value={yarn.preferredSupplierId ?? ""}
+                        disabled={yarn.workflowStage !== "in_requisition" || rq.loading}
+                        onChange={(e) =>
+                          void rq.updateRowVendor(yarn.id, e.target.value)
+                        }
+                        aria-label={`Preferred vendor for ${yarn.yarnName}`}
+                      >
+                        <option value="">Select vendor…</option>
+                        {vendorsForRow(yarn).map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.brandName}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
                     <td className="px-1.5 py-2.5 text-[12px] text-gray-600 border border-gray-200">
                       {new Date(yarn.lastUpdated).toLocaleString(undefined, {
                         day: "2-digit",
@@ -345,16 +489,36 @@ const RequisitionListPage = () => {
                       })}
                     </td>
                     <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
-                      <button
-                        type="button"
-                        onClick={() => onSendToDraft(yarn)}
-                        disabled={rq.loading}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-purple-200 text-purple-700 text-[11px] font-bold rounded hover:bg-purple-50 transition-colors disabled:opacity-50"
-                        aria-label={`Send ${yarn.yarnName} to PO draft queue`}
-                      >
-                        <i className="ri-draft-line text-sm" aria-hidden />
-                        Send to PO draft
-                      </button>
+                      <div className="inline-flex flex-col sm:flex-row sm:flex-wrap items-stretch gap-2 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => onSendToDraft(yarn)}
+                          disabled={rq.loading || !rq.canStageRow(yarn)}
+                          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 border border-purple-200 text-purple-700 text-[11px] font-bold rounded hover:bg-purple-50 transition-colors disabled:opacity-50"
+                          aria-label={`Send ${yarn.yarnName} to PO draft`}
+                        >
+                          <i className="ri-draft-line text-sm" aria-hidden />
+                          Send to draft PO
+                        </button>
+                        {rq.canDismissRow(yarn) ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (
+                                window.confirm(`Dismiss requirement for "${yarn.yarnName}"?`)
+                              ) {
+                                void rq.dismissRow(yarn.id, yarn.yarnName);
+                              }
+                            }}
+                            disabled={rq.loading}
+                            className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 border border-red-100 text-red-700 text-[11px] font-bold rounded hover:bg-red-50 disabled:opacity-50"
+                            aria-label={`Dismiss ${yarn.yarnName}`}
+                          >
+                            <i className="ri-delete-bin-line text-sm" aria-hidden />
+                            Dismiss
+                          </button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}
