@@ -32,12 +32,14 @@ function formatConeCell(cones: Array<string | FloorIssueConeRef> | undefined): s
 interface LinkingSamplingHistoryProps {
   floor: LinkingSamplingFloor;
   refreshKey?: number;
+  /** Use inside `LinkingSamplingHistoryDrawer`: drop page-level border/margin and duplicate section title row. */
+  embedInDrawer?: boolean;
 }
 
 /**
  * Floor-issue transaction history with pagination, section filter, yarn search, and optional dates.
  */
-export function LinkingSamplingHistory({ floor, refreshKey = 0 }: LinkingSamplingHistoryProps) {
+export function LinkingSamplingHistory({ floor, refreshKey = 0, embedInDrawer = false }: LinkingSamplingHistoryProps) {
   const [rows, setRows] = useState<FloorIssueHistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [scope, setScope] = useState<FloorIssueHistoryScope>("tab");
@@ -166,11 +168,21 @@ export function LinkingSamplingHistory({ floor, refreshKey = 0 }: LinkingSamplin
   const yarnSearchId = `history-yarn-${floor}`;
 
   return (
-    <section className="mt-8 border-t border-gray-200 pt-4" aria-labelledby={`floor-history-${floor}`}>
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-        <h2 id={`floor-history-${floor}`} className="text-[11px] font-bold text-gray-800 uppercase tracking-wider">
-          {tabTitle} — issue history
-        </h2>
+    <section
+      className={embedInDrawer ? "flex flex-col min-h-0" : "mt-8 border-t border-gray-200 pt-4"}
+      aria-labelledby={embedInDrawer ? undefined : `floor-history-${floor}`}
+      aria-label={embedInDrawer ? `${tabTitle} issue history` : undefined}
+    >
+      <div
+        className={`flex flex-wrap items-center gap-2 mb-2 ${embedInDrawer ? "justify-end" : "justify-between"}`}
+      >
+        {!embedInDrawer ? (
+          <h2 id={`floor-history-${floor}`} className="text-[11px] font-bold text-gray-800 uppercase tracking-wider">
+            {tabTitle} — issue history
+          </h2>
+        ) : (
+          <h2 className="sr-only">{tabTitle} issue history</h2>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"

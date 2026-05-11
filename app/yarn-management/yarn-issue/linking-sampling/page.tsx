@@ -7,7 +7,7 @@ import { Toaster } from "react-hot-toast";
 import Seo from "@/shared/layout-components/seo/seo";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { LinkingSamplingIssuePanel } from "@/app/yarn-management/yarn-issue/linking-sampling/LinkingSamplingIssuePanel";
-import { LinkingSamplingHistory } from "@/app/yarn-management/yarn-issue/linking-sampling/LinkingSamplingHistory";
+import { LinkingSamplingHistoryDrawer } from "@/app/yarn-management/yarn-issue/linking-sampling/LinkingSamplingHistoryDrawer";
 
 const TABS = [
   {
@@ -41,6 +41,7 @@ function YarnIssueLinkingSamplingContent() {
 
   const [activeTab, setActiveTab] = useState<LinkingSamplingTab>("linking");
   const [historyRefresh, setHistoryRefresh] = useState(0);
+  const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
 
   const bumpHistory = useCallback(() => {
     setHistoryRefresh((k) => k + 1);
@@ -172,14 +173,32 @@ function YarnIssueLinkingSamplingContent() {
                 role="tabpanel"
                 aria-labelledby={`yarn-issue-tab-${activeTab}`}
               >
-                <p className="text-[11px] text-gray-500 mb-3">{tabMeta.description}</p>
+                <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+                  <p className="text-[11px] text-gray-500 flex-1 min-w-[220px] leading-snug">
+                    {tabMeta.description}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryDrawerOpen(true)}
+                    className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-[11px] font-bold text-gray-800 rounded-md hover:bg-gray-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/40 focus-visible:ring-offset-2"
+                    aria-label={`Open ${tabMeta.label} issue history in a side panel`}
+                  >
+                    <i className="ri-history-line text-sm" aria-hidden />
+                    Issue history
+                  </button>
+                </div>
                 <LinkingSamplingIssuePanel
                   key={activeTab}
                   floor={activeTab}
                   floorLabel={tabMeta.label}
                   onIssueSuccess={bumpHistory}
                 />
-                <LinkingSamplingHistory floor={activeTab} refreshKey={historyRefresh} />
+                <LinkingSamplingHistoryDrawer
+                  open={historyDrawerOpen}
+                  onClose={() => setHistoryDrawerOpen(false)}
+                  floor={activeTab}
+                  refreshKey={historyRefresh}
+                />
               </div>
             );
           })()}

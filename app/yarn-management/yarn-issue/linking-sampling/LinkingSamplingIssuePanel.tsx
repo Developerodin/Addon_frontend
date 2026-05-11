@@ -292,7 +292,11 @@ export function LinkingSamplingIssuePanel({ floor, floorLabel, onIssueSuccess }:
         )}
       </div>
 
-      <form onSubmit={handleScanSubmit} className="space-y-2">
+      <form
+        onSubmit={handleScanSubmit}
+        className="space-y-2"
+        aria-describedby={!issueBatchId ? `floor-scan-hint-${floor}` : undefined}
+      >
         <label htmlFor={`floor-scan-${floor}`} className="text-[11px] font-bold text-gray-700 block">
           Cone barcode
         </label>
@@ -301,11 +305,11 @@ export function LinkingSamplingIssuePanel({ floor, floorLabel, onIssueSuccess }:
             ref={barcodeInputRef}
             id={`floor-scan-${floor}`}
             type="text"
-            className="bg-white border border-gray-600 pl-8 pr-3 py-1.5 text-[11px] rounded w-full focus:ring-0 focus:border-purple-300 font-medium placeholder:text-gray-500"
+            className="bg-white border border-gray-600 pl-8 pr-3 py-1.5 text-[11px] rounded w-full focus:ring-0 focus:border-purple-300 font-medium placeholder:text-gray-500 disabled:bg-gray-100 disabled:text-gray-500 disabled:border-gray-300 disabled:cursor-not-allowed"
             placeholder="Scan or enter barcode…"
             value={barcodeInput}
             onChange={(e) => setBarcodeInput(e.target.value)}
-            disabled={barcodeLoading}
+            disabled={barcodeLoading || !issueBatchId || batchCreating}
             autoComplete="off"
           />
           <i className="ri-barcode-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm" aria-hidden />
@@ -315,10 +319,23 @@ export function LinkingSamplingIssuePanel({ floor, floorLabel, onIssueSuccess }:
             {scanError}
           </p>
         )}
+        {!issueBatchId && !batchCreating && (
+          <p id={`floor-scan-hint-${floor}`} className="text-[10px] text-amber-800 font-medium leading-snug">
+            Use <span className="font-bold">New batch</span> above, then scan or enter a barcode.
+          </p>
+        )}
         <button
           type="submit"
-          className="ti-btn ti-btn-primary w-full whitespace-normal break-words leading-tight px-4 py-2 text-[11px] font-bold"
+          title={!issueBatchId && !barcodeLoading && !batchCreating ? "Create a new batch first" : undefined}
+          className="ti-btn ti-btn-primary w-full whitespace-normal break-words leading-tight px-4 py-2 text-[11px] font-bold disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
           disabled={barcodeLoading || !issueBatchId || batchCreating}
+          aria-label={
+            !issueBatchId && !batchCreating
+              ? "Load cone (create a new batch first)"
+              : barcodeLoading
+                ? "Loading cone"
+                : "Load cone"
+          }
         >
           {barcodeLoading ? "Loading…" : "Load cone"}
         </button>
