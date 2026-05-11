@@ -303,7 +303,7 @@ export default function DraftPOsPage() {
                                   View
                                 </button>
                                 <Link
-                                  href={`/yarn-management/purchase-management/purchase/edit/${po.id}`}
+                                  href={`/yarn-management/purchase-management/purchase/edit/${po.id}?fromDraftQueue=1`}
                                   className="inline-flex items-center gap-1 px-2 py-1 border border-purple-200 text-purple-700 text-[10px] font-bold rounded hover:bg-purple-50"
                                   aria-label={`Edit draft PO ${po.orderNumber || po.id}`}
                                 >

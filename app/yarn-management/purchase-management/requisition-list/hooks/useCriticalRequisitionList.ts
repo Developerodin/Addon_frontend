@@ -27,9 +27,8 @@ export interface CriticalRow {
 
 export type AlertStatusFilter = "all" | "belowMin" | "overblocked";
 
-export type WorkflowStatusFilter =
-  | "all"
-  | RequisitionWorkflowStageUi;
+/** Toolbar workflow filter — list screen only exposes active queue buckets. */
+export type WorkflowStatusFilter = "all" | "in_requisition" | "sent_to_draft";
 
 /**
  * Converts UI alert filter to yarn-requisitions API `alertStatus`.

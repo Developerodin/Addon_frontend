@@ -309,8 +309,6 @@ const RequisitionListPage = () => {
               <option value="all">All statuses</option>
               <option value="in_requisition">In requisition</option>
               <option value="sent_to_draft">Sent to draft</option>
-              <option value="order_placed">Order placed</option>
-              <option value="dismissed">Dismissed</option>
             </select>
             <select
               className="bg-white border border-gray-200 text-[11px] font-medium rounded px-2 py-1.5 pr-7 focus:ring-0 focus:border-gray-300 max-w-[200px]"

@@ -61,6 +61,10 @@ function AddPurchasePageInner() {
   const searchParams = useSearchParams();
   const fromDraftQueue = searchParams.get("fromDraftQueue") === "1";
   const supplierDraftId = searchParams.get("supplierId")?.trim() || "";
+  const poListBackHref = fromDraftQueue
+    ? "/yarn-management/purchase-management/draft-pos"
+    : "/yarn-management/purchase-management/purchase";
+  const editFromDraftSuffix = fromDraftQueue ? "?fromDraftQueue=1" : "";
   const { hasSubPermission, isLoading } = useNavigation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
@@ -238,7 +242,7 @@ function AddPurchasePageInner() {
           </div>
           <h3 className="text-lg font-medium text-gray-900 mb-2">Access Restricted</h3>
           <p className="text-gray-500 mb-4">You don't have permission to add purchase orders.</p>
-          <Link href="/yarn-management/purchase-management/purchase" className="ti-btn ti-btn-primary">
+          <Link href={poListBackHref} className="ti-btn ti-btn-primary">
             <i className="ri-arrow-left-line me-2"></i>
             Back to Purchase
           </Link>
@@ -483,7 +487,7 @@ function AddPurchasePageInner() {
       }
 
       toast.success("Purchase order created successfully");
-      router.push("/yarn-management/purchase-management/purchase");
+      router.push(poListBackHref);
     } catch (error: any) {
       console.error("Failed to create purchase order:", error);
       const message = error?.message || "Failed to create purchase order";
@@ -568,9 +572,9 @@ function AddPurchasePageInner() {
 
       toast.success("Draft saved. You can submit it to the supplier anytime from Edit PO.");
       if (newId) {
-        router.push(`/yarn-management/purchase-management/purchase/edit/${newId}`);
+        router.push(`/yarn-management/purchase-management/purchase/edit/${newId}${editFromDraftSuffix}`);
       } else {
-        router.push("/yarn-management/purchase-management/purchase");
+        router.push(poListBackHref);
       }
     } catch (error: unknown) {
       console.error("Failed to save draft purchase order:", error);
@@ -583,7 +587,7 @@ function AddPurchasePageInner() {
   };
 
   const handleCancel = () => {
-    router.push('/yarn-management/purchase-management/purchase');
+    router.push(poListBackHref);
   };
 
   if (fromDraftQueue && !draftReady) {
@@ -617,7 +621,7 @@ function AddPurchasePageInner() {
 
             <div className="flex flex-wrap items-center gap-2">
               <Link
-                href="/yarn-management/purchase-management/purchase"
+                href={poListBackHref}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-600 text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm"
               >
                 <i className="ri-arrow-left-line text-xs"></i>
