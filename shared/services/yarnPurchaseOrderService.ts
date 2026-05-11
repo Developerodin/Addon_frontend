@@ -47,6 +47,7 @@ export type PurchaseOrderStatus =
   | 'stocked'
   | 'goods received'
   | 'goods partially received'
+  | 'returned to vendor'
   | 'PO accepted'
   | 'PO accepted partially'
   | 'po_accepted'
@@ -404,6 +405,7 @@ class YarnPurchaseOrderService {
       stocked: 'stocked',
       'goods received': 'goods_received',
       'goods partially received': 'goods_partially_received',
+      'returned to vendor': 'returned_to_vendor',
       'PO accepted': 'po_accepted',
       'PO accepted partially': 'po_accepted_partially',
       po_accepted: 'po_accepted',
@@ -548,6 +550,49 @@ class YarnPurchaseOrderService {
       method: 'DELETE',
       body: JSON.stringify({ poNumber: poNumber.trim(), lotNumber: lotNumber.trim() }),
     });
+  }
+
+  /**
+   * GET vendor return preview (ST / LT / unallocated + PO summary).
+   */
+  async getVendorReturnPreview(params: {
+    po_number: string;
+    scope: 'entire_po' | 'lots';
+    lot_numbers?: string;
+  }): Promise<Record<string, unknown>> {
+    const q = new URLSearchParams();
+    q.set('po_number', params.po_number.trim());
+    q.set('scope', params.scope);
+    if (params.lot_numbers?.trim()) q.set('lot_numbers', params.lot_numbers.trim());
+    return this.makeRequest<Record<string, unknown>>(`/vendor-return/preview?${q.toString()}`);
+  }
+
+  /**
+   * POST finalize vendor return.
+   */
+  async finalizeVendorReturn(body: {
+    poNumber: string;
+    scope: 'entire_po' | 'lots';
+    lotNumbers?: string[];
+    remark?: string;
+    cancellationIntent: 'partial' | 'full_po';
+    idempotencyKey?: string;
+  }): Promise<Record<string, unknown>> {
+    return this.makeRequest<Record<string, unknown>>('/vendor-return/finalize', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  /**
+   * GET vendor return history.
+   */
+  async getVendorReturnHistory(po_number?: string, limit?: number): Promise<Record<string, unknown>[]> {
+    const q = new URLSearchParams();
+    if (po_number?.trim()) q.set('po_number', po_number.trim());
+    if (limit != null) q.set('limit', String(limit));
+    const suffix = q.toString() ? `?${q}` : '';
+    return this.makeRequest<Record<string, unknown>[]>(`/vendor-return/history${suffix}`);
   }
 }
 

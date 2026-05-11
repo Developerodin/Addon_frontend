@@ -37,6 +37,13 @@ const PurchaseManagementPage = () => {
       permission: "Draft POs"
     },
     {
+      title: "PO Return",
+      description: "Rejected purchase orders and return workflow",
+      icon: "ri-arrow-go-back-line",
+      path: "/yarn-management/purchase-management/po-return",
+      permission: "PO Return"
+    },
+    {
       title: "GRN History",
       description: "Search and reprint yarn goods received notes",
       icon: "ri-file-text-line",

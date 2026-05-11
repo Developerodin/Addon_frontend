@@ -98,6 +98,7 @@ const convertStatusFromAPI = (statusCode: string): PurchaseOrderStatus => {
     'stocked': 'stocked',
     'goods_received': 'goods received',
     'goods_partially_received': 'goods partially received',
+    'returned_to_vendor': 'returned to vendor',
     'po_accepted': 'PO accepted',
     'po_accepted_partially': 'PO accepted partially',
     'po_rejected': 'rejected'
@@ -118,6 +119,7 @@ const convertStatusToAPI = (status: PurchaseOrderStatus): string => {
     'stocked': 'stocked',
     'goods received': 'goods_received',
     'goods partially received': 'goods_partially_received',
+    'returned to vendor': 'returned_to_vendor',
     'PO accepted': 'po_accepted',
     'PO accepted partially': 'po_accepted_partially',
     'po_accepted': 'po_accepted',
@@ -328,6 +330,7 @@ const PurchasePage = () => {
           'in_transit',
           'goods_partially_received',
           'goods_received',
+          'returned_to_vendor',
           'qc_pending',
           'po_accepted',
           'po_accepted_partially',
@@ -929,6 +932,7 @@ const PurchasePage = () => {
       case 'stocked': return 'bg-emerald-100 text-emerald-800';
       case 'goods received': return 'bg-teal-100 text-teal-800';
       case 'goods partially received': return 'bg-amber-100 text-amber-800';
+      case 'returned to vendor': return 'bg-slate-200 text-slate-800';
       case 'PO accepted': return 'bg-green-100 text-green-800';
       case 'PO accepted partially': return 'bg-lime-100 text-lime-800';
       case 'po_accepted': return 'bg-green-100 text-green-800';
@@ -1028,6 +1032,7 @@ const PurchasePage = () => {
                   <option value="in transit">In transit</option>
                   <option value="goods partially received">Partially received</option>
                   <option value="goods received">Received</option>
+                  <option value="returned to vendor">Returned to vendor</option>
                   <option value="QC pending">QC pending</option>
                   <option value="PO accepted">PO accepted</option>
                   <option value="PO accepted partially">PO accepted (partial)</option>

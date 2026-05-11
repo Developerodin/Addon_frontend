@@ -19,6 +19,7 @@ const STATUS_BADGE: Record<string, string> = {
   in_transit: "bg-indigo-100 text-indigo-700",
   goods_partially_received: "bg-amber-100 text-amber-700",
   goods_received: "bg-teal-100 text-teal-700",
+  returned_to_vendor: "bg-slate-200 text-slate-800",
   qc_pending: "bg-orange-100 text-orange-700",
   po_rejected: "bg-red-100 text-red-700",
   po_accepted: "bg-green-100 text-green-700",

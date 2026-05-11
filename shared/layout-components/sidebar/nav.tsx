@@ -461,6 +461,14 @@ const BaseMenuItems: any = [
             title: "Draft POs",
           },
           {
+            icon: ReturnIcon,
+            path: "/yarn-management/purchase-management/po-return",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "PO Return",
+          },
+          {
             icon: PurchaseReceivedIcon,
             path: "/yarn-management/grn",
             type: "link",

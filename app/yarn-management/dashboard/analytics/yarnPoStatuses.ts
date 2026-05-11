@@ -9,6 +9,7 @@ export const YARN_PO_STATUSES = [
   "po_rejected",
   "po_accepted",
   "po_accepted_partially",
+  "returned_to_vendor",
 ] as const;
 
 export type YarnPoStatus = (typeof YARN_PO_STATUSES)[number];

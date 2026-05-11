@@ -40,6 +40,10 @@ const STATUS_COLORS: Record<string, { active: string; idle: string }> = {
     active: "bg-teal-600 text-white border-teal-600",
     idle: "bg-white text-teal-700 border-teal-200 hover:border-teal-400",
   },
+  returned_to_vendor: {
+    active: "bg-slate-600 text-white border-slate-600",
+    idle: "bg-white text-slate-700 border-slate-200 hover:border-slate-400",
+  },
   qc_pending: {
     active: "bg-orange-500 text-white border-orange-500",
     idle: "bg-white text-orange-700 border-orange-200 hover:border-orange-400",

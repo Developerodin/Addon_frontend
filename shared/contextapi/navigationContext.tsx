@@ -55,6 +55,7 @@ interface NavigationPermissions {
       'Purchase Order': boolean;
       'Purchase Order Recevied': boolean;
       'Draft POs': boolean;
+      'PO Return': boolean;
       'GRN History': boolean;
       'Yarn QC': boolean;
       'Yarn Storage': boolean;
@@ -180,6 +181,7 @@ const defaultPermissions: NavigationPermissions = {
       'Purchase Order': false,
       'Purchase Order Recevied': false,
       'Draft POs': false,
+      'PO Return': false,
       'GRN History': false,
       'Yarn QC': false,
       'Yarn Storage': false,

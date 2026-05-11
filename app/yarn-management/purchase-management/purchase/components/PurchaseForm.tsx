@@ -23,6 +23,7 @@ export type PurchaseOrderStatus =
   | 'stocked'
   | 'goods received'
   | 'goods partially received'
+  | 'returned to vendor'
   | 'PO accepted'
   | 'PO accepted partially'
   | 'po_accepted';
