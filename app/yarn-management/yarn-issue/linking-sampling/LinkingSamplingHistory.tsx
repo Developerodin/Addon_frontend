@@ -311,6 +311,9 @@ export function LinkingSamplingHistory({ floor, refreshKey = 0 }: LinkingSamplin
                   <th className="text-right font-bold text-gray-800 px-2 py-1.5 border-r border-gray-200 whitespace-nowrap">
                     Tear (kg)
                   </th>
+                  <th className="text-left font-bold text-gray-800 px-2 py-1.5 border-r border-gray-200 min-w-[140px]">
+                    Issued by
+                  </th>
                   <th className="text-left font-mono font-bold text-gray-800 px-2 py-1.5 min-w-[180px]">
                     Transaction ID
                   </th>
@@ -343,6 +346,9 @@ export function LinkingSamplingHistory({ floor, refreshKey = 0 }: LinkingSamplin
                     </td>
                     <td className="px-2 py-1.5 text-right tabular-nums border-r border-gray-100">
                       {row.transactionTearWeight ?? "—"}
+                    </td>
+                    <td className="px-2 py-1.5 text-gray-800 border-r border-gray-100 break-all max-w-[200px] text-[10px]">
+                      {row.issuedByEmail?.trim() ? row.issuedByEmail : "—"}
                     </td>
                     <td className="px-2 py-1.5 font-mono text-[10px] text-gray-700 break-all">{row._id}</td>
                   </tr>

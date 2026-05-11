@@ -3,6 +3,7 @@
 import React, { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { Toaster } from "react-hot-toast";
 import Seo from "@/shared/layout-components/seo/seo";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { LinkingSamplingIssuePanel } from "@/app/yarn-management/yarn-issue/linking-sampling/LinkingSamplingIssuePanel";
@@ -88,6 +89,15 @@ function YarnIssueLinkingSamplingContent() {
   return (
     <div className="main-content !p-[10px]">
       <Seo title="Yarn Issue — Linking & sampling" />
+      <Toaster
+        position="top-center"
+        containerStyle={{ zIndex: 100000 }}
+        toastOptions={{
+          duration: 7000,
+          style: { fontSize: "13px", maxWidth: "min(28rem, 92vw)" },
+          error: { duration: 9000 },
+        }}
+      />
 
       <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
         <div className="p-[10px] border-b border-gray-100">

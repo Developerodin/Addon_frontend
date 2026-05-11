@@ -55,6 +55,8 @@ export function LinkingSamplingIssuePanel({ floor, floorLabel, onIssueSuccess }:
   const [totalNetWeight, setTotalNetWeight] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [fetchingWeight, setFetchingWeight] = useState(false);
+  /** API error when confirming issue (shown in modal + toast). */
+  const [issueError, setIssueError] = useState<string | null>(null);
 
   useEffect(() => {
     const tw = parseFloat(totalWeight);
@@ -80,6 +82,7 @@ export function LinkingSamplingIssuePanel({ floor, floorLabel, onIssueSuccess }:
     setTotalTearWeight("0");
     setTotalNetWeight("");
     setScanError(null);
+    setIssueError(null);
   }, []);
 
   const handleScanSubmit = async (e: React.FormEvent) => {
@@ -118,6 +121,7 @@ export function LinkingSamplingIssuePanel({ floor, floorLabel, onIssueSuccess }:
       setConeData(cone);
       setTotalTearWeight(cone.tearWeight != null ? String(cone.tearWeight) : "0");
       setTotalWeight("");
+      setIssueError(null);
       setShowModal(true);
     } catch (err) {
       console.error(err);
@@ -170,6 +174,7 @@ export function LinkingSamplingIssuePanel({ floor, floorLabel, onIssueSuccess }:
     }
 
     setSubmitting(true);
+    setIssueError(null);
     try {
       await issueConeForFloor({
         barcode: barcodeInput.trim(),
@@ -183,7 +188,9 @@ export function LinkingSamplingIssuePanel({ floor, floorLabel, onIssueSuccess }:
       barcodeInputRef.current?.focus();
       onIssueSuccess?.();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Issue failed.");
+      const msg = err instanceof Error ? err.message : "Issue failed.";
+      setIssueError(msg);
+      toast.error(msg, { id: "linking-sampling-issue-error" });
     } finally {
       setSubmitting(false);
     }
@@ -252,6 +259,16 @@ export function LinkingSamplingIssuePanel({ floor, floorLabel, onIssueSuccess }:
             </div>
 
             <div className="p-4 space-y-4">
+              {issueError && (
+                <div
+                  className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-900 leading-snug"
+                  role="alert"
+                  aria-live="assertive"
+                >
+                  <div className="font-bold text-red-950 mb-0.5">Could not issue this cone</div>
+                  <p className="text-red-900/95">{issueError}</p>
+                </div>
+              )}
               <div className="p-3 bg-gray-50 rounded border border-gray-100 text-[11px]">
                 <div className="font-bold text-gray-800 mb-2">Cone details</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-gray-700">

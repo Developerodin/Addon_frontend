@@ -10,6 +10,27 @@ export interface IssueConeForFloorPayload {
   totalTearWeight: number;
 }
 
+/**
+ * Normalizes backend / proxy error JSON into a single user-facing string.
+ * @param body - Parsed JSON or empty object
+ * @param status - HTTP status when body has no message
+ */
+export function issueConeErrorMessageFromBody(body: unknown, status: number): string {
+  if (!body || typeof body !== 'object') {
+    return `Issue failed (${status})`;
+  }
+  const o = body as Record<string, unknown>;
+  const msg = o.message;
+  if (typeof msg === 'string' && msg.trim()) return msg.trim();
+  if (Array.isArray(msg) && msg.length) {
+    const parts = msg.filter((x): x is string => typeof x === 'string');
+    if (parts.length) return parts.join('. ');
+  }
+  const err = o.error;
+  if (typeof err === 'string' && err.trim()) return err.trim();
+  return `Issue failed (${status})`;
+}
+
 const getAccessToken = (): string | null => {
   if (typeof document === 'undefined') return null;
   try {
@@ -32,9 +53,17 @@ export async function issueConeForFloor(payload: IssueConeForFloorPayload): Prom
     },
     body: JSON.stringify(payload),
   });
-  const data = (await res.json().catch(() => ({}))) as { message?: string };
+  let data: unknown = {};
+  const text = await res.text();
+  if (text) {
+    try {
+      data = JSON.parse(text) as unknown;
+    } catch {
+      data = { message: text };
+    }
+  }
   if (!res.ok) {
-    throw new Error(data.message || `Issue failed (${res.status})`);
+    throw new Error(issueConeErrorMessageFromBody(data, res.status));
   }
   return data;
 }

@@ -41,6 +41,7 @@ function rowsToExportRecords(rows: FloorIssueHistoryRow[]): Record<string, strin
       'Total (kg)': row.transactionTotalWeight ?? '',
       'Tear (kg)': row.transactionTearWeight ?? '',
       Cones: row.transactionConeCount ?? '',
+      'Issued by': row.issuedByEmail?.trim() ?? '',
       'Transaction ID': row._id,
     };
   });

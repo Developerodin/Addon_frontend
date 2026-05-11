@@ -8,6 +8,35 @@ import yarnCatalogService, { BulkImportYarnCatalogRequest, YarnCatalog } from "@
 // import supplierService from "@/shared/services/supplierService";
 import * as XLSX from "xlsx";
 
+/**
+ * Parses optional yarn-catalog boolean columns from Excel (true/false, 0/1, yes/no).
+ * Empty cells omit the field so bulk updates do not overwrite existing flags.
+ * @param raw - Cell value from the worksheet.
+ * @returns Either a definite boolean, omit (`undefined`), or a validation error message.
+ */
+function parseCatalogBooleanCell(
+  raw: unknown
+): { ok: true; value?: boolean } | { ok: false; message: string } {
+  if (raw === undefined || raw === null) return { ok: true };
+  if (typeof raw === "boolean") return { ok: true, value: raw };
+  if (typeof raw === "number") {
+    if (raw === 1) return { ok: true, value: true };
+    if (raw === 0) return { ok: true, value: false };
+    if (Number.isNaN(raw)) return { ok: true };
+    return { ok: false, message: "must be true or false (or 0 or 1)" };
+  }
+  const s = `${raw}`.trim();
+  if (s === "") return { ok: true };
+  const lower = s.toLowerCase();
+  if (lower === "true" || lower === "yes" || lower === "1" || lower === "y") {
+    return { ok: true, value: true };
+  }
+  if (lower === "false" || lower === "no" || lower === "0" || lower === "n") {
+    return { ok: true, value: false };
+  }
+  return { ok: false, message: "must be true or false" };
+}
+
 const CataloguingPage = () => {
   const { hasSubPermission } = useNavigation();
   const [yarns, setYarns] = useState<YarnCatalog[]>([]);
@@ -109,6 +138,8 @@ const CataloguingPage = () => {
           Remark: "Sample remark",
           "HSN Code": "5509",
           "Min Quantity": 100,
+          Linking: true,
+          Sampling: false,
           Status: "active",
         },
         {
@@ -125,6 +156,8 @@ const CataloguingPage = () => {
           Remark: "",
           "HSN Code": "",
           "Min Quantity": "",
+          Linking: false,
+          Sampling: false,
           Status: "inactive",
         },
       ];
@@ -142,6 +175,8 @@ const CataloguingPage = () => {
         { wch: 10 },
         { wch: 24 },
         { wch: 14 },
+        { wch: 10 },
+        { wch: 10 },
         { wch: 12 },
         { wch: 10 },
       ];
@@ -174,6 +209,8 @@ const CataloguingPage = () => {
     Remark?: string;
     "HSN Code"?: string;
     "Min Quantity"?: string | number;
+    Linking?: string | number | boolean;
+    Sampling?: string | number | boolean;
     Status?: string;
     "Batch Size"?: string | number;
   };
@@ -288,6 +325,8 @@ const CataloguingPage = () => {
             hsnCode,
             minQuantityRaw,
             statusRaw,
+            linking: row.Linking,
+            sampling: row.Sampling,
           });
 
           if (!yarnTypeId) {
@@ -325,6 +364,22 @@ const CataloguingPage = () => {
             }
           }
 
+          let linkingValue: boolean | undefined;
+          const linkingParsed = parseCatalogBooleanCell(row.Linking);
+          if (!linkingParsed.ok) {
+            registerError(`Row ${rowNumber}: Linking ${linkingParsed.message}`);
+          } else if (linkingParsed.value !== undefined) {
+            linkingValue = linkingParsed.value;
+          }
+
+          let samplingValue: boolean | undefined;
+          const samplingParsed = parseCatalogBooleanCell(row.Sampling);
+          if (!samplingParsed.ok) {
+            registerError(`Row ${rowNumber}: Sampling ${samplingParsed.message}`);
+          } else if (samplingParsed.value !== undefined) {
+            samplingValue = samplingParsed.value;
+          }
+
           if (rowHasError) {
             console.log(`[IMPORT DEBUG] Row ${rowNumber} has validation errors, skipping`);
             skippedRowCount++;
@@ -351,6 +406,8 @@ const CataloguingPage = () => {
             ...(remark ? { remark } : {}),
             ...(hsnCode ? { hsnCode } : {}),
             ...(minQuantityValue !== undefined ? { minQuantity: minQuantityValue } : {}),
+            ...(linkingValue !== undefined ? { linking: linkingValue } : {}),
+            ...(samplingValue !== undefined ? { sampling: samplingValue } : {}),
           };
 
           console.log(`[IMPORT DEBUG] Row ${rowNumber} validation passed, adding to catalogs:`, catalogEntry);
@@ -466,6 +523,8 @@ const CataloguingPage = () => {
         Remark: catalog.remark || "",
         "HSN Code": catalog.hsnCode || "",
         "Min Quantity": catalog.minQuantity ?? "",
+        Linking: catalog.linking === true,
+        Sampling: catalog.sampling === true,
         Status: catalog.status || "",
         "Created At": catalog.createdAt ? new Date(catalog.createdAt).toLocaleString() : "",
         "Updated At": catalog.updatedAt ? new Date(catalog.updatedAt).toLocaleString() : "",
@@ -491,6 +550,8 @@ const CataloguingPage = () => {
         { wch: 10 },
         { wch: 24 },
         { wch: 14 },
+        { wch: 10 },
+        { wch: 10 },
         { wch: 12 },
         { wch: 10 },
         { wch: 24 },
@@ -543,6 +604,8 @@ const CataloguingPage = () => {
         Remark: catalog.remark || "",
         "HSN Code": catalog.hsnCode || "",
         "Min Quantity": catalog.minQuantity ?? "",
+        Linking: catalog.linking === true,
+        Sampling: catalog.sampling === true,
         Status: catalog.status || "",
         "Created At": catalog.createdAt ? new Date(catalog.createdAt).toLocaleString() : "",
         "Updated At": catalog.updatedAt ? new Date(catalog.updatedAt).toLocaleString() : "",
@@ -568,6 +631,8 @@ const CataloguingPage = () => {
         { wch: 10 },
         { wch: 24 },
         { wch: 14 },
+        { wch: 10 },
+        { wch: 10 },
         { wch: 12 },
         { wch: 10 },
         { wch: 24 },
