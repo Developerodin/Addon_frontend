@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
@@ -7,6 +7,8 @@ import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { useSelector } from "react-redux";
 import { toast } from "react-hot-toast";
 import yarnPurchaseOrderService, { PurchaseOrderStatus } from "@/shared/services/yarnPurchaseOrderService";
+import { QcVendorReturnSection } from "./QcVendorReturnSection";
+import { QcLotVendorReturn } from "./QcLotVendorReturn";
 import yarnBoxService, { YarnBox } from "@/shared/services/yarnBoxService";
 import { FileUploadService } from "@/shared/services/fileUploadService";
 
@@ -33,7 +35,7 @@ interface ReceivedLotDetail {
   numberOfCones: number;
   totalWeight: number;
   numberOfBoxes: number;
-  status: 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected';
+  status: 'lot_pending' | 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected' | 'lot_returned_to_vendor';
   poItems: ReceivedLotPoItem[];
 }
 
@@ -76,7 +78,8 @@ const convertStatusFromAPI = (statusCode: string): PurchaseOrderStatus => {
     'stocked': 'stocked',
     'goods_received': 'goods received',
     'goods_partially_received': 'goods partially received',
-    'po_rejected': 'rejected'
+    'po_rejected': 'rejected',
+    'returned_to_vendor': 'returned to vendor',
   };
   return statusMap[statusCode] || 'submitted to supplier';
 };
@@ -156,6 +159,8 @@ const ProcessQCOrderPage = () => {
   const orderId = params?.id as string;
 
   const [order, setOrder] = useState<ReceivedOrder | null>(null);
+  /** Raw PO `currentStatus` from API (needed for return-to-vendor UI guards). */
+  const [apiCurrentStatus, setApiCurrentStatus] = useState<string | undefined>(undefined);
   const [isLoadingOrder, setIsLoadingOrder] = useState(true);
   const [barcodeScanValue, setBarcodeScanValue] = useState<string>('');
   const [scannedBox, setScannedBox] = useState<YarnBox | null>(null);
@@ -172,6 +177,16 @@ const ProcessQCOrderPage = () => {
   const hasPurchaseManagement = hasSubPermission('/yarn-management', 'Purchase Management');
   const hasYarnQC = hasSubPermission('/yarn-management/purchase-management', 'Yarn QC');
   const hasPermission = hasPurchaseManagement || hasYarnQC;
+
+  /** Reload PO after vendor-return or QC actions. */
+  const reloadOrderFromApi = useCallback(async () => {
+    if (!orderId) return;
+    const apiOrder = await yarnPurchaseOrderService.getPurchaseOrderById(orderId);
+    setOrder(mapAPIOrderToReceivedOrder(apiOrder));
+    setApiCurrentStatus(
+      String(apiOrder.currentStatus ?? apiOrder.status_code ?? apiOrder.status ?? "").trim() || undefined
+    );
+  }, [orderId]);
   
   // Fetch order from API
   useEffect(() => {
@@ -194,6 +209,9 @@ const ProcessQCOrderPage = () => {
         console.log('QC Process page - mapped order:', mappedOrder);
         
         setOrder(mappedOrder);
+        setApiCurrentStatus(
+          String(apiOrder.currentStatus ?? apiOrder.status_code ?? apiOrder.status ?? "").trim() || undefined
+        );
         toast.success('Order details loaded successfully');
       } catch (error) {
         console.error('QC Process page - failed to fetch order:', error);
@@ -228,6 +246,7 @@ const ProcessQCOrderPage = () => {
       case 'stocked': return 'bg-emerald-100 text-emerald-800';
       case 'goods received': return 'bg-green-100 text-green-800';
       case 'goods partially received': return 'bg-amber-100 text-amber-800';
+      case 'returned to vendor': return 'bg-orange-100 text-orange-900';
       case 'po_accepted': return 'bg-green-100 text-green-800';
       case 'po_rejected': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
@@ -237,8 +256,10 @@ const ProcessQCOrderPage = () => {
   const getLotStatusColor = (status: string) => {
     switch (status) {
       case 'lot_qc_pending': return 'bg-yellow-100 text-yellow-800';
+      case 'lot_pending': return 'bg-slate-100 text-slate-800';
       case 'lot_accepted': return 'bg-green-100 text-green-800';
       case 'lot_rejected': return 'bg-red-100 text-red-800';
+      case 'lot_returned_to_vendor': return 'bg-orange-100 text-orange-900';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -246,8 +267,10 @@ const ProcessQCOrderPage = () => {
   const getLotStatusDisplay = (status: string) => {
     switch (status) {
       case 'lot_qc_pending': return 'QC Pending';
+      case 'lot_pending': return 'Pending';
       case 'lot_accepted': return 'Accepted';
       case 'lot_rejected': return 'Rejected';
+      case 'lot_returned_to_vendor': return 'Return to vendor';
       default: return status;
     }
   };
@@ -507,6 +530,9 @@ const ProcessQCOrderPage = () => {
         const updatedApiOrder = await yarnPurchaseOrderService.getPurchaseOrderById(orderId);
         const updatedMappedOrder = mapAPIOrderToReceivedOrder(updatedApiOrder);
         setOrder(updatedMappedOrder);
+        setApiCurrentStatus(
+          String(updatedApiOrder.currentStatus ?? updatedApiOrder.status_code ?? "").trim() || undefined
+        );
         
         // Check if all lots are approved
         const allLotsApproved = areAllLotsApproved(updatedMappedOrder);
@@ -711,6 +737,16 @@ const ProcessQCOrderPage = () => {
               </div>
             )}
           </div>
+          {user?.id && user?.email && (
+            <QcVendorReturnSection
+              orderId={orderId}
+              poNumber={order.purchaseOrderNumber}
+              apiCurrentStatus={apiCurrentStatus}
+              userEmail={String(user.email)}
+              userId={String(user.id)}
+              onDone={reloadOrderFromApi}
+            />
+          )}
           {order.notes && (
             <div className="mb-4 p-2 bg-gray-50 rounded border border-gray-200">
               <p className="text-[10px] uppercase text-gray-500 mb-1">Notes</p>
@@ -728,9 +764,9 @@ const ProcessQCOrderPage = () => {
             <div className="space-y-3">
               {order.receivedLotDetails.map((lot, index) => (
                 <div key={index} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="bg-purple-100 text-purple-600 rounded-full w-6 h-6 flex items-center justify-center font-bold text-[10px]">
+                  <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="bg-purple-100 text-purple-600 rounded-full w-6 h-6 flex items-center justify-center font-bold text-[10px] shrink-0">
                         {index + 1}
                       </div>
                       <div>
@@ -740,6 +776,16 @@ const ProcessQCOrderPage = () => {
                         </span>
                       </div>
                     </div>
+                    {user?.id && user?.email && (
+                      <QcLotVendorReturn
+                        poNumber={order.purchaseOrderNumber}
+                        lotNumber={lot.lotNumber}
+                        lotStatus={lot.status}
+                        userEmail={String(user.email)}
+                        userId={String(user.id)}
+                        onDone={reloadOrderFromApi}
+                      />
+                    )}
                   </div>
                   
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">

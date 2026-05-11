@@ -463,7 +463,7 @@ class YarnPurchaseOrderService {
   async updateLotStatus(
     poNumber: string,
     lotNumber: string,
-    lotStatus: 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected'
+    lotStatus: 'lot_pending' | 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected' | 'lot_returned_to_vendor'
   ): Promise<any> {
     if (!poNumber) {
       throw new Error('PO Number is required');
@@ -487,7 +487,7 @@ class YarnPurchaseOrderService {
   async updateLotStatusQCApprove(payload: {
     poNumber: string;
     lotNumber: string;
-    lotStatus: 'lot_accepted' | 'lot_rejected';
+    lotStatus: 'lot_accepted' | 'lot_rejected' | 'lot_returned_to_vendor';
     updated_by: {
       username: string;
       user_id: string;
