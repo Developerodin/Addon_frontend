@@ -186,7 +186,8 @@ export function useCriticalRequisitionList(hasPermission: boolean) {
     to: "",
   });
   const [statusFilter, setStatusFilter] = useState<AlertStatusFilter>("all");
-  const [workflowFilter, setWorkflowFilter] = useState<WorkflowStatusFilter>("all");
+  const [workflowFilter, setWorkflowFilter] =
+    useState<WorkflowStatusFilter>("in_requisition");
   const [vendorSupplierIdFilter, setVendorSupplierIdFilter] = useState<string>("");
   const [vendorNameQuery, setVendorNameQuery] = useState("");
   const [debouncedVendorName, setDebouncedVendorName] = useState("");
