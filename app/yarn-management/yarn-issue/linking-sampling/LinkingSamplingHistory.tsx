@@ -302,6 +302,9 @@ export function LinkingSamplingHistory({ floor, refreshKey = 0 }: LinkingSamplin
                   <th className="text-left font-bold text-gray-800 px-2 py-1.5 border-r border-gray-200 min-w-[120px]">
                     Cone barcode
                   </th>
+                  <th className="text-left font-bold text-gray-800 px-2 py-1.5 border-r border-gray-200 min-w-[180px]">
+                    Batch
+                  </th>
                   <th className="text-right font-bold text-gray-800 px-2 py-1.5 border-r border-gray-200 whitespace-nowrap">
                     Net (kg)
                   </th>
@@ -337,6 +340,9 @@ export function LinkingSamplingHistory({ floor, refreshKey = 0 }: LinkingSamplin
                     </td>
                     <td className="px-2 py-1.5 text-gray-800 font-mono text-[10px] border-r border-gray-100 break-all">
                       {formatConeCell(row.conesIdsArray)}
+                    </td>
+                    <td className="px-2 py-1.5 text-gray-800 font-mono text-[10px] border-r border-gray-100 break-all max-w-[200px]">
+                      {row.issueBatchId?.trim() ? row.issueBatchId : "—"}
                     </td>
                     <td className="px-2 py-1.5 text-right tabular-nums font-semibold text-blue-700 border-r border-gray-100">
                       {row.transactionNetWeight ?? "—"}

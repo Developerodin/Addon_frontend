@@ -34,6 +34,8 @@ export interface FloorIssueHistoryRow {
   conesIdsArray?: Array<string | FloorIssueConeRef>;
   /** Set server-side on new floor issues; older rows may omit. */
   issuedByEmail?: string;
+  /** Linking/sampling floor-issue batch id when present. */
+  issueBatchId?: string;
   createdAt?: string;
 }
 

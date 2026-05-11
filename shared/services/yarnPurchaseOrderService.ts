@@ -553,35 +553,60 @@ class YarnPurchaseOrderService {
   }
 
   /**
-   * GET vendor return preview (ST / LT / unallocated + PO summary).
+   * POST start vendor-return scan session.
    */
-  async getVendorReturnPreview(params: {
-    po_number: string;
-    scope: 'entire_po' | 'lots';
-    lot_numbers?: string;
-  }): Promise<Record<string, unknown>> {
-    const q = new URLSearchParams();
-    q.set('po_number', params.po_number.trim());
-    q.set('scope', params.scope);
-    if (params.lot_numbers?.trim()) q.set('lot_numbers', params.lot_numbers.trim());
-    return this.makeRequest<Record<string, unknown>>(`/vendor-return/preview?${q.toString()}`);
-  }
-
-  /**
-   * POST finalize vendor return.
-   */
-  async finalizeVendorReturn(body: {
+  async createVendorReturnSession(body: {
     poNumber: string;
-    scope: 'entire_po' | 'lots';
-    lotNumbers?: string[];
     remark?: string;
     cancellationIntent: 'partial' | 'full_po';
-    idempotencyKey?: string;
   }): Promise<Record<string, unknown>> {
-    return this.makeRequest<Record<string, unknown>>('/vendor-return/finalize', {
+    return this.makeRequest<Record<string, unknown>>('/vendor-return/sessions', {
       method: 'POST',
       body: JSON.stringify(body),
     });
+  }
+
+  /**
+   * POST append a cone barcode to the pending list.
+   */
+  async scanVendorReturnSession(sessionId: string, barcode: string): Promise<{
+    session: Record<string, unknown>;
+    conePreview: Record<string, unknown>;
+  }> {
+    return this.makeRequest<{
+      session: Record<string, unknown>;
+      conePreview: Record<string, unknown>;
+    }>(`/vendor-return/sessions/${encodeURIComponent(sessionId)}/scan`, {
+      method: 'POST',
+      body: JSON.stringify({ barcode: barcode.trim() }),
+    });
+  }
+
+  /**
+   * DELETE remove a pending barcode from the session.
+   */
+  async removeVendorReturnSessionScan(sessionId: string, barcode: string): Promise<Record<string, unknown>> {
+    const q = new URLSearchParams({ barcode: barcode.trim() }).toString();
+    return this.makeRequest<Record<string, unknown>>(
+      `/vendor-return/sessions/${encodeURIComponent(sessionId)}/scan?${q}`,
+      { method: 'DELETE' }
+    );
+  }
+
+  /**
+   * POST finalize vendor return (archive cones, sync inventory).
+   */
+  async finalizeVendorReturnSession(
+    sessionId: string,
+    body?: { idempotencyKey?: string }
+  ): Promise<Record<string, unknown>> {
+    return this.makeRequest<Record<string, unknown>>(
+      `/vendor-return/sessions/${encodeURIComponent(sessionId)}/finalize`,
+      {
+        method: 'POST',
+        body: JSON.stringify(body ?? {}),
+      }
+    );
   }
 
   /**

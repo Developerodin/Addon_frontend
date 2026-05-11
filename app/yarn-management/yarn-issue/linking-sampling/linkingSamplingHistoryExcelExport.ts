@@ -37,6 +37,7 @@ function rowsToExportRecords(rows: FloorIssueHistoryRow[]): Record<string, strin
       Floor: floorLabelFromType(row.transactionType),
       Yarn: row.yarnName ?? '',
       'Cone barcodes': formatConeBarcodes(row.conesIdsArray),
+      Batch: row.issueBatchId?.trim() ?? '',
       'Net (kg)': row.transactionNetWeight ?? '',
       'Total (kg)': row.transactionTotalWeight ?? '',
       'Tear (kg)': row.transactionTearWeight ?? '',

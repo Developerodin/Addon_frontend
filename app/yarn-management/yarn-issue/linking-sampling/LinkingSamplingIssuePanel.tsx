@@ -6,21 +6,35 @@ import { API_BASE_URL } from "@/shared/data/utilities/api";
 import { fetchWeightLatest } from "@/shared/data/utilities/weightApi";
 import Cookies from "js-cookie";
 import {
+  createFloorIssueBatch,
   issueConeForFloor,
   type LinkingSamplingFloor,
 } from "@/app/yarn-management/yarn-issue/linking-sampling/linkingSamplingIssueService";
 
-/** Max net kg enforced on client (server also enforces 5 kg). */
+/** Max net kg per cone and per yarn catalog within one batch (server-enforced). */
 const MAX_NET_KG = 5;
 
 interface ConeScanShape {
   _id: string;
   barcode?: string;
   yarnName?: string;
+  yarnCatalogId?: string | { _id?: string };
   coneWeight?: number;
   tearWeight?: number;
   boxId?: string;
   issueStatus?: string;
+}
+
+/**
+ * Stable key for per-batch yarn weight tracking (prefers catalog id).
+ * @param cone - Cone payload from barcode API
+ */
+function catalogKeyFromCone(cone: ConeScanShape | null): string {
+  if (!cone) return "_unknown";
+  const y = cone.yarnCatalogId;
+  if (y && typeof y === "object" && y._id) return String(y._id);
+  if (typeof y === "string" && y) return y;
+  return cone.yarnName?.trim() || "_unknown";
 }
 
 const getToken = () => Cookies.get("accessToken") || (typeof localStorage !== "undefined" ? localStorage.getItem("token") : null);
@@ -57,6 +71,26 @@ export function LinkingSamplingIssuePanel({ floor, floorLabel, onIssueSuccess }:
   const [fetchingWeight, setFetchingWeight] = useState(false);
   /** API error when confirming issue (shown in modal + toast). */
   const [issueError, setIssueError] = useState<string | null>(null);
+  const [issueBatchId, setIssueBatchId] = useState<string | null>(null);
+  const [batchCreating, setBatchCreating] = useState(false);
+  /** Net kg issued in the current batch per yarn key (client hint; server is authoritative). */
+  const [batchNetByYarnKey, setBatchNetByYarnKey] = useState<Record<string, number>>({});
+
+  const handleNewBatch = async () => {
+    setBatchCreating(true);
+    try {
+      const b = await createFloorIssueBatch(floor);
+      setIssueBatchId(b.issueBatchId);
+      setBatchNetByYarnKey({});
+      toast.success("New batch started. You can scan cones.");
+      barcodeInputRef.current?.focus();
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Could not create batch.");
+    } finally {
+      setBatchCreating(false);
+    }
+  };
 
   useEffect(() => {
     const tw = parseFloat(totalWeight);
@@ -87,6 +121,10 @@ export function LinkingSamplingIssuePanel({ floor, floorLabel, onIssueSuccess }:
 
   const handleScanSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!issueBatchId) {
+      toast.error("Start a new batch before scanning.");
+      return;
+    }
     if (!barcodeInput.trim()) {
       toast.error("Scan the cone barcode first.");
       return;
@@ -152,6 +190,10 @@ export function LinkingSamplingIssuePanel({ floor, floorLabel, onIssueSuccess }:
   };
 
   const handleIssue = async () => {
+    if (!issueBatchId) {
+      toast.error("No active batch. Start a new batch first.");
+      return;
+    }
     if (!coneData?._id || !barcodeInput.trim()) {
       toast.error("Missing cone or barcode.");
       return;
@@ -173,16 +215,28 @@ export function LinkingSamplingIssuePanel({ floor, floorLabel, onIssueSuccess }:
       return;
     }
 
+    const yk = catalogKeyFromCone(coneData);
+    const prevInBatch = batchNetByYarnKey[yk] ?? 0;
+    if (prevInBatch + net > MAX_NET_KG + 1e-9) {
+      toast.error(
+        `This yarn already has ${prevInBatch.toFixed(3)} kg net in this batch (max ${MAX_NET_KG} kg total).`,
+        { id: "linking-sampling-batch-cap" }
+      );
+      return;
+    }
+
     setSubmitting(true);
     setIssueError(null);
     try {
       await issueConeForFloor({
         barcode: barcodeInput.trim(),
         floor,
+        issueBatchId,
         totalWeight: tw,
         totalTearWeight: tt,
       });
       toast.success(`Cone issued for ${floorLabel}. Transaction saved.`);
+      setBatchNetByYarnKey((p) => ({ ...p, [yk]: prevInBatch + net }));
       setBarcodeInput("");
       resetFlow();
       barcodeInputRef.current?.focus();
@@ -198,11 +252,45 @@ export function LinkingSamplingIssuePanel({ floor, floorLabel, onIssueSuccess }:
 
   return (
     <div className="max-w-xl">
-      <p className="text-[11px] text-gray-600 mb-3 leading-relaxed">
-        Scan a cone in <span className="font-bold text-gray-800">{floorLabel}</span>. The yarn catalog must allow{" "}
-        {floor === "linking" ? "linking" : "sampling"} for this yarn. Max net weight per cone:{" "}
-        <span className="font-semibold">{MAX_NET_KG} kg</span>.
+      <p className="text-[11px] text-gray-600 mb-2 leading-relaxed">
+        Start a <span className="font-semibold text-gray-800">new batch</span>, then scan cones in{" "}
+        <span className="font-bold text-gray-800">{floorLabel}</span>. The yarn catalog must allow{" "}
+        {floor === "linking" ? "linking" : "sampling"}. Max <span className="font-semibold">{MAX_NET_KG} kg</span> net
+        per cone and <span className="font-semibold">{MAX_NET_KG} kg</span> net total per yarn per batch.
       </p>
+
+      <div
+        className="flex flex-wrap items-center gap-2 mb-3 p-2.5 bg-gray-50 border border-gray-100 rounded-md"
+        role="region"
+        aria-label="Floor issue batch"
+      >
+        <button
+          type="button"
+          onClick={() => void handleNewBatch()}
+          disabled={batchCreating}
+          className="inline-flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 shrink-0"
+          aria-label="Create a new issue batch with a system-generated id"
+        >
+          <i className={`ri-add-circle-line ${batchCreating ? "animate-pulse" : ""}`} aria-hidden />
+          {batchCreating ? "Creating…" : "New batch"}
+        </button>
+        {issueBatchId ? (
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Active batch</div>
+            <div
+              className="text-[11px] font-mono text-gray-900 truncate"
+              title={issueBatchId}
+              aria-label={`Batch id ${issueBatchId}`}
+            >
+              {issueBatchId}
+            </div>
+          </div>
+        ) : (
+          <p className="text-[11px] text-amber-900 font-semibold leading-snug">
+            Create a batch before scanning — each batch caps the same yarn at {MAX_NET_KG} kg net total.
+          </p>
+        )}
+      </div>
 
       <form onSubmit={handleScanSubmit} className="space-y-2">
         <label htmlFor={`floor-scan-${floor}`} className="text-[11px] font-bold text-gray-700 block">
@@ -230,7 +318,7 @@ export function LinkingSamplingIssuePanel({ floor, floorLabel, onIssueSuccess }:
         <button
           type="submit"
           className="ti-btn ti-btn-primary w-full whitespace-normal break-words leading-tight px-4 py-2 text-[11px] font-bold"
-          disabled={barcodeLoading}
+          disabled={barcodeLoading || !issueBatchId || batchCreating}
         >
           {barcodeLoading ? "Loading…" : "Load cone"}
         </button>
@@ -293,6 +381,25 @@ export function LinkingSamplingIssuePanel({ floor, floorLabel, onIssueSuccess }:
                 </div>
               </div>
 
+              {issueBatchId && (
+                <div
+                  className="p-3 rounded border border-purple-100 bg-purple-50/40 text-[11px]"
+                  aria-label="Batch weight allowance for this yarn"
+                >
+                  <div className="font-bold text-gray-800 mb-1">This batch</div>
+                  <p className="text-[10px] font-mono text-gray-700 break-all mb-2" title={issueBatchId}>
+                    {issueBatchId}
+                  </p>
+                  <p className="text-gray-800">
+                    <span className="text-gray-600">This yarn net in batch:</span>{" "}
+                    <span className="font-bold tabular-nums">
+                      {(batchNetByYarnKey[catalogKeyFromCone(coneData)] ?? 0).toFixed(3)}
+                    </span>
+                    <span className="text-gray-600"> / {MAX_NET_KG} kg</span>
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label className="text-[11px] font-bold text-gray-700 block mb-1">
                   Total weight (kg) <span className="text-red-500">*</span>
@@ -352,7 +459,7 @@ export function LinkingSamplingIssuePanel({ floor, floorLabel, onIssueSuccess }:
                   type="button"
                   onClick={handleIssue}
                   className="px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50"
-                  disabled={submitting}
+                  disabled={submitting || !issueBatchId}
                 >
                   {submitting ? "Saving…" : `Issue to ${floorLabel}`}
                 </button>
