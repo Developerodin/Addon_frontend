@@ -25,7 +25,10 @@ export interface GrnSnapshotItem {
 export interface GrnSnapshotLot {
   lotNumber: string;
   numberOfCones: number;
+  /** Gross weight (kg) */
   totalWeight: number;
+  /** Net weight (kg) */
+  netWeight?: number;
   numberOfBoxes: number;
   voided?: boolean;
 }
@@ -158,6 +161,7 @@ const buildLotsBlock = (lots: GrnSnapshotLot[]): string => {
               <td style="border: 1px solid #000; padding: 3px;">${l.lotNumber}${l.voided ? ' (voided)' : ''}</td>
               <td class="text-right" style="border: 1px solid #000; padding: 3px;">${formatINR(l.numberOfCones, 0)}</td>
               <td class="text-right" style="border: 1px solid #000; padding: 3px;">${formatINR(l.totalWeight, 2)}</td>
+              <td class="text-right" style="border: 1px solid #000; padding: 3px;">${formatINR(l.netWeight ?? 0, 2)}</td>
               <td class="text-right" style="border: 1px solid #000; padding: 3px;">${formatINR(l.numberOfBoxes, 0)}</td>
             </tr>`
     )
@@ -169,7 +173,8 @@ const buildLotsBlock = (lots: GrnSnapshotLot[]): string => {
             <th style="background-color:#f8f9fa;">SR</th>
             <th style="background-color:#f8f9fa;">LOT NO</th>
             <th style="background-color:#f8f9fa;">CONES</th>
-            <th style="background-color:#f8f9fa;">WEIGHT (kg)</th>
+            <th style="background-color:#f8f9fa;">GROSS (kg)</th>
+            <th style="background-color:#f8f9fa;">NET (kg)</th>
             <th style="background-color:#f8f9fa;">BOXES</th>
           </tr>
         </thead>
@@ -230,9 +235,7 @@ const renderGrnHtml = async (grn: GrnSnapshot): Promise<string> => {
   html = setById(html, 'taxable-value', formatINR(grn.totals?.subTotal ?? 0, 2));
   html = setById(html, 'sgst-amount', formatINR(grn.totals?.sgst ?? 0, 2));
   html = setById(html, 'igst-amount', formatINR(grn.totals?.igst ?? 0, 2));
-  html = setById(html, 'grand-total', formatINR(grn.totals?.grandTotal ?? 0, 2));
 
-  html = setById(html, 'total-in-words', grn.totals?.amountInWords || '');
   html = setById(html, 'narration', grn.notes || 'N/A');
 
   html = setById(html, 'discrepancy-details', grn.discrepancyDetails || '');

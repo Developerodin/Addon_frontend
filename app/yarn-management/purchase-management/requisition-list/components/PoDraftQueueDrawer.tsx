@@ -60,11 +60,18 @@ export function PoDraftQueueDrawerTrigger({
   useEffect(() => {
     if (!open) return undefined;
     void loadQueue();
+    const onDraftPoDeleted = () => {
+      void loadQueue();
+    };
+    window.addEventListener("yarnRequisitionsDraftPoReleased", onDraftPoDeleted);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("yarnRequisitionsDraftPoReleased", onDraftPoDeleted);
+    };
   }, [open, loadQueue]);
 
   return (

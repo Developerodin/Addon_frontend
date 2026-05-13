@@ -27,7 +27,6 @@ export function PoReturnClient() {
   const [poSearch, setPoSearch] = useState("");
   const [selectedPo, setSelectedPo] = useState<PoOption | null>(null);
   const [remark, setRemark] = useState("");
-  const [cancellationIntent, setCancellationIntent] = useState<"partial" | "full_po">("partial");
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionBusy, setSessionBusy] = useState(false);
@@ -107,7 +106,7 @@ export function PoReturnClient() {
       const created = await yarnPurchaseOrderService.createVendorReturnSession({
         poNumber: selectedPo.poNumber,
         remark,
-        cancellationIntent,
+        cancellationIntent: "partial",
       });
       const id = String(created._id ?? created.id ?? "");
       if (!id) {
@@ -258,8 +257,6 @@ export function PoReturnClient() {
           }}
           remark={remark}
           onRemarkChange={setRemark}
-          cancellationIntent={cancellationIntent}
-          onCancellationIntent={setCancellationIntent}
           sessionBusy={sessionBusy}
           sessionId={sessionId}
           onStartSession={handleStartSession}

@@ -82,6 +82,8 @@ export default function DraftPOsPage() {
   const [draftPoRows, setDraftPoRows] = useState<DraftPoSummaryRow[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [viewModalOrderId, setViewModalOrderId] = useState<string | null>(null);
+  const [draftPendingDelete, setDraftPendingDelete] = useState<DraftPoSummaryRow | null>(null);
+  const [isDeletingDraft, setIsDeletingDraft] = useState(false);
   const [supplierFilter, setSupplierFilter] = useState("");
   const [debouncedSupplierFilter, setDebouncedSupplierFilter] = useState("");
   const [sortNewestFirst, setSortNewestFirst] = useState(true);
@@ -118,6 +120,32 @@ export default function DraftPOsPage() {
     if (!canAccess || isLoading) return;
     void fetchRows();
   }, [canAccess, isLoading, fetchRows]);
+
+  /**
+   * Deletes the draft PO after confirmation; requisition-linked lines are released on the server.
+   */
+  const confirmDeleteDraftPo = async () => {
+    const row = draftPendingDelete;
+    if (!row) return;
+    setIsDeletingDraft(true);
+    try {
+      await yarnPurchaseOrderService.deletePurchaseOrder(row.id);
+      toast.success(
+        `Draft ${row.orderNumber || row.id} deleted. Requisition lines from this draft show in the list again.`
+      );
+      setDraftPendingDelete(null);
+      if (viewModalOrderId === row.id) {
+        setViewModalOrderId(null);
+      }
+      await fetchRows();
+      window.dispatchEvent(new Event("yarnRequisitionsDraftPoReleased"));
+    } catch (err) {
+      console.error("[DraftPOsPage] delete failed", err);
+      toast.error(err instanceof Error ? err.message : "Could not delete draft PO");
+    } finally {
+      setIsDeletingDraft(false);
+    }
+  };
 
   const scopedRows = useMemo(() => {
     const trimmed = debouncedSupplierFilter.toLowerCase();
@@ -310,6 +338,16 @@ export default function DraftPOsPage() {
                                   <i className="ri-pencil-line text-xs" aria-hidden />
                                   Edit
                                 </Link>
+                                <button
+                                  type="button"
+                                  onClick={() => setDraftPendingDelete(po)}
+                                  className="inline-flex items-center gap-1 px-2 py-1 border border-red-200 text-red-600 text-[10px] font-bold rounded hover:bg-red-50"
+                                  aria-label={`Delete draft PO ${po.orderNumber || po.id}`}
+                                  disabled={isDeletingDraft}
+                                >
+                                  <i className="ri-delete-bin-line text-xs" aria-hidden />
+                                  Delete
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -327,6 +365,78 @@ export default function DraftPOsPage() {
           orderId={viewModalOrderId}
           onClose={() => setViewModalOrderId(null)}
         />
+
+        {draftPendingDelete && (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+            role="presentation"
+            onClick={(e) => {
+              if (e.target === e.currentTarget && !isDeletingDraft) {
+                setDraftPendingDelete(null);
+              }
+            }}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-draft-po-title"
+              aria-describedby="delete-draft-po-desc"
+              className="bg-white rounded-2xl shadow-xl max-w-md w-full border border-gray-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-100 mb-4">
+                  <i className="ri-delete-bin-line text-2xl text-red-600" aria-hidden />
+                </div>
+                <h2
+                  id="delete-draft-po-title"
+                  className="text-lg font-semibold text-gray-900 text-center mb-2"
+                >
+                  Delete draft purchase order?
+                </h2>
+                <p id="delete-draft-po-desc" className="text-sm text-gray-600 text-center mb-1">
+                  <span className="font-mono font-semibold text-gray-900">
+                    {draftPendingDelete.orderNumber || "—"}
+                  </span>
+                  {" · "}
+                  <span>{draftPendingDelete.supplier}</span>
+                </p>
+                <p className="text-xs text-gray-500 text-center mb-6">
+                  Yarn lines that came from requisitions will return to the requisition list for this vendor. Lines
+                  added only on this draft are removed with the draft. This cannot be undone.
+                </p>
+                <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
+                  <button
+                    type="button"
+                    className="ti-btn ti-btn-light w-full sm:w-auto"
+                    disabled={isDeletingDraft}
+                    onClick={() => setDraftPendingDelete(null)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-md px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
+                    disabled={isDeletingDraft}
+                    onClick={() => void confirmDeleteDraftPo()}
+                  >
+                    {isDeletingDraft ? (
+                      <>
+                        <i className="ri-loader-4-line animate-spin" aria-hidden />
+                        Deleting…
+                      </>
+                    ) : (
+                      <>
+                        <i className="ri-delete-bin-line" aria-hidden />
+                        Delete draft
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

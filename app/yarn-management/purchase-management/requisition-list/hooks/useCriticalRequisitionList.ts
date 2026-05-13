@@ -300,6 +300,14 @@ export function useCriticalRequisitionList(hasPermission: boolean) {
     void fetchPage();
   }, [fetchPage]);
 
+  useEffect(() => {
+    const onDraftPoDeleted = () => {
+      void fetchPage();
+    };
+    window.addEventListener("yarnRequisitionsDraftPoReleased", onDraftPoDeleted);
+    return () => window.removeEventListener("yarnRequisitionsDraftPoReleased", onDraftPoDeleted);
+  }, [fetchPage]);
+
   /**
    * Toggles sort for a column and resets to page 1.
    * @param key - Sortable column key.

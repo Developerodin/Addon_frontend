@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
@@ -14,6 +14,9 @@ import { QZTrayLoader, QZTrayStatus, QZTrayUntrustedWarning, QZTrayRequestBlocke
 import { printCones, connectQZ, getDefaultPrinter, isQZLoaded, getAvailablePrinters, PrinterInfo } from "@/shared/utils/qzTray";
 import { fetchWeightLatest } from "@/shared/data/utilities/weightApi";
 import * as XLSX from "xlsx";
+
+/** Maximum net (box) or gross weight (kg) allowed when recording a received box on this page. */
+const MAX_BOX_WEIGHT_KG = 70;
 
 interface ReceivedItem {
   id: string;
@@ -177,6 +180,50 @@ function isYarnBoxEditableOnProcessPage(box: YarnBox): boolean {
   return !conesIssued || w > 0;
 }
 
+/**
+ * Returns positive kg if the value parses to a finite number &gt; 0.
+ * @param value - Raw weight from API or form field
+ */
+function parsePositiveKgInput(value: string | number | undefined | null): number {
+  if (value === undefined || value === null) return 0;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }
+  const s = String(value).trim();
+  if (s === '') return 0;
+  const n = parseFloat(s);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/**
+ * True when the row is still an unused placeholder (pending receive): editable, not stored,
+ * cones not issued, no gross/net weight on server or in the current row draft.
+ */
+function isDeletableUnusedPlaceholderBox(
+  box: YarnBox,
+  data: { grossWeight?: string; boxWeight?: string }
+): boolean {
+  if (!isYarnBoxEditableOnProcessPage(box)) return false;
+
+  const mongoId = box._id || box.id;
+  if (!mongoId) return false;
+
+  if (box.storedStatus === true) return false;
+
+  if (box.storageLocation && String(box.storageLocation).trim() !== '') return false;
+
+  if (box.coneData?.conesIssued === true) return false;
+
+  const serverBw = parsePositiveKgInput(box.boxWeight);
+  const serverGw = parsePositiveKgInput((box as { grossWeight?: number }).grossWeight);
+  const draftBw = parsePositiveKgInput(data.boxWeight);
+  const draftGw = parsePositiveKgInput(data.grossWeight);
+
+  if (serverBw > 0 || serverGw > 0 || draftBw > 0 || draftGw > 0) return false;
+
+  return true;
+}
+
 const ProcessOrderPage = () => {
   const params = useParams();
   const router = useRouter();
@@ -209,6 +256,10 @@ const ProcessOrderPage = () => {
   const [isUpdatingOrderStatus, setIsUpdatingOrderStatus] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
   const [isExportingBoxes, setIsExportingBoxes] = useState(false);
+  const [selectedUnusedPlaceholderBoxIds, setSelectedUnusedPlaceholderBoxIds] = useState<string[]>([]);
+  const [showRemoveUnusedBoxesConfirmModal, setShowRemoveUnusedBoxesConfirmModal] = useState(false);
+  const [isArchivingUnusedBoxes, setIsArchivingUnusedBoxes] = useState(false);
+  const [dataRevision, setDataRevision] = useState(0);
   const [lotData, setLotData] = useState<{
     poNumber: string;
     lotDetails: Array<{
@@ -452,6 +503,14 @@ const ProcessOrderPage = () => {
             ? box.yarnName
             : '';
 
+          let grossKg = weight;
+          if (grossKg > MAX_BOX_WEIGHT_KG) {
+            toast.error(
+              `Gross weight from scale (${grossKg} kg) exceeds the ${MAX_BOX_WEIGHT_KG} kg limit — using ${MAX_BOX_WEIGHT_KG} kg`
+            );
+            grossKg = MAX_BOX_WEIGHT_KG;
+          }
+
           // Update boxData: grossWeight from scale (auto), boxWeight stays user-filled
           setBoxData(prev => ({
             ...prev,
@@ -459,9 +518,9 @@ const ProcessOrderPage = () => {
               yarnName: prev[activeBoxId]?.yarnName || defaultYarnName,
               shadeCode: prev[activeBoxId]?.shadeCode || box.shadeCode || '',
               lotNumber: prev[activeBoxId]?.lotNumber || box.lotNumber || '',
-              grossWeight: weight.toString(),
+              grossWeight: grossKg.toString(),
               boxWeight: prev[activeBoxId]?.boxWeight || '',
-              numberOfCones: prev[activeBoxId]?.numberOfCones || box.numberOfCones?.toString() || ''
+              numberOfCones: prev[activeBoxId]?.numberOfCones || conesToFormString(box.numberOfCones) || ''
             }
           }));
 
@@ -577,7 +636,7 @@ const ProcessOrderPage = () => {
                   lotNumber: boxLotNumber,
                   grossWeight: (box as any).grossWeight?.toString() || existingData.grossWeight || '',
                   boxWeight: box.boxWeight?.toString() || '',
-                  numberOfCones: box.numberOfCones?.toString() || '',
+                  numberOfCones: conesToFormString(box.numberOfCones) || '',
                   yarnNameEdited: false,
                 };
               } else {
@@ -595,7 +654,7 @@ const ProcessOrderPage = () => {
                   lotNumber: existingData.lotNumber || boxLotNumber,
                   grossWeight: existingData.grossWeight || (box as any).grossWeight?.toString() || '',
                   boxWeight: existingData.boxWeight || box.boxWeight?.toString() || '',
-                  numberOfCones: existingData.numberOfCones || box.numberOfCones?.toString() || '',
+                  numberOfCones: conesToFormString(existingData.numberOfCones) || conesToFormString(box.numberOfCones) || '',
                   yarnNameEdited,
                 };
               }
@@ -658,7 +717,96 @@ const ProcessOrderPage = () => {
     if (order?.orderNumber) {
       fetchBoxes();
     }
-  }, [order?.orderNumber, rawApiOrder]);
+  }, [order?.orderNumber, rawApiOrder, dataRevision]);
+
+  useEffect(() => {
+    setSelectedUnusedPlaceholderBoxIds((prev) =>
+      prev.filter((id) =>
+        boxes.some((b) => {
+          const mid = b._id || b.id;
+          return mid != null && String(mid) === id;
+        })
+      )
+    );
+  }, [boxes]);
+
+  const toggleUnusedPlaceholderSelection = useCallback((mongoId: string, checked: boolean) => {
+    setSelectedUnusedPlaceholderBoxIds((prev) => {
+      if (checked) {
+        return prev.includes(mongoId) ? prev : [...prev, mongoId];
+      }
+      return prev.filter((existing) => existing !== mongoId);
+    });
+  }, []);
+
+  const selectedUnusedBoxesPreview = useMemo(() => {
+    const idSet = new Set(selectedUnusedPlaceholderBoxIds);
+    return boxes.filter((b) => {
+      const mid = b._id || b.id;
+      return mid != null && idSet.has(String(mid));
+    });
+  }, [boxes, selectedUnusedPlaceholderBoxIds]);
+
+  const openRemoveUnusedBoxesConfirmModal = useCallback(() => {
+    if (selectedUnusedPlaceholderBoxIds.length === 0) return;
+    setShowRemoveUnusedBoxesConfirmModal(true);
+  }, [selectedUnusedPlaceholderBoxIds]);
+
+  /**
+   * Permanently deletes selected unused placeholder boxes after user confirms in the modal.
+   */
+  const confirmRemoveUnusedPlaceholderBoxes = useCallback(async () => {
+    if (selectedUnusedPlaceholderBoxIds.length === 0) {
+      setShowRemoveUnusedBoxesConfirmModal(false);
+      return;
+    }
+
+    setIsArchivingUnusedBoxes(true);
+    const idsSnapshot = [...selectedUnusedPlaceholderBoxIds];
+    try {
+      const result = await yarnBoxService.archiveUnusedPlaceholderYarnBoxes(idsSnapshot);
+      const { archived, failed } = result;
+
+      if (archived.length > 0) {
+        toast.success(`Deleted ${archived.length} box record(s).`);
+        const archivedSet = new Set(archived);
+        setSelectedUnusedPlaceholderBoxIds((prev) => prev.filter((id) => !archivedSet.has(id)));
+        setActiveBoxId((prev) => {
+          if (!prev) return null;
+          const activeBox = boxes.find((b) => {
+            const bKey = b._id || b.id || b.boxId;
+            return bKey === prev;
+          });
+          const activeMongo = activeBox?._id || activeBox?.id;
+          if (activeMongo != null && archivedSet.has(String(activeMongo))) {
+            return null;
+          }
+          return prev;
+        });
+        setBarcodeScanValue('');
+        setDataRevision((n) => n + 1);
+        try {
+          const apiOrder = await yarnPurchaseOrderService.getPurchaseOrderById(orderId);
+          setRawApiOrder(apiOrder);
+          setOrder(mapAPIOrderToReceivedOrder(apiOrder));
+        } catch (poErr) {
+          console.warn('Process page: PO refresh after box delete failed', poErr);
+        }
+      }
+
+      if (failed.length > 0) {
+        const preview = failed.slice(0, 3).map((f) => f.reason).join('; ');
+        const more = failed.length > 3 ? ` (+${failed.length - 3} more)` : '';
+        toast.error(`Some boxes could not be removed: ${preview}${more}`);
+      }
+    } catch (error) {
+      console.error('Delete unused boxes failed:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to remove boxes');
+    } finally {
+      setIsArchivingUnusedBoxes(false);
+      setShowRemoveUnusedBoxesConfirmModal(false);
+    }
+  }, [selectedUnusedPlaceholderBoxIds, boxes, orderId]);
 
   const getQualityStatusColor = (status: string) => {
     switch (status) {
@@ -965,6 +1113,56 @@ const ProcessOrderPage = () => {
     return sanitized;
   };
 
+  /**
+   * Caps editable box (net) weight input at MAX_BOX_WEIGHT_KG and optionally notifies when clamped.
+   * @param rawValue - Raw field value from the box-weight input
+   * @param opts - When `notifyWhenCapped`, shows a toast if the numeric value was above the max
+   * @returns Sanitized string safe to store (empty, partial decimals, or number ≤ max)
+   */
+  const normalizeBoxWeightInput = (
+    rawValue: string,
+    opts?: { notifyWhenCapped?: boolean }
+  ): string => {
+    const sanitized = validateNumericInput(rawValue, true);
+    if (sanitized === '' || sanitized === '.') return sanitized;
+    const n = parseFloat(sanitized);
+    if (!Number.isFinite(n)) return sanitized;
+    if (n > MAX_BOX_WEIGHT_KG) {
+      if (opts?.notifyWhenCapped) {
+        toast.error(`Box weight cannot exceed ${MAX_BOX_WEIGHT_KG} kg`);
+      }
+      return String(MAX_BOX_WEIGHT_KG);
+    }
+    return sanitized;
+  };
+
+  /**
+   * Cone counts are whole numbers only: digits in the input, no decimals.
+   * @param value - Raw cones field value
+   * @returns Digits-only string (empty if cleared)
+   */
+  const normalizeConesInput = (value: string): string => validateNumericInput(value, false);
+
+  /**
+   * Normalizes API / form cone count to a positive integer string for state and display.
+   * @param raw - Number or string from server or input
+   * @returns Rounded count as string, or empty if not a valid positive integer
+   */
+  const conesToFormString = (raw: unknown): string => {
+    if (raw === undefined || raw === null) return '';
+    const s = String(raw).trim();
+    if (s === '') return '';
+    const n = Number(s);
+    if (!Number.isFinite(n) || n < 1) return '';
+    return String(Math.round(n));
+  };
+
+  /**
+   * Integer cone count for read-only cells (no decimal artifacts).
+   * @param raw - Value from row state or API
+   */
+  const formatConesDisplay = (raw: string | number | undefined | null): string => conesToFormString(raw);
+
   // Truncate ID/Barcode for display
   const truncateId = (id: string): string => {
     if (!id || id.length <= 7) return id;
@@ -1178,37 +1376,6 @@ const ProcessOrderPage = () => {
     }
   };
 
-  // Update order status
-  // Helper function to convert number to words (simple version)
-  const numberToWords = (num: number): string => {
-    const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
-    const teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
-    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-
-    if (num === 0) return 'Zero';
-    if (num < 10) return ones[num];
-    if (num < 20) return teens[num - 10];
-    if (num < 100) return tens[Math.floor(num / 10)] + (num % 10 !== 0 ? ' ' + ones[num % 10] : '');
-    if (num < 1000) {
-      const hundred = Math.floor(num / 100);
-      const remainder = num % 100;
-      return ones[hundred] + ' Hundred' + (remainder !== 0 ? ' ' + numberToWords(remainder) : '');
-    }
-    if (num < 100000) {
-      const thousand = Math.floor(num / 1000);
-      const remainder = num % 1000;
-      return numberToWords(thousand) + ' Thousand' + (remainder !== 0 ? ' ' + numberToWords(remainder) : '');
-    }
-    if (num < 10000000) {
-      const lakh = Math.floor(num / 100000);
-      const remainder = num % 100000;
-      return numberToWords(lakh) + ' Lakh' + (remainder !== 0 ? ' ' + numberToWords(remainder) : '');
-    }
-    const crore = Math.floor(num / 10000000);
-    const remainder = num % 10000000;
-    return numberToWords(crore) + ' Crore' + (remainder !== 0 ? ' ' + numberToWords(remainder) : '');
-  };
-
   const handlePrintOrderSummary = async () => {
     if (!order || !rawApiOrder) {
       toast.error('Order data not available');
@@ -1271,7 +1438,6 @@ const ProcessOrderPage = () => {
       const orderDate = rawApiOrder?.createDate || order.receivedDate;
       const subTotal = rawApiOrder?.subTotal || 0;
       const totalGst = rawApiOrder?.gst || 0;
-      const totalAmount = rawApiOrder?.total || order.totalAmount || 0;
       const notes = rawApiOrder?.notes || order.notes || '';
 
       // Get packlist details
@@ -1349,16 +1515,7 @@ const ProcessOrderPage = () => {
       htmlTemplate = htmlTemplate.replace(/id="taxable-value".*?>.*?<\/td>/, `id="taxable-value">${subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>`);
       htmlTemplate = htmlTemplate.replace(/id="sgst-amount".*?>.*?<\/td>/, `id="sgst-amount">${sgst}</td>`);
       htmlTemplate = htmlTemplate.replace(/id="igst-amount".*?>.*?<\/td>/, `id="igst-amount">${igst}</td>`);
-      htmlTemplate = htmlTemplate.replace(/id="grand-total".*?>.*?<\/td>/, `id="grand-total" style="width: 16%;">${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>`);
 
-      // Amount in words
-      const rupees = Math.floor(totalAmount);
-      const paise = Math.round((totalAmount - rupees) * 100);
-      let amountInWords = `${numberToWords(rupees)} Only`;
-      if (paise > 0) {
-        amountInWords = `${numberToWords(rupees)} and ${numberToWords(paise)} Paise Only`;
-      }
-      htmlTemplate = htmlTemplate.replace(/id="total-in-words">.*?<\/span>/, `id="total-in-words">${amountInWords}</span>`);
       htmlTemplate = htmlTemplate.replace(/id="narration">.*?<\/span>/, `id="narration">${notes || 'N/A'}</span>`);
 
       // Open print window
@@ -1472,8 +1629,26 @@ const ProcessOrderPage = () => {
       return;
     }
 
+    const boxWeightNum = parseFloat(data.boxWeight);
+    if (boxWeightNum > MAX_BOX_WEIGHT_KG) {
+      toast.error(`Box weight cannot exceed ${MAX_BOX_WEIGHT_KG} kg`);
+      return;
+    }
+
+    const grossWeightNumCheck = data.grossWeight ? parseFloat(data.grossWeight) : NaN;
+    if (Number.isFinite(grossWeightNumCheck) && grossWeightNumCheck > MAX_BOX_WEIGHT_KG) {
+      toast.error(`Gross weight cannot exceed ${MAX_BOX_WEIGHT_KG} kg`);
+      return;
+    }
+
     if (!data.numberOfCones || parseFloat(data.numberOfCones) <= 0) {
       toast.error('Please enter valid number of cones');
+      return;
+    }
+
+    const conesInt = Math.round(parseFloat(data.numberOfCones));
+    if (!Number.isFinite(conesInt) || conesInt < 1) {
+      toast.error('Number of cones must be a whole number (1 or more)');
       return;
     }
 
@@ -1486,7 +1661,7 @@ const ProcessOrderPage = () => {
         lotNumber: data.lotNumber,
         ...(grossWeightNum !== undefined && grossWeightNum >= 0 && { grossWeight: grossWeightNum }),
         boxWeight: parseFloat(data.boxWeight),
-        numberOfCones: parseFloat(data.numberOfCones)
+        numberOfCones: conesInt
       };
 
       // Use _id for API call if available, otherwise use boxId
@@ -1534,7 +1709,7 @@ const ProcessOrderPage = () => {
                   lotNumber: box.lotNumber || '',
                   grossWeight: (box as any).grossWeight?.toString() || '',
                   boxWeight: box.boxWeight?.toString() || '',
-                  numberOfCones: box.numberOfCones?.toString() || ''
+                  numberOfCones: conesToFormString(box.numberOfCones) || ''
                 };
               } else {
                 // This is another box - preserve existing data if it exists
@@ -1544,7 +1719,7 @@ const ProcessOrderPage = () => {
                   lotNumber: existingData.lotNumber || box.lotNumber || '',
                   grossWeight: existingData.grossWeight || (box as any).grossWeight?.toString() || '',
                   boxWeight: existingData.boxWeight || box.boxWeight?.toString() || '',
-                  numberOfCones: existingData.numberOfCones || box.numberOfCones?.toString() || ''
+                  numberOfCones: conesToFormString(existingData.numberOfCones) || conesToFormString(box.numberOfCones) || ''
                 };
               }
             }
@@ -2199,7 +2374,11 @@ const ProcessOrderPage = () => {
           "Shade Code": data?.shadeCode ?? box.shadeCode ?? "",
           "Gross Weight (kg)": data?.grossWeight ? parseFloat(data.grossWeight) : ((box as any).grossWeight ?? ""),
           "Box Weight (kg)": data?.boxWeight ? parseFloat(data.boxWeight) : (box.boxWeight ?? ""),
-          "Number of Cones": data?.numberOfCones ?? box.numberOfCones ?? "",
+          "Number of Cones": (() => {
+            const raw = data?.numberOfCones ?? box.numberOfCones ?? "";
+            const s = conesToFormString(raw);
+            return s === "" ? "" : Number(s);
+          })(),
           "Received Date": order.receivedDate ? new Date(order.receivedDate).toLocaleDateString() : "",
         });
       };
@@ -2248,6 +2427,7 @@ const ProcessOrderPage = () => {
             return Number.isFinite(n) ? n : 0;
           };
           const items: BulkMatchUpdateItem[] = [];
+          const weightErrors: string[] = [];
           for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
             const lotNumber = get(row, "Lot Number", "lotNumber", "LotNumber");
@@ -2260,6 +2440,13 @@ const ProcessOrderPage = () => {
             const boxWeight = num(row, "Box Weight (kg)", "Box Weight (kg)", "boxWeight", "Box Weight");
             const numberOfCones = num(row, "Number of Cones", "numberOfCones", "Number of Cones", "NumberOfCones");
             if (!boxId && !barcode) continue; // skip empty rows
+            const rowLabel = `Row ${i + 2}`;
+            if (boxWeight > MAX_BOX_WEIGHT_KG) {
+              weightErrors.push(`${rowLabel}: box weight ${boxWeight} kg > ${MAX_BOX_WEIGHT_KG} kg max`);
+            }
+            if (grossWeight > MAX_BOX_WEIGHT_KG) {
+              weightErrors.push(`${rowLabel}: gross weight ${grossWeight} kg > ${MAX_BOX_WEIGHT_KG} kg max`);
+            }
             items.push({
               lotNumber: lotNumber || "",
               poNumber: poNumber || "",
@@ -2272,7 +2459,19 @@ const ProcessOrderPage = () => {
               boxId: boxId || "",
             });
           }
-          if (items.length === 0) reject(new Error("No valid rows in Excel (need at least Box ID or Barcode)."));
+          if (weightErrors.length) {
+            reject(
+              new Error(
+                weightErrors.slice(0, 15).join("\n") +
+                  (weightErrors.length > 15 ? `\n… and ${weightErrors.length - 15} more` : "")
+              )
+            );
+            return;
+          }
+          if (items.length === 0) {
+            reject(new Error("No valid rows in Excel (need at least Box ID or Barcode)."));
+            return;
+          }
           resolve(items);
         } catch (err) {
           reject(err instanceof Error ? err : new Error("Failed to parse Excel"));
@@ -2786,6 +2985,47 @@ const ProcessOrderPage = () => {
             />
           </div>
 
+          {selectedUnusedPlaceholderBoxIds.length > 0 && (
+            <div
+              className="mb-3 flex flex-wrap items-center gap-2 rounded border border-red-200 bg-red-50/90 px-2 py-1.5"
+              role="status"
+              aria-live="polite"
+            >
+              <span className="text-[11px] font-semibold text-red-900">
+                {selectedUnusedPlaceholderBoxIds.length} unused box(es) selected (no weight recorded)
+              </span>
+              <button
+                type="button"
+                onClick={openRemoveUnusedBoxesConfirmModal}
+                disabled={isArchivingUnusedBoxes}
+                className={`inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-bold shadow-sm transition-colors ${isArchivingUnusedBoxes
+                  ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                  : 'bg-red-600 text-white hover:bg-red-700'
+                  }`}
+              >
+                {isArchivingUnusedBoxes ? (
+                  <>
+                    <i className="ri-loader-4-line animate-spin text-xs" aria-hidden />
+                    Removing…
+                  </>
+                ) : (
+                  <>
+                    <i className="ri-delete-bin-line text-xs" aria-hidden />
+                    Remove selected
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedUnusedPlaceholderBoxIds([])}
+                disabled={isArchivingUnusedBoxes}
+                className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-[10px] font-bold text-gray-800 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Clear selection
+              </button>
+            </div>
+          )}
+
           {/* Weighing Process Indicator */}
           {activeBoxId && (() => {
             const activeBox = boxes.find(b => {
@@ -2849,6 +3089,24 @@ const ProcessOrderPage = () => {
 
                 const lotStatus = getLotStatus(lotNumber);
                 const lotStatusDisplay = getLotStatusDisplay(lotStatus);
+
+                const lotDeletableMongoIds = lotBoxes.flatMap((box) => {
+                  const rowKey = box._id || box.id || box.boxId;
+                  if (!rowKey) return [];
+                  const defaultYarnName =
+                    box.yarnName && !box.yarnName.startsWith('Yarn-PO-') ? box.yarnName : '';
+                  const data = boxData[rowKey] || {
+                    yarnName: defaultYarnName,
+                    shadeCode: box.shadeCode || '',
+                    lotNumber: box.lotNumber || '',
+                    grossWeight: (box as { grossWeight?: number }).grossWeight?.toString() || '',
+                    boxWeight: box.boxWeight?.toString() || '',
+                    numberOfCones: conesToFormString(box.numberOfCones) || '',
+                  };
+                  if (!isDeletableUnusedPlaceholderBox(box, data)) return [];
+                  const mid = box._id || box.id;
+                  return mid ? [String(mid)] : [];
+                });
 
                 // Debug logging
                 if (process.env.NODE_ENV === 'development') {
@@ -2939,6 +3197,44 @@ const ProcessOrderPage = () => {
                       <table className="w-full border-collapse border border-gray-200">
                         <thead>
                           <tr className="bg-gray-50/30">
+                            <th
+                              className="w-10 px-1 py-2 text-center text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200"
+                              scope="col"
+                              title={lotDeletableMongoIds.length > 0 ? 'Select unused placeholders (no weight) to remove' : undefined}
+                            >
+                              {lotDeletableMongoIds.length > 0 ? (
+                                <input
+                                  type="checkbox"
+                                  className="h-3.5 w-3.5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                                  aria-label={`Select all unused placeholder boxes in lot ${lotNumber}`}
+                                  checked={
+                                    lotDeletableMongoIds.length > 0 &&
+                                    lotDeletableMongoIds.every((id) => selectedUnusedPlaceholderBoxIds.includes(id))
+                                  }
+                                  ref={(inputEl) => {
+                                    if (!inputEl || lotDeletableMongoIds.length === 0) return;
+                                    const some = lotDeletableMongoIds.some((id) =>
+                                      selectedUnusedPlaceholderBoxIds.includes(id)
+                                    );
+                                    const every = lotDeletableMongoIds.every((id) =>
+                                      selectedUnusedPlaceholderBoxIds.includes(id)
+                                    );
+                                    inputEl.indeterminate = some && !every;
+                                  }}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    setSelectedUnusedPlaceholderBoxIds((prev) => {
+                                      const withoutLot = prev.filter((id) => !lotDeletableMongoIds.includes(id));
+                                      return checked ? [...withoutLot, ...lotDeletableMongoIds] : withoutLot;
+                                    });
+                                  }}
+                                />
+                              ) : (
+                                <span className="text-[9px] font-normal text-gray-300 select-none" aria-hidden>
+                                  —
+                                </span>
+                              )}
+                            </th>
                             <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box ID</th>
                             <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Barcode</th>
                             <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Name</th>
@@ -2966,9 +3262,12 @@ const ProcessOrderPage = () => {
                               lotNumber: box.lotNumber || '',
                               grossWeight: (box as any).grossWeight?.toString() || '',
                               boxWeight: box.boxWeight?.toString() || '',
-                              numberOfCones: box.numberOfCones?.toString() || ''
+                              numberOfCones: conesToFormString(box.numberOfCones) || ''
                             };
                             const isUpdating = updatingBoxId === boxId;
+                            const mongoId = box._id || box.id;
+                            const showRemoveCheckbox =
+                              Boolean(mongoId) && isDeletableUnusedPlaceholderBox(box, data);
 
                             return (
                               <tr
@@ -2976,6 +3275,20 @@ const ProcessOrderPage = () => {
                                 className={`hover:bg-gray-50/50 transition-colors group ${isActive ? 'bg-blue-50 border-2 border-blue-400' : ''
                                   } ${!canEditBox ? 'bg-slate-50/90' : ''}`}
                               >
+                                <td className="px-1 py-2 border border-gray-200 text-center align-middle">
+                                  {showRemoveCheckbox ? (
+                                    <input
+                                      type="checkbox"
+                                      className="h-3.5 w-3.5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                                      checked={selectedUnusedPlaceholderBoxIds.includes(String(mongoId))}
+                                      onChange={(e) =>
+                                        toggleUnusedPlaceholderSelection(String(mongoId), e.target.checked)
+                                      }
+                                      disabled={isArchivingUnusedBoxes}
+                                      aria-label={`Select box ${box.boxId} for removal; unused placeholder with no weight`}
+                                    />
+                                  ) : null}
+                                </td>
                                 <td className="px-1.5 py-2 border border-gray-200">
                                   <button
                                     type="button"
@@ -3040,7 +3353,12 @@ const ProcessOrderPage = () => {
                                   <span className="text-[12px] text-gray-900">{data.lotNumber || '-'}</span>
                                 </td>
                                 <td className="px-1.5 py-2 border border-gray-200">
-                                  <span className="text-[12px] text-gray-900" title="Auto from scale">{data.grossWeight || '-'}</span>
+                                  <span
+                                    className="text-[12px] text-gray-900"
+                                    title={`Gross weight from scale; values above ${MAX_BOX_WEIGHT_KG} kg are capped when read`}
+                                  >
+                                    {data.grossWeight || '-'}
+                                  </span>
                                 </td>
                                 <td className="px-1.5 py-2 border border-gray-200">
                                   {isActive ? (
@@ -3053,23 +3371,24 @@ const ProcessOrderPage = () => {
                                         : (data.boxWeight === '' || data.boxWeight === '0' ? '' : data.boxWeight)}
                                       onChange={(e) => {
                                         const value = e.target.value;
-                                        const sanitizedValue = validateNumericInput(value, true);
+                                        const normalized = normalizeBoxWeightInput(value, { notifyWhenCapped: true });
                                         const key = `box-${boxId}-boxWeight`;
 
                                         setRawInputValues(prev => ({
                                           ...prev,
-                                          [key]: sanitizedValue
+                                          [key]: normalized
                                         }));
 
                                         setBoxData(prev => ({
                                           ...prev,
-                                          [boxId]: { ...prev[boxId], boxWeight: sanitizedValue }
+                                          [boxId]: { ...prev[boxId], boxWeight: normalized }
                                         }));
                                       }}
                                       onBlur={(e) => {
                                         const value = e.target.value;
                                         const key = `box-${boxId}-boxWeight`;
-                                        const numValue = parseFloat(value);
+                                        const normalized = normalizeBoxWeightInput(value, { notifyWhenCapped: true });
+                                        const numValue = parseFloat(normalized);
 
                                         setRawInputValues(prev => {
                                           const newValues = { ...prev };
@@ -3077,7 +3396,7 @@ const ProcessOrderPage = () => {
                                           return newValues;
                                         });
 
-                                        if (value === '' || isNaN(numValue) || numValue <= 0) {
+                                        if (normalized === '' || isNaN(numValue) || numValue <= 0) {
                                           setBoxData(prev => ({
                                             ...prev,
                                             [boxId]: { ...prev[boxId], boxWeight: '' }
@@ -3085,7 +3404,7 @@ const ProcessOrderPage = () => {
                                         } else {
                                           setBoxData(prev => ({
                                             ...prev,
-                                            [boxId]: { ...prev[boxId], boxWeight: value }
+                                            [boxId]: { ...prev[boxId], boxWeight: normalized }
                                           }));
 
                                           // Auto-focus cones input when valid weight is entered
@@ -3110,7 +3429,10 @@ const ProcessOrderPage = () => {
                                           }, 50);
                                         }
                                       }}
-                                      placeholder="0.00"
+                                      placeholder={`0.00 (max ${MAX_BOX_WEIGHT_KG})`}
+                                      title={`Box net weight (kg); maximum ${MAX_BOX_WEIGHT_KG} kg`}
+                                      inputMode="decimal"
+                                      aria-label={`Box weight in kilograms, maximum ${MAX_BOX_WEIGHT_KG}`}
                                     />
                                   ) : (
                                     <span className="text-[12px] text-gray-900">{data.boxWeight || '-'}</span>
@@ -3124,10 +3446,10 @@ const ProcessOrderPage = () => {
                                       data-box-cones={boxId}
                                       value={rawInputValues[`box-${boxId}-numberOfCones`] !== undefined
                                         ? rawInputValues[`box-${boxId}-numberOfCones`]
-                                        : (data.numberOfCones === '' || data.numberOfCones === '0' ? '' : data.numberOfCones)}
+                                        : (data.numberOfCones === '' || data.numberOfCones === '0' ? '' : conesToFormString(data.numberOfCones))}
                                       onChange={(e) => {
                                         const value = e.target.value;
-                                        const sanitizedValue = validateNumericInput(value, true);
+                                        const sanitizedValue = normalizeConesInput(value);
                                         const key = `box-${boxId}-numberOfCones`;
 
                                         setRawInputValues(prev => ({
@@ -3143,7 +3465,8 @@ const ProcessOrderPage = () => {
                                       onBlur={(e) => {
                                         const value = e.target.value;
                                         const key = `box-${boxId}-numberOfCones`;
-                                        const numValue = parseFloat(value);
+                                        const sanitized = normalizeConesInput(value);
+                                        const numValue = parseInt(sanitized, 10);
 
                                         setRawInputValues(prev => {
                                           const newValues = { ...prev };
@@ -3151,7 +3474,7 @@ const ProcessOrderPage = () => {
                                           return newValues;
                                         });
 
-                                        if (value === '' || isNaN(numValue) || numValue <= 0) {
+                                        if (sanitized === '' || !Number.isFinite(numValue) || numValue < 1) {
                                           setBoxData(prev => ({
                                             ...prev,
                                             [boxId]: { ...prev[boxId], numberOfCones: '' }
@@ -3159,7 +3482,7 @@ const ProcessOrderPage = () => {
                                         } else {
                                           setBoxData(prev => ({
                                             ...prev,
-                                            [boxId]: { ...prev[boxId], numberOfCones: value }
+                                            [boxId]: { ...prev[boxId], numberOfCones: String(numValue) }
                                           }));
                                         }
                                       }}
@@ -3181,9 +3504,11 @@ const ProcessOrderPage = () => {
                                         }
                                       }}
                                       placeholder="0"
+                                      inputMode="numeric"
+                                      aria-label="Number of cones (whole number only)"
                                     />
                                   ) : (
-                                    <span className="text-[12px] text-gray-900">{data.numberOfCones || '-'}</span>
+                                    <span className="text-[12px] text-gray-900">{formatConesDisplay(data.numberOfCones) || '-'}</span>
                                   )}
                                 </td>
                                 <td className="px-1.5 py-2 border border-gray-200">
@@ -3224,7 +3549,26 @@ const ProcessOrderPage = () => {
               })}
 
               {/* Unassigned boxes section */}
-              {boxesByLot.unassigned.length > 0 && (
+              {boxesByLot.unassigned.length > 0 && (() => {
+                const unassignedDeletableMongoIds = boxesByLot.unassigned.flatMap((box) => {
+                  const rowKey = box._id || box.id || box.boxId;
+                  if (!rowKey) return [];
+                  const defaultYarnName =
+                    box.yarnName && !box.yarnName.startsWith('Yarn-PO-') ? box.yarnName : '';
+                  const rowData = boxData[rowKey] || {
+                    yarnName: defaultYarnName,
+                    shadeCode: box.shadeCode || '',
+                    lotNumber: box.lotNumber || '',
+                    grossWeight: (box as { grossWeight?: number }).grossWeight?.toString() || '',
+                    boxWeight: box.boxWeight?.toString() || '',
+                    numberOfCones: conesToFormString(box.numberOfCones) || '',
+                  };
+                  if (!isDeletableUnusedPlaceholderBox(box, rowData)) return [];
+                  const mid = box._id || box.id;
+                  return mid ? [String(mid)] : [];
+                });
+
+                return (
                 <div className="border border-yellow-200 rounded-lg overflow-hidden bg-yellow-50/30">
                   <div className="bg-yellow-100 px-3 py-2 border-b border-yellow-200">
                     <h4 className="text-xs font-bold text-gray-900 flex items-center gap-2">
@@ -3239,6 +3583,52 @@ const ProcessOrderPage = () => {
                     <table className="w-full border-collapse border border-gray-200">
                       <thead>
                         <tr className="bg-gray-50/30">
+                          <th
+                            className="w-10 px-1 py-2 text-center text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200"
+                            scope="col"
+                            title={
+                              unassignedDeletableMongoIds.length > 0
+                                ? 'Select unused placeholders (no weight) to remove'
+                                : undefined
+                            }
+                          >
+                            {unassignedDeletableMongoIds.length > 0 ? (
+                              <input
+                                type="checkbox"
+                                className="h-3.5 w-3.5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                                aria-label="Select all unused placeholder boxes in unassigned list"
+                                checked={
+                                  unassignedDeletableMongoIds.length > 0 &&
+                                  unassignedDeletableMongoIds.every((id) =>
+                                    selectedUnusedPlaceholderBoxIds.includes(id)
+                                  )
+                                }
+                                ref={(inputEl) => {
+                                  if (!inputEl || unassignedDeletableMongoIds.length === 0) return;
+                                  const some = unassignedDeletableMongoIds.some((id) =>
+                                    selectedUnusedPlaceholderBoxIds.includes(id)
+                                  );
+                                  const every = unassignedDeletableMongoIds.every((id) =>
+                                    selectedUnusedPlaceholderBoxIds.includes(id)
+                                  );
+                                  inputEl.indeterminate = some && !every;
+                                }}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  setSelectedUnusedPlaceholderBoxIds((prev) => {
+                                    const without = prev.filter(
+                                      (id) => !unassignedDeletableMongoIds.includes(id)
+                                    );
+                                    return checked ? [...without, ...unassignedDeletableMongoIds] : without;
+                                  });
+                                }}
+                              />
+                            ) : (
+                              <span className="text-[9px] font-normal text-gray-300 select-none" aria-hidden>
+                                —
+                              </span>
+                            )}
+                          </th>
                           <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box ID</th>
                           <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Barcode</th>
                           <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Name</th>
@@ -3265,9 +3655,12 @@ const ProcessOrderPage = () => {
                             lotNumber: box.lotNumber || '',
                             grossWeight: (box as any).grossWeight?.toString() || '',
                             boxWeight: box.boxWeight?.toString() || '',
-                            numberOfCones: box.numberOfCones?.toString() || ''
+                            numberOfCones: conesToFormString(box.numberOfCones) || ''
                           };
                           const isUpdating = updatingBoxId === boxId;
+                          const mongoId = box._id || box.id;
+                          const showRemoveCheckbox =
+                            Boolean(mongoId) && isDeletableUnusedPlaceholderBox(box, data);
 
                           return (
                             <tr
@@ -3275,6 +3668,20 @@ const ProcessOrderPage = () => {
                               className={`hover:bg-gray-50/50 transition-colors group ${isActive ? 'bg-blue-50 border-2 border-blue-400' : ''
                                 } ${!canEditBox ? 'bg-slate-50/90' : ''}`}
                             >
+                              <td className="px-1 py-2 border border-gray-200 text-center align-middle">
+                                {showRemoveCheckbox ? (
+                                  <input
+                                    type="checkbox"
+                                    className="h-3.5 w-3.5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                                    checked={selectedUnusedPlaceholderBoxIds.includes(String(mongoId))}
+                                    onChange={(e) =>
+                                      toggleUnusedPlaceholderSelection(String(mongoId), e.target.checked)
+                                    }
+                                    disabled={isArchivingUnusedBoxes}
+                                    aria-label={`Select box ${box.boxId} for removal; unused placeholder with no weight`}
+                                  />
+                                ) : null}
+                              </td>
                               <td className="px-1.5 py-2 border border-gray-200">
                                 <button
                                   type="button"
@@ -3339,7 +3746,12 @@ const ProcessOrderPage = () => {
                                 <span className="text-[12px] text-yellow-600 font-medium">{data.lotNumber || 'Not assigned'}</span>
                               </td>
                               <td className="px-1.5 py-2 border border-gray-200">
-                                <span className="text-[12px] text-gray-900" title="Auto from scale">{data.grossWeight || '-'}</span>
+                                <span
+                                  className="text-[12px] text-gray-900"
+                                  title={`Gross weight from scale; values above ${MAX_BOX_WEIGHT_KG} kg are capped when read`}
+                                >
+                                  {data.grossWeight || '-'}
+                                </span>
                               </td>
                               <td className="px-1.5 py-2 border border-gray-200">
                                 {isActive ? (
@@ -3352,23 +3764,24 @@ const ProcessOrderPage = () => {
                                       : (data.boxWeight === '' || data.boxWeight === '0' ? '' : data.boxWeight)}
                                     onChange={(e) => {
                                       const value = e.target.value;
-                                      const sanitizedValue = validateNumericInput(value, true);
+                                      const normalized = normalizeBoxWeightInput(value, { notifyWhenCapped: true });
                                       const key = `box-${boxId}-boxWeight`;
 
                                       setRawInputValues(prev => ({
                                         ...prev,
-                                        [key]: sanitizedValue
+                                        [key]: normalized
                                       }));
 
                                       setBoxData(prev => ({
                                         ...prev,
-                                        [boxId]: { ...prev[boxId], boxWeight: sanitizedValue }
+                                        [boxId]: { ...prev[boxId], boxWeight: normalized }
                                       }));
                                     }}
                                     onBlur={(e) => {
                                       const value = e.target.value;
                                       const key = `box-${boxId}-boxWeight`;
-                                      const numValue = parseFloat(value);
+                                      const normalized = normalizeBoxWeightInput(value, { notifyWhenCapped: true });
+                                      const numValue = parseFloat(normalized);
 
                                       setRawInputValues(prev => {
                                         const newValues = { ...prev };
@@ -3376,7 +3789,7 @@ const ProcessOrderPage = () => {
                                         return newValues;
                                       });
 
-                                      if (value === '' || isNaN(numValue) || numValue <= 0) {
+                                      if (normalized === '' || isNaN(numValue) || numValue <= 0) {
                                         setBoxData(prev => ({
                                           ...prev,
                                           [boxId]: { ...prev[boxId], boxWeight: '' }
@@ -3384,7 +3797,7 @@ const ProcessOrderPage = () => {
                                       } else {
                                         setBoxData(prev => ({
                                           ...prev,
-                                          [boxId]: { ...prev[boxId], boxWeight: value }
+                                          [boxId]: { ...prev[boxId], boxWeight: normalized }
                                         }));
 
                                         // Auto-focus cones input when valid weight is entered
@@ -3409,7 +3822,10 @@ const ProcessOrderPage = () => {
                                         }, 50);
                                       }
                                     }}
-                                    placeholder="0.00"
+                                    placeholder={`0.00 (max ${MAX_BOX_WEIGHT_KG})`}
+                                    title={`Box net weight (kg); maximum ${MAX_BOX_WEIGHT_KG} kg`}
+                                    inputMode="decimal"
+                                    aria-label={`Box weight in kilograms, maximum ${MAX_BOX_WEIGHT_KG}`}
                                   />
                                 ) : (
                                   <span className="text-[12px] text-gray-900">{data.boxWeight || '-'}</span>
@@ -3423,10 +3839,10 @@ const ProcessOrderPage = () => {
                                     data-box-cones={boxId}
                                     value={rawInputValues[`box-${boxId}-numberOfCones`] !== undefined
                                       ? rawInputValues[`box-${boxId}-numberOfCones`]
-                                      : (data.numberOfCones === '' || data.numberOfCones === '0' ? '' : data.numberOfCones)}
+                                      : (data.numberOfCones === '' || data.numberOfCones === '0' ? '' : conesToFormString(data.numberOfCones))}
                                     onChange={(e) => {
                                       const value = e.target.value;
-                                      const sanitizedValue = validateNumericInput(value, true);
+                                      const sanitizedValue = normalizeConesInput(value);
                                       const key = `box-${boxId}-numberOfCones`;
 
                                       setRawInputValues(prev => ({
@@ -3442,7 +3858,8 @@ const ProcessOrderPage = () => {
                                     onBlur={(e) => {
                                       const value = e.target.value;
                                       const key = `box-${boxId}-numberOfCones`;
-                                      const numValue = parseFloat(value);
+                                      const sanitized = normalizeConesInput(value);
+                                      const numValue = parseInt(sanitized, 10);
 
                                       setRawInputValues(prev => {
                                         const newValues = { ...prev };
@@ -3450,7 +3867,7 @@ const ProcessOrderPage = () => {
                                         return newValues;
                                       });
 
-                                      if (value === '' || isNaN(numValue) || numValue <= 0) {
+                                      if (sanitized === '' || !Number.isFinite(numValue) || numValue < 1) {
                                         setBoxData(prev => ({
                                           ...prev,
                                           [boxId]: { ...prev[boxId], numberOfCones: '' }
@@ -3458,7 +3875,7 @@ const ProcessOrderPage = () => {
                                       } else {
                                         setBoxData(prev => ({
                                           ...prev,
-                                          [boxId]: { ...prev[boxId], numberOfCones: value }
+                                          [boxId]: { ...prev[boxId], numberOfCones: String(numValue) }
                                         }));
                                       }
                                     }}
@@ -3480,9 +3897,11 @@ const ProcessOrderPage = () => {
                                       }
                                     }}
                                     placeholder="0"
+                                    inputMode="numeric"
+                                    aria-label="Number of cones (whole number only)"
                                   />
                                 ) : (
-                                  <span className="text-[12px] text-gray-900">{data.numberOfCones || '-'}</span>
+                                  <span className="text-[12px] text-gray-900">{formatConesDisplay(data.numberOfCones) || '-'}</span>
                                 )}
                               </td>
                               <td className="px-1.5 py-2 border border-gray-200">
@@ -3519,7 +3938,8 @@ const ProcessOrderPage = () => {
                     </table>
                   </div>
                 </div>
-              )}
+                );
+              })()}
             </div>
           )}
         </div>
@@ -3659,7 +4079,9 @@ const ProcessOrderPage = () => {
                   <div className="mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">
                     {(() => {
                       const boxId = selectedBoxForDetails._id || selectedBoxForDetails.id || selectedBoxForDetails.boxId;
-                      return boxData[boxId]?.numberOfCones || selectedBoxForDetails.numberOfCones || '-';
+                      const fromForm = boxData[boxId]?.numberOfCones;
+                      const fromBox = selectedBoxForDetails.numberOfCones;
+                      return formatConesDisplay(fromForm ?? fromBox) || '-';
                     })()}
                   </div>
                 </div>
@@ -3704,6 +4126,92 @@ const ProcessOrderPage = () => {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm delete unused placeholder boxes */}
+      {showRemoveUnusedBoxesConfirmModal && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+          role="presentation"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isArchivingUnusedBoxes) {
+              setShowRemoveUnusedBoxesConfirmModal(false);
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="remove-unused-boxes-title"
+            aria-describedby="remove-unused-boxes-desc"
+            className="bg-white rounded-2xl shadow-xl max-w-md w-full border border-gray-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-100 mb-4">
+                <i className="ri-delete-bin-line text-2xl text-red-600" aria-hidden />
+              </div>
+              <h3 id="remove-unused-boxes-title" className="text-lg font-semibold text-gray-900 text-center mb-2">
+                Delete {selectedUnusedPlaceholderBoxIds.length} box record
+                {selectedUnusedPlaceholderBoxIds.length === 1 ? '' : 's'}?
+              </h3>
+              <p id="remove-unused-boxes-desc" className="text-sm text-gray-600 text-center mb-4">
+                These are unused placeholders (no weight or cones). They will be permanently removed from the database
+                and the lot box count on the PO will go down. This cannot be undone.
+              </p>
+              {selectedUnusedBoxesPreview.length > 0 && (
+                <ul
+                  className="max-h-40 overflow-y-auto rounded-lg border border-gray-100 bg-gray-50 text-left text-[11px] text-gray-800 mb-4 divide-y divide-gray-100"
+                  aria-label="Boxes to be deleted"
+                >
+                  {selectedUnusedBoxesPreview.slice(0, 12).map((b) => (
+                    <li key={String(b._id || b.id || b.boxId)} className="px-3 py-2 flex justify-between gap-2">
+                      <span className="font-mono truncate" title={b.boxId}>
+                        {b.boxId || '—'}
+                      </span>
+                      <span className="text-gray-500 shrink-0">
+                        Lot {b.lotNumber || '—'}
+                      </span>
+                    </li>
+                  ))}
+                  {selectedUnusedBoxesPreview.length > 12 && (
+                    <li className="px-3 py-2 text-gray-500 italic">
+                      + {selectedUnusedBoxesPreview.length - 12} more
+                    </li>
+                  )}
+                </ul>
+              )}
+              <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
+                <button
+                  type="button"
+                  className="ti-btn ti-btn-light w-full sm:w-auto"
+                  disabled={isArchivingUnusedBoxes}
+                  onClick={() => setShowRemoveUnusedBoxesConfirmModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-md px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
+                  disabled={isArchivingUnusedBoxes}
+                  onClick={() => void confirmRemoveUnusedPlaceholderBoxes()}
+                >
+                  {isArchivingUnusedBoxes ? (
+                    <>
+                      <i className="ri-loader-4-line animate-spin" aria-hidden />
+                      Deleting…
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-delete-bin-line" aria-hidden />
+                      Delete permanently
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

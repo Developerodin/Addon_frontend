@@ -141,7 +141,10 @@ export interface ReceivedLotPoItem {
 export interface ReceivedLotDetail {
   lotNumber: string;
   numberOfCones: number;
+  /** Gross weight (kg) */
   totalWeight: number;
+  /** Net weight (kg) */
+  netWeight: number;
   numberOfBoxes: number;
   poItems: ReceivedLotPoItem[];
   status: 'lot_pending' | 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected';

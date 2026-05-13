@@ -360,6 +360,20 @@ class YarnBoxService {
       body: JSON.stringify(payload),
     });
   }
+
+/** Permanently removes eligible unused placeholders (POST /archive-unused-placeholders). */
+  async archiveUnusedPlaceholderYarnBoxes(yarnBoxIds: string[]): Promise<{
+    archived: string[];
+    failed: Array<{ id: string; reason: string }>;
+  }> {
+    return this.makeRequest<{ archived: string[]; failed: Array<{ id: string; reason: string }> }>(
+      '/archive-unused-placeholders',
+      {
+        method: 'POST',
+        body: JSON.stringify({ yarn_box_ids: yarnBoxIds }),
+      }
+    );
+  }
 }
 
 const yarnBoxService = new YarnBoxService();

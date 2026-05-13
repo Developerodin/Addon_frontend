@@ -66,6 +66,7 @@ interface PurchaseOrder {
     lotNumber: string;
     numberOfCones: number;
     totalWeight: number;
+    netWeight: number;
     numberOfBoxes: number;
     poItems: Array<{ poItem: string; receivedQuantity: number }>;
     status: 'lot_pending' | 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected';
@@ -127,6 +128,15 @@ const convertStatusToAPI = (status: PurchaseOrderStatus): string => {
   };
   return statusMap[status] || 'submitted_to_supplier';
 };
+
+/**
+ * Whether the row may show a delete action (only pre-receipt: submitted or in transit).
+ * @param status - Display status from list mapping
+ * @returns True only for those two statuses
+ */
+function canDeletePurchaseOrderFromList(status: PurchaseOrderStatus): boolean {
+  return status === 'submitted to supplier' || status === 'in transit';
+}
 
 // Helper function to map API response to component format
 const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
@@ -251,6 +261,7 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
         lotNumber: lot.lotNumber || lot.lot_number || '',
         numberOfCones: (lot.numberOfCones ?? lot.number_of_cones) ?? 0,
         totalWeight: (lot.totalWeight ?? lot.total_weight) ?? 0,
+        netWeight: lot.netWeight ?? lot.net_weight ?? 0,
         numberOfBoxes: (lot.numberOfBoxes ?? lot.number_of_boxes) ?? 0,
         status: lot.status || 'lot_pending',
         poItems: (lot.poItems || []).map((poItem: any) => ({
@@ -298,6 +309,7 @@ const PurchasePage = () => {
   const [activeTab, setActiveTab] = useState<'details' | 'history'>('details');
   const [isPrinting, setIsPrinting] = useState(false);
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
+  const [orderPendingDelete, setOrderPendingDelete] = useState<PurchaseOrder | null>(null);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [excelProcessModalOpen, setExcelProcessModalOpen] = useState(false);
@@ -827,13 +839,26 @@ const PurchasePage = () => {
     }
   };
 
-  const handleDeleteOrder = async (order: PurchaseOrder) => {
-    // Show confirmation dialog
-    const confirmed = window.confirm(
-      `Are you sure you want to delete Purchase Order ${order.orderNumber}?\n\nThis action cannot be undone.`
-    );
+  /**
+   * Opens the delete confirmation dialog for an eligible PO row.
+   */
+  const openDeleteOrderConfirm = (order: PurchaseOrder) => {
+    if (!canDeletePurchaseOrderFromList(order.status)) {
+      toast.error('Only orders that are submitted to supplier or in transit can be deleted.');
+      return;
+    }
+    setOrderPendingDelete(order);
+  };
 
-    if (!confirmed) {
+  /**
+   * Confirms and runs API delete for `orderPendingDelete`; closes details drawer if it matches.
+   */
+  const confirmDeleteOrder = async () => {
+    const order = orderPendingDelete;
+    if (!order) return;
+    if (!canDeletePurchaseOrderFromList(order.status)) {
+      toast.error('Only orders that are submitted to supplier or in transit can be deleted.');
+      setOrderPendingDelete(null);
       return;
     }
 
@@ -841,7 +866,17 @@ const PurchasePage = () => {
     try {
       await yarnPurchaseOrderService.deletePurchaseOrder(order.id);
       toast.success(`Purchase Order ${order.orderNumber} deleted successfully`);
-      // Refresh orders list
+      setOrderPendingDelete(null);
+      setSelectedOrders((prev) => {
+        const next = new Set(prev);
+        next.delete(order.id);
+        return next;
+      });
+      if (detailsModalOpen && selectedOrder?.id === order.id) {
+        setDetailsModalOpen(false);
+        setSelectedOrder(null);
+        setDetailedOrderData(null);
+      }
       await fetchPurchaseOrders();
     } catch (error) {
       console.error('Failed to delete purchase order:', error);
@@ -897,19 +932,34 @@ const PurchasePage = () => {
       return;
     }
 
+    const deletableIds = Array.from(selectedOrders).filter((orderId) => {
+      const o = orders.find((x) => x.id === orderId);
+      return o && canDeletePurchaseOrderFromList(o.status);
+    });
+
+    if (deletableIds.length === 0) {
+      toast.error('Only orders submitted to supplier or in transit can be deleted. Deselect others or change selection.');
+      return;
+    }
+
+    if (deletableIds.length < selectedOrders.size) {
+      const ok = window.confirm(
+        `${selectedOrders.size - deletableIds.length} selected order(s) cannot be deleted (wrong status). Delete ${deletableIds.length} eligible order(s) only?`
+      );
+      if (!ok) return;
+    }
+
     const confirmed = window.confirm(
-      `Are you sure you want to delete ${selectedOrders.size} purchase order(s)?\n\nThis action cannot be undone.`
+      `Are you sure you want to delete ${deletableIds.length} purchase order(s)?\n\nThis action cannot be undone.`
     );
 
     if (!confirmed) return;
 
     setIsDeleting(true);
     try {
-      const deletePromises = Array.from(selectedOrders).map(orderId =>
-        yarnPurchaseOrderService.deletePurchaseOrder(orderId)
-      );
+      const deletePromises = deletableIds.map((orderId) => yarnPurchaseOrderService.deletePurchaseOrder(orderId));
       await Promise.all(deletePromises);
-      toast.success(`${selectedOrders.size} purchase order(s) deleted successfully`);
+      toast.success(`${deletableIds.length} purchase order(s) deleted successfully`);
       setSelectedOrders(new Set());
       await fetchPurchaseOrders();
     } catch (error) {
@@ -1279,14 +1329,18 @@ const PurchasePage = () => {
                           >
                             <i className="ri-pencil-line text-xs"></i>
                           </Link>
-                          {/* <button
-                            onClick={() => handleDeleteOrder(order)}
-                            className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 border border-red-100 rounded hover:bg-red-100 transition-colors"
-                            title="Delete"
-                            disabled={isDeleting}
-                          >
-                            <i className="ri-delete-bin-line text-xs"></i>
-                          </button> */}
+                          {canDeletePurchaseOrderFromList(order.status) && (
+                            <button
+                              type="button"
+                              onClick={() => openDeleteOrderConfirm(order)}
+                              className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 border border-red-100 rounded hover:bg-red-100 transition-colors"
+                              title="Delete purchase order"
+                              aria-label={`Delete purchase order ${order.orderNumber}`}
+                              disabled={isDeleting}
+                            >
+                              <i className="ri-delete-bin-line text-xs" aria-hidden />
+                            </button>
+                          )}
                           {(order.status === 'submitted to supplier' || order.status === 'goods partially received' || order.status === 'in transit') && (
                             <button
                               onClick={() => handleStatusUpdate(order.id, 'in transit')}
@@ -1423,6 +1477,72 @@ const PurchasePage = () => {
           existingPacklistData={orderForUpdatePacklist.packListDetailsArray || (orderForUpdatePacklist.packlistDetails ? [orderForUpdatePacklist.packlistDetails] : undefined)}
           isSubmitting={isUpdatingStatus}
         />
+      )}
+
+      {orderPendingDelete && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+          role="presentation"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isDeleting) {
+              setOrderPendingDelete(null);
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-po-title"
+            aria-describedby="delete-po-desc"
+            className="bg-white rounded-2xl shadow-xl max-w-md w-full border border-gray-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-100 mb-4">
+                <i className="ri-delete-bin-line text-2xl text-red-600" aria-hidden />
+              </div>
+              <h3 id="delete-po-title" className="text-lg font-semibold text-gray-900 text-center mb-2">
+                Delete purchase order?
+              </h3>
+              <p id="delete-po-desc" className="text-sm text-gray-600 text-center mb-1">
+                <span className="font-mono font-semibold text-gray-900">{orderPendingDelete.orderNumber}</span>
+                {' · '}
+                <span>{orderPendingDelete.supplier}</span>
+              </p>
+              <p className="text-xs text-gray-500 text-center mb-6">
+                This permanently removes the PO from the system. This cannot be undone.
+              </p>
+              <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
+                <button
+                  type="button"
+                  className="ti-btn ti-btn-light w-full sm:w-auto"
+                  disabled={isDeleting}
+                  onClick={() => setOrderPendingDelete(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-md px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
+                  disabled={isDeleting}
+                  onClick={() => void confirmDeleteOrder()}
+                >
+                  {isDeleting ? (
+                    <>
+                      <i className="ri-loader-4-line animate-spin" aria-hidden />
+                      Deleting…
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-delete-bin-line" aria-hidden />
+                      Delete permanently
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {selectedOrder && (

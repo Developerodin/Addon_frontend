@@ -33,7 +33,7 @@ const fmtINR = (n: number, digits = 2) =>
 
 /**
  * Slide-over drawer that previews a single GRN. Tabs:
- *  - Overview: header (vendor, dates, totals, discrepancy)
+ *  - Overview: header (vendor, dates, gross/net weight totals, quantity totals, discrepancy)
  *  - Lots: subtable matching what gets printed
  *  - Items: line items snapshot
  *  - Revisions: full chain (only fetched when tab is opened)
@@ -87,7 +87,8 @@ const GrnDetailDrawer: React.FC<GrnDetailDrawerProps> = ({ grn, onClose, onUpdat
 
   const totalBoxes = (current.lots || []).reduce((s, l) => s + (l.numberOfBoxes || 0), 0);
   const totalCones = (current.lots || []).reduce((s, l) => s + (l.numberOfCones || 0), 0);
-  const totalWeight = (current.lots || []).reduce((s, l) => s + (l.totalWeight || 0), 0);
+  const totalGrossWeight = (current.lots || []).reduce((s, l) => s + (l.totalWeight || 0), 0);
+  const totalNetWeight = (current.lots || []).reduce((s, l) => s + (Number(l.netWeight) || 0), 0);
 
   return (
     <div className="fixed inset-0 z-50 flex" role="dialog" aria-modal="true" aria-label="GRN details">
@@ -202,7 +203,7 @@ const GrnDetailDrawer: React.FC<GrnDetailDrawerProps> = ({ grn, onClose, onUpdat
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4 border-t border-gray-100 pt-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 border-t border-gray-100 pt-4">
                 <div>
                   <p className="text-[10px] font-bold text-gray-500 uppercase">Total Lots</p>
                   <p className="text-base font-bold text-gray-800">{(current.lots || []).length}</p>
@@ -216,16 +217,12 @@ const GrnDetailDrawer: React.FC<GrnDetailDrawerProps> = ({ grn, onClose, onUpdat
                   <p className="text-base font-bold text-gray-800">{totalCones}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-gray-500 uppercase">Total Weight</p>
-                  <p className="text-base font-bold text-gray-800">{fmtINR(totalWeight)} kg</p>
+                  <p className="text-[10px] font-bold text-gray-500 uppercase">Gross weight</p>
+                  <p className="text-base font-bold text-gray-800">{fmtINR(totalGrossWeight)} kg</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-gray-500 uppercase">Sub Total</p>
-                  <p className="text-base font-bold text-gray-800">₹ {fmtINR(current.totals?.subTotal || 0)}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold text-gray-500 uppercase">Grand Total</p>
-                  <p className="text-base font-bold text-purple-700">₹ {fmtINR(current.totals?.grandTotal || 0)}</p>
+                  <p className="text-[10px] font-bold text-gray-500 uppercase">Net weight</p>
+                  <p className="text-base font-bold text-gray-800">{fmtINR(totalNetWeight)} kg</p>
                 </div>
               </div>
 
@@ -274,7 +271,8 @@ const GrnDetailDrawer: React.FC<GrnDetailDrawerProps> = ({ grn, onClose, onUpdat
                 <tr className="bg-gray-50">
                   <th className="px-2 py-2 text-left font-bold text-gray-600 border-b border-gray-200">Lot No</th>
                   <th className="px-2 py-2 text-right font-bold text-gray-600 border-b border-gray-200">Cones</th>
-                  <th className="px-2 py-2 text-right font-bold text-gray-600 border-b border-gray-200">Weight (kg)</th>
+                  <th className="px-2 py-2 text-right font-bold text-gray-600 border-b border-gray-200">Gross (kg)</th>
+                  <th className="px-2 py-2 text-right font-bold text-gray-600 border-b border-gray-200">Net (kg)</th>
                   <th className="px-2 py-2 text-right font-bold text-gray-600 border-b border-gray-200">Boxes</th>
                   <th className="px-2 py-2 text-left font-bold text-gray-600 border-b border-gray-200">Lines</th>
                 </tr>
@@ -285,6 +283,7 @@ const GrnDetailDrawer: React.FC<GrnDetailDrawerProps> = ({ grn, onClose, onUpdat
                     <td className="px-2 py-2 font-bold border-b border-gray-100">{lot.lotNumber}{lot.voided ? ' (voided)' : ''}</td>
                     <td className="px-2 py-2 text-right border-b border-gray-100">{fmtINR(lot.numberOfCones, 0)}</td>
                     <td className="px-2 py-2 text-right border-b border-gray-100">{fmtINR(lot.totalWeight)}</td>
+                    <td className="px-2 py-2 text-right border-b border-gray-100">{fmtINR(Number(lot.netWeight) || 0)}</td>
                     <td className="px-2 py-2 text-right border-b border-gray-100">{fmtINR(lot.numberOfBoxes, 0)}</td>
                     <td className="px-2 py-2 border-b border-gray-100 text-gray-500">{(lot as { poItems?: unknown[] }).poItems?.length || 0}</td>
                   </tr>

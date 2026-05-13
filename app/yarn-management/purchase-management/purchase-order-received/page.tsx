@@ -281,12 +281,27 @@ const mapAPIOrderToComponent = (apiOrder: any): PurchaseOrder => {
         lotNumber: lot.lotNumber || lot.lot_number || '',
         numberOfCones: lot.numberOfCones || lot.number_of_cones || 0,
         totalWeight: lot.totalWeight || lot.total_weight || 0,
+        netWeight: lot.netWeight ?? lot.net_weight ?? 0,
         numberOfBoxes: lot.numberOfBoxes || lot.number_of_boxes || 0,
         status: lot.status || 'lot_pending',
-        poItems: (lot.poItems || []).map((poItem: any) => ({
-          poItem: poItem.poItem || poItem.po_item || '',
-          receivedQuantity: poItem.receivedQuantity || poItem.received_quantity || 0
-        }))
+        poItems: (lot.poItems || []).map((poItem: any) => {
+          const rawPi = poItem.poItem ?? poItem.po_item;
+          const poItemId =
+            rawPi != null && typeof rawPi === "object"
+              ? String(rawPi._id ?? rawPi.id ?? "")
+              : String(rawPi ?? "");
+          const rqRaw = poItem.receivedQuantity ?? poItem.received_quantity;
+          const receivedQuantity =
+            typeof rqRaw === "number"
+              ? rqRaw
+              : typeof rqRaw === "string"
+                ? Number.parseFloat(rqRaw) || 0
+                : 0;
+          return {
+            poItem: poItemId,
+            receivedQuantity,
+          };
+        }),
       }));
     })()
   };
@@ -314,6 +329,67 @@ const grExcelTh =
 const grExcelTd = "border border-gray-400 p-0 align-middle bg-white";
 const grExcelInput =
   "w-full min-h-[30px] px-1.5 py-1 text-xs text-gray-900 border-0 bg-transparent focus:outline-none focus:ring-0 focus:bg-gray-100/90 placeholder:text-gray-400 disabled:opacity-50";
+
+/**
+ * True if `value` is empty or a valid partial kg decimal (digits with at `.` or `,` — not both).
+ * @param value - Raw input
+ */
+function isPartialKgDecimal(value: string): boolean {
+  if (value === "") return true;
+  const hasDot = value.includes(".");
+  const hasComma = value.includes(",");
+  if (hasDot && hasComma) return false;
+  const sep = hasDot ? "." : hasComma ? "," : null;
+  if (sep == null) return /^\d+$/.test(value);
+  const parts = value.split(sep);
+  if (parts.length > 2) return false;
+  const [a, b = ""] = parts;
+  return /^\d*$/.test(a) && /^\d*$/.test(b);
+}
+
+/**
+ * Parses a finalized kg field string (accepts `,` or `.` as decimal separator).
+ * @param value - Input on blur
+ * @returns Parsed number or null if empty / invalid
+ */
+function parseKgInputValue(value: string): number | null {
+  const trimmed = value.trim().replace(",", ".");
+  if (trimmed === "" || trimmed === ".") return null;
+  const n = parseFloat(trimmed);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Normalizes received-lot PO line rows for equality checks (stable order by poItem id).
+ * @param poItems - Lines on a received lot
+ */
+function normalizeReceivedLotPoItemsForCompare(
+  poItems: { poItem: string | unknown; receivedQuantity: number | unknown }[]
+): { poItem: string; receivedQuantity: number }[] {
+  return [...poItems]
+    .map((p) => ({
+      poItem: String(p.poItem ?? ""),
+      receivedQuantity: Number(p.receivedQuantity) || 0,
+    }))
+    .sort((a, b) => a.poItem.localeCompare(b.poItem));
+}
+
+/**
+ * Returns true when two received-lot PO line lists match (ignores key order / coercions).
+ * @param a - First list
+ * @param b - Second list
+ */
+function receivedLotPoItemsDeepEqual(
+  a: { poItem: string | unknown; receivedQuantity: number | unknown }[],
+  b: { poItem: string | unknown; receivedQuantity: number | unknown }[]
+): boolean {
+  const na = normalizeReceivedLotPoItemsForCompare(a);
+  const nb = normalizeReceivedLotPoItemsForCompare(b);
+  if (na.length !== nb.length) return false;
+  return na.every(
+    (row, i) => row.poItem === nb[i].poItem && row.receivedQuantity === nb[i].receivedQuantity
+  );
+}
 
 /** Logins that may unlock editing of already-saved lots in Goods Received (UI + submit). Server should still enforce authorization. */
 const GOODS_RECEIVED_PERSISTED_LOT_EDIT_EMAILS = new Set(
@@ -821,8 +897,9 @@ const PurchaseOrderReceivedPage = () => {
 
   const handleGoodsReceivedSubmit = async (payload: UpdatePurchaseOrderWithReceivedLotsPayload) => {
     if (!orderForGoodsReceived) {
-      toast.error('Order not found');
-      return;
+      const msg = "Order not found";
+      toast.error(msg);
+      throw new Error(msg);
     }
 
     setIsSubmittingGoodsReceived(true);
@@ -895,10 +972,10 @@ const PurchaseOrderReceivedPage = () => {
       setOrderForGoodsReceived(null);
       setRawOrderDataForGoodsReceived(null);
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Failed to update order';
-      console.error('Failed to update order:', error);
+      const msg = error instanceof Error ? error.message : "Failed to update order";
+      console.error("Failed to update order:", error);
       toast.error(msg);
-      alert(msg);
+      throw error instanceof Error ? error : new Error(msg);
     } finally {
       setIsSubmittingGoodsReceived(false);
     }
@@ -1910,6 +1987,7 @@ const newEmptyGoodsReceivedLotRow = (panelSeq: number): GoodsReceivedLotRow => (
   lotNumber: "",
   numberOfCones: 0,
   totalWeight: 0,
+  netWeight: 0,
   numberOfBoxes: 0,
   poItems: [],
   status: "lot_pending",
@@ -1923,6 +2001,7 @@ function toReceivedLotPayload(lot: GoodsReceivedLotRow): ReceivedLotDetail {
     lotNumber: lot.lotNumber,
     numberOfCones: lot.numberOfCones,
     totalWeight: lot.totalWeight,
+    netWeight: lot.netWeight,
     numberOfBoxes: lot.numberOfBoxes,
     poItems: lot.poItems,
     status: lot.status,
@@ -1956,6 +2035,15 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
   const [deleteConfirmLotIndex, setDeleteConfirmLotIndex] = useState<number | null>(null);
   const [isDeletingLot, setIsDeletingLot] = useState(false);
   const [isDeletingAllLots, setIsDeletingAllLots] = useState(false);
+  /** Inline validation / API error for Update Order (scroll + highlight lot when `rowId` set) */
+  const [submitFeedback, setSubmitFeedback] = useState<{
+    variant: "error";
+    message: string;
+    rowId?: string;
+  } | null>(null);
+  const [updateConfirmOpen, setUpdateConfirmOpen] = useState(false);
+  const [pendingUpdatePayload, setPendingUpdatePayload] =
+    useState<UpdatePurchaseOrderWithReceivedLotsPayload | null>(null);
   /** After Add Lot: scroll to new block and focus first field */
   const scrollNewLotAfterAdd = useRef(false);
 
@@ -2014,6 +2102,9 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
       setIsDeletingLot(false);
       setIsDeletingAllLots(false);
       setUnlockedPersistedLotRows({});
+      setSubmitFeedback(null);
+      setUpdateConfirmOpen(false);
+      setPendingUpdatePayload(null);
       // Load existing data if available, otherwise reset form
       if (order.receivedLotDetails && order.receivedLotDetails.length > 0) {
         // Create a map of original lots by lotNumber for quick lookup
@@ -2034,6 +2125,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
             lotNumber: lot.lotNumber || '',
             numberOfCones: lot.numberOfCones || 0,
             totalWeight: lot.totalWeight || 0,
+            netWeight: lot.netWeight ?? 0,
             numberOfBoxes: lot.numberOfBoxes || 0,
             poItems: lot.poItems || [],
             status: lot.status || 'lot_pending',
@@ -2244,118 +2336,202 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
     setLots(updatedLots);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  /**
+   * Validates lots and builds the PATCH payload (panel order + preserved statuses).
+   * @returns Success with payload or failure with message and optional lot row id to scroll/highlight.
+   */
+  const buildGoodsReceivedPayloadFromState = ():
+    | { ok: true; payload: UpdatePurchaseOrderWithReceivedLotsPayload }
+    | { ok: false; message: string; rowId?: string } => {
+      for (let i = 0; i < lots.length; i++) {
+        const lot = lots[i];
+        if (lot.isPersistedLot && lot.lotNumber.trim()) {
+          const adminUnlocked =
+            canUnlockPersistedLotEdit && !!unlockedPersistedLotRows[lot.rowId];
+          if (adminUnlocked) continue;
 
-    const showError = (message: string) => {
-      toast.error(message);
-      alert(message);
-    };
+          const lookupKey =
+            persistedLotSourceKeyByRowIdRef.current.get(lot.rowId) ??
+            lot.lotNumber.trim().toUpperCase();
+          const originalLot = originalLots.get(lookupKey);
+          if (originalLot) {
+            const cur = toReceivedLotPayload(lot);
+            const wasModified =
+              cur.numberOfCones !== originalLot.numberOfCones ||
+              cur.totalWeight !== originalLot.totalWeight ||
+              cur.netWeight !== (originalLot.netWeight ?? 0) ||
+              cur.numberOfBoxes !== originalLot.numberOfBoxes ||
+              cur.lotNumber.trim().toUpperCase() !==
+                originalLot.lotNumber.trim().toUpperCase() ||
+              !receivedLotPoItemsDeepEqual(cur.poItems, originalLot.poItems);
 
-    // Check if any persisted (server) lots were modified — use row flag, not lot# string
-    for (let i = 0; i < lots.length; i++) {
-      const lot = lots[i];
-      if (lot.isPersistedLot && lot.lotNumber.trim()) {
-        const adminUnlocked =
-          canUnlockPersistedLotEdit && !!unlockedPersistedLotRows[lot.rowId];
-        if (adminUnlocked) continue;
-
-        const lookupKey =
-          persistedLotSourceKeyByRowIdRef.current.get(lot.rowId) ??
-          lot.lotNumber.trim().toUpperCase();
-        const originalLot = originalLots.get(lookupKey);
-        if (originalLot) {
-          const cur = toReceivedLotPayload(lot);
-          const wasModified =
-            cur.numberOfCones !== originalLot.numberOfCones ||
-            cur.totalWeight !== originalLot.totalWeight ||
-            cur.numberOfBoxes !== originalLot.numberOfBoxes ||
-            cur.lotNumber.trim().toUpperCase() !== originalLot.lotNumber.trim().toUpperCase() ||
-            JSON.stringify(cur.poItems) !== JSON.stringify(originalLot.poItems);
-
-          if (wasModified) {
-            showError(`Lot ${lot.lotNumber} is saved and cannot be modified. Saved lots can only be viewed.`);
-            return;
+            if (wasModified) {
+              return {
+                ok: false,
+                message: `Lot ${lot.lotNumber}: This lot is saved and cannot be modified. Tap "Edit lot" (if permitted) or add a new lot for additional receipt lines.`,
+                rowId: lot.rowId,
+              };
+            }
           }
         }
       }
-    }
 
-    // Validation
-    for (let i = 0; i < lots.length; i++) {
-      const lot = lots[i];
-      const label = lot.panelSeq;
-      if (!lot.lotNumber.trim()) {
-        showError(`Lot ${label}: Lot Number is required`);
-        return;
-      }
-      if (lot.numberOfCones <= 0) {
-        showError(`Lot ${label}: Number of Cones must be greater than 0`);
-        return;
-      }
-      if (lot.totalWeight <= 0) {
-        showError(`Lot ${label}: Total Weight must be greater than 0`);
-        return;
-      }
-      if (lot.numberOfBoxes <= 0) {
-        showError(`Lot ${label}: Number of Boxes must be greater than 0`);
-        return;
-      }
-      if (lot.poItems.length === 0) {
-        showError(`Lot ${label}: At least one PO Item is required`);
-        return;
-      }
-      for (let j = 0; j < lot.poItems.length; j++) {
-        const poItem = lot.poItems[j];
-        if (!poItem.poItem) {
-          showError(`Lot ${label}, PO Item ${j + 1}: PO Item is required`);
-          return;
-        }
-        if (poItem.receivedQuantity <= 0) {
-          showError(`Lot ${label}, PO Item ${j + 1}: Received Quantity must be greater than 0`);
-          return;
-        }
-      }
-    }
-
-    // Preserve existing lot statuses, only set lot_pending for new lots
-    // For saved lots, use the original data to ensure no changes
-    // UI prepends new lots on top; API expects append order (Lot 1…N) — sort by panelSeq before sending
-    const lotsInPayloadOrder = [...lots].sort((a, b) => a.panelSeq - b.panelSeq);
-
-    const lotsWithPreservedStatus = lotsInPayloadOrder.map(lot => {
-      const lotNumberKey = lot.lotNumber.trim().toUpperCase();
-      const sourceKey = persistedLotSourceKeyByRowIdRef.current.get(lot.rowId);
-      const originalLot =
-        sourceKey != null ? originalLots.get(sourceKey) : originalLots.get(lotNumberKey);
-      const base = toReceivedLotPayload(lot);
-
-      if (lot.isPersistedLot && originalLot) {
-        const adminUnlocked =
-          canUnlockPersistedLotEdit && !!unlockedPersistedLotRows[lot.rowId];
-        if (adminUnlocked) {
+      for (let i = 0; i < lots.length; i++) {
+        const lot = lots[i];
+        const label = lot.panelSeq;
+        const rowRef = lot.rowId;
+        if (!lot.lotNumber.trim()) {
           return {
-            ...base,
-            status: originalLot.status || 'lot_pending'
+            ok: false,
+            message: `Lot ${label}: Lot number is required.`,
+            rowId: rowRef,
           };
         }
-        return {
-          ...originalLot,
-          status: originalLot.status || 'lot_pending'
-        };
+        if (lot.numberOfCones <= 0) {
+          return {
+            ok: false,
+            message: `Lot ${label}: Number of cones must be greater than 0.`,
+            rowId: rowRef,
+          };
+        }
+        if (lot.totalWeight <= 0) {
+          return {
+            ok: false,
+            message: `Lot ${label}: Gross weight must be greater than 0.`,
+            rowId: rowRef,
+          };
+        }
+        if (lot.netWeight <= 0) {
+          return {
+            ok: false,
+            message: `Lot ${label}: Net weight must be greater than 0.`,
+            rowId: rowRef,
+          };
+        }
+        if (lot.numberOfBoxes <= 0) {
+          return {
+            ok: false,
+            message: `Lot ${label}: Number of boxes must be greater than 0.`,
+            rowId: rowRef,
+          };
+        }
+        if (lot.poItems.length === 0) {
+          return {
+            ok: false,
+            message: `Lot ${label}: Add at least one PO line row (use "Add PO Item").`,
+            rowId: rowRef,
+          };
+        }
+        for (let j = 0; j < lot.poItems.length; j++) {
+          const poItem = lot.poItems[j];
+          const poKey = String(poItem.poItem ?? "").trim();
+          if (!poKey) {
+            return {
+              ok: false,
+              message: `Lot ${label}, PO line ${j + 1}: Select a PO item from the dropdown.`,
+              rowId: rowRef,
+            };
+          }
+          const qty = Number(poItem.receivedQuantity);
+          if (!Number.isFinite(qty) || qty <= 0) {
+            return {
+              ok: false,
+              message: `Lot ${label}, PO line ${j + 1}: Received quantity (kg) must be greater than 0.`,
+              rowId: rowRef,
+            };
+          }
+        }
       }
 
-      return {
-        ...base,
-        status: originalLot ? (originalLot.status || 'lot_pending') : 'lot_pending' as const
-      };
-    });
+      const lotsInPayloadOrder = [...lots].sort((a, b) => a.panelSeq - b.panelSeq);
 
-    const payload: UpdatePurchaseOrderWithReceivedLotsPayload = {
-      receivedLotDetails: lotsWithPreservedStatus
+      const lotsWithPreservedStatus = lotsInPayloadOrder.map((lot) => {
+        const lotNumberKey = lot.lotNumber.trim().toUpperCase();
+        const sourceKey = persistedLotSourceKeyByRowIdRef.current.get(lot.rowId);
+        const originalLot =
+          sourceKey != null ? originalLots.get(sourceKey) : originalLots.get(lotNumberKey);
+        const base = toReceivedLotPayload(lot);
+
+        if (lot.isPersistedLot && originalLot) {
+          const adminUnlocked =
+            canUnlockPersistedLotEdit && !!unlockedPersistedLotRows[lot.rowId];
+          if (adminUnlocked) {
+            return {
+              ...base,
+              status: originalLot.status || "lot_pending",
+            };
+          }
+          return {
+            ...originalLot,
+            status: originalLot.status || "lot_pending",
+          };
+        }
+
+        return {
+          ...base,
+          status: originalLot
+            ? originalLot.status || "lot_pending"
+            : ("lot_pending" as const),
+        };
+      });
+
+      const payload: UpdatePurchaseOrderWithReceivedLotsPayload = {
+        receivedLotDetails: lotsWithPreservedStatus,
+      };
+
+      return { ok: true, payload };
     };
 
-    await onSubmit(payload);
+  /**
+   * Validates form state; on success opens the confirmation dialog with a pending PATCH payload.
+   */
+  const beginGoodsReceivedUpdate = () => {
+    if (isSubmitting) return;
+    setSubmitFeedback(null);
+    const result = buildGoodsReceivedPayloadFromState();
+    if (!result.ok) {
+      toast.error(result.message);
+      setSubmitFeedback({
+        variant: "error",
+        message: result.message,
+        rowId: result.rowId,
+      });
+      if (result.rowId) {
+        requestAnimationFrame(() =>
+          document
+            .getElementById(`goods-received-lot-${result.rowId}`)
+            ?.scrollIntoView({ behavior: "smooth", block: "center" })
+        );
+      }
+      return;
+    }
+    setPendingUpdatePayload(result.payload);
+    setUpdateConfirmOpen(true);
+  };
+
+  /**
+   * Sends the confirmed payload to the server; surfaces API errors inline on the drawer.
+   */
+  const executeConfirmedGoodsReceivedUpdate = async () => {
+    const payload = pendingUpdatePayload;
+    if (!payload || isSubmitting) return;
+
+    setUpdateConfirmOpen(false);
+    setPendingUpdatePayload(null);
+
+    try {
+      await onSubmit(payload);
+      setSubmitFeedback(null);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Failed to update order";
+      toast.error(msg);
+      setSubmitFeedback({ variant: "error", message: msg });
+    }
+  };
+
+  const handleGoodsReceivedFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    beginGoodsReceivedUpdate();
   };
 
   return (
@@ -2375,7 +2551,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
-        <form onSubmit={handleSubmit} className="flex flex-col h-full" noValidate>
+        <form onSubmit={handleGoodsReceivedFormSubmit} className="flex flex-col h-full" noValidate>
           {/* Header */}
           <div className="bg-primary text-white px-4 py-3 flex-shrink-0">
             <div className="flex items-center justify-between">
@@ -2599,6 +2775,10 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                   id={`goods-received-lot-${lot.rowId}`}
                   className={`mb-4 border border-gray-400 rounded-sm bg-white overflow-hidden shadow-sm relative ${
                     lotIsPersisted ? "ring-1 ring-gray-400 bg-gray-100/50" : ""
+                  } ${
+                    submitFeedback?.rowId === lot.rowId
+                      ? "ring-2 ring-red-500 ring-offset-2 ring-offset-white"
+                      : ""
                   }`}
                 >
                   <div className="flex justify-between items-center px-2 py-1.5 bg-gray-50/80 border-b border-gray-400">
@@ -2660,12 +2840,13 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                   )}
 
                   <div className="overflow-x-auto">
-                    <table className="min-w-[720px] w-full border-collapse border border-gray-400 bg-white">
+                    <table className="min-w-[900px] w-full border-collapse border border-gray-400 bg-white">
                       <thead>
                         <tr>
                           <th className={grExcelTh}>Lot # *</th>
                           <th className={grExcelTh}>Cones *</th>
-                          <th className={grExcelTh}>Wt (kg) *</th>
+                          <th className={grExcelTh}>Gross wt (kg) *</th>
+                          <th className={grExcelTh}>Net wt (kg) *</th>
                           <th className={grExcelTh}>Boxes *</th>
                         </tr>
                       </thead>
@@ -2750,31 +2931,30 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                               onChange={(e) => {
                                 const value = e.target.value;
                                 const key = `lot-${lotIndex}-totalWeight`;
-                                if (value === "" || /^\d*\.?\d*$/.test(value)) {
-                                  setRawInputValues((prev) => ({
-                                    ...prev,
-                                    [key]: value,
-                                  }));
-                                  if (value === "" || value === ".") {
-                                    updateLot(lotIndex, "totalWeight", 0);
-                                  } else {
-                                    const numValue = parseFloat(value);
-                                    if (!isNaN(numValue)) {
-                                      updateLot(lotIndex, "totalWeight", numValue);
-                                    }
-                                  }
+                                if (!isPartialKgDecimal(value)) return;
+                                setRawInputValues((prev) => ({
+                                  ...prev,
+                                  [key]: value,
+                                }));
+                                if (value === "" || value === "." || value === ",") {
+                                  updateLot(lotIndex, "totalWeight", 0);
+                                  return;
+                                }
+                                const numValue = parseFloat(value.replace(",", "."));
+                                if (!isNaN(numValue)) {
+                                  updateLot(lotIndex, "totalWeight", numValue);
                                 }
                               }}
                               onBlur={(e) => {
                                 const value = e.target.value;
                                 const key = `lot-${lotIndex}-totalWeight`;
-                                const numValue = parseFloat(value);
+                                const numValue = parseKgInputValue(value);
                                 setRawInputValues((prev) => {
                                   const newValues = { ...prev };
                                   delete newValues[key];
                                   return newValues;
                                 });
-                                if (value === "" || isNaN(numValue) || numValue <= 0) {
+                                if (numValue == null || numValue <= 0) {
                                   updateLot(lotIndex, "totalWeight", 0);
                                 } else {
                                   updateLot(lotIndex, "totalWeight", numValue);
@@ -2783,6 +2963,58 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                               className={grExcelInput}
                               placeholder="0.00"
                               required
+                              inputMode="decimal"
+                              aria-label={`Lot ${lot.panelSeq} gross weight in kg`}
+                            />
+                          </td>
+                          <td className={grExcelTd}>
+                            <input
+                              type="text"
+                              value={
+                                rawInputValues[`lot-${lotIndex}-netWeight`] !== undefined
+                                  ? rawInputValues[`lot-${lotIndex}-netWeight`]
+                                  : (lot.netWeight ?? 0) === 0
+                                    ? ""
+                                    : String(lot.netWeight ?? 0)
+                              }
+                              disabled={!lotRowEditable}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                const key = `lot-${lotIndex}-netWeight`;
+                                if (!isPartialKgDecimal(value)) return;
+                                setRawInputValues((prev) => ({
+                                  ...prev,
+                                  [key]: value,
+                                }));
+                                if (value === "" || value === "." || value === ",") {
+                                  updateLot(lotIndex, "netWeight", 0);
+                                  return;
+                                }
+                                const numValue = parseFloat(value.replace(",", "."));
+                                if (!isNaN(numValue)) {
+                                  updateLot(lotIndex, "netWeight", numValue);
+                                }
+                              }}
+                              onBlur={(e) => {
+                                const value = e.target.value;
+                                const key = `lot-${lotIndex}-netWeight`;
+                                const numValue = parseKgInputValue(value);
+                                setRawInputValues((prev) => {
+                                  const newValues = { ...prev };
+                                  delete newValues[key];
+                                  return newValues;
+                                });
+                                if (numValue == null || numValue <= 0) {
+                                  updateLot(lotIndex, "netWeight", 0);
+                                } else {
+                                  updateLot(lotIndex, "netWeight", numValue);
+                                }
+                              }}
+                              className={grExcelInput}
+                              placeholder="0.00"
+                              required
+                              inputMode="decimal"
+                              aria-label={`Lot ${lot.panelSeq} net weight in kg`}
                             />
                           </td>
                           <td className={grExcelTd}>
@@ -2799,15 +3031,15 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                               onChange={(e) => {
                                 const value = e.target.value;
                                 const key = `lot-${lotIndex}-numberOfBoxes`;
-                                if (value === "" || /^\d*\.?\d*$/.test(value)) {
+                                if (value === "" || /^\d*$/.test(value)) {
                                   setRawInputValues((prev) => ({
                                     ...prev,
                                     [key]: value,
                                   }));
-                                  if (value === "" || value === ".") {
+                                  if (value === "") {
                                     updateLot(lotIndex, "numberOfBoxes", 0);
                                   } else {
-                                    const numValue = parseFloat(value);
+                                    const numValue = parseInt(value, 10);
                                     if (!isNaN(numValue)) {
                                       updateLot(lotIndex, "numberOfBoxes", numValue);
                                     }
@@ -2817,13 +3049,13 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                               onBlur={(e) => {
                                 const value = e.target.value;
                                 const key = `lot-${lotIndex}-numberOfBoxes`;
-                                const numValue = parseFloat(value);
+                                const numValue = parseInt(value.trim(), 10);
                                 setRawInputValues((prev) => {
                                   const newValues = { ...prev };
                                   delete newValues[key];
                                   return newValues;
                                 });
-                                if (value === "" || isNaN(numValue) || numValue <= 0) {
+                                if (value.trim() === "" || isNaN(numValue) || numValue <= 0) {
                                   updateLot(lotIndex, "numberOfBoxes", 0);
                                 } else {
                                   updateLot(lotIndex, "numberOfBoxes", numValue);
@@ -2832,6 +3064,9 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                               className={grExcelInput}
                               placeholder="0"
                               required
+                              inputMode="numeric"
+                              autoComplete="off"
+                              aria-label={`Lot ${lot.panelSeq} number of boxes`}
                             />
                           </td>
                         </tr>
@@ -3078,6 +3313,99 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                 document.body
               )
             : null}
+
+          {/* Confirm update purchase order */}
+          {updateConfirmOpen &&
+            typeof document !== "undefined"
+              ? createPortal(
+                  <div
+                    className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/50 p-4"
+                    onClick={() => {
+                      if (!isSubmitting) {
+                        setUpdateConfirmOpen(false);
+                        setPendingUpdatePayload(null);
+                      }
+                    }}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="goods-received-update-title"
+                  >
+                    <div
+                      className="bg-white rounded-lg shadow-xl max-w-md w-full p-4 space-y-3 border border-gray-200"
+                      onClick={(ev) => ev.stopPropagation()}
+                    >
+                      <h2 id="goods-received-update-title" className="text-sm font-bold text-gray-900">
+                        Update purchase order?
+                      </h2>
+                      <p className="text-xs text-gray-600 leading-relaxed">
+                        Saved received-lot details for{" "}
+                        <span className="font-semibold text-gray-800">{order.orderNumber}</span> will be sent to the
+                        server. Continue?
+                      </p>
+                      <div className="flex justify-end gap-2 pt-1">
+                        <button
+                          type="button"
+                          className="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 rounded border border-gray-200 hover:bg-gray-200 disabled:opacity-50"
+                          disabled={isSubmitting}
+                          onClick={() => {
+                            setUpdateConfirmOpen(false);
+                            setPendingUpdatePayload(null);
+                          }}
+                          aria-label="Cancel update purchase order"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="px-3 py-1.5 text-xs font-semibold text-white bg-purple-600 rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                          disabled={isSubmitting}
+                          onClick={() => {
+                            void executeConfirmedGoodsReceivedUpdate();
+                          }}
+                          aria-label="Confirm update purchase order"
+                        >
+                          {isSubmitting ? (
+                            <>
+                              <i className="ri-loader-4-line animate-spin text-xs" aria-hidden />
+                              Updating…
+                            </>
+                          ) : (
+                            <>
+                              <i className="ri-check-line text-xs" aria-hidden />
+                              Yes, update
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>,
+                  document.body
+                )
+              : null}
+
+          {submitFeedback && (
+            <div
+              className="relative z-10 shrink-0 border-t border-red-200 bg-red-50 px-4 py-2"
+              role="alert"
+              aria-live="assertive"
+            >
+              <div className="flex items-start gap-2">
+                <i className="ri-error-warning-line text-red-600 text-base shrink-0 mt-0.5" aria-hidden />
+                <div>
+                  <p className="text-[11px] font-bold text-red-900 uppercase tracking-wide">Cannot update yet</p>
+                  <p className="text-xs text-red-800 mt-0.5 leading-snug">{submitFeedback.message}</p>
+                </div>
+                <button
+                  type="button"
+                  className="ml-auto text-red-700 hover:bg-red-100 rounded px-2 py-0.5 text-[10px] font-semibold shrink-0"
+                  onClick={() => setSubmitFeedback(null)}
+                  aria-label="Dismiss update error message"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Footer - relative z-10 so it stays above scrollable content */}
           <div className="relative z-10 bg-gray-50 px-4 py-3 flex justify-end gap-2 flex-shrink-0 border-t border-gray-200">

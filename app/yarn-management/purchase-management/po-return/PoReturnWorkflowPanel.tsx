@@ -14,8 +14,6 @@ type PoReturnWorkflowPanelProps = {
   onSelectPo: (po: PoOption | null) => void;
   remark: string;
   onRemarkChange: (v: string) => void;
-  cancellationIntent: "partial" | "full_po";
-  onCancellationIntent: (v: "partial" | "full_po") => void;
   sessionBusy: boolean;
   sessionId: string | null;
   onStartSession: () => void;
@@ -40,8 +38,6 @@ export function PoReturnWorkflowPanel({
   onSelectPo,
   remark,
   onRemarkChange,
-  cancellationIntent,
-  onCancellationIntent,
   sessionBusy,
   sessionId,
   onStartSession,
@@ -85,61 +81,36 @@ export function PoReturnWorkflowPanel({
           </p>
         </div>
         <div className="box-body px-4 py-4 space-y-4">
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-1">
-              <label htmlFor="po-return-search" className="text-[11px] font-semibold text-gray-700">
-                Find PO
-              </label>
-              <input
-                id="po-return-search"
-                type="search"
-                value={poSearch}
-                onChange={(e) => onPoSearchChange(e.target.value)}
-                placeholder="Filter by PO number or supplier…"
-                className="w-full rounded-md border border-gray-200 px-3 py-1.5 text-xs"
-              />
-              <select
-                id="po-return-select"
-                className="w-full rounded-md border border-gray-200 px-3 py-1.5 text-xs mt-1"
-                value={selectedPo?.id ?? ""}
-                onChange={(e) => {
-                  const opt = filteredPoOptions.find((p) => p.id === e.target.value);
-                  onSelectPo(opt ?? null);
-                }}
-                disabled={poLoading || filteredPoOptions.length === 0}
-                aria-label="Purchase order"
-              >
-                <option value="">{poLoading ? "Loading…" : "Select a PO with received lots"}</option>
-                {filteredPoOptions.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.poNumber} — {p.supplierLabel} ({p.currentStatus})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <span className="text-[11px] font-semibold text-gray-700">ERP cancellation intent</span>
-              <fieldset className="flex flex-wrap gap-3 mt-1">
-                <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                  <input
-                    type="radio"
-                    name="cancel-intent"
-                    checked={cancellationIntent === "partial"}
-                    onChange={() => onCancellationIntent("partial")}
-                  />
-                  Partial (some lines)
-                </label>
-                <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                  <input
-                    type="radio"
-                    name="cancel-intent"
-                    checked={cancellationIntent === "full_po"}
-                    onChange={() => onCancellationIntent("full_po")}
-                  />
-                  Full PO
-                </label>
-              </fieldset>
-            </div>
+          <div className="space-y-1 max-w-xl">
+            <label htmlFor="po-return-search" className="text-[11px] font-semibold text-gray-700">
+              Find PO
+            </label>
+            <input
+              id="po-return-search"
+              type="search"
+              value={poSearch}
+              onChange={(e) => onPoSearchChange(e.target.value)}
+              placeholder="Filter by PO number or supplier…"
+              className="w-full rounded-md border border-gray-200 px-3 py-1.5 text-xs"
+            />
+            <select
+              id="po-return-select"
+              className="w-full rounded-md border border-gray-200 px-3 py-1.5 text-xs mt-1"
+              value={selectedPo?.id ?? ""}
+              onChange={(e) => {
+                const opt = filteredPoOptions.find((p) => p.id === e.target.value);
+                onSelectPo(opt ?? null);
+              }}
+              disabled={poLoading || filteredPoOptions.length === 0}
+              aria-label="Purchase order"
+            >
+              <option value="">{poLoading ? "Loading…" : "Select a PO with received lots"}</option>
+              {filteredPoOptions.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.poNumber} — {p.supplierLabel} ({p.currentStatus})
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="space-y-1">

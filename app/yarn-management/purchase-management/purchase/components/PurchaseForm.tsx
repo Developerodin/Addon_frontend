@@ -164,6 +164,27 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     formDataItemsRef.current = formData.items;
   }, [formData.items]);
 
+  /** Validated payload held while the update-confirmation modal is open. */
+  const pendingSubmitPayloadRef = useRef<PurchaseOrderData | null>(null);
+  const [showSubmitConfirmModal, setShowSubmitConfirmModal] = useState(false);
+
+  /**
+   * Closes the update confirmation modal and drops any staged submit payload.
+   */
+  const cancelSubmitConfirm = useCallback(() => {
+    pendingSubmitPayloadRef.current = null;
+    setShowSubmitConfirmModal(false);
+  }, []);
+
+  useEffect(() => {
+    if (!showSubmitConfirmModal) return;
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") cancelSubmitConfirm();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showSubmitConfirmModal, cancelSubmitConfirm]);
+
   // Autocomplete state for yarn names - initialize with existing items to prevent auto-showing suggestions
   const [autocompleteStates, setAutocompleteStates] = useState<Record<string, {
     query: string;
@@ -1141,6 +1162,22 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     setAutocompleteStates(newStates);
   };
 
+  /**
+   * Asks the user to confirm before removing a yarn line from the PO.
+   * @param itemId - Stable id of the row to remove
+   */
+  const confirmRemoveItem = (itemId: string) => {
+    const item = formData.items.find((i) => i.id === itemId);
+    const lineHint = item?.yarnName?.trim()
+      ? `"${item.yarnName.trim()}"`
+      : 'this line';
+    const confirmed = window.confirm(
+      `Delete ${lineHint}?\n\nConfirm you want to remove this line from the purchase order. This cannot be undone.`
+    );
+    if (!confirmed) return;
+    removeItem(itemId);
+  };
+
   const handleDownloadYarnTemplate = () => {
     try {
       downloadYarnItemsTemplate();
@@ -1977,6 +2014,27 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
     console.log('[PurchaseForm] Passing data to onSubmit', dataToSubmit);
 
+    if (showEditWarning) {
+      pendingSubmitPayloadRef.current = dataToSubmit;
+      setShowSubmitConfirmModal(true);
+      return;
+    }
+
+    try {
+      await onSubmit(dataToSubmit);
+    } catch (error) {
+      console.error("Form submission error:", error);
+    }
+  };
+
+  /**
+   * Submits after the user confirms in the update PO modal.
+   */
+  const handleConfirmSubmitUpdate = async () => {
+    const dataToSubmit = pendingSubmitPayloadRef.current;
+    pendingSubmitPayloadRef.current = null;
+    setShowSubmitConfirmModal(false);
+    if (!dataToSubmit) return;
     try {
       await onSubmit(dataToSubmit);
     } catch (error) {
@@ -2023,6 +2081,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   }
 
   return (
+    <>
     <form onSubmit={handleSubmit} className="space-y-4">
       {showEditWarning && (
         <div
@@ -2547,9 +2606,10 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                         <td className="border border-gray-300 px-2 py-1.5 text-center">
                           <button
                             type="button"
-                            onClick={() => removeItem(item.id)}
+                            onClick={() => confirmRemoveItem(item.id)}
                             className="text-red-600 hover:text-red-800 hover:bg-red-50 p-0.5 rounded transition-colors"
-                            title="Remove Item"
+                            title="Remove line (will ask for confirmation)"
+                            aria-label={`Confirm delete line${item.yarnName?.trim() ? `: ${item.yarnName.trim()}` : ''}`}
                           >
                             <i className="ri-delete-bin-line text-xs"></i>
                           </button>
@@ -2664,6 +2724,66 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
         </button>
       </div>
     </form>
+
+    {showSubmitConfirmModal && (
+      <div
+        className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50"
+        role="presentation"
+        onClick={cancelSubmitConfirm}
+      >
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="po-update-confirm-title"
+          className="w-full max-w-md rounded-lg border border-gray-200 bg-white shadow-xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="border-b border-gray-100 px-4 py-3">
+            <h2 id="po-update-confirm-title" className="text-sm font-bold text-gray-900">
+              Confirm update
+            </h2>
+          </div>
+          <div className="px-4 py-3 space-y-2 text-xs text-gray-700">
+            <p>
+              You are about to update this purchase order. Changes may affect lots and packlist data.
+            </p>
+            <p className="text-gray-600">
+              After saving, verify packlist and lots, and confirm all details are correct.
+            </p>
+          </div>
+          <div className="flex justify-end gap-2 border-t border-gray-100 px-4 py-3 bg-gray-50/80 rounded-b-lg">
+            <button
+              type="button"
+              onClick={cancelSubmitConfirm}
+              className="px-3 py-1.5 text-[11px] font-bold rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+              disabled={isSubmitting}
+              aria-label="Cancel update and close"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void handleConfirmSubmitUpdate();
+              }}
+              disabled={isSubmitting}
+              className="px-3 py-1.5 text-[11px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-60"
+              aria-label="Confirm and update purchase order"
+            >
+              {isSubmitting ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <i className="ri-loader-4-line animate-spin text-xs" aria-hidden />
+                  Updating…
+                </span>
+              ) : (
+                submitButtonText
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 };
 
