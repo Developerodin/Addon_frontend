@@ -6,6 +6,7 @@ import {
   listMachineOrderAssignments,
   getMachineOrderAssignment,
   updateAssignmentItemsPriorities,
+  updateAssignmentItemStatus,
   OrderStatus,
   type MachineOrderAssignment,
   type OrderStatusType,
@@ -114,6 +115,8 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
   /** Visual feedback for row being dragged (native DnD ghost + opacity). */
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
   const [savingOrder, setSavingOrder] = useState(false);
+  /** Assignment item whose status PATCH is in flight (disables that row's status select). */
+  const [savingStatusItemId, setSavingStatusItemId] = useState<string | null>(null);
   const [auditLogsTarget, setAuditLogsTarget] = useState<{ machineId: string; label: string } | null>(null);
 
   /** Reorder within the prioritized list only; on-hold and no-priority items keep trailing priorities. */
@@ -147,6 +150,59 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
         setSavingOrder(false);
         draggedItemIdRef.current = null;
         setDraggingItemId(null);
+      }
+    },
+    [poDetailsAssignment]
+  );
+
+  /**
+   * Persists one queue row's order status and mirrors the result into the drawer and machine table.
+   * @param itemId Subdocument id of the assignment line item
+   * @param nextStatus Target status value from backend enum
+   */
+  const handleAssignmentItemStatusChange = useCallback(
+    async (itemId: string, nextStatus: OrderStatusType) => {
+      if (!poDetailsAssignment?.id) return;
+      const items = poDetailsAssignment.productionOrderItems ?? [];
+      const current = items.find((i) => i.itemId === itemId);
+      const prev = (current?.status ?? OrderStatus.PENDING) as OrderStatusType;
+      if (nextStatus === prev) return;
+      const assignmentId = poDetailsAssignment.id;
+      const snapshot = poDetailsAssignment;
+      setSavingStatusItemId(itemId);
+      setPoDetailsAssignment((p) => {
+        if (!p?.id) return p;
+        return {
+          ...p,
+          productionOrderItems: (p.productionOrderItems ?? []).map((i) =>
+            i.itemId === itemId ? { ...i, status: nextStatus } : i
+          ),
+        };
+      });
+      setRows((prevRows) =>
+        prevRows.map((r) => {
+          if (r.id !== assignmentId) return r;
+          return {
+            ...r,
+            productionOrderItems: (r.productionOrderItems ?? []).map((i) =>
+              i.itemId === itemId ? { ...i, status: nextStatus } : i
+            ),
+          };
+        })
+      );
+      try {
+        const updated = await updateAssignmentItemStatus(assignmentId, itemId, nextStatus);
+        setPoDetailsAssignment(updated);
+        setRows((prevRows) => prevRows.map((r) => (r.id === assignmentId ? updated : r)));
+        toast.success("Status updated");
+      } catch (e) {
+        setPoDetailsAssignment(snapshot);
+        setRows((prevRows) =>
+          prevRows.map((r) => (r.id === assignmentId ? snapshot : r))
+        );
+        toast.error(e instanceof Error ? e.message : "Failed to update status");
+      } finally {
+        setSavingStatusItemId(null);
       }
     },
     [poDetailsAssignment]
@@ -588,13 +644,47 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
                                     {item.orderNumber ?? "—"} · {item.articleNumber ?? "—"}
                                   </span>
                                 </td>
-                                <td className="px-2 py-1.5 border-r border-gray-300 text-center">
-                                  <span
-                                    className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-medium max-w-[110px] mx-auto ${assignmentItemStatusBadgeClass(item.status)}`}
-                                    aria-label={`Assignment status: ${item.status ?? OrderStatus.PENDING}`}
-                                  >
-                                    {item.status ?? OrderStatus.PENDING}
-                                  </span>
+                                <td
+                                  className="px-2 py-1.5 border-r border-gray-300 text-center align-middle"
+                                  onClick={(e) => e.stopPropagation()}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                >
+                                  {item.itemId ? (
+                                    <>
+                                      <label className="sr-only" htmlFor={`po-item-status-${rowKey}`}>
+                                        Update assignment status for {item.orderNumber ?? "—"} ·{" "}
+                                        {item.articleNumber ?? "—"}
+                                      </label>
+                                      <select
+                                        id={`po-item-status-${rowKey}`}
+                                        value={(item.status ?? OrderStatus.PENDING) as OrderStatusType}
+                                        disabled={
+                                          savingOrder || savingStatusItemId === item.itemId
+                                        }
+                                        onChange={(e) => {
+                                          const v = e.target.value as OrderStatusType;
+                                          void handleAssignmentItemStatusChange(item.itemId!, v);
+                                        }}
+                                        className="w-full max-w-[132px] mx-auto block text-[10px] font-medium rounded border border-gray-300 bg-white dark:bg-slate-800 dark:border-slate-600 text-gray-800 dark:text-slate-100 py-0.5 px-1 focus:ring-1 focus:ring-purple-500 focus:border-purple-500 disabled:opacity-50"
+                                        aria-busy={
+                                          savingStatusItemId === item.itemId ? true : undefined
+                                        }
+                                      >
+                                        {(Object.values(OrderStatus) as OrderStatusType[]).map((opt) => (
+                                          <option key={opt} value={opt}>
+                                            {opt}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </>
+                                  ) : (
+                                    <span
+                                      className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-medium max-w-[110px] mx-auto ${assignmentItemStatusBadgeClass(item.status)}`}
+                                      aria-label={`Assignment status: ${item.status ?? OrderStatus.PENDING}`}
+                                    >
+                                      {item.status ?? OrderStatus.PENDING}
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="px-2 py-1.5 border-r border-gray-300">
                                   <span
