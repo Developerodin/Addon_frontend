@@ -192,6 +192,26 @@ const getAccessToken = (): string | null => {
   }
 };
 
+/**
+ * Reads HTTP error payloads from Yarn PO APIs (typically `{ code, message }`).
+ * Falls back to raw text when the body is not JSON.
+ */
+async function parseErrorResponse(response: Response): Promise<string | undefined> {
+  const raw = await response.text();
+  if (!raw.trim()) return undefined;
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (typeof parsed.message === 'string' && parsed.message.trim()) {
+      return parsed.message.trim();
+    }
+  } catch {
+    return raw.trim().slice(0, 500);
+  }
+
+  return undefined;
+}
+
 class YarnPurchaseOrderService {
   private baseURL = `${API_BASE_URL}/yarn-management/yarn-purchase-orders`;
 
@@ -221,13 +241,13 @@ class YarnPurchaseOrderService {
       const response = await fetch(url, config);
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const detail = await parseErrorResponse(response);
 
         if (response.status === 401) {
           throw new Error('Authentication failed. Please login again.');
         }
 
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+        throw new Error(detail ?? `HTTP error! status: ${response.status}`);
       }
 
       if (response.status === 204) {

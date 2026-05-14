@@ -1,3 +1,13 @@
+/**
+ * Ensures toast / inline banners show `{ message }` from API errors thrown as `Error`.
+ */
+export function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+  return fallback;
+}
+
 export type PoOption = {
   id: string;
   poNumber: string;

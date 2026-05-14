@@ -393,7 +393,7 @@ function receivedLotPoItemsDeepEqual(
 
 /** Logins that may unlock editing of already-saved lots in Goods Received (UI + submit). Server should still enforce authorization. */
 const GOODS_RECEIVED_PERSISTED_LOT_EDIT_EMAILS = new Set(
-  ["mayank@addbr.com", "admin@addon.in"].map((e) => e.trim().toLowerCase())
+  ["mayank@addbr.com", "admin@addon.in", "alok@addbr.com"].map((e) => e.trim().toLowerCase())
 );
 
 /**
@@ -3095,7 +3095,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                         <thead>
                           <tr>
                             <th className={grExcelTh}>PO Item *</th>
-                            <th className={grExcelTh}>Rec. Qty (kg) *</th>
+                            <th className={grExcelTh}>Received net weight *</th>
                             <th className={`${grExcelTh} w-[7rem] text-center`}>Action</th>
                           </tr>
                         </thead>

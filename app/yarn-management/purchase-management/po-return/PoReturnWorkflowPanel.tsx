@@ -6,6 +6,9 @@ import type { PendingRow, PoOption } from "./poReturnHelpers";
 import { sumPendingNetKg } from "./poReturnHelpers";
 
 type PoReturnWorkflowPanelProps = {
+  /** Last API / validation error for the workflow (shown inline near scan controls). */
+  workflowError?: string | null;
+  onDismissWorkflowError?: () => void;
   poSearch: string;
   onPoSearchChange: (v: string) => void;
   poLoading: boolean;
@@ -30,6 +33,8 @@ type PoReturnWorkflowPanelProps = {
  * PO picker, session controls, scan table, and finalize action.
  */
 export function PoReturnWorkflowPanel({
+  workflowError,
+  onDismissWorkflowError,
   poSearch,
   onPoSearchChange,
   poLoading,
@@ -150,6 +155,28 @@ export function PoReturnWorkflowPanel({
           {sessionId && (
             <div className="rounded-md border border-gray-100 p-3 space-y-3 bg-gray-50/50">
               <p className="text-[11px] text-gray-600 font-mono">Session: {sessionId}</p>
+              {workflowError?.trim() && (
+                <div
+                  role="alert"
+                  aria-live="assertive"
+                  aria-relevant="additions text"
+                  className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-900"
+                >
+                  <div className="flex justify-between gap-2 items-start">
+                    <p className="font-medium pr-2">{workflowError}</p>
+                    {onDismissWorkflowError && (
+                      <button
+                        type="button"
+                        onClick={onDismissWorkflowError}
+                        className="shrink-0 text-red-700 underline font-semibold hover:text-red-900"
+                        aria-label="Dismiss error message"
+                      >
+                        Dismiss
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="flex flex-wrap gap-2 items-end">
                 <div className="flex-1 min-w-[200px]">
                   <label htmlFor="po-return-barcode" className="sr-only">

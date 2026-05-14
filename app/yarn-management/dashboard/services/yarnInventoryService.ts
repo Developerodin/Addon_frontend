@@ -135,6 +135,8 @@ export interface YarnRequisitionResponse {
   dismissedAt?: string;
   linkedPurchaseOrderId?: string | YarnCatalogInfo;
   attachedDraftPoId?: string | YarnCatalogInfo;
+  /** Kg on attached draft PO line for this requisition (null if not on a draft or line not found). */
+  draftPoQuantity?: number | null;
   created: string;
   lastUpdated: string;
 }
