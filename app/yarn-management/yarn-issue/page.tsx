@@ -2258,9 +2258,6 @@ const YarnIssuePage = () => {
                 className="box-body p-6"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (!submittingTransaction) {
-                    handleIssueSubmit();
-                  }
                 }}
               >
               {coneData && (
@@ -2416,9 +2413,14 @@ const YarnIssuePage = () => {
                 </button>
                 <button
                   ref={issueSubmitButtonRef}
-                  type="submit"
+                  type="button"
                   className="ti-btn ti-btn-primary"
                   disabled={submittingTransaction}
+                  onClick={() => {
+                    if (!submittingTransaction) {
+                      handleIssueSubmit();
+                    }
+                  }}
                 >
                   {submittingTransaction ? (
                     <>

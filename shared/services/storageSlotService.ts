@@ -287,7 +287,8 @@ class StorageSlotService {
   }
 
   async getSlotDetailsByBarcode(barcode: string): Promise<SlotDetailsResponse> {
-    return this.makeRequest<SlotDetailsResponse>(`/slots/barcode/${barcode}`, {
+    const encoded = encodeURIComponent(barcode.trim());
+    return this.makeRequest<SlotDetailsResponse>(`/slots/barcode/${encoded}`, {
       method: "GET",
     });
   }

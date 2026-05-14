@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useCallback, useEffect, useMemo } from "react";
+import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
 import * as XLSX from "xlsx";
@@ -51,6 +51,15 @@ import {
 
 const getProcessedBoxStorageKey = (boxId: string) =>
   `processedBoxResult:${boxId}`;
+
+/** True when rack label or barcode exactly matches trimmed query (case-insensitive). */
+function rackMatchesExactQuery(rack: RackLocation, queryTrimmed: string): boolean {
+  const q = queryTrimmed.trim().toLowerCase();
+  if (!q) return false;
+  const code = (rack.rackCode ?? "").trim().toLowerCase();
+  const bc = (rack.barcode ?? "").trim().toLowerCase();
+  return code === q || bc === q;
+}
 
 /** Result of resolving a scanned box barcode on the short-term page */
 interface BoxBarcodeFetchResult {
@@ -123,10 +132,11 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
   const [isOpenProcessModalSubmitting, setIsOpenProcessModalSubmitting] =
     useState(false);
 
-  // Search by rack code or barcode (current-page filter + global API lookup, 5s debounce)
+  // Search by rack code or barcode: exact matches on loaded slots, then deferred GET /slots/barcode/:barcode when needed
   const [rackSearchQuery, setRackSearchQuery] = useState("");
   const [searchResultRack, setSearchResultRack] = useState<RackLocation | null>(null);
   const [isSearchingByBarcode, setIsSearchingByBarcode] = useState(false);
+  const rackLookupGenerationRef = useRef(0);
 
   // Print settings modal state
   const [showPrintSettingsModal, setShowPrintSettingsModal] = useState(false);
@@ -255,18 +265,17 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
     return grid;
   }, [racks, gridDimensions, isLoadingSlots]);
 
-  const racksFilteredBySearch = useMemo(() => {
-    const q = rackSearchQuery.trim().toLowerCase();
-    if (!q || !racks) return [];
-    return (racks ?? []).filter(
-      (r) =>
-        (r.rackCode && r.rackCode.toLowerCase().includes(q)) ||
-        (r.barcode && r.barcode.toLowerCase().includes(q))
-    );
+  const racksExactSearchMatches = useMemo(() => {
+    const q = rackSearchQuery.trim();
+    if (!q) return [];
+    return racks.filter((r) => rackMatchesExactQuery(r, q));
   }, [racks, rackSearchQuery]);
 
-  // Global search: fetch slot by barcode/label (5s debounce)
+  /** When not in paginated slots, resolve canonical ST slot via storage API (ignores bogus yarn lookups by arbitrary string). */
   useEffect(() => {
+    rackLookupGenerationRef.current += 1;
+    const lookupId = rackLookupGenerationRef.current;
+
     const q = rackSearchQuery.trim();
     if (!q) {
       setSearchResultRack(null);
@@ -274,41 +283,81 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
       return;
     }
 
-    const timer = setTimeout(async () => {
-      setIsSearchingByBarcode(true);
-      setSearchResultRack(null);
-      try {
-        const details = await fetchRackDetailsFromYarnApis(q, "ST", null);
-        const slot = details.storageSlot;
-        const data = details.type === "boxes" ? (details.data as BoxInSlot[]) : (details.data as ConeInSlot[]);
-        const rack: RackLocation = {
-          id: slot._id,
-          rackCode: slot.label,
-          row: slot.shelfNumber,
-          column: slot.floorNumber,
-          shelf: slot.shelfNumber,
-          barcode: slot.barcode,
-          capacity: 1,
-          currentBoxes: Array.isArray(data) ? data.length : 0,
-          status: Array.isArray(data) && data.length > 0 ? "Occupied" : slot.isActive ? "Available" : "Maintenance",
-        };
-        setSearchResultRack(rack);
-        setRackSlotDetails((prev) => new Map(prev).set(slot._id, details));
-      } catch {
-        setSearchResultRack(null);
-      } finally {
-        setIsSearchingByBarcode(false);
-      }
-    }, 5000);
+    const hasLocalExact = racks.some((r) => rackMatchesExactQuery(r, q));
 
-    return () => clearTimeout(timer);
-  }, [rackSearchQuery]);
+    if (hasLocalExact) {
+      setSearchResultRack(null);
+      setIsSearchingByBarcode(false);
+      return;
+    }
+
+    setSearchResultRack(null);
+    setIsSearchingByBarcode(true);
+
+    const DEBOUNCE_MS = 500;
+    const timer = setTimeout(() => {
+      if (rackLookupGenerationRef.current !== lookupId) return;
+
+      void (async () => {
+        try {
+          const details = await storageSlotService.getSlotDetailsByBarcode(q);
+          if (rackLookupGenerationRef.current !== lookupId) return;
+
+          const slot = details.storageSlot;
+          if ((slot.zoneCode ?? "").toUpperCase() !== "ST") {
+            setSearchResultRack(null);
+            return;
+          }
+
+          const data =
+            details.type === "boxes"
+              ? (details.data as BoxInSlot[])
+              : (details.data as ConeInSlot[]);
+
+          const rack: RackLocation = {
+            id: slot._id,
+            rackCode: slot.label,
+            row: slot.shelfNumber,
+            column: slot.floorNumber,
+            shelf: slot.shelfNumber,
+            sectionCode: slot.sectionCode,
+            barcode: slot.barcode,
+            capacity: 1,
+            currentBoxes: Array.isArray(data) ? data.length : 0,
+            status:
+              Array.isArray(data) && data.length > 0
+                ? "Occupied"
+                : slot.isActive
+                  ? "Available"
+                  : "Maintenance",
+          };
+
+          setSearchResultRack(rack);
+          setRackSlotDetails((prev) => new Map(prev).set(slot._id, details));
+        } catch (err) {
+          if (rackLookupGenerationRef.current !== lookupId) return;
+          setSearchResultRack(null);
+          console.error("ShortTermStorage rack barcode lookup failed:", err);
+        } finally {
+          if (rackLookupGenerationRef.current === lookupId) {
+            setIsSearchingByBarcode(false);
+          }
+        }
+      })();
+    }, DEBOUNCE_MS);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [rackSearchQuery, racks]);
 
   const displayRacksForSearch = useMemo(() => {
-    if (!rackSearchQuery.trim()) return [];
+    const q = rackSearchQuery.trim();
+    if (!q) return [];
+    if (racksExactSearchMatches.length > 0) return racksExactSearchMatches;
     if (searchResultRack) return [searchResultRack];
-    return racksFilteredBySearch;
-  }, [rackSearchQuery, searchResultRack, racksFilteredBySearch]);
+    return [];
+  }, [rackSearchQuery, searchResultRack, racksExactSearchMatches]);
 
   const ST_SECTIONS = ["B7-01"];
   const PAGE_SIZE_OPTIONS = [52, 100, 200, 500];
