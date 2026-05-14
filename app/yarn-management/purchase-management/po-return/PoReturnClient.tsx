@@ -8,6 +8,7 @@ import { PoReturnHistoryPanel } from "./PoReturnHistoryPanel";
 import { PoReturnWorkflowPanel } from "./PoReturnWorkflowPanel";
 import {
   getPoQueryDateBounds,
+  getErrorMessage,
   mapToPoOptions,
   sumPendingNetKg,
   type HistoryRow,
@@ -37,6 +38,7 @@ export function PoReturnClient() {
   const [historyRows, setHistoryRows] = useState<HistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"return" | "history">("return");
+  const [workflowError, setWorkflowError] = useState<string | null>(null);
 
   const fetchPos = useCallback(async () => {
     setPoLoading(true);
@@ -94,6 +96,7 @@ export function PoReturnClient() {
     setSessionId(null);
     setPendingRows([]);
     setBarcodeInput("");
+    setWorkflowError(null);
   }, []);
 
   const handleStartSession = async () => {
@@ -114,9 +117,12 @@ export function PoReturnClient() {
       }
       setSessionId(id);
       setPendingRows([]);
+      setWorkflowError(null);
       toast.success("Session started — scan ST cones for this PO");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not start session");
+      const msg = getErrorMessage(e, "Could not start session");
+      setWorkflowError(msg);
+      toast.error(msg);
     } finally {
       setSessionBusy(false);
     }
@@ -146,9 +152,12 @@ export function PoReturnClient() {
         return next;
       });
       setBarcodeInput("");
+      setWorkflowError(null);
       toast.success(`Added ${row.barcode}`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Scan failed");
+      const msg = getErrorMessage(e, "Scan failed");
+      setWorkflowError(msg);
+      toast.error(msg);
     } finally {
       setSessionBusy(false);
     }
@@ -160,9 +169,12 @@ export function PoReturnClient() {
     try {
       await yarnPurchaseOrderService.removeVendorReturnSessionScan(sessionId, barcode);
       setPendingRows((prev) => prev.filter((r) => r.barcode !== barcode));
+      setWorkflowError(null);
       toast.success(`Removed ${barcode}`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Remove failed");
+      const msg = getErrorMessage(e, "Remove failed");
+      setWorkflowError(msg);
+      toast.error(msg);
     } finally {
       setSessionBusy(false);
     }
@@ -181,12 +193,15 @@ export function PoReturnClient() {
     setSessionBusy(true);
     try {
       await yarnPurchaseOrderService.finalizeVendorReturnSession(sessionId);
+      setWorkflowError(null);
       toast.success("Vendor return completed — inventory updated");
       resetSessionUi();
       void fetchHistory(selectedPo?.poNumber?.trim());
       void fetchPos();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Finalize failed");
+      const msg = getErrorMessage(e, "Finalize failed");
+      setWorkflowError(msg);
+      toast.error(msg);
     } finally {
       setSessionBusy(false);
     }
@@ -246,6 +261,8 @@ export function PoReturnClient() {
 
       {activeTab === "return" && (
         <PoReturnWorkflowPanel
+          workflowError={workflowError}
+          onDismissWorkflowError={() => setWorkflowError(null)}
           poSearch={poSearch}
           onPoSearchChange={setPoSearch}
           poLoading={poLoading}
@@ -265,7 +282,10 @@ export function PoReturnClient() {
             toast("Session cleared locally — create a new session to continue");
           }}
           barcodeInput={barcodeInput}
-          onBarcodeInputChange={setBarcodeInput}
+          onBarcodeInputChange={(v) => {
+            setWorkflowError(null);
+            setBarcodeInput(v);
+          }}
           onAddBarcode={handleAddBarcode}
           pendingRows={pendingRows}
           onRemoveRow={handleRemoveRow}
