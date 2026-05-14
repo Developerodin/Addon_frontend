@@ -22,12 +22,41 @@ function supplierLabel(box: YarnBox): string {
 }
 
 /**
+ * Parses a CSV/API weight field to a finite number; empty strings and non-numbers become NaN.
+ * @param value - Raw box or gross weight from the API.
+ */
+function parseKgField(value: unknown): number {
+  if (value === null || value === undefined) return Number.NaN;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : Number.NaN;
+  }
+  const s = String(value).trim();
+  if (s === "") return Number.NaN;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : Number.NaN;
+}
+
+/**
+ * True when the box should appear on the unallocated export: at least one of net (box)
+ * or gross weight is present and greater than zero.
+ * @param box - Yarn box without storage slot.
+ */
+function hasPositiveBoxOrGrossWeight(box: YarnBox): boolean {
+  const net = parseKgField(box.boxWeight);
+  const gross = parseKgField(box.grossWeight);
+  return (
+    (Number.isFinite(net) && net > 0) || (Number.isFinite(gross) && gross > 0)
+  );
+}
+
+/**
  * Maps yarn boxes without storage to one CSV row per box (PO / lot / QC context for ops).
+ * Omits boxes with no positive box (net) and no positive gross weight.
  */
 export function buildUnallocatedBoxExportRows(
   boxes: YarnBox[]
 ): Record<string, string | number | boolean>[] {
-  return boxes.map((box) => ({
+  return boxes.filter(hasPositiveBoxOrGrossWeight).map((box) => ({
     "Yarn Name": box.yarnName || "",
     "PO Number": box.poNumber || "",
     Supplier: supplierLabel(box),
