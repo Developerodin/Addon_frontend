@@ -54,7 +54,6 @@ export function downloadYarnEstimationOrderExcel(order: OrderEstimation): void {
       "Planned qty": nz(a.plannedQuantity),
       "Knitting completed": nz(k?.completed),
       "Knitting M4": nz(k?.m4Quantity),
-      "Knitting received": nz(k?.received),
       "Knitting remaining": nz(k?.remaining),
       "Knitting weight (kg)": nz(k?.weight),
       "Issued net (kg)": nz(a.totals?.issued?.netWeight),

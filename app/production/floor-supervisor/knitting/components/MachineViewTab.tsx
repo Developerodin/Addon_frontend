@@ -1,16 +1,11 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-hot-toast";
 import {
   listMachineOrderAssignments,
   getMachineOrderAssignment,
   updateAssignmentItemsPriorities,
-  updateAssignmentItemStatus,
-  updateAssignmentItemYarnIssueStatus,
-  updateAssignmentItemYarnReturnStatus,
-  deleteAssignmentItem,
   OrderStatus,
   type MachineOrderAssignment,
   type OrderStatusType,
@@ -60,6 +55,26 @@ function getItemCounts(a: MachineOrderAssignment): { poCount: number; articleCou
 }
 
 /**
+ * Tailwind utility classes for read-only item status in the PO details drawer.
+ */
+function assignmentItemStatusBadgeClass(status: OrderStatusType | undefined): string {
+  const s = status ?? OrderStatus.PENDING;
+  switch (s) {
+    case OrderStatus.IN_PROGRESS:
+      return "bg-blue-100 text-blue-800";
+    case OrderStatus.COMPLETED:
+      return "bg-green-100 text-green-800";
+    case OrderStatus.ON_HOLD:
+      return "bg-amber-100 text-amber-800";
+    case OrderStatus.CANCELLED:
+      return "bg-red-100 text-red-800";
+    case OrderStatus.PENDING:
+    default:
+      return "bg-gray-100 text-gray-700";
+  }
+}
+
+/**
  * Prioritized queue item that is knitting "running" for this machine: first In Progress among prioritized non–on-hold items.
  */
 function getRunningArticleLabel(a: MachineOrderAssignment): string {
@@ -94,116 +109,12 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
 
   const [machines, setMachines] = useState<{ id: string; machineCode?: string; name?: string }[]>([]);
   const [poDetailsAssignment, setPoDetailsAssignment] = useState<MachineOrderAssignment | null>(null);
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  /** Drag source item id — ref so drop handler always sees the latest value (state can lag). */
+  const draggedItemIdRef = useRef<string | null>(null);
+  /** Visual feedback for row being dragged (native DnD ghost + opacity). */
+  const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
   const [savingOrder, setSavingOrder] = useState(false);
-  const [updatingStatusItemId, setUpdatingStatusItemId] = useState<string | null>(null);
-  const [updatingYarnItemId, setUpdatingYarnItemId] = useState<string | null>(null);
-  const [updatingYarnReturnItemId, setUpdatingYarnReturnItemId] = useState<string | null>(null);
-  const [yarnMenuOpenItemId, setYarnMenuOpenItemId] = useState<string | null>(null);
-  const [settingsMenuOpen, setSettingsMenuOpen] = useState<{ itemId: string; top: number; left: number } | null>(null);
-  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
   const [auditLogsTarget, setAuditLogsTarget] = useState<{ machineId: string; label: string } | null>(null);
-
-  const ORDER_STATUS_OPTIONS: OrderStatusType[] = [
-    OrderStatus.PENDING,
-    OrderStatus.IN_PROGRESS,
-    OrderStatus.COMPLETED,
-    OrderStatus.ON_HOLD,
-    OrderStatus.CANCELLED,
-  ];
-
-  /** First-priority item can be set to In Progress / Completed (including when yarn not yet done). Others: Pending, On Hold, Cancelled only. */
-  const getStatusOptionsForItem = useCallback(
-    (idx: number, currentStatus?: OrderStatusType, _yarnIssueStatus?: string | null): OrderStatusType[] => {
-      const restricted = [OrderStatus.PENDING, OrderStatus.ON_HOLD, OrderStatus.CANCELLED];
-      if (idx === 0) return ORDER_STATUS_OPTIONS; // First item: full options including Completed
-      const current = currentStatus ?? OrderStatus.PENDING;
-      if (current === OrderStatus.IN_PROGRESS || current === OrderStatus.COMPLETED) {
-        return [current, ...restricted.filter((s) => s !== current)];
-      }
-      return restricted;
-    },
-    []
-  );
-
-  const handleItemStatusChange = useCallback(
-    async (itemId: string, newStatus: OrderStatusType) => {
-      if (!poDetailsAssignment?.id || !itemId) return;
-      setUpdatingStatusItemId(itemId);
-      try {
-        const updated = await updateAssignmentItemStatus(poDetailsAssignment.id, itemId, newStatus);
-        setPoDetailsAssignment(updated);
-        setRows((prev) => prev.map((r) => (r.id === poDetailsAssignment.id ? updated : r)));
-        toast.success("Item status updated");
-      } catch (e) {
-        const message = e instanceof Error ? e.message : "Failed to update item status";
-        alert(message);
-      } finally {
-        setUpdatingStatusItemId(null);
-      }
-    },
-    [poDetailsAssignment]
-  );
-
-  const YARN_STATUS_OPTIONS = ["Not Started", "In Progress", "Completed"] as const;
-  const handleYarnStatusChange = useCallback(
-    async (itemId: string, newStatus: string) => {
-      if (!poDetailsAssignment?.id || !itemId) return;
-      setYarnMenuOpenItemId(null);
-      setUpdatingYarnItemId(itemId);
-      try {
-        const updated = await updateAssignmentItemYarnIssueStatus(poDetailsAssignment.id, itemId, newStatus);
-        setPoDetailsAssignment(updated);
-        setRows((prev) => prev.map((r) => (r.id === poDetailsAssignment.id ? updated : r)));
-        toast.success(`Yarn status set to ${newStatus}`);
-      } catch (e) {
-        const message = e instanceof Error ? e.message : "Failed to update yarn issue status";
-        alert(message);
-      } finally {
-        setUpdatingYarnItemId(null);
-      }
-    },
-    [poDetailsAssignment]
-  );
-
-  const handleYarnReturnStatusChange = useCallback(
-    async (itemId: string, newStatus: string) => {
-      if (!poDetailsAssignment?.id || !itemId) return;
-      setUpdatingYarnReturnItemId(itemId);
-      try {
-        const updated = await updateAssignmentItemYarnReturnStatus(poDetailsAssignment.id, itemId, newStatus);
-        setPoDetailsAssignment(updated);
-        setRows((prev) => prev.map((r) => (r.id === poDetailsAssignment.id ? updated : r)));
-        toast.success(`Yarn return status set to ${newStatus}`);
-      } catch (e) {
-        const message = e instanceof Error ? e.message : "Failed to update yarn return status";
-        alert(message);
-      } finally {
-        setUpdatingYarnReturnItemId(null);
-      }
-    },
-    [poDetailsAssignment]
-  );
-
-  const handleDeleteItem = useCallback(
-    async (itemId: string) => {
-      if (!poDetailsAssignment?.id || !itemId) return;
-      setSettingsMenuOpen(null);
-      setDeletingItemId(itemId);
-      try {
-        const updated = await deleteAssignmentItem(poDetailsAssignment.id, itemId);
-        setPoDetailsAssignment(updated);
-        setRows((prev) => prev.map((r) => (r.id === poDetailsAssignment.id ? updated : r)));
-        toast.success("Article removed from assignment");
-      } catch (e) {
-        const message = e instanceof Error ? e.message : "Failed to delete item";
-        toast.error(message);
-      } finally {
-        setDeletingItemId(null);
-      }
-    },
-    [poDetailsAssignment]
-  );
 
   /** Reorder within the prioritized list only; on-hold and no-priority items keep trailing priorities. */
   const handleReorderItems = useCallback(
@@ -234,7 +145,8 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
         toast.error(e instanceof Error ? e.message : "Failed to update order");
       } finally {
         setSavingOrder(false);
-        setDraggedIndex(null);
+        draggedItemIdRef.current = null;
+        setDraggingItemId(null);
       }
     },
     [poDetailsAssignment]
@@ -547,12 +459,12 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
         )}
       </div>
 
-      {/* PO details – right-side drawer, ~49% width (30% less than before) */}
+      {/* PO details – right-side drawer; 50vw for half-screen width */}
       {poDetailsAssignment && (
         <>
           <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setPoDetailsAssignment(null)} aria-hidden />
           <div
-            className="fixed inset-y-0 right-0 w-full max-w-[520px] shadow-2xl z-50 flex flex-col animate-slide-in-right overflow-hidden bg-white/70 dark:bg-slate-900/80 backdrop-blur-xl border-l border-white/30 dark:border-slate-700/50"
+            className="fixed inset-y-0 right-0 w-[50vw] shadow-2xl z-50 flex flex-col animate-slide-in-right overflow-hidden bg-white/70 dark:bg-slate-900/80 backdrop-blur-xl border-l border-white/30 dark:border-slate-700/50"
             style={{
               backgroundImage: "radial-gradient(circle at 1px 1px, rgba(148, 163, 184, 0.15) 1px, transparent 0)",
               backgroundSize: "20px 20px",
@@ -605,41 +517,68 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
                             <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300">Yarn</th>
                             <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300">Yarn Return</th>
                             <th className="px-2 py-1.5 text-center font-semibold text-gray-700 w-6" title="Drag to reorder" />
-                            <th className="px-2 py-1.5 text-center font-semibold text-gray-700 w-8" />
                           </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
+                        <tbody className="bg-white divide-y divide-gray-200" data-addon-po-queue="machine-drawer">
                           {allOrdered.map((item, idx) => {
                             const isPrioritized = prioritizedItems.includes(item);
-                            const isFirst = idx === 0 && isPrioritized;
-                            const canDrag = isPrioritized && !(item.status === OrderStatus.IN_PROGRESS && prioritizedItems.indexOf(item) === 0);
-                            const statusOptionIdx = isPrioritized ? prioritizedItems.indexOf(item) : 1;
-                            const showAskForYarn = isPrioritized && prioritizedItems.indexOf(item) <= 1;
+                            const canDrag =
+                              Boolean(item.itemId) &&
+                              isPrioritized &&
+                              !(item.status === OrderStatus.IN_PROGRESS && prioritizedItems.indexOf(item) === 0);
+                            /** Drop is allowed on prioritized rows except the running (In Progress) slot — keeps running article first in queue. */
+                            const isValidDropTarget =
+                              prioritizedItems.includes(item) && item.status !== OrderStatus.IN_PROGRESS;
+                            const rowKey = item.itemId ?? `${item.productionOrder}-${item.article}`;
                             return (
                               <tr
-                                key={item.itemId ?? `${item.productionOrder}-${item.article}`}
+                                key={rowKey}
                                 draggable={canDrag}
-                                onDragStart={() => canDrag && setDraggedIndex(idx)}
-                                onDragEnd={() => setDraggedIndex(null)}
+                                aria-grabbed={canDrag ? draggingItemId === item.itemId : undefined}
+                                onDragStart={
+                                  canDrag
+                                    ? (e) => {
+                                        draggedItemIdRef.current = item.itemId ?? null;
+                                        setDraggingItemId(item.itemId ?? null);
+                                        e.dataTransfer.effectAllowed = "move";
+                                        if (item.itemId) {
+                                          e.dataTransfer.setData("text/plain", item.itemId);
+                                        }
+                                      }
+                                    : undefined
+                                }
+                                onDragEnd={() => {
+                                  draggedItemIdRef.current = null;
+                                  setDraggingItemId(null);
+                                  document
+                                    .querySelectorAll('tbody[data-addon-po-queue="machine-drawer"] tr')
+                                    .forEach((el) => el.classList.remove("ring-1", "ring-indigo-400", "bg-indigo-50"));
+                                }}
                                 onDragOver={(e) => {
+                                  if (!draggedItemIdRef.current || !isValidDropTarget) return;
                                   e.preventDefault();
-                                  if (!canDrag) return;
+                                  e.dataTransfer.dropEffect = "move";
                                   e.currentTarget.classList.add("ring-1", "ring-indigo-400", "bg-indigo-50");
                                 }}
                                 onDragLeave={(e) => {
+                                  const next = e.relatedTarget as Node | null;
+                                  if (next && e.currentTarget.contains(next)) return;
                                   e.currentTarget.classList.remove("ring-1", "ring-indigo-400", "bg-indigo-50");
                                 }}
                                 onDrop={(e) => {
                                   e.preventDefault();
                                   e.currentTarget.classList.remove("ring-1", "ring-indigo-400", "bg-indigo-50");
-                                  if (draggedIndex === null || !prioritizedItems.includes(item) || item.status === OrderStatus.IN_PROGRESS) return;
-                                  const fromPrioritizedIdx = prioritizedItems.findIndex((p) => allOrdered.indexOf(p) === draggedIndex);
+                                  const dragId = draggedItemIdRef.current;
+                                  if (!dragId || !isValidDropTarget) return;
+                                  const fromPrioritizedIdx = prioritizedItems.findIndex((p) => p.itemId === dragId);
                                   const toPrioritizedIdx = prioritizedItems.indexOf(item);
                                   if (fromPrioritizedIdx >= 0 && toPrioritizedIdx >= 0 && fromPrioritizedIdx !== toPrioritizedIdx) {
                                     handleReorderItems(prioritizedItems, fromPrioritizedIdx, toPrioritizedIdx);
                                   }
                                 }}
-                                className={`${canDrag ? "cursor-grab active:cursor-grabbing" : ""} hover:bg-gray-50`}
+                                className={`hover:bg-gray-50 ${canDrag ? "cursor-grab active:cursor-grabbing select-none" : ""} ${
+                                  draggingItemId === item.itemId ? "opacity-60" : ""
+                                }`}
                               >
                                 <td className="px-2 py-1.5 border-r border-gray-300 font-medium text-gray-600">
                                   {item.priority ?? idx + 1}
@@ -649,127 +588,42 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
                                     {item.orderNumber ?? "—"} · {item.articleNumber ?? "—"}
                                   </span>
                                 </td>
-                                <td className="px-2 py-1.5 border-r border-gray-300">
-                                  <select
-                                    value={item.status ?? OrderStatus.PENDING}
-                                    onChange={(e) => {
-                                      const val = e.target.value as OrderStatusType;
-                                      if (item.itemId) handleItemStatusChange(item.itemId, val);
-                                    }}
-                                    disabled={!item.itemId || updatingStatusItemId === item.itemId}
-                                    className="bg-white border border-gray-300 px-1.5 py-0.5 rounded text-[10px] w-full max-w-[100px]"
+                                <td className="px-2 py-1.5 border-r border-gray-300 text-center">
+                                  <span
+                                    className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-medium max-w-[110px] mx-auto ${assignmentItemStatusBadgeClass(item.status)}`}
+                                    aria-label={`Assignment status: ${item.status ?? OrderStatus.PENDING}`}
                                   >
-                                    {getStatusOptionsForItem(statusOptionIdx, item.status, item.yarnIssueStatus).map((opt) => (
-                                      <option key={opt} value={opt}>{opt}</option>
-                                    ))}
-                                  </select>
+                                    {item.status ?? OrderStatus.PENDING}
+                                  </span>
                                 </td>
                                 <td className="px-2 py-1.5 border-r border-gray-300">
-                                  {showAskForYarn ? (
-                                    <select
-                                      value={item.yarnIssueStatus ? String(item.yarnIssueStatus) : ""}
-                                      onChange={(e) => {
-                                        const val = e.target.value;
-                                        if (item.itemId && val) handleYarnStatusChange(item.itemId, val);
-                                      }}
-                                      disabled={!item.itemId || updatingYarnItemId === item.itemId}
-                                      className="bg-white border border-gray-300 px-1.5 py-0.5 rounded text-[10px] w-full max-w-[100px]"
-                                    >
-                                      <option value="">—</option>
-                                      {YARN_STATUS_OPTIONS.map((opt) => (
-                                        <option key={opt} value={opt}>{opt}</option>
-                                      ))}
-                                    </select>
-                                  ) : (
-                                    <span className="text-gray-600">{item.yarnIssueStatus ? String(item.yarnIssueStatus) : "—"}</span>
-                                  )}
+                                  <span
+                                    className="inline-block text-gray-600 tabular-nums"
+                                    aria-label={`Yarn issue status: ${item.yarnIssueStatus ? String(item.yarnIssueStatus) : "not set"}`}
+                                  >
+                                    {item.yarnIssueStatus ? String(item.yarnIssueStatus) : "—"}
+                                  </span>
                                 </td>
                                 <td className="px-2 py-1.5 border-r border-gray-300">
-                                  {item.itemId ? (
-                                    <select
-                                      value={item.yarnReturnStatus ? String(item.yarnReturnStatus) : ""}
-                                      onChange={(e) => {
-                                        const val = e.target.value;
-                                        if (val) handleYarnReturnStatusChange(item.itemId!, val);
-                                      }}
-                                      disabled={updatingYarnReturnItemId === item.itemId}
-                                      className="bg-white border border-gray-300 px-1.5 py-0.5 rounded text-[10px] w-full min-w-[110px]"
+                                  <span
+                                    className="inline-block text-gray-600 tabular-nums"
+                                    aria-label={`Yarn return status: ${item.yarnReturnStatus ? String(item.yarnReturnStatus) : "not set"}`}
+                                  >
+                                    {item.yarnReturnStatus ? String(item.yarnReturnStatus) : "—"}
+                                  </span>
+                                </td>
+                                <td className="px-2 py-1.5 text-center align-middle">
+                                  {isPrioritized ? (
+                                    <span
+                                      className={`inline-flex items-center justify-center p-1 rounded ${
+                                        canDrag ? "text-gray-500" : "text-gray-300"
+                                      }`}
+                                      title={canDrag ? "Drag row to change priority" : "Running article stays first — reorder items below"}
+                                      aria-hidden
                                     >
-                                      <option value="">—</option>
-                                      <option value="Pending">Pending</option>
-                                      <option value="In Progress">In Progress</option>
-                                      <option value="Completed">Completed</option>
-                                    </select>
-                                  ) : (
-                                    <span className="text-gray-600">{item.yarnReturnStatus ? String(item.yarnReturnStatus) : "—"}</span>
-                                  )}
-                                </td>
-                                <td className="px-2 py-1.5 text-center">
-                                  {canDrag && <i className="ri-draggable text-gray-400 text-sm" aria-hidden />}
-                                </td>
-                                <td className="px-2 py-1.5 text-center relative">
-                                  {canShowSettings && (() => {
-                                    const effectiveItemId = item.itemId ?? (item as { id?: string; _id?: string }).id ?? (item as { id?: string; _id?: string })._id;
-                                    if (!effectiveItemId) return null;
-                                    const isOpen = settingsMenuOpen?.itemId === effectiveItemId;
-                                    return (
-                                      <div className="relative inline-block">
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (isOpen) {
-                                              setSettingsMenuOpen(null);
-                                            } else {
-                                              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                              setSettingsMenuOpen({
-                                                itemId: effectiveItemId,
-                                                top: rect.bottom + 4,
-                                                left: Math.min(rect.right - 100, window.innerWidth - 120),
-                                              });
-                                            }
-                                          }}
-                                          className="flex items-center justify-center rounded bg-gray-100 text-gray-600 hover:bg-gray-200 w-6 h-6"
-                                          title="Article options"
-                                          disabled={deletingItemId === effectiveItemId}
-                                        >
-                                          <i className="ri-settings-3-line text-xs" />
-                                        </button>
-                                        {isOpen && settingsMenuOpen && typeof document !== "undefined" && createPortal(
-                                          <>
-                                            <div
-                                              className="fixed inset-0 z-[60]"
-                                              onClick={() => setSettingsMenuOpen(null)}
-                                              aria-hidden
-                                            />
-                                            <div
-                                              className="fixed z-[70] min-w-[100px] bg-white border border-gray-300 rounded shadow-lg py-1"
-                                              style={{ top: settingsMenuOpen.top, left: settingsMenuOpen.left }}
-                                            >
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  if (window.confirm(`Remove ${item.articleNumber ?? "article"} from this machine assignment?`)) {
-                                                    handleDeleteItem(effectiveItemId);
-                                                  }
-                                                }}
-                                                disabled={deletingItemId === effectiveItemId}
-                                                className="w-full px-3 py-1.5 text-left text-[11px] text-red-600 hover:bg-red-50 flex items-center gap-1.5"
-                                              >
-                                                {deletingItemId === effectiveItemId ? (
-                                                  <span className="animate-spin rounded-full h-3 w-3 border-2 border-red-500 border-t-transparent" />
-                                                ) : (
-                                                  <i className="ri-delete-bin-line text-sm" />
-                                                )}
-                                                Delete
-                                              </button>
-                                            </div>
-                                          </>,
-                                          document.body
-                                        )}
-                                      </div>
-                                    );
-                                  })()}
+                                      <i className="ri-draggable text-base" />
+                                    </span>
+                                  ) : null}
                                 </td>
                               </tr>
                             );

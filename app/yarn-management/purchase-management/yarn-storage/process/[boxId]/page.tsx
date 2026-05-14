@@ -60,6 +60,29 @@ const formatStatus = (value?: string) =>
 const formatWeight = (value?: number) =>
   typeof value === "number" ? value.toFixed(4) : "-";
 
+/** Maximum cone weight (kg) allowed when entering weight on this page. */
+const MAX_CONE_WEIGHT_KG = 6;
+
+/**
+ * Normalizes cone weight field input: allows empty/incomplete decimals, clamps numeric values above {@link MAX_CONE_WEIGHT_KG}.
+ * @param raw - Raw string from the cone weight input
+ * @returns Stored value for state and whether it was clamped to the maximum
+ */
+function normalizeConeWeightFieldInput(raw: string): { value: string; clamped: boolean } {
+  const trimmed = raw.trim();
+  if (trimmed === "" || trimmed === "-" || trimmed === "." || trimmed === "-.") {
+    return { value: raw, clamped: false };
+  }
+  const n = parseFloat(trimmed);
+  if (!Number.isFinite(n)) {
+    return { value: raw, clamped: false };
+  }
+  if (n > MAX_CONE_WEIGHT_KG) {
+    return { value: String(MAX_CONE_WEIGHT_KG), clamped: true };
+  }
+  return { value: raw, clamped: false };
+}
+
 /**
  * Tailwind utility classes for the cone issue-status pill, color-coded by lifecycle:
  *  - issued     -> blue (out for production)
@@ -320,11 +343,17 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
         const cone = cones.find(c => c._id === activeConeId);
 
         if (cone) {
+          const capped = Math.min(weight, MAX_CONE_WEIGHT_KG);
+          if (weight > MAX_CONE_WEIGHT_KG) {
+            toast.error(
+              `Scale read ${weight.toFixed(4)} kg exceeds max ${MAX_CONE_WEIGHT_KG} kg; using ${MAX_CONE_WEIGHT_KG} kg.`
+            );
+          }
           // Update coneInputs with fetched weight, ensuring all fields exist
           setConeInputs(prev => ({
             ...prev,
             [activeConeId]: {
-              coneWeight: weight.toString(),
+              coneWeight: capped.toString(),
               tearWeight: prev[activeConeId]?.tearWeight || '',
               coneStorageId: prev[activeConeId]?.coneStorageId || ''
             }
@@ -423,11 +452,19 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     field: "coneWeight" | "tearWeight" | "coneStorageId",
     value: string
   ) => {
+    let next = value;
+    if (field === "coneWeight") {
+      const { value: normalized, clamped } = normalizeConeWeightFieldInput(value);
+      next = normalized;
+      if (clamped) {
+        toast.error(`Cone weight cannot exceed ${MAX_CONE_WEIGHT_KG} kg`);
+      }
+    }
     setConeInputs((prev) => ({
       ...prev,
       [coneId]: {
         ...(prev[coneId] ?? { coneWeight: "", tearWeight: "", coneStorageId: "" }),
-        [field]: value,
+        [field]: next,
       },
     }));
   };
@@ -447,6 +484,11 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
 
     if (!Number.isFinite(coneWeight) || coneWeight <= 0) {
       toast.error("Enter valid cone weight");
+      return;
+    }
+
+    if (coneWeight > MAX_CONE_WEIGHT_KG) {
+      toast.error(`Cone weight cannot exceed ${MAX_CONE_WEIGHT_KG} kg`);
       return;
     }
 
@@ -1056,7 +1098,9 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                   <thead>
                     <tr className="bg-gray-50/30">
                       <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Cone Barcode</th>
-                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Cone Weight (kg)</th>
+                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                        Cone Weight (kg, max {MAX_CONE_WEIGHT_KG})
+                      </th>
                       <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Tear Weight (kg)</th>
                       <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Issue Status</th>
                       <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Storage Location</th>
@@ -1082,7 +1126,10 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                           {activeConeId === cone._id ? (
                             <input
                               type="text"
+                              inputMode="decimal"
                               data-cone-weight={cone._id}
+                              aria-label={`Cone weight in kilograms, maximum ${MAX_CONE_WEIGHT_KG}`}
+                              title={`Cone weight (kg); max ${MAX_CONE_WEIGHT_KG}`}
                               className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
                               value={coneInputs[cone._id]?.coneWeight || ""}
                               onChange={(e) =>

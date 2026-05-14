@@ -85,7 +85,7 @@ const RequisitionListPage = () => {
       const headers = [
         "Yarn Name",
         "Minimum Qty",
-        "Available Qty",
+        "Available net qty",
         "Blocked Qty",
         "Alert inventory",
         "Procurement workflow",
@@ -385,7 +385,7 @@ const RequisitionListPage = () => {
                     onClick={() => rq.handleSort("availableQty")}
                   >
                     <div className="flex items-center gap-1.5">
-                      Available Qty
+                      Available net qty
                       <SortIcon field="availableQty" />
                     </div>
                   </th>
