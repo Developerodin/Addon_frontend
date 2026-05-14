@@ -19,6 +19,8 @@ export interface CriticalRow {
   minimumQty: number;
   availableQty: number;
   blockedQty: number;
+  /** Quantity (kg) staged on the linked draft PO line for this requisition, when applicable. */
+  draftPoQuantity: number | null;
   lastUpdated: string;
   workflowStage: RequisitionWorkflowStageUi;
   preferredSupplierId?: string;
@@ -138,6 +140,10 @@ export function mapRequisitionToCriticalRow(
     minimumQty: req.minQty,
     availableQty: req.availableQty,
     blockedQty: req.blockedQty,
+    draftPoQuantity:
+      typeof req.draftPoQuantity === "number" && Number.isFinite(req.draftPoQuantity)
+        ? req.draftPoQuantity
+        : null,
     lastUpdated: req.lastUpdated || req.created,
     workflowStage: wf,
     preferredSupplierId: normalizeSupplierId(req),
@@ -313,8 +319,8 @@ export function useCriticalRequisitionList(hasPermission: boolean) {
    * @param key - Sortable column key.
    */
   const handleSort = useCallback((key: keyof CriticalRow) => {
-    if (key === "id" || key === "workflowStage" || key === "preferredSupplierDisplayName") {
-      toast("Sorting by supplier or workflow is handled via filters.", { icon: "ℹ️" });
+    if (key === "id" || key === "workflowStage" || key === "preferredSupplierDisplayName" || key === "draftPoQuantity") {
+      toast("Sorting by supplier, workflow, or draft PO qty is handled via filters.", { icon: "ℹ️" });
       return;
     }
     setSortConfig((prev) => {

@@ -87,6 +87,7 @@ const RequisitionListPage = () => {
         "Minimum Qty",
         "Available net qty",
         "Blocked Qty",
+        "Draft PO qty",
         "Alert inventory",
         "Procurement workflow",
         "Vendor snapshot",
@@ -99,6 +100,7 @@ const RequisitionListPage = () => {
           yarn.minimumQty.toString(),
           yarn.availableQty.toString(),
           yarn.blockedQty.toString(),
+          yarn.draftPoQuantity != null ? yarn.draftPoQuantity.toString() : "",
           badges,
           workflowStageLabel(yarn.workflowStage),
           yarn.preferredSupplierDisplayName || "",
@@ -398,6 +400,14 @@ const RequisitionListPage = () => {
                       <SortIcon field="blockedQty" />
                     </div>
                   </th>
+                  <th
+                    scope="col"
+                    className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200"
+                    title="Quantity on the linked draft purchase order line for this yarn (kg)"
+                    aria-label="Draft purchase order quantity in kilograms"
+                  >
+                    Draft PO qty
+                  </th>
                   <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
                     Alert Status
                   </th>
@@ -435,6 +445,18 @@ const RequisitionListPage = () => {
                     </td>
                     <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">
                       <span className="text-orange-600 font-semibold">{yarn.blockedQty.toLocaleString()}</span>
+                    </td>
+                    <td
+                      className="px-1.5 py-2.5 text-[12px] border border-gray-200"
+                      title="Staged quantity on draft PO (kg)"
+                    >
+                      {yarn.draftPoQuantity != null ? (
+                        <span className="text-amber-700 font-semibold tabular-nums">
+                          {yarn.draftPoQuantity.toLocaleString()}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 font-medium">—</span>
+                      )}
                     </td>
                     <td className="px-1.5 py-2.5 border border-gray-200">
                       <div className="flex flex-wrap gap-1.5">
