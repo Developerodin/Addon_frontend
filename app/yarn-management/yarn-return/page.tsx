@@ -29,6 +29,11 @@ import {
   resolveYarnCatalogId,
   resolveYarnCatalogIdFromTransaction,
 } from "./resolveYarnCatalogId";
+import {
+  fetchArticleReturnSlice,
+  type ArticleReturnSliceCone,
+  type ArticleReturnSliceResponse,
+} from "@/shared/services/yarnTransactionsArticleReturnSliceService";
 
 type ConeStatus = "Awaiting" | "Returned";
 type OrderStatus = "Awaiting Return" | "In Progress" | "Partial" | "Returned";
@@ -112,6 +117,127 @@ interface ArticleRow {
   cones: Cone[];
   plannedQuantity: number;
   yarnNames: string; // Comma-separated unique yarn names from cones
+  /** Lazy machine mode: raw ids for GET article-return-slice (may be code in id field). */
+  sliceFetchArticleId?: string;
+  sliceFetchArticleNumber?: string;
+}
+
+function mapSliceStatusToOrderStatus(s: ArticleReturnSliceResponse["status"]): OrderStatus {
+  if (s === "Returned") return "Returned";
+  if (s === "Partial") return "Partial";
+  return "Awaiting Return";
+}
+
+function mapSliceConeToPageCone(sc: ArticleReturnSliceCone): Cone {
+  const st: ConeStatus = sc.status === "Returned" ? "Returned" : "Awaiting";
+  return {
+    id: String(sc.id),
+    barcode: String(sc.barcode ?? sc.id),
+    yarnCode: "N/A",
+    yarnName: sc.yarnName?.trim() || "Unknown Yarn",
+    yarnType: "Unknown",
+    issuedWeight: 0,
+    status: st,
+    articleId: sc.articleId,
+    articleNumber: sc.articleNumber,
+  };
+}
+
+/**
+ * Yarn-cones barcode GET returns issueWeight / returnWeight; order cones from article-return-slice use issuedWeight stub 0 — merge API onto cone for Scan & Return UI.
+ */
+function mergeConeWithYarnConeApiResponse(cone: Cone, coneDetails: Record<string, unknown>): Cone {
+  const detailIssue =
+    coneDetails.issueWeight ?? coneDetails.issue_weight;
+  const detailReturn =
+    coneDetails.returnWeight ?? coneDetails.return_weight;
+  const parsedIssue =
+    detailIssue != null && detailIssue !== "" ? Number(detailIssue) : NaN;
+  const parsedReturn =
+    detailReturn != null && detailReturn !== "" ? Number(detailReturn) : NaN;
+
+  const issuedWeight = Number.isFinite(parsedIssue) ? parsedIssue : cone.issuedWeight ?? 0;
+  const returnedWeight = Number.isFinite(parsedReturn) ? parsedReturn : cone.returnedWeight;
+
+  const yc = coneDetails.yarnCatalogId;
+  const yarnTypeFromCatalog =
+    yc && typeof yc === "object"
+      ? (yc as { yarnType?: { name?: string } }).yarnType?.name
+      : undefined;
+  const yarnFromDetails = coneDetails.yarn as { yarnType?: { name?: string } } | undefined;
+  const yarnType = yarnTypeFromCatalog || yarnFromDetails?.yarnType?.name || cone.yarnType;
+
+  const catId = resolveYarnCatalogId(coneDetails as Parameters<typeof resolveYarnCatalogId>[0]);
+  const balanceWeight =
+    Number.isFinite(parsedIssue) && Number.isFinite(parsedReturn)
+      ? Math.max(parsedIssue - parsedReturn, 0)
+      : cone.balanceWeight;
+
+  return {
+    ...cone,
+    issuedWeight,
+    returnedWeight:
+      returnedWeight !== undefined ? returnedWeight : cone.returnedWeight,
+    balanceWeight,
+    yarnName: String(coneDetails.yarnName ?? cone.yarnName ?? "Unknown Yarn"),
+    yarnType: String(yarnTypeFromCatalog || yarnType || cone.yarnType || "Unknown"),
+    ...(catId && catId !== "N/A" ? { yarnCatalogId: catId } : {}),
+    yarnCode: catId && catId !== "N/A" ? catId : cone.yarnCode,
+  };
+}
+
+function articleRowFromSlice(
+  slice: ArticleReturnSliceResponse,
+  orderNumber: string,
+  plannedQuantity: number
+): ArticleRow {
+  const rowPrefix =
+    normalizeArticleRefId(slice.articleId) || String(slice.articleNumber || "").trim() || "article";
+  return {
+    rowId: `${rowPrefix}-${slice.orderId}`,
+    articleId: normalizeArticleRefId(slice.articleId) || slice.articleNumber,
+    articleNumber: slice.articleNumber,
+    orderId: slice.orderId,
+    orderNumber,
+    productionOrder: slice.productionOrder,
+    floor: slice.floor,
+    knittingSupervisor: slice.knittingSupervisor,
+    knittingCompletedAt: slice.knittingCompletedAt ?? "",
+    status: mapSliceStatusToOrderStatus(slice.status),
+    cones: slice.cones.map(mapSliceConeToPageCone),
+    plannedQuantity,
+    yarnNames: slice.yarnNames,
+  };
+}
+
+function buildMachineCatalogArticleRow(
+  meta: { orderId: string; orderNumber: string; floor: string },
+  art: Article,
+  articleIndex: number
+): ArticleRow {
+  const artId = art.id || (art as { _id?: string })._id;
+  const artNorm = normalizeArticleRefId(artId);
+  const artNum = String(art.articleNumber ?? "").trim();
+  const rowPrefix = artNorm || artNum || `slot${articleIndex}`;
+  const rawAid = String(art.id || (art as { _id?: string })._id || "").trim();
+  const rawNum = String(art.articleNumber || "").trim();
+  return {
+    rowId: `${rowPrefix}-${meta.orderId}`,
+    articleId: artNorm || rawNum || rowPrefix,
+    articleNumber: art.articleNumber,
+    orderId: meta.orderId,
+    orderNumber: meta.orderNumber,
+    productionOrder: meta.orderNumber,
+    floor: meta.floor,
+    knittingSupervisor: "N/A",
+    knittingCompletedAt: "",
+    status: "Awaiting Return",
+    cones: [],
+    plannedQuantity: art.plannedQuantity ?? 0,
+    yarnNames: "",
+    sliceFetchArticleId: rawAid || undefined,
+    sliceFetchArticleNumber: rawNum || undefined,
+  };
 }
 
 interface ReturnRecord {
@@ -125,8 +251,8 @@ interface ReturnRecord {
   lastUpdated: string;
 }
 
-/** History drawer: rows per page (client-side slice of filtered return transactions). */
-const HISTORY_PAGE_SIZE = 100;
+/** History drawer: API max page size for `GET …/yarn-transactions` (backend rejects limit > 100). */
+const YARN_RETURN_HISTORY_API_LIMIT = 100;
 
 interface ReturnTransaction {
   _id: string;
@@ -199,27 +325,36 @@ function resolvePreservedArticleSelection(
 
   const suffix = `-${order.id}`;
   if (!preserve.articleRowId.endsWith(suffix)) return null;
-  const artIdStr = preserve.articleRowId.slice(0, -suffix.length);
+  const rowPrefix = preserve.articleRowId.slice(0, -suffix.length);
 
   const articles = order.articles?.length
     ? order.articles
     : [{ id: order.id, articleNumber: order.orderNumber, plannedQuantity: 0 } as Article];
+  const soleArticle = articles.length === 1;
   const firstArticleId = articles[0] ? articles[0].id || (articles[0] as { _id?: string })._id : undefined;
+  const firstNorm = normalizeArticleRefId(firstArticleId);
 
-  const art = articles.find(
-    (a) => String(a.id || (a as { _id?: string })._id) === artIdStr
-  );
+  const art = articles.find((a) => {
+    const n = normalizeArticleRefId(a.id || (a as { _id?: string })._id);
+    const num = String(a.articleNumber ?? "").trim();
+    return (n && n === rowPrefix) || (num && num === rowPrefix);
+  });
   if (!art) return null;
 
   const artId = art.id || (art as { _id?: string })._id;
+  const artNorm = normalizeArticleRefId(artId);
+  const artNum = String(art.articleNumber ?? "").trim();
+
   let conesForArticle = order.cones.filter((c) => {
-    if (c.articleId && String(c.articleId) === String(artId)) return true;
-    if (c.articleNumber && art.articleNumber && String(c.articleNumber).trim() === String(art.articleNumber).trim())
-      return true;
-    if (!c.articleId && !c.articleNumber) return artId === firstArticleId;
+    const cid = normalizeArticleRefId(c.articleId);
+    if (cid && artNorm && cid === artNorm) return true;
+    const cnum = String(c.articleNumber ?? "").trim();
+    if (cnum && artNum && cnum === artNum) return true;
+    const orphan = !normalizeArticleRefId(c.articleId) && !String(c.articleNumber ?? "").trim();
+    if (orphan && soleArticle && artNorm && firstNorm && artNorm === firstNorm) return true;
     return false;
   });
-  if (conesForArticle.length === 0 && order.cones.length > 0 && articles.length === 1) {
+  if (conesForArticle.length === 0 && order.cones.length > 0 && soleArticle) {
     conesForArticle = order.cones;
   }
 
@@ -227,6 +362,18 @@ function resolvePreservedArticleSelection(
   if (pendingCones.length === 0) return null;
 
   return { orderId: order.id, articleRowId: preserve.articleRowId };
+}
+
+/** Preserve machine article pick across reload when orders have no cones yet (lazy slice). */
+function resolvePreservedCatalogSelection(
+  catalogRows: ArticleRow[],
+  preserve: { orderId: string; articleRowId: string } | undefined
+): { orderId: string; articleRowId: string } | null {
+  if (!preserve || catalogRows.length === 0) return null;
+  const row = catalogRows.find(
+    (r) => String(r.orderId) === String(preserve.orderId) && r.rowId === preserve.articleRowId
+  );
+  return row ? { orderId: preserve.orderId, articleRowId: preserve.articleRowId } : null;
 }
 
 const getAccessToken = (): string | null => {
@@ -280,34 +427,515 @@ const txArticleNumber = (tx: any): string | undefined => {
   return typeof n === "string" ? n.trim() : undefined;
 };
 
-// Helper function to extract transactions from nested API response structure
-const extractTransactions = (data: any): any[] => {
-  if (!data) return [];
-  
-  // Handle paginated response
-  if (data.results) {
-    data = data.results;
+/** Compare assignment ↔ cone refs (ObjectId string vs populated object mismatch). */
+function normalizeArticleRefId(id: unknown): string {
+  if (id == null || id === "") return "";
+  if (typeof id === "object" && id !== null) {
+    const o = id as Record<string, unknown>;
+    return String(o._id ?? o.id ?? "").trim();
   }
-  
-  // If not an array, return empty
-  if (!Array.isArray(data)) {
-    return [];
-  }
-  
-  // Extract transactions from nested structure
-  const transactions: any[] = [];
-  data.forEach((item: any) => {
-    // Check if item has a transactions array (nested structure)
-    if (item.transactions && Array.isArray(item.transactions)) {
-      transactions.push(...item.transactions);
-    } else if (item.transactionType) {
-      // If item is already a transaction, add it directly
-      transactions.push(item);
+  return String(id).trim();
+}
+
+/** Best-effort article fields from yarn_issued txn (populated article / nested ids). */
+function issuedArticleFieldsFromTx(tx: any): { articleId?: string; articleNumber?: string } {
+  let articleId = txArticleId(tx);
+  let articleNumber = txArticleNumber(tx);
+  const pop = tx.article;
+  if (pop && typeof pop === "object") {
+    const po = pop as Record<string, unknown>;
+    if (!articleId) {
+      const id = po._id ?? po.id;
+      if (id != null) articleId = String(id).trim();
     }
+    const pn = po.articleNumber;
+    if (!articleNumber && typeof pn === "string" && pn.trim()) articleNumber = pn.trim();
+  }
+  const rawAid = tx.articleId;
+  if (!articleId && rawAid && typeof rawAid === "object") {
+    const id = (rawAid as any)._id ?? (rawAid as any).id;
+    if (id != null) articleId = String(id).trim();
+    const pn = (rawAid as any).articleNumber;
+    if (!articleNumber && typeof pn === "string" && pn.trim()) articleNumber = pn.trim();
+  }
+  return {
+    articleId: articleId?.trim() || undefined,
+    articleNumber: articleNumber || undefined,
+  };
+}
+
+/** YarnCone-shaped ids in Mongo ObjectId form (24 hex chars). */
+const OBJECT_ID_LIKE = /^[a-f0-9]{24}$/i;
+
+type TxnGroup = { transactions?: unknown[] };
+
+/** Flatten grouped yarn API buckets (article groups, NO_ARTICLE, etc.). */
+function flattenGroupedTransactions(body: unknown): any[] {
+  if (!Array.isArray(body)) return [];
+  const out: any[] = [];
+  for (const group of body as TxnGroup[]) {
+    const txs = group?.transactions;
+    if (Array.isArray(txs)) out.push(...txs);
+  }
+  return out;
+}
+
+/**
+ * Canonical ref strings for a cone on a txn: conesIdsArray may be ObjectIds or
+ * `{ _id, barcode, boxId, yarnName }` from the backend.
+ */
+function txnConeRefStrings(tx: any): string[] {
+  const arr = tx?.conesIdsArray;
+  if (!Array.isArray(arr)) return [];
+  const out = new Set<string>();
+  for (const c of arr) {
+    if (c != null && typeof c === "object" && !Array.isArray(c)) {
+      const o = c as Record<string, unknown>;
+      if (o._id != null) out.add(String(o._id).trim());
+      if (o.id != null) out.add(String(o.id).trim());
+      if (o.barcode != null && String(o.barcode).trim()) out.add(String(o.barcode).trim());
+      if (o.boxId != null && String(o.boxId).trim()) out.add(String(o.boxId).trim());
+    } else if (c != null && String(c).trim()) {
+      out.add(String(c).trim());
+    }
+  }
+  return Array.from(out).filter(Boolean);
+}
+
+/** Every cone identity returned for an order (flattened yarn_returned tx list). */
+function returnedConeIdSet(allTxnsFlattened: any[]): Set<string> {
+  const s = new Set<string>();
+  for (const tx of allTxnsFlattened) {
+    if (tx?.transactionType !== "yarn_returned") continue;
+    for (const id of txnConeRefStrings(tx)) s.add(id);
+    const cb = tx?.coneBarcode;
+    if (cb != null && String(cb).trim()) s.add(String(cb).trim());
+  }
+  return s;
+}
+
+function primaryConeMapKey(refStrings: string[]): string {
+  const mongo = refStrings.find((k) => OBJECT_ID_LIKE.test(k));
+  return mongo ?? refStrings[0] ?? "";
+}
+
+function fallbackIssuedConeKeys(tx: any): string[] {
+  const txId = tx?._id ?? tx?.id;
+  const keys = [tx?.coneBarcode, tx?.barcode, txId != null ? `TX-${txId}` : undefined]
+    .filter(Boolean)
+    .map((x) => String(x).trim())
+    .filter(Boolean);
+  return Array.from(new Set(keys));
+}
+
+/**
+ * One logical cone slot per conesIdsArray element when populated; otherwise legacy fallbacks.
+ */
+function issuedConeSlots(tx: any): { refStrings: string[]; labelBarcode: string }[] {
+  const arr = tx?.conesIdsArray;
+  if (Array.isArray(arr) && arr.length > 0) {
+    const slots: { refStrings: string[]; labelBarcode: string }[] = [];
+    arr.forEach((c: any, i: number) => {
+      if (c != null && typeof c === "object" && !Array.isArray(c)) {
+        const refStrings = txnConeRefStrings({ conesIdsArray: [c] });
+        const o = c as Record<string, unknown>;
+        const bc =
+          (typeof o.barcode === "string" && o.barcode.trim()) ||
+          refStrings.find((k) => !OBJECT_ID_LIKE.test(k)) ||
+          refStrings[0] ||
+          `cone-${i}`;
+        if (refStrings.length > 0) slots.push({ refStrings, labelBarcode: String(bc) });
+      } else if (c != null && String(c).trim()) {
+        const k = String(c).trim();
+        slots.push({ refStrings: [k], labelBarcode: k });
+      }
+    });
+    return slots;
+  }
+  const fb = fallbackIssuedConeKeys(tx);
+  const numberOfCones = Math.max(1, Number(tx?.numberOfCones || tx?.transactionConeCount || 1) || 1);
+  if (fb.length === 0) {
+    const txKey = tx?._id ?? tx?.id ?? "x";
+    return Array.from({ length: numberOfCones }, (_, i) => ({
+      refStrings: [`TX-${txKey}-${i + 1}`],
+      labelBarcode: `TX-${txKey}-${i + 1}`,
+    }));
+  }
+  return fb.map((k) => ({ refStrings: [k], labelBarcode: k }));
+}
+
+function findLatestReturnTxForConeKeys(keys: string[], returnedTransactions: any[]): any | undefined {
+  let match: any;
+  let latest = 0;
+  for (const rt of returnedTransactions) {
+    if (rt?.transactionType !== "yarn_returned") continue;
+    const rtKeys = new Set<string>(txnConeRefStrings(rt));
+    const cb = rt?.coneBarcode;
+    if (cb != null && String(cb).trim()) rtKeys.add(String(cb).trim());
+    const hit = keys.some((k) => rtKeys.has(k));
+    if (!hit) continue;
+    const t = new Date(rt.transactionDate || rt.createdAt || rt.updatedAt || 0).getTime();
+    if (!match || t >= latest) {
+      match = rt;
+      latest = t;
+    }
+  }
+  return match;
+}
+
+/** Build merged cones for one PO from flattened yarn_issued + yarn_returned lists (same rules everywhere). */
+function buildConesFromIssuedAndReturned(
+  issuedTransactions: any[],
+  returnedTransactions: any[]
+): Cone[] {
+  const issued = issuedTransactions.filter((t) => t?.transactionType === "yarn_issued");
+  const returnedFlat = returnedTransactions.filter((t) => t?.transactionType === "yarn_returned");
+  const returnedIds = returnedConeIdSet(returnedFlat);
+  const conesMap = new Map<string, Cone>();
+
+  for (const tx of issued) {
+    const issuedNC = Math.max(1, Number(tx.numberOfCones || tx.transactionConeCount || 1) || 1);
+    const weightPerCone = (tx.transactionNetWeight || tx.totalNetWeight || 0) / issuedNC;
+    const { articleId, articleNumber } = issuedArticleFieldsFromTx(tx);
+    const slots = issuedConeSlots(tx);
+    const issuedTxKey = String(tx._id ?? tx.id ?? "");
+
+    slots.forEach((slot, idx) => {
+      const keys = slot.refStrings;
+      const mapKey = primaryConeMapKey(keys) || `slot-${idx}`;
+      const dedupeKey = `${issuedTxKey}:${mapKey}`;
+      if (!dedupeKey || conesMap.has(dedupeKey)) return;
+
+      const isReturned = keys.some((k) => returnedIds.has(k));
+      const returnedTx = isReturned ? findLatestReturnTxForConeKeys(keys, returnedFlat) : undefined;
+      const uniqueConeId = slots.length > 1 ? `${mapKey}-${idx + 1}` : mapKey;
+      const catalogId = resolveYarnCatalogIdFromTransaction(tx);
+
+      conesMap.set(dedupeKey, {
+        id: uniqueConeId,
+        barcode: slot.labelBarcode,
+        yarnCode: catalogId || (tx as { yarnCode?: string }).yarnCode || "N/A",
+        yarnName: tx.yarnName || "Unknown Yarn",
+        yarnType: tx.yarn?.yarnType?.name || "Unknown",
+        issuedWeight: weightPerCone,
+        returnedWeight: returnedTx
+          ? (returnedTx.transactionNetWeight || returnedTx.totalNetWeight || 0) / issuedNC
+          : undefined,
+        balanceWeight: returnedTx
+          ? Math.max(
+              weightPerCone -
+                (returnedTx.transactionNetWeight || returnedTx.totalNetWeight || 0) / issuedNC,
+              0
+            )
+          : undefined,
+        status: returnedTx ? ("Returned" as ConeStatus) : ("Awaiting" as ConeStatus),
+        lastReturnedAt: returnedTx?.transactionDate || returnedTx?.createdAt,
+        transactionId: tx._id || tx.id,
+        yarnCatalogId: catalogId || undefined,
+        articleId,
+        articleNumber,
+      });
+    });
+  }
+
+  return Array.from(conesMap.values());
+}
+
+/**
+ * Yarn transactions API shapes (contract):
+ * - GET …/yarn-issued-by-order/{orderNumber}: yarn-first buckets `{ yarnName?, yarnCatalogId?, transactions[] }`.
+ *   Same yarn bucket may mix articles; each txn still carries articleId/articleNumber — cones inherit that for row filtering.
+ * - GET …/yarn-transactions?order_id=: may be grouped by article `{ articleNumber?, transactions[] }` or nested under
+ *   `results` / `data` / `articles`. Returns for a cone must still be merged by YarnCone id from `conesIdsArray`, not by
+ *   which article bucket the backend grouped the row under (mis-grouped yarn_returned would otherwise show 0 returns).
+ */
+function unwrapTransactionsRoot(data: unknown): unknown {
+  let root: unknown = data;
+  for (let step = 0; step < 10; step++) {
+    if (root == null) break;
+    if (Array.isArray(root)) break;
+    if (typeof root !== "object") break;
+    const o = root as Record<string, unknown>;
+    let next: unknown;
+    if (Array.isArray(o.results)) next = o.results;
+    else if (typeof o.results === "object" && o.results !== null && !Array.isArray(o.results)) next = o.results;
+    else if (Array.isArray(o.data)) next = o.data;
+    else if (typeof o.data === "object" && o.data !== null && !Array.isArray(o.data)) next = o.data;
+    else if (Array.isArray(o.articles)) next = o.articles;
+    else break;
+    root = next;
+  }
+  return root;
+}
+
+/** Depth-first collect of leaf transactions from yarn/article/group wrappers. */
+function walkTransactionBuckets(node: unknown, depth = 0): any[] {
+  if (depth > 20 || node == null) return [];
+  if (Array.isArray(node)) {
+    return node.flatMap((n) => walkTransactionBuckets(n, depth + 1));
+  }
+  if (typeof node !== "object") return [];
+  const o = node as Record<string, unknown>;
+  const txKind = o.transactionType ?? o.transaction_type;
+  if (typeof txKind === "string") return [node];
+
+  const txs = o.transactions;
+  if (Array.isArray(txs)) {
+    const fromChildren = txs.flatMap((t) => walkTransactionBuckets(t, depth + 1));
+    if (fromChildren.length > 0) return fromChildren;
+  }
+
+  for (const k of ["articles", "groups", "yarns", "buckets", "items", "children"] as const) {
+    const arr = o[k];
+    if (Array.isArray(arr)) return arr.flatMap((x) => walkTransactionBuckets(x, depth + 1));
+  }
+
+  return [];
+}
+
+// Helper: unwrap pagination / grouped buckets / flat tx arrays from yarn-transactions APIs.
+const extractTransactions = (data: any): any[] => {
+  if (data == null) return [];
+
+  const root = unwrapTransactionsRoot(data);
+  const walked = walkTransactionBuckets(root, 0);
+  const filtered = walked.filter((t) => {
+    const typ =
+      (t as any)?.transactionType ?? (t as any)?.transaction_type;
+    return t && typeof t === "object" && typeof typ === "string";
   });
-  
-  return transactions;
+  if (filtered.length > 0) return filtered;
+
+  if (Array.isArray(root)) {
+    const fallback = flattenGroupedTransactions(root);
+    if (fallback.length > 0) return fallback;
+  }
+
+  return [];
 };
+
+/** Map list API payloads (mixed keys) into ReturnTransaction rows for the history drawer. */
+function normalizeReturnTransactionForHistory(raw: Record<string, unknown>): ReturnTransaction {
+  const yarnRaw = raw.yarn;
+  const yarn =
+    yarnRaw && typeof yarnRaw === "object"
+      ? (yarnRaw as ReturnTransaction["yarn"])
+      : undefined;
+  const yarnName =
+    (typeof raw.yarnName === "string" && raw.yarnName.trim())
+      ? raw.yarnName.trim()
+      : yarn?.yarnName || "Unknown";
+  const id = String(raw._id ?? raw.id ?? "").trim();
+  const txnType = String(raw.transactionType ?? raw.transaction_type ?? "yarn_returned");
+  const net = Number(raw.transactionNetWeight ?? raw.totalNetWeight ?? raw.netWeight ?? 0);
+  const total = Number(raw.transactionTotalWeight ?? raw.totalWeight ?? 0);
+  const tear = Number(raw.transactionTearWeight ?? raw.totalTearWeight ?? 0);
+  const coneCt =
+    Number(raw.transactionConeCount ?? raw.numberOfCones ?? raw.conesCount ?? 1) || 1;
+  const dateRaw = raw.transactionDate ?? raw.createdAt ?? raw.updatedAt;
+  const transactionDate =
+    typeof dateRaw === "string" || typeof dateRaw === "number"
+      ? new Date(dateRaw).toISOString()
+      : new Date().toISOString();
+  const createdAt =
+    typeof raw.createdAt === "string"
+      ? raw.createdAt
+      : transactionDate;
+  const updatedAt =
+    typeof raw.updatedAt === "string"
+      ? raw.updatedAt
+      : transactionDate;
+
+  const oidRaw = raw.orderId;
+  let orderIdStr: string | undefined;
+  if (typeof oidRaw === "string") orderIdStr = oidRaw;
+  else if (oidRaw && typeof oidRaw === "object") {
+    const o = oidRaw as { _id?: unknown; id?: unknown };
+    orderIdStr =
+      typeof o._id === "string" ? o._id : typeof o.id === "string" ? o.id : undefined;
+  }
+
+  return {
+    _id: id || `tx-${transactionDate}-${Math.random().toString(36).slice(2)}`,
+    orderno:
+      typeof raw.orderno === "string"
+        ? raw.orderno
+        : typeof (raw as { orderNo?: string }).orderNo === "string"
+          ? (raw as { orderNo: string }).orderNo
+          : undefined,
+    orderId: orderIdStr,
+    yarnName,
+    transactionType: txnType,
+    transactionDate,
+    transactionNetWeight: Number.isFinite(net) ? net : 0,
+    transactionTotalWeight: Number.isFinite(total) ? total : 0,
+    transactionTearWeight: Number.isFinite(tear) ? tear : 0,
+    transactionConeCount: coneCt,
+    createdAt,
+    updatedAt,
+    yarn,
+  };
+}
+
+type YarnReturnedHistoryPageOptions = {
+  yarnName?: string;
+  startDate?: string;
+  endDate?: string;
+};
+
+type YarnReturnedHistoryPageResult = {
+  rows: ReturnTransaction[];
+  page: number;
+  limit: number;
+  totalResults: number;
+  totalPages: number;
+};
+
+function historyTransactionTypeOf(t: { transactionType?: string; transaction_type?: string }): string {
+  return String(t?.transactionType ?? t?.transaction_type ?? "").toLowerCase();
+}
+
+/** Parse paged `GET …/yarn-transactions` envelope + return rows (same filters as floor-issue history). */
+function normalizeYarnReturnedHistoryPage(
+  data: unknown,
+  requestedPage: number,
+  limit: number
+): YarnReturnedHistoryPageResult {
+  const empty: YarnReturnedHistoryPageResult = {
+    rows: [],
+    page: Math.max(1, requestedPage),
+    limit,
+    totalResults: 0,
+    totalPages: 0,
+  };
+  if (data == null) return empty;
+
+  let page = Math.max(1, requestedPage);
+  let totalResults = 0;
+  let totalPages = 0;
+  let rawList: unknown[] = [];
+
+  if (typeof data === "object" && !Array.isArray(data)) {
+    const o = data as Record<string, unknown>;
+    const p = o.page;
+    if (typeof p === "number" && Number.isFinite(p)) page = Math.max(1, p);
+    else if (typeof p === "string") {
+      const n = Number(p);
+      if (Number.isFinite(n)) page = Math.max(1, n);
+    }
+    const tr = o.totalResults ?? o.total;
+    if (typeof tr === "number" && Number.isFinite(tr)) totalResults = tr;
+    else if (typeof tr === "string") {
+      const n = Number(tr);
+      if (Number.isFinite(n)) totalResults = n;
+    }
+    const tp = o.totalPages;
+    if (typeof tp === "number" && Number.isFinite(tp)) totalPages = Math.max(0, tp);
+    else if (typeof tp === "string") {
+      const n = Number(tp);
+      if (Number.isFinite(n)) totalPages = Math.max(0, n);
+    }
+    if (Array.isArray(o.results)) rawList = o.results;
+  }
+
+  const typeOf = historyTransactionTypeOf;
+  let items: unknown[] = rawList;
+  if (items.length === 0) {
+    items = extractTransactions(data);
+  }
+  items = items.filter(
+    (t) => t && typeof t === "object" && typeOf(t as { transactionType?: string; transaction_type?: string }) === "yarn_returned"
+  );
+
+  const seen = new Set<string>();
+  const rows: ReturnTransaction[] = [];
+  for (const item of items) {
+    if (!item || typeof item !== "object") continue;
+    const row = normalizeReturnTransactionForHistory(item as Record<string, unknown>);
+    if (!row._id || seen.has(row._id)) continue;
+    seen.add(row._id);
+    rows.push(row);
+  }
+
+  const effLimit = Math.min(Math.max(limit, 1), YARN_RETURN_HISTORY_API_LIMIT);
+  let effTotal = totalResults > 0 ? totalResults : rows.length;
+  let effPages = totalPages > 0 ? totalPages : effTotal > 0 ? Math.ceil(effTotal / effLimit) : 0;
+  if (effPages === 0 && rows.length > 0) effPages = 1;
+  if (effTotal === 0 && rows.length > 0) effTotal = rows.length;
+
+  return {
+    rows,
+    page,
+    limit: effLimit,
+    totalResults: effTotal,
+    totalPages: effPages,
+  };
+}
+
+/**
+ * Paged yarn_returned list (limit capped at 100). Optional filters match linking/sampling history query names.
+ */
+async function fetchYarnReturnedHistoryPage(
+  token: string | null,
+  page: number,
+  options?: YarnReturnedHistoryPageOptions
+): Promise<YarnReturnedHistoryPageResult> {
+  const pageNum = Math.max(1, Math.floor(page) || 1);
+  const limit = YARN_RETURN_HISTORY_API_LIMIT;
+  const empty: YarnReturnedHistoryPageResult = {
+    rows: [],
+    page: pageNum,
+    limit,
+    totalResults: 0,
+    totalPages: 0,
+  };
+
+  const buildSearch = (includeOptionFilters: boolean) => {
+    const search = new URLSearchParams({
+      paged: "1",
+      page: String(pageNum),
+      limit: String(limit),
+      transaction_type: "yarn_returned",
+    });
+    if (includeOptionFilters && options) {
+      const y = options.yarnName?.trim();
+      if (y) search.set("yarn_name", y);
+      const sd = options.startDate?.trim();
+      const ed = options.endDate?.trim();
+      if (sd) search.set("start_date", sd);
+      if (ed) search.set("end_date", ed);
+    }
+    return search;
+  };
+
+  let res = await fetch(
+    `${API_BASE_URL}/yarn-management/yarn-transactions?${buildSearch(true).toString()}`,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    }
+  );
+
+  // Retry without optional filters if the server rejects unknown filter combinations.
+  if (!res.ok) {
+    res = await fetch(
+      `${API_BASE_URL}/yarn-management/yarn-transactions?${buildSearch(false).toString()}`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      }
+    );
+  }
+
+  if (!res.ok) return empty;
+
+  const data = await res.json();
+  return normalizeYarnReturnedHistoryPage(data, pageNum, limit);
+}
 
 /** Production order Mongo id from cone (`orderId` or populated `order`). Cones often only store this + `articleId`. */
 function productionOrderIdFromCone(cd: any): string | null {
@@ -440,6 +1068,10 @@ const YarnReturnPage = () => {
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [history, setHistory] = useState<ReturnRecord[]>([]);
   const [returnTransactions, setReturnTransactions] = useState<ReturnTransaction[]>([]);
+  const [articleSliceCache, setArticleSliceCache] = useState<Record<string, ArticleRow>>({});
+  /** Article rows from completed-items only (no slice); merged with `articleSliceCache` for display. */
+  const [machineArticleCatalogRows, setMachineArticleCatalogRows] = useState<ArticleRow[]>([]);
+  const [articleSliceLoadingRowId, setArticleSliceLoadingRowId] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedArticleRowId, setSelectedArticleRowId] = useState<string | null>(null);
   const [activeConeId, setActiveConeId] = useState<string | null>(null);
@@ -464,6 +1096,12 @@ const YarnReturnPage = () => {
   const [quickReturnSummaryOpen, setQuickReturnSummaryOpen] = useState(false);
   const [yarnNamesDrawerRow, setYarnNamesDrawerRow] = useState<ArticleRow | null>(null);
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
+  const [historyDrawerLoading, setHistoryDrawerLoading] = useState(false);
+  const [historyDrawerRows, setHistoryDrawerRows] = useState<ReturnTransaction[]>([]);
+  const [historyDrawerTotalResults, setHistoryDrawerTotalResults] = useState(0);
+  const [historyDrawerTotalPages, setHistoryDrawerTotalPages] = useState(0);
+  const [historySearchDebounced, setHistorySearchDebounced] = useState("");
+  const historyLastFiltersRef = useRef<string>("__init__");
   /** Return by scanning cone only: order/article resolved from cone API (not from machine list). */
   const [showQuickReturnDrawer, setShowQuickReturnDrawer] = useState(false);
   const [quickReturnOrder, setQuickReturnOrder] = useState<ProductionOrder | null>(null);
@@ -611,57 +1249,7 @@ const YarnReturnPage = () => {
         return !oid || String(oid) === String(orderId);
       });
 
-      const conesMap = new Map<string, Cone>();
-      const coneIdToTxIds = new Map<string, string[]>();
-      issuedTransactions.forEach((tx: any) => {
-        if (tx.transactionType !== "yarn_issued") return;
-        const txId = tx._id || tx.id;
-        const coneIds = Array.isArray(tx.conesIdsArray) && tx.conesIdsArray.length > 0
-          ? tx.conesIdsArray
-          : [tx.coneBarcode || tx.barcode || `TX-${txId}`];
-        coneIds.forEach((cid: string) => {
-          if (!coneIdToTxIds.has(cid)) coneIdToTxIds.set(cid, []);
-          coneIdToTxIds.get(cid)!.push(txId);
-        });
-      });
-      issuedTransactions.forEach((tx: any) => {
-        if (tx.transactionType !== "yarn_issued") return;
-        const numberOfCones = tx.numberOfCones || tx.transactionConeCount || 1;
-        const weightPerCone = (tx.transactionNetWeight || tx.totalNetWeight || 0) / numberOfCones;
-        const articleId = txArticleId(tx);
-        const articleNumber = txArticleNumber(tx);
-        const coneIds = Array.isArray(tx.conesIdsArray) && tx.conesIdsArray.length > 0
-          ? tx.conesIdsArray
-          : [tx.coneBarcode || tx.barcode || `TX-${tx._id || tx.id}`];
-        coneIds.forEach((coneId: string, idx: number) => {
-          if (conesMap.has(coneId)) return;
-          const txIdsForCone = coneIdToTxIds.get(coneId) || [];
-          const returnedTx = returnedTransactions.find(
-            (rt: any) =>
-              (rt.conesIdsArray?.includes?.(coneId) || rt.coneBarcode === coneId || txIdsForCone.includes(rt.issuedTransactionId)) &&
-              rt.transactionType === "yarn_returned"
-          );
-          const uniqueConeId = coneIds.length > 1 ? `${coneId}-${idx + 1}` : coneId;
-          const catalogId = resolveYarnCatalogIdFromTransaction(tx);
-          conesMap.set(coneId, {
-            id: uniqueConeId,
-            barcode: coneId,
-            yarnCode: catalogId || (tx as { yarnCode?: string }).yarnCode || "N/A",
-            yarnName: tx.yarnName || "Unknown Yarn",
-            yarnType: tx.yarn?.yarnType?.name || "Unknown",
-            issuedWeight: weightPerCone,
-            returnedWeight: returnedTx ? (returnedTx.transactionNetWeight || returnedTx.totalNetWeight || 0) / numberOfCones : undefined,
-            balanceWeight: returnedTx ? Math.max(weightPerCone - ((returnedTx.transactionNetWeight || returnedTx.totalNetWeight || 0) / numberOfCones), 0) : undefined,
-            status: returnedTx ? ("Returned" as ConeStatus) : ("Awaiting" as ConeStatus),
-            lastReturnedAt: returnedTx?.transactionDate || returnedTx?.createdAt,
-            transactionId: tx._id || tx.id,
-            yarnCatalogId: catalogId || undefined,
-            articleId,
-            articleNumber,
-          });
-        });
-      });
-      const cones = Array.from(conesMap.values());
+      const cones = buildConesFromIssuedAndReturned(issuedTransactions, returnedTransactions);
       const lastUpdated = meta.updatedAt || meta.createdAt || new Date().toISOString();
       return {
         id: orderId,
@@ -713,6 +1301,8 @@ const YarnReturnPage = () => {
         setOrders([]);
         setHistory([]);
         setReturnTransactions((prev) => prev);
+        setMachineArticleCatalogRows([]);
+        setArticleSliceCache({});
         setSelectedOrderId(null);
         setSelectedArticleRowId(null);
         setSelectedMachineAssignmentId(assignment.id);
@@ -765,71 +1355,69 @@ const YarnReturnPage = () => {
         });
       });
 
+      setMachineArticleCatalogRows([]);
+      setArticleSliceCache({});
       setOrdersLoading(true);
-      const token = getAccessToken();
       try {
-        const ordersWithCones = await Promise.all(
-          builtOrdersMeta.map((meta) =>
-            fetchOrderWithCones(token, meta.orderNumber, meta.orderId, {
-              floor: meta.floor,
-              articles: meta.articles,
-              createdAt: meta.createdAt,
-              updatedAt: meta.updatedAt,
-            })
-          )
-        );
-        const filtered = ordersWithCones.filter((o) => o.hasIssuedTransactions || o.cones.length > 0);
-        setOrders(filtered);
-        setHistory(filtered.map((order) => buildHistoryRecord(order)));
+        const catalogRows: ArticleRow[] = [];
+        for (const meta of builtOrdersMeta) {
+          meta.articles.forEach((art, ai) => {
+            const rawAid = String(art.id || (art as { _id?: string })._id || "").trim();
+            const rawNum = String(art.articleNumber || "").trim();
+            if (!rawAid && !rawNum) return;
+            catalogRows.push(buildMachineCatalogArticleRow(meta, art, ai));
+          });
+        }
 
-        const allReturnTxs: ReturnTransaction[] = [];
-        await Promise.all(
-          filtered.map(async (o) => {
-            try {
-              const res = await fetch(
-                `${API_BASE_URL}/yarn-management/yarn-transactions?order_id=${o.id}`,
-                { headers: { "Content-Type": "application/json", ...(token && { Authorization: `Bearer ${token}` }) } }
-              );
-              if (!res.ok) return;
-              const data = await res.json();
-              const txs = extractTransactions(data).filter((tx: any) => tx.transactionType === "yarn_returned") as ReturnTransaction[];
-              allReturnTxs.push(...txs);
-            } catch (err) {
-              console.warn("Fetch return tx for", o.id, err);
-            }
-          })
-        );
-        setReturnTransactions(allReturnTxs);
+        const catalogOrders: ProductionOrder[] = builtOrdersMeta.map((meta) => {
+          const lastUpdated = new Date().toISOString();
+          return {
+            id: meta.orderId,
+            productionOrder: meta.orderNumber,
+            orderNumber: meta.orderNumber,
+            floor: meta.floor,
+            knittingSupervisor: "N/A",
+            knittingCompletedAt: meta.updatedAt || meta.createdAt || lastUpdated,
+            status: "Awaiting Return" as OrderStatus,
+            cones: [],
+            lastUpdated,
+            articles: meta.articles,
+            hasIssuedTransactions: true,
+          };
+        });
 
-        const restored = resolvePreservedArticleSelection(filtered, options?.preserveSelection);
+        setMachineArticleCatalogRows(catalogRows);
+        setOrders(catalogOrders);
+        setHistory(catalogOrders.map((order) => buildHistoryRecord(order)));
+        setReturnTransactions([]);
+
+        const restored = resolvePreservedCatalogSelection(catalogRows, options?.preserveSelection);
         if (restored) {
           setSelectedOrderId(restored.orderId);
           setSelectedArticleRowId(restored.articleRowId);
+        } else if (catalogRows[0]) {
+          setSelectedOrderId(catalogRows[0].orderId);
+          setSelectedArticleRowId(catalogRows[0].rowId);
         } else {
-          const first = filtered[0];
-          if (first?.id) {
-            setSelectedOrderId(first.id);
-            const firstArticle = first.articles?.[0];
-            if (firstArticle) {
-              setSelectedArticleRowId(`${firstArticle.id}-${first.id}`);
-            } else {
-              setSelectedArticleRowId(first.id);
-            }
-          } else {
-            setSelectedOrderId(null);
-            setSelectedArticleRowId(null);
-          }
+          setSelectedOrderId(null);
+          setSelectedArticleRowId(null);
+        }
+
+        if (builtOrdersMeta.length > 0 && catalogRows.length === 0) {
+          toast.error("No articles found for this machine.");
         }
       } catch (error) {
         console.error("Error loading orders for machine:", error);
         toast.error("Failed to load orders and cones");
         setOrders([]);
         setHistory([]);
+        setMachineArticleCatalogRows([]);
+        setArticleSliceCache({});
       } finally {
         setOrdersLoading(false);
       }
     },
-    [fetchOrderWithCones]
+    []
   );
 
   /** Mark yarn return status as Completed for all items across all machines shown. */
@@ -879,6 +1467,12 @@ const YarnReturnPage = () => {
     }
   }, [machineAssignments, selectedMachineAssignmentId, loadOrdersForMachine]);
 
+  // Debounce history search so we do not refetch on every keystroke.
+  useEffect(() => {
+    const id = window.setTimeout(() => setHistorySearchDebounced(historySearchTerm), 400);
+    return () => window.clearTimeout(id);
+  }, [historySearchTerm]);
+
   // Default: select first machine when completed-items have loaded
   useEffect(() => {
     if (!machineAssignmentsLoading && machineAssignments.length > 0 && selectedMachineAssignmentId === null) {
@@ -886,84 +1480,138 @@ const YarnReturnPage = () => {
     }
   }, [machineAssignmentsLoading, machineAssignments, selectedMachineAssignmentId, loadOrdersForMachine]);
 
-  // When no orders (no machines or no completed items), fetch all return transactions for history drawer
   useEffect(() => {
-    if (!hasPermission) return;
-    const noOrders = !ordersLoading && orders.length === 0;
-    const noMachines = !machineAssignmentsLoading && machineAssignments.length === 0;
-    if (!noOrders && !noMachines) return;
+    if (!showHistoryDrawer) {
+      historyLastFiltersRef.current = "__init__";
+    }
+  }, [showHistoryDrawer]);
 
-    const fetchAllReturnTransactions = async () => {
+  // Keep current page in range when total pages changes.
+  useEffect(() => {
+    if (!Number.isFinite(historyDrawerTotalPages) || historyDrawerTotalPages <= 0) return;
+    setHistoryPage((p) => Math.min(Math.max(1, p), historyDrawerTotalPages));
+  }, [historyDrawerTotalPages]);
+
+  // History drawer: server-paged yarn_returned list (limit ≤ 100 per API contract).
+  useEffect(() => {
+    if (!showHistoryDrawer || !hasPermission) return;
+
+    const filtersKey = `${historySearchDebounced}|${historyDateRange.from}|${historyDateRange.to}`;
+    const filtersChanged = historyLastFiltersRef.current !== filtersKey;
+    historyLastFiltersRef.current = filtersKey;
+
+    const pageToFetch = filtersChanged ? 1 : historyPage;
+    if (filtersChanged && historyPage !== 1) {
+      setHistoryPage(1);
+    }
+
+    let cancelled = false;
+    setHistoryDrawerLoading(true);
+    const loadHistory = async () => {
       const token = getAccessToken();
       try {
-        const res = await fetch(
-          `${API_BASE_URL}/yarn-management/yarn-transactions`,
-          { headers: { "Content-Type": "application/json", ...(token && { Authorization: `Bearer ${token}` }) } }
-        );
-        if (!res.ok) return;
-        const data = await res.json();
-        const txs = extractTransactions(data).filter((tx: any) => tx.transactionType === "yarn_returned") as ReturnTransaction[];
-        setReturnTransactions(txs);
+        const r = await fetchYarnReturnedHistoryPage(token, pageToFetch, {
+          yarnName: historySearchDebounced.trim() || undefined,
+          startDate: historyDateRange.from || undefined,
+          endDate: historyDateRange.to || undefined,
+        });
+        if (!cancelled) {
+          setHistoryDrawerRows(r.rows);
+          setHistoryDrawerTotalResults(r.totalResults);
+          setHistoryDrawerTotalPages(r.totalPages);
+        }
       } catch (err) {
-        console.warn("Fetch all return transactions for history:", err);
+        if (!cancelled) console.warn("Fetch return transactions for history:", err);
+      } finally {
+        if (!cancelled) setHistoryDrawerLoading(false);
       }
     };
-    fetchAllReturnTransactions();
-  }, [hasPermission, machineAssignmentsLoading, machineAssignments.length, ordersLoading, orders.length]);
-
-  // Filter pending orders - exclude orders where all cones have been returned
-  // Check both cone status and return transaction cone counts
-  const pendingOrders = useMemo(() => {
-    return orders.filter((order) => {
-      // If order status is already "Returned", exclude it
-      if (order.status === "Returned") {
-        return false;
-      }
-
-      // Check if all cones are marked as returned (most reliable check)
-      const allConesReturned =
-        order.cones.length > 0 &&
-        order.cones.every((cone) => cone.status === "Returned");
-
-      if (allConesReturned) {
-        return false; // Exclude from pending
-      }
-
-      // Get return transactions for this order (same order number)
-      const orderReturnTransactions = returnTransactions.filter(
-        (tx) =>
-          (txOrderno(tx) ?? tx.orderno) === productionOrderNoForApi(order) ||
-          txOrderId(tx) === order.id
-      );
-
-      if (orderReturnTransactions.length === 0) {
-        // No return transactions, show in pending
-        return true;
-      }
-
-      // Count total cones in the order
-      const totalConesInOrder = order.cones.length;
-
-      // Count total cones returned from return transactions
-      const totalConesReturned = orderReturnTransactions.reduce(
-        (sum, tx) => sum + (tx.transactionConeCount || 1),
-        0
-      );
-
-      // If returned cones count >= total cones, exclude from pending
-      if (totalConesReturned >= totalConesInOrder) {
-        return false;
-      }
-
-      // If we have some returned cones but not all, still show in pending
-      return true;
-    });
-  }, [orders, returnTransactions]);
+    loadHistory();
+    return () => {
+      cancelled = true;
+      setHistoryDrawerLoading(false);
+    };
+  }, [
+    showHistoryDrawer,
+    hasPermission,
+    historyPage,
+    historySearchDebounced,
+    historyDateRange.from,
+    historyDateRange.to,
+  ]);
 
   const selectedOrder = useMemo(
     () => orders.find((order) => order.id === selectedOrderId) ?? null,
     [orders, selectedOrderId]
   );
+
+  // Lazy-load GET article-return-slice for the selected machine article (default: first after machine pick).
+  useEffect(() => {
+    if (quickReturnOrder) return;
+    if (!selectedArticleRowId || machineArticleCatalogRows.length === 0) return;
+
+    const catalogRow = machineArticleCatalogRows.find((r) => r.rowId === selectedArticleRowId);
+    if (!catalogRow) return;
+
+    let cancelled = false;
+    setArticleSliceLoadingRowId(selectedArticleRowId);
+
+    (async () => {
+      try {
+        const slice = await fetchArticleReturnSlice({
+          orderId: catalogRow.orderId,
+          ...(catalogRow.sliceFetchArticleId ? { articleId: catalogRow.sliceFetchArticleId } : {}),
+          ...(catalogRow.sliceFetchArticleNumber
+            ? { articleNumber: catalogRow.sliceFetchArticleNumber }
+            : {}),
+        });
+        if (cancelled) return;
+
+        const mergedFromApi = articleRowFromSlice(
+          slice,
+          catalogRow.orderNumber,
+          catalogRow.plannedQuantity ?? 0
+        );
+        // Keep catalog rowId/articleId so selection and pending filters stay stable (API may use different id shape).
+        const mergedRow: ArticleRow = {
+          ...mergedFromApi,
+          rowId: catalogRow.rowId,
+          articleId: catalogRow.articleId,
+          articleNumber: catalogRow.articleNumber,
+        };
+        setArticleSliceCache((prev) => ({ ...prev, [catalogRow.rowId]: mergedRow }));
+
+        setOrders((prev) =>
+          prev.map((o) => {
+            if (o.id !== catalogRow.orderId) return o;
+            return {
+              ...o,
+              productionOrder: slice.productionOrder,
+              floor: slice.floor,
+              knittingSupervisor: slice.knittingSupervisor,
+              knittingCompletedAt: slice.knittingCompletedAt ?? o.knittingCompletedAt,
+              status: mapSliceStatusToOrderStatus(slice.status),
+              cones: slice.cones.map(mapSliceConeToPageCone),
+              hasIssuedTransactions: slice.cones.length > 0,
+            };
+          })
+        );
+      } catch (e) {
+        if (cancelled) return;
+        console.warn("article-return-slice:", e);
+        toast.error(e instanceof Error ? e.message : "Failed to load article data");
+      } finally {
+        if (!cancelled) {
+          setArticleSliceLoadingRowId((cur) => (cur === selectedArticleRowId ? null : cur));
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      setArticleSliceLoadingRowId(null);
+    };
+  }, [selectedArticleRowId, machineArticleCatalogRows, quickReturnOrder]);
 
   /** Keep focus on the scan barcode field when the panel is active (portal + modal transitions need explicit focus). */
   useEffect(() => {
@@ -996,30 +1644,41 @@ const YarnReturnPage = () => {
     return () => window.clearTimeout(t);
   }, [showReturnModal]);
 
-  // Build article rows from orders (article-wise display)
-  // Each article row shows only cones belonging to that article (by cone.articleId)
+  // Build article rows: lazy machine catalog + per-article slice cache, or from orders (quick return / legacy).
   const articleRows = useMemo(() => {
+    if (!quickReturnOrder && machineArticleCatalogRows.length > 0) {
+      return machineArticleCatalogRows.map((r) => articleSliceCache[r.rowId] ?? r);
+    }
+    const sourceOrders = quickReturnOrder ? [quickReturnOrder] : orders;
     const rows: ArticleRow[] = [];
-    for (const order of orders) {
+    for (const order of sourceOrders) {
       const articles = order.articles?.length ? order.articles : [{ id: order.id, articleNumber: order.orderNumber, plannedQuantity: 0 } as Article];
-      const firstArticleId = articles[0] ? (articles[0].id || (articles[0] as any)._id) : undefined;
-      for (const art of articles) {
+      const soleArticle = articles.length === 1;
+      const firstArticleId = articles[0] ? articles[0].id || (articles[0] as any)._id : undefined;
+      const firstNorm = normalizeArticleRefId(firstArticleId);
+      for (let ai = 0; ai < articles.length; ai++) {
+        const art = articles[ai];
         const artId = art.id || (art as any)._id;
-        // Filter cones by article: match by articleId first, then articleNumber (fallback when articleId missing/mismatch)
+        const artNorm = normalizeArticleRefId(artId);
+        const artNum = String(art.articleNumber ?? "").trim();
+        const rowPrefix = artNorm || artNum || `slot${ai}`;
         let conesForArticle = order.cones.filter((c) => {
-          if (c.articleId && String(c.articleId) === String(artId)) return true;
-          if (c.articleNumber && art.articleNumber && String(c.articleNumber).trim() === String(art.articleNumber).trim()) return true;
-          if (!c.articleId && !c.articleNumber) return artId === firstArticleId; // legacy: no article info → first article
+          const cid = normalizeArticleRefId(c.articleId);
+          if (cid && artNorm && cid === artNorm) return true;
+          const cnum = String(c.articleNumber ?? "").trim();
+          if (cnum && artNum && cnum === artNum) return true;
+          // Legacy orphan cones: only when this PO truly has one article row (never pin orphans to "first" on multi-article orders).
+          const orphan = !normalizeArticleRefId(c.articleId) && !String(c.articleNumber ?? "").trim();
+          if (orphan && soleArticle && artNorm && firstNorm && artNorm === firstNorm) return true;
           return false;
         });
-        // Fallback: single-article order gets all cones; multi-article with no match stays empty
-        if (conesForArticle.length === 0 && order.cones.length > 0 && articles.length === 1) {
+        if (conesForArticle.length === 0 && order.cones.length > 0 && soleArticle) {
           conesForArticle = order.cones;
         }
         const yarnNames = Array.from(new Set(conesForArticle.map((c) => c.yarnName).filter(Boolean))).join(", ");
         rows.push({
-          rowId: `${artId}-${order.id}`,
-          articleId: artId,
+          rowId: `${rowPrefix}-${order.id}`,
+          articleId: artNorm || String(artId ?? "").trim() || rowPrefix,
           articleNumber: art.articleNumber,
           orderId: order.id,
           orderNumber: order.orderNumber,
@@ -1035,13 +1694,37 @@ const YarnReturnPage = () => {
       }
     }
     return rows;
-  }, [orders]);
+  }, [articleSliceCache, machineArticleCatalogRows, orders, quickReturnOrder]);
 
-  // Pending article rows (articles whose parent order has pending cones)
+  // Pending article rows: include unloaded catalog rows; exclude fully returned once slice is loaded.
   const pendingArticles = useMemo(() => {
-    const pendingOrderIds = new Set(pendingOrders.map((o) => o.id));
-    return articleRows.filter((row) => pendingOrderIds.has(row.orderId));
-  }, [articleRows, pendingOrders]);
+    return articleRows.filter((row) => {
+      if (row.cones.length === 0) return true;
+      return row.cones.some((cone) => cone.status !== "Returned");
+    });
+  }, [articleRows]);
+
+  const totalPendingCones = useMemo(
+    () =>
+      articleRows.reduce(
+        (sum, row) => sum + row.cones.filter((c) => c.status !== "Returned").length,
+        0
+      ),
+    [articleRows]
+  );
+
+  const totalReturnedCones = useMemo(
+    () =>
+      articleRows.reduce((sum, row) => sum + row.cones.filter((c) => c.status === "Returned").length, 0),
+    [articleRows]
+  );
+
+  /** Article lines fully returned (slice loaded, all cones Returned). */
+  const totalCompletedOrders = useMemo(() => {
+    return articleRows.filter(
+      (row) => row.cones.length > 0 && row.cones.every((cone) => cone.status === "Returned")
+    ).length;
+  }, [articleRows]);
 
   const selectedArticleRow = useMemo(
     () => articleRows.find((r) => r.rowId === selectedArticleRowId) ?? null,
@@ -1061,7 +1744,8 @@ const YarnReturnPage = () => {
     const articles = order.articles?.length
       ? order.articles
       : [{ id: order.id, articleNumber: order.orderNumber, plannedQuantity: 0 } as Article];
-    const norm = (id: string | undefined) => String(id ?? "").trim();
+    const norm = normalizeArticleRefId;
+    const soleArticle = articles.length === 1;
     const firstId = articles[0] ? norm(articles[0].id || (articles[0] as any)._id) : "";
     let art = articles[0];
     for (const a of articles) {
@@ -1073,12 +1757,13 @@ const YarnReturnPage = () => {
     }
     const artId = norm(art?.id ?? (art as any)?._id) || firstId;
     let conesForArticle = order.cones.filter((c) => {
-      if (c.articleId && norm(c.articleId) === artId) return true;
+      if (norm(c.articleId) && norm(c.articleId) === artId) return true;
       if (c.articleNumber && art?.articleNumber && String(c.articleNumber).trim() === String(art.articleNumber).trim()) return true;
-      if (!c.articleId && !c.articleNumber) return norm(artId) === firstId;
+      const orphan = !norm(c.articleId) && !String(c.articleNumber ?? "").trim();
+      if (orphan && soleArticle && artId && firstId && artId === firstId) return true;
       return false;
     });
-    if (conesForArticle.length === 0 && order.cones.length > 0 && articles.length === 1) {
+    if (conesForArticle.length === 0 && order.cones.length > 0 && soleArticle) {
       conesForArticle = order.cones;
     }
     const yarnNames = Array.from(new Set(conesForArticle.map((c) => c.yarnName).filter(Boolean))).join(", ");
@@ -1118,172 +1803,90 @@ const YarnReturnPage = () => {
     [yarnNamesDrawerRow]
   );
 
-  // Sync selection to first pending article when current selection is not in pending list
+  // Keep selection stable on machine+catalog flow: slice rowId must match catalog (see lazy fetch).
   useEffect(() => {
+    const machineCatalogUi =
+      !quickReturnOrder && machineArticleCatalogRows.length > 0;
+
+    const selectionInCatalog = (id: string | null) =>
+      Boolean(id && machineArticleCatalogRows.some((r) => r.rowId === id));
+
+    if (machineCatalogUi) {
+      if (
+        selectedArticleRowId &&
+        articleSliceLoadingRowId === selectedArticleRowId
+      ) {
+        return;
+      }
+
+      if (pendingArticles.length === 0) {
+        if (!selectionInCatalog(selectedArticleRowId)) {
+          setSelectedOrderId(null);
+          setSelectedArticleRowId(null);
+        }
+        return;
+      }
+
+      const isSelectedPending =
+        Boolean(selectedArticleRowId) &&
+        pendingArticles.some((a) => a.rowId === selectedArticleRowId);
+      if (isSelectedPending) return;
+      if (selectionInCatalog(selectedArticleRowId)) return;
+
+      const first = pendingArticles[0];
+      setSelectedOrderId(first.orderId);
+      setSelectedArticleRowId(first.rowId);
+      return;
+    }
+
     if (pendingArticles.length === 0) {
       setSelectedOrderId(null);
       setSelectedArticleRowId(null);
       return;
     }
-    const isSelectedPending = selectedArticleRowId && pendingArticles.some((a) => a.rowId === selectedArticleRowId);
+    const isSelectedPending =
+      selectedArticleRowId && pendingArticles.some((a) => a.rowId === selectedArticleRowId);
     if (!isSelectedPending) {
       const first = pendingArticles[0];
       setSelectedOrderId(first.orderId);
       setSelectedArticleRowId(first.rowId);
     }
-  }, [pendingArticles, selectedArticleRowId]);
-
-  // Calculate pending cones (cones that haven't been returned)
-  // Count based on return transactions history, not just cone status
-  const totalPendingCones = useMemo(
-    () =>
-      pendingOrders.reduce((sum, order) => {
-        // Get return transactions for this order
-        const orderReturnTransactions = returnTransactions.filter(
-          (tx) =>
-            (txOrderno(tx) ?? tx.orderno) === productionOrderNoForApi(order) ||
-            txOrderId(tx) === order.id
-        );
-        
-        // Count total cones returned from return transactions (from history)
-        const totalConesReturnedFromHistory = orderReturnTransactions.reduce(
-          (txSum, tx) => txSum + (tx.transactionConeCount || 1),
-          0
-        );
-        
-        // Total cones in the order
-        const totalConesInOrder = order.cones.length;
-        
-        // Actual pending cones = total cones - cones returned in history
-        const actualPendingCones = Math.max(0, totalConesInOrder - totalConesReturnedFromHistory);
-        
-        return sum + actualPendingCones;
-      }, 0),
-    [pendingOrders, returnTransactions]
-  );
-
-  // Calculate returned cones from return transactions
-  const totalReturnedCones = useMemo(
-    () =>
-      returnTransactions.reduce(
-        (sum, tx) => sum + (tx.transactionConeCount || 1),
-        0
-      ),
-    [returnTransactions]
-  );
-
-  // Calculate orders where all cones have been returned
-  const totalCompletedOrders = useMemo(() => {
-    return orders.filter((order) => {
-      // Check if order status is "Returned"
-      if (order.status === "Returned") {
-        return true;
-      }
-
-      // Check if all cones are marked as returned
-      const allConesReturned =
-        order.cones.length > 0 &&
-        order.cones.every((cone) => cone.status === "Returned");
-
-      if (allConesReturned) {
-        return true;
-      }
-
-      // Get return transactions for this order
-      const orderReturnTransactions = returnTransactions.filter(
-        (tx) =>
-          (txOrderno(tx) ?? tx.orderno) === productionOrderNoForApi(order) ||
-          txOrderId(tx) === order.id
-      );
-
-      if (orderReturnTransactions.length === 0) {
-        return false;
-      }
-
-      // Count total cones in the order
-      const totalConesInOrder = order.cones.length;
-
-      // Count total cones returned from return transactions
-      const totalConesReturned = orderReturnTransactions.reduce(
-        (sum, tx) => sum + (tx.transactionConeCount || 1),
-        0
-      );
-
-      // Order is completed if returned cones >= total cones
-      return totalConesReturned >= totalConesInOrder;
-    }).length;
-  }, [orders, returnTransactions]);
+  }, [
+    pendingArticles,
+    selectedArticleRowId,
+    machineArticleCatalogRows,
+    articleSliceLoadingRowId,
+    quickReturnOrder,
+  ]);
 
   useEffect(() => {
-    if (!pendingToastShown.current && pendingOrders.length > 0) {
+    if (!pendingToastShown.current && pendingArticles.length > 0) {
       pendingToastShown.current = true;
       toast("Knitting completed orders are awaiting cone return.", {
         icon: "🧵",
       });
     }
-  }, [pendingOrders]);
+  }, [pendingArticles]);
 
   // Only articles whose cones are pending for return
   const filteredArticleRows = useMemo(() => pendingArticles, [pendingArticles]);
 
-  const filteredReturnTransactions = useMemo(() => {
-    return returnTransactions
-      .filter((transaction) => {
-        // Filter by order number or yarn name
-        if (
-          historySearchTerm &&
-          !(txOrderno(transaction) ?? transaction.orderno ?? "")
-            .toLowerCase()
-            .includes(historySearchTerm.toLowerCase()) &&
-          !(transaction.yarnName ?? "")
-            .toLowerCase()
-            .includes(historySearchTerm.toLowerCase())
-        ) {
-          return false;
-        }
+  /** Data table lists only the article selected in “Select Article”. */
+  const selectedTableArticleRows = useMemo(() => {
+    if (!selectedArticleRowId) return [];
+    const row = articleRows.find((r) => r.rowId === selectedArticleRowId);
+    return row ? [row] : [];
+  }, [articleRows, selectedArticleRowId]);
 
-        // Filter by date range
-        if (historyDateRange.from) {
-          const fromDate = new Date(historyDateRange.from);
-          const transactionDate = new Date(transaction.transactionDate);
-          if (transactionDate < fromDate) {
-            return false;
-          }
-        }
-        if (historyDateRange.to) {
-          const toDate = new Date(historyDateRange.to);
-          const transactionDate = new Date(transaction.transactionDate);
-          transactionDate.setHours(0, 0, 0, 0);
-          if (transactionDate > toDate) {
-            return false;
-          }
-        }
-        return true;
-      })
-      .sort(
-        (a, b) =>
-          new Date(b.transactionDate || b.createdAt).getTime() -
-          new Date(a.transactionDate || a.createdAt).getTime()
-      );
-  }, [returnTransactions, historyDateRange.from, historyDateRange.to, historySearchTerm]);
-
-  useEffect(() => {
-    setHistoryPage(1);
-  }, [historySearchTerm, historyDateRange.from, historyDateRange.to]);
-
-  const historyFilteredTotal = filteredReturnTransactions.length;
-  const historyTotalPages =
-    historyFilteredTotal === 0 ? 0 : Math.ceil(historyFilteredTotal / HISTORY_PAGE_SIZE);
-
-  useEffect(() => {
-    if (historyTotalPages === 0) return;
-    setHistoryPage((p) => (p > historyTotalPages ? historyTotalPages : p));
-  }, [historyTotalPages]);
-
-  const paginatedHistoryTransactions = useMemo(() => {
-    const start = (historyPage - 1) * HISTORY_PAGE_SIZE;
-    return filteredReturnTransactions.slice(start, start + HISTORY_PAGE_SIZE);
-  }, [filteredReturnTransactions, historyPage]);
+  const isSelectedArticleSliceLoading = useMemo(
+    () =>
+      Boolean(
+        selectedArticleRowId &&
+          machineArticleCatalogRows.length > 0 &&
+          articleSliceLoadingRowId === selectedArticleRowId
+      ),
+    [selectedArticleRowId, machineArticleCatalogRows.length, articleSliceLoadingRowId]
+  );
 
   /** Find machine assignment row that contains this production order (for yarn-return status when not on selected machine). */
   const findMachineAssignmentForOrderId = useCallback(
@@ -1832,9 +2435,10 @@ const YarnReturnPage = () => {
           (txOrderno(tx) ?? tx.orderno) === productionOrderNoForApi(orderCtx) ||
           txOrderId(tx) === orderCtx.id
       );
-      const returnedConeIds = new Set(
-        orderReturnTxs.flatMap((tx) => (tx as any).conesIdsArray ?? [])
-      );
+      const returnedConeIds = new Set<string>();
+      for (const tx of orderReturnTxs) {
+        for (const id of txnConeRefStrings(tx)) returnedConeIds.add(id);
+      }
       const returnedConeBarcodes = new Set(
         orderReturnTxs
           .map((tx) => ((tx as any).coneBarcode ?? "").toString().trim())
@@ -1941,6 +2545,8 @@ const YarnReturnPage = () => {
           issuedWeight: cone.issuedWeight,
         });
       }
+
+      cone = mergeConeWithYarnConeApiResponse(cone, coneDetails as Record<string, unknown>);
 
       // Check if cone is already returned (double check)
       if (cone.status === "Returned" || coneDetails.returnStatus === "returned") {
@@ -2525,57 +3131,19 @@ const YarnReturnPage = () => {
               console.warn("Could not fetch returned transactions:", err);
             }
 
-            // Update cones with latest data (same logic as fetchOrderWithCones - use conesIdsArray)
-            const conesMap = new Map<string, Cone>();
-            const coneIdToTxIds = new Map<string, string[]>();
-            issuedTransactions.forEach((tx: any) => {
-              if (tx.transactionType !== "yarn_issued") return;
-              const txId = tx._id || tx.id;
-              const coneIds = Array.isArray(tx.conesIdsArray) && tx.conesIdsArray.length > 0
-                ? tx.conesIdsArray
-                : [tx.coneBarcode || tx.barcode || `TX-${txId}`];
-              coneIds.forEach((cid: string) => {
-                if (!coneIdToTxIds.has(cid)) coneIdToTxIds.set(cid, []);
-                coneIdToTxIds.get(cid)!.push(txId);
-              });
+            issuedTransactions = issuedTransactions.filter((tx: any) => {
+              const oid = txOrderId(tx);
+              return !oid || String(oid) === String(orderForSubmit.id);
             });
-            issuedTransactions.forEach((tx: any) => {
-              if (tx.transactionType !== "yarn_issued") return;
-              const numberOfCones = tx.numberOfCones || tx.transactionConeCount || 1;
-              const weightPerCone = (tx.transactionNetWeight || tx.totalNetWeight || 0) / numberOfCones;
-              const articleId = txArticleId(tx);
-              const coneIds = Array.isArray(tx.conesIdsArray) && tx.conesIdsArray.length > 0
-                ? tx.conesIdsArray
-                : [tx.coneBarcode || tx.barcode || `TX-${tx._id || tx.id}`];
-              coneIds.forEach((coneId: string, idx: number) => {
-                if (conesMap.has(coneId)) return;
-                const txIdsForCone = coneIdToTxIds.get(coneId) || [];
-                const returnedTx = returnedTransactions.find(
-                  (rt: any) =>
-                    (rt.conesIdsArray?.includes?.(coneId) || rt.coneBarcode === coneId || txIdsForCone.includes(rt.issuedTransactionId)) &&
-                    rt.transactionType === "yarn_returned"
-                );
-                const uniqueConeId = coneIds.length > 1 ? `${coneId}-${idx + 1}` : coneId;
-                const catalogIdRefresh = resolveYarnCatalogIdFromTransaction(tx);
-                conesMap.set(coneId, {
-                  id: uniqueConeId,
-                  barcode: coneId,
-                  yarnCode: catalogIdRefresh || (tx as { yarnCode?: string }).yarnCode || "N/A",
-                  yarnName: tx.yarnName || "Unknown Yarn",
-                  yarnType: tx.yarn?.yarnType?.name || "Unknown",
-                  issuedWeight: weightPerCone,
-                  returnedWeight: returnedTx ? (returnedTx.transactionNetWeight || returnedTx.totalNetWeight || 0) / numberOfCones : undefined,
-                  balanceWeight: returnedTx ? Math.max(weightPerCone - ((returnedTx.transactionNetWeight || returnedTx.totalNetWeight || 0) / numberOfCones), 0) : undefined,
-                  status: returnedTx ? ("Returned" as ConeStatus) : ("Awaiting" as ConeStatus),
-                  lastReturnedAt: returnedTx?.transactionDate || returnedTx?.createdAt,
-                  transactionId: tx._id || tx.id,
-                  yarnCatalogId: catalogIdRefresh || undefined,
-                  articleId,
-                });
-              });
+            returnedTransactions = returnedTransactions.filter((tx: any) => {
+              const oid = txOrderId(tx);
+              return !oid || String(oid) === String(orderForSubmit.id);
             });
 
-            const updatedCones = Array.from(conesMap.values());
+            const updatedCones = buildConesFromIssuedAndReturned(
+              issuedTransactions,
+              returnedTransactions
+            );
             setOrders((prev) =>
               prev.map((order) => {
                 if (order.id !== orderForSubmit.id) {
@@ -2683,7 +3251,7 @@ const YarnReturnPage = () => {
               <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
               <h1 className="text-sm font-bold text-gray-800">Yarn Return</h1>
               <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
-                {pendingOrders.length}
+                {pendingArticles.length}
               </span>
             </div>
             <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -2698,7 +3266,10 @@ const YarnReturnPage = () => {
               </button> */}
               <button
                 type="button"
-                onClick={() => setShowHistoryDrawer(true)}
+                onClick={() => {
+                  setHistoryPage(1);
+                  setShowHistoryDrawer(true);
+                }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors"
               >
                 <i className="ri-history-line text-sm"></i>
@@ -2713,7 +3284,7 @@ const YarnReturnPage = () => {
             <div className="flex items-center justify-between p-3 rounded border-l-4 border-blue-200 bg-blue-50 border border-gray-100">
               <div className="flex-1 min-w-0">
                 <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">Orders Awaiting</p>
-                <p className="text-sm font-bold text-blue-600 truncate">{pendingOrders.length}</p>
+                <p className="text-sm font-bold text-blue-600 truncate">{pendingArticles.length}</p>
               </div>
             </div>
             <div className="flex items-center justify-between p-3 rounded border-l-4 border-orange-200 bg-orange-50 border border-gray-100">
@@ -2892,7 +3463,14 @@ const YarnReturnPage = () => {
                 )}
 
                 <div className="p-[10px] pt-0">
-                  <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-2">Pending Articles Returns ({pendingArticles.length})</h3>
+                  <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-2">
+                    Selected article — return details
+                    {pendingArticles.length > 0 && (
+                      <span className="text-gray-400 font-semibold normal-case ml-1">
+                        ({filteredArticleRows.length} to choose · showing 1 row)
+                      </span>
+                    )}
+                  </h3>
                 </div>
                 <div className="overflow-x-auto min-h-[200px]">
                   {pendingArticles.length === 0 ? (
@@ -2919,47 +3497,68 @@ const YarnReturnPage = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {pendingArticles.map((row) => {
-                          const actualPendingCones = row.cones.filter((c) => c.status !== "Returned").length;
-                          return (
-                            <tr key={row.rowId} className="hover:bg-gray-50/50 transition-colors">
-                              <td className="pl-[10px] pr-1.5 py-2 border border-gray-200 text-[12px] font-bold text-gray-900">{row.articleNumber}</td>
-                              <td className="px-1.5 py-2 border border-gray-200 text-center">
-                                {row.cones.some((c) => (c.yarnName || "").trim()) ? (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setYarnNamesDrawerRow(row);
-                                    }}
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white text-purple-600 transition-colors hover:border-purple-300 hover:bg-purple-50"
-                                    title="View yarn names"
-                                    aria-label={`View yarn names for article ${row.articleNumber}`}
-                                  >
-                                    <i className="ri-eye-line text-lg" />
-                                  </button>
-                                ) : (
-                                  <span className="text-[12px] text-gray-400">—</span>
-                                )}
-                              </td>
-                              <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{row.productionOrder}</td>
-                              <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{row.floor}</td>
-                              <td className="px-1.5 py-2 text-[12px] text-gray-600 border border-gray-200">{new Date(row.knittingCompletedAt).toLocaleString()}</td>
-                              <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{row.knittingSupervisor}</td>
-                              <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{actualPendingCones} pending</td>
-                              <td className="px-1.5 py-2 border border-gray-200">
-                                <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${statusBadgeColor(row.status)}`}>{row.status}</span>
-                              </td>
-                              <td className="px-1.5 py-2 text-right pr-[10px] border border-gray-200">
-                                <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                                  <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors" onClick={() => handleReturnConesClick(row.orderId, row.rowId)}>
-                                    <i className="ri-reply-line text-sm"></i> Return Cones
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
+                        {isSelectedArticleSliceLoading ? (
+                          <tr>
+                            <td colSpan={9} className="border border-gray-200 py-16 text-center align-middle">
+                              <div className="flex flex-col items-center justify-center gap-2">
+                                <div className="h-8 w-8 animate-spin rounded-full border-2 border-purple-600 border-t-transparent" />
+                                <p className="text-[11px] font-medium text-gray-500">Loading article data…</p>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : selectedTableArticleRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={9} className="border border-gray-200 py-12 text-center text-[11px] text-gray-500">
+                              Select an article above to view return details.
+                            </td>
+                          </tr>
+                        ) : (
+                          selectedTableArticleRows.map((row) => {
+                            const actualPendingCones = row.cones.filter((c) => c.status !== "Returned").length;
+                            return (
+                              <tr key={row.rowId} className="hover:bg-gray-50/50 transition-colors">
+                                <td className="pl-[10px] pr-1.5 py-2 border border-gray-200 text-[12px] font-bold text-gray-900">{row.articleNumber}</td>
+                                <td className="px-1.5 py-2 border border-gray-200 text-center">
+                                  {row.cones.some((c) => (c.yarnName || "").trim()) ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setYarnNamesDrawerRow(row);
+                                      }}
+                                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white text-purple-600 transition-colors hover:border-purple-300 hover:bg-purple-50"
+                                      title="View yarn names"
+                                      aria-label={`View yarn names for article ${row.articleNumber}`}
+                                    >
+                                      <i className="ri-eye-line text-lg" />
+                                    </button>
+                                  ) : (
+                                    <span className="text-[12px] text-gray-400">—</span>
+                                  )}
+                                </td>
+                                <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{row.productionOrder}</td>
+                                <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{row.floor}</td>
+                                <td className="px-1.5 py-2 text-[12px] text-gray-600 border border-gray-200">
+                                  {row.knittingCompletedAt?.trim()
+                                    ? new Date(row.knittingCompletedAt).toLocaleString()
+                                    : "—"}
+                                </td>
+                                <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{row.knittingSupervisor}</td>
+                                <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{actualPendingCones} pending</td>
+                                <td className="px-1.5 py-2 border border-gray-200">
+                                  <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${statusBadgeColor(row.status)}`}>{row.status}</span>
+                                </td>
+                                <td className="px-1.5 py-2 text-right pr-[10px] border border-gray-200">
+                                  <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                    <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors" onClick={() => handleReturnConesClick(row.orderId, row.rowId)}>
+                                      <i className="ri-reply-line text-sm"></i> Return Cones
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
                       </tbody>
                     </table>
                   )}
@@ -3873,7 +4472,12 @@ const YarnReturnPage = () => {
                 />
               </div>
               <div className="overflow-x-auto">
-                {filteredReturnTransactions.length === 0 ? (
+                {historyDrawerLoading ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-purple-600 border-t-transparent mb-3" />
+                    <p className="text-[11px] font-medium text-gray-500">Loading return history…</p>
+                  </div>
+                ) : historyDrawerRows.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 text-center">
                     <i className="ri-time-line text-4xl text-gray-300 mb-2"></i>
                     <h3 className="text-xs font-bold text-gray-400 mb-1">No Records</h3>
@@ -3882,11 +4486,12 @@ const YarnReturnPage = () => {
                 ) : (
                   <>
                     <p className="text-[11px] text-gray-500 mb-2">
-                      {historyFilteredTotal} record{historyFilteredTotal !== 1 ? "s" : ""} · {HISTORY_PAGE_SIZE} per page
-                      {historyTotalPages > 0 && (
+                      {historyDrawerTotalResults.toLocaleString()} record
+                      {historyDrawerTotalResults !== 1 ? "s" : ""} total · up to {YARN_RETURN_HISTORY_API_LIMIT} per page
+                      {historyDrawerTotalPages > 0 && (
                         <>
                           {" "}
-                          · Page {historyPage} of {historyTotalPages}
+                          · Page {historyPage} of {historyDrawerTotalPages}
                         </>
                       )}
                     </p>
@@ -3904,7 +4509,7 @@ const YarnReturnPage = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {paginatedHistoryTransactions.map((transaction) => (
+                        {historyDrawerRows.map((transaction) => (
                           <tr key={transaction._id} className="hover:bg-gray-50/50 transition-colors">
                             <td className="pl-[10px] pr-1.5 py-2 text-[12px] font-bold text-gray-900 border border-gray-200">{txOrderno(transaction) ?? transaction.orderno ?? transaction.orderId ?? "-"}</td>
                             <td className="px-1.5 py-2 text-[12px] text-gray-600 border border-gray-200">{new Date(transaction.transactionDate).toLocaleDateString()}</td>
@@ -3918,13 +4523,16 @@ const YarnReturnPage = () => {
                         ))}
                       </tbody>
                     </table>
-                    {historyTotalPages > 1 && (
+                    {historyDrawerTotalPages > 1 && (
                       <div className="flex flex-wrap items-center justify-between gap-2 mt-3 pt-3 border-t border-gray-100">
                         <p className="text-[11px] text-gray-500">
                           Showing{" "}
-                          {(historyPage - 1) * HISTORY_PAGE_SIZE + 1}
+                          {historyDrawerTotalResults === 0
+                            ? 0
+                            : (historyPage - 1) * YARN_RETURN_HISTORY_API_LIMIT + 1}
                           –
-                          {Math.min(historyPage * HISTORY_PAGE_SIZE, historyFilteredTotal)} of {historyFilteredTotal}
+                          {Math.min(historyPage * YARN_RETURN_HISTORY_API_LIMIT, historyDrawerTotalResults)} of{" "}
+                          {historyDrawerTotalResults.toLocaleString()}
                         </p>
                         <div className="flex items-center gap-1.5">
                           <button
@@ -3938,8 +4546,8 @@ const YarnReturnPage = () => {
                           </button>
                           <button
                             type="button"
-                            onClick={() => setHistoryPage((p) => Math.min(historyTotalPages, p + 1))}
-                            disabled={historyPage >= historyTotalPages}
+                            onClick={() => setHistoryPage((p) => Math.min(historyDrawerTotalPages, p + 1))}
+                            disabled={historyPage >= historyDrawerTotalPages}
                             className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
                           >
                             Next
