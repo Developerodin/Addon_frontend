@@ -1696,6 +1696,12 @@ const YarnReturnPage = () => {
     return rows;
   }, [articleSliceCache, machineArticleCatalogRows, orders, quickReturnOrder]);
 
+  /** Machine catalog lists articles before per-row slice fetch; stubs have empty cones — avoid showing fake counts. */
+  const isMachineCatalogLazyMode = useMemo(
+    () => Boolean(!quickReturnOrder && machineArticleCatalogRows.length > 0),
+    [quickReturnOrder, machineArticleCatalogRows.length]
+  );
+
   // Pending article rows: include unloaded catalog rows; exclude fully returned once slice is loaded.
   const pendingArticles = useMemo(() => {
     return articleRows.filter((row) => {
@@ -3411,6 +3417,8 @@ const YarnReturnPage = () => {
                     <div className="p-[10px] border-b border-gray-100">
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-[200px] overflow-y-auto">
                         {filteredArticleRows.map((row) => {
+                          const sliceDataLoaded =
+                            !isMachineCatalogLazyMode || Boolean(articleSliceCache[row.rowId]);
                           const actualPendingCones = row.cones.filter((c) => c.status !== "Returned").length;
                           const isSelected = selectedArticleRowId === row.rowId;
                           return (
@@ -3428,9 +3436,20 @@ const YarnReturnPage = () => {
                               }`}
                             >
                               <div className="text-[12px] font-bold text-gray-900 truncate">{row.articleNumber}</div>
-                              <div className="text-[10px] text-gray-500 mt-0.5 truncate" title={row.yarnNames || undefined}>{row.yarnNames || "—"}</div>
+                              {sliceDataLoaded ? (
+                                <div
+                                  className="text-[10px] text-gray-500 mt-0.5 truncate"
+                                  title={row.yarnNames.trim() ? row.yarnNames : undefined}
+                                >
+                                  {row.yarnNames.trim() || "—"}
+                                </div>
+                              ) : null}
                               <div className="text-[10px] text-gray-500 mt-0.5 truncate">Prod: {row.productionOrder}</div>
-                              <div className="text-[10px] text-gray-600 mt-1 font-medium">{actualPendingCones} pending</div>
+                              {sliceDataLoaded ? (
+                                <div className="text-[10px] text-gray-600 mt-1 font-medium">
+                                  {actualPendingCones} pending
+                                </div>
+                              ) : null}
                             </button>
                           );
                         })}
