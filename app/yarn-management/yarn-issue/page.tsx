@@ -411,7 +411,6 @@ const YarnIssuePage = () => {
   const [endDate, setEndDate] = useState<string>("");
   const [fetchingWeight, setFetchingWeight] = useState(false);
   const barcodeInputRef = useRef<HTMLInputElement | null>(null);
-  const issueSubmitButtonRef = useRef<HTMLButtonElement | null>(null);
   const focusBarcodeInput = useCallback(() => {
     const timer = setTimeout(() => {
       barcodeInputRef.current?.focus();
@@ -1172,24 +1171,6 @@ const YarnIssuePage = () => {
     if (!showScanIssuePanel || showIssueModal) return;
     return focusBarcodeInput();
   }, [showIssueModal, showScanIssuePanel, focusBarcodeInput]);
-
-  useEffect(() => {
-    if (!showIssueModal) return;
-    const weightReady =
-      (parseFloat(transactionForm.totalWeight) || 0) > 0 ||
-      (parseFloat(transactionForm.totalNetWeight) || 0) > 0;
-    if (!weightReady || submittingTransaction) return;
-
-    const timer = setTimeout(() => {
-      issueSubmitButtonRef.current?.focus();
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [
-    showIssueModal,
-    transactionForm.totalWeight,
-    transactionForm.totalNetWeight,
-    submittingTransaction,
-  ]);
 
   const handleBarcodeSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -2412,11 +2393,15 @@ const YarnIssuePage = () => {
                   Cancel
                 </button>
                 <button
-                  ref={issueSubmitButtonRef}
                   type="button"
                   className="ti-btn ti-btn-primary"
                   disabled={submittingTransaction}
-                  onClick={() => {
+                  onKeyDown={(e) => {
+                    // Issuing must be explicit (pointer); avoid Enter/Space activating after weight entry.
+                    if (e.key === "Enter" || e.key === " ") e.preventDefault();
+                  }}
+                  onClick={(e) => {
+                    if (e.detail === 0) return;
                     if (!submittingTransaction) {
                       handleIssueSubmit();
                     }
