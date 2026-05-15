@@ -1891,19 +1891,27 @@ const YarnReturnPage = () => {
       return;
     }
 
+    const selectionExistsInRows =
+      Boolean(selectedArticleRowId) &&
+      articleRows.some((r) => r.rowId === selectedArticleRowId);
+
     if (pendingArticles.length === 0) {
-      setSelectedOrderId(null);
-      setSelectedArticleRowId(null);
+      if (!selectionExistsInRows) {
+        setSelectedOrderId(null);
+        setSelectedArticleRowId(null);
+      }
       return;
     }
     const isSelectedPending =
       selectedArticleRowId && pendingArticles.some((a) => a.rowId === selectedArticleRowId);
-    if (!isSelectedPending) {
-      const first = pendingArticles[0];
-      setSelectedOrderId(first.orderId);
-      setSelectedArticleRowId(first.rowId);
-    }
+    if (isSelectedPending) return;
+    if (selectionExistsInRows) return;
+
+    const first = pendingArticles[0];
+    setSelectedOrderId(first.orderId);
+    setSelectedArticleRowId(first.rowId);
   }, [
+    articleRows,
     pendingArticles,
     selectedArticleRowId,
     machineArticleCatalogRows,
@@ -1920,8 +1928,8 @@ const YarnReturnPage = () => {
     }
   }, [pendingArticles]);
 
-  // Only articles whose cones are pending for return
-  const filteredArticleRows = useMemo(() => pendingArticles, [pendingArticles]);
+  /** All loaded articles for the picker (cards stay visible at 0 pending; KPI uses `pendingArticles`). */
+  const filteredArticleRows = useMemo(() => articleRows, [articleRows]);
 
   /** Data table lists only the article selected in “Select Article”. */
   const selectedTableArticleRows = useMemo(() => {
@@ -3444,7 +3452,7 @@ const YarnReturnPage = () => {
               </div>
             ) : (
               <>
-                {pendingArticles.length > 0 && (
+                {articleRows.length > 0 && (
                 <div className="border border-gray-200 rounded overflow-hidden bg-white">
                   <button
                     type="button"
@@ -3453,7 +3461,11 @@ const YarnReturnPage = () => {
                   >
                     <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Select Article</h3>
                     <span className="text-gray-500 text-sm">
-                      {selectedArticleRow?.articleNumber ?? "—"} · {filteredArticleRows.length} article{filteredArticleRows.length !== 1 ? "s" : ""}
+                      {selectedArticleRow?.articleNumber ?? "—"} · {filteredArticleRows.length} article
+                      {filteredArticleRows.length !== 1 ? "s" : ""}
+                      {pendingArticles.length > 0 ? (
+                        <span className="text-gray-400"> · {pendingArticles.length} awaiting return</span>
+                      ) : null}
                     </span>
                     <i className={`ri-arrow-down-s-line text-lg text-gray-500 transition-transform ${orderSelectOpen ? "rotate-180" : ""}`} />
                   </button>
@@ -3493,7 +3505,9 @@ const YarnReturnPage = () => {
                                 <div className="text-[10px] text-gray-600 mt-1 font-medium">
                                   {actualPendingCones} pending
                                 </div>
-                              ) : null}
+                              ) : (
+                                <div className="text-xs text-black mt-1 font-normal">Tap article to load counts</div>
+                              )}
                             </button>
                           );
                         })}
@@ -3503,7 +3517,7 @@ const YarnReturnPage = () => {
                 </div>
                 )}
 
-                {selectedMachineAssignment && pendingArticles.length > 0 && (
+                {selectedMachineAssignment && articleRows.length > 0 && (
                   <div className="border border-gray-200 rounded overflow-hidden bg-white">
                     <div className="p-[10px] flex justify-between items-start gap-4 border-b border-gray-100">
                       <div className="min-w-0 flex-1">
@@ -3528,21 +3542,28 @@ const YarnReturnPage = () => {
                 <div className="p-[10px] pt-0">
                   <h3 className="text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-2">
                     Selected article — return details
-                    {pendingArticles.length > 0 && (
+                    {articleRows.length > 0 && (
                       <span className="text-gray-400 font-semibold normal-case ml-1">
-                        ({filteredArticleRows.length} to choose · showing 1 row)
+                        ({filteredArticleRows.length} article{filteredArticleRows.length !== 1 ? "s" : ""}
+                        {pendingArticles.length > 0
+                          ? ` · ${pendingArticles.length} with pending cones`
+                          : " · none pending"}
+                        {" "}
+                        · showing 1 row)
                       </span>
                     )}
                   </h3>
                 </div>
                 <div className="overflow-x-auto min-h-[200px]">
-                  {pendingArticles.length === 0 ? (
+                  {articleRows.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 text-center">
                       <div className="text-gray-400 mb-4">
                         <i className="ri-checkbox-circle-line text-5xl"></i>
                       </div>
                       <h3 className="text-xs font-bold text-gray-400 mb-1">All caught up!</h3>
-                      <p className="text-[11px] text-gray-500">No knitting-complete articles awaiting cone return for this machine.</p>
+                      <p className="text-[11px] text-gray-500">
+                        No knitting-complete articles loaded for this machine.
+                      </p>
                     </div>
                   ) : (
                     <table className="w-full border-collapse border border-gray-200">
