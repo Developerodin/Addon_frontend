@@ -36,7 +36,7 @@ interface ReceivedLotDetail {
   numberOfCones: number;
   totalWeight: number;
   numberOfBoxes: number;
-  status: 'lot_pending' | 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected';
+  status: 'lot_pending' | 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected' | 'lot_returned_to_vendor';
 }
 
 interface ReceivedOrder {
@@ -92,7 +92,13 @@ const mapAPIOrderToReceivedOrder = (apiOrder: any): ReceivedOrder => {
   const receivedQuantitiesMap = new Map<string, number>();
   const receivedLotDetails: ReceivedLotDetail[] | undefined = apiOrder.receivedLotDetails
     ? apiOrder.receivedLotDetails.map((lot: any) => {
-      const normalizedStatus: ReceivedLotDetail['status'] = ['lot_pending', 'lot_qc_pending', 'lot_accepted', 'lot_rejected'].includes(lot.status)
+      const normalizedStatus: ReceivedLotDetail['status'] = [
+        'lot_pending',
+        'lot_qc_pending',
+        'lot_accepted',
+        'lot_rejected',
+        'lot_returned_to_vendor',
+      ].includes(lot.status)
         ? lot.status
         : 'lot_pending';
 
@@ -888,6 +894,8 @@ const ProcessOrderPage = () => {
         return { text: 'Accepted', color: 'bg-green-100 text-green-800' };
       case 'lot_rejected':
         return { text: 'Rejected', color: 'bg-red-100 text-red-800' };
+      case 'lot_returned_to_vendor':
+        return { text: 'Returned to vendor', color: 'bg-red-100 text-red-800' };
       default:
         return { text: 'Pending', color: 'bg-gray-100 text-gray-800' };
     }
@@ -980,6 +988,14 @@ const ProcessOrderPage = () => {
         // Get lot number from box (check boxData first, then box.lotNumber)
         const existingData = boxData[boxId];
         const lotNumber = existingData?.lotNumber?.trim() || foundBox.lotNumber?.trim() || '';
+
+        if (lotNumber && getLotStatus(lotNumber) === 'lot_returned_to_vendor') {
+          toast.error(
+            `Lot ${lotNumber} was returned to the vendor. Boxes in this lot are view only and cannot be activated from the scanner.`
+          );
+          setBarcodeScanValue('');
+          return;
+        }
 
         const existingYarn = (existingData?.yarnName || '').trim();
         const existingShade = (existingData?.shadeCode || '').trim();
@@ -1290,6 +1306,11 @@ const ProcessOrderPage = () => {
       return;
     }
 
+    if (getLotStatus(lotNumber) === 'lot_returned_to_vendor') {
+      toast.error('This lot was returned to the vendor and cannot be sent for QC');
+      return;
+    }
+
     if (!areAllBoxesInLotCompleted(lotBoxes)) {
       toast.error(`All boxes in ${lotNumber} must be completed before sending for QC`);
       return;
@@ -1321,6 +1342,11 @@ const ProcessOrderPage = () => {
   const handleRejectLot = async (lotNumber: string, lotBoxes: YarnBox[]) => {
     if (!order) {
       toast.error('Order information not available');
+      return;
+    }
+
+    if (getLotStatus(lotNumber) === 'lot_returned_to_vendor') {
+      toast.error('This lot was returned to the vendor and cannot be rejected from this screen');
       return;
     }
 
@@ -1643,6 +1669,12 @@ const ProcessOrderPage = () => {
     const data = boxData[boxId];
     if (!data) {
       toast.error('Box data not found');
+      return;
+    }
+
+    const lotNumForGuard = (data.lotNumber || '').trim();
+    if (lotNumForGuard && getLotStatus(lotNumForGuard) === 'lot_returned_to_vendor') {
+      toast.error('This lot was returned to the vendor. Boxes in this lot are view only.');
       return;
     }
 
@@ -3064,9 +3096,12 @@ const ProcessOrderPage = () => {
               const bId = b._id || b.id || b.boxId;
               return bId === activeBoxId;
             });
+            const activeBoxData = boxData[activeBoxId] || {};
             if (!activeBox || !isYarnBoxEditableOnProcessPage(activeBox)) return null;
 
-            const activeBoxData = boxData[activeBoxId] || {};
+            const weighLot = (activeBoxData.lotNumber || activeBox.lotNumber || '').trim();
+            if (weighLot && getLotStatus(weighLot) === 'lot_returned_to_vendor') return null;
+
             const hasWeight = activeBoxData.boxWeight && parseFloat(activeBoxData.boxWeight) > 0;
             const hasCones = activeBoxData.numberOfCones && parseFloat(activeBoxData.numberOfCones) > 0;
 
@@ -3121,8 +3156,11 @@ const ProcessOrderPage = () => {
 
                 const lotStatus = getLotStatus(lotNumber);
                 const lotStatusDisplay = getLotStatusDisplay(lotStatus);
+                const isLotReturnedToVendor = lotStatus === 'lot_returned_to_vendor';
 
-                const lotDeletableMongoIds = lotBoxes.flatMap((box) => {
+                const lotDeletableMongoIds = isLotReturnedToVendor
+                  ? []
+                  : lotBoxes.flatMap((box) => {
                   const rowKey = box._id || box.id || box.boxId;
                   if (!rowKey) return [];
                   const defaultYarnName =
@@ -3155,6 +3193,7 @@ const ProcessOrderPage = () => {
                           <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-semibold rounded-full ${lotStatusDisplay.color}`}>
                             <i className={`ri-${lotStatus === 'lot_qc_pending' || lotStatus === 'lot_pending' ? 'time-line' :
                               lotStatus === 'lot_accepted' ? 'check-line' :
+                                lotStatus === 'lot_returned_to_vendor' ? 'truck-line' :
                                 'close-line'
                               } text-[9px]`}></i>
                             {lotStatusDisplay.text}
@@ -3225,6 +3264,13 @@ const ProcessOrderPage = () => {
                         )}
                       </div>
                     </div>
+                    {isLotReturnedToVendor && (
+                      <div className="px-3 py-2 border-b border-red-100 bg-red-50">
+                        <p className="text-[10px] font-semibold text-red-700">
+                          Lot returned to vendor — this lot is view only. You cannot Send QC, reject the lot from here, or edit boxes in this lot.
+                        </p>
+                      </div>
+                    )}
                     <div className="overflow-x-auto">
                       <table className="w-full border-collapse border border-gray-200">
                         <thead>
@@ -3288,7 +3334,7 @@ const ProcessOrderPage = () => {
                         <tbody>
                           {lotBoxes.map((box) => {
                             const boxId = box._id || box.id || box.boxId;
-                            const canEditBox = isYarnBoxEditableOnProcessPage(box);
+                            const canEditBox = isYarnBoxEditableOnProcessPage(box) && !isLotReturnedToVendor;
                             const isActive = activeBoxId === boxId && canEditBox;
                             // Check if yarnName is a default placeholder (starts with "Yarn-PO-")
                             const defaultYarnName = box.yarnName && !box.yarnName.startsWith('Yarn-PO-')
@@ -3306,7 +3352,9 @@ const ProcessOrderPage = () => {
                             const isUpdating = updatingBoxId === boxId;
                             const mongoId = box._id || box.id;
                             const showRemoveCheckbox =
-                              Boolean(mongoId) && isDeletableUnusedPlaceholderBox(box, data);
+                              !isLotReturnedToVendor &&
+                              Boolean(mongoId) &&
+                              isDeletableUnusedPlaceholderBox(box, data);
 
                             return (
                               <tr
@@ -3567,7 +3615,11 @@ const ProcessOrderPage = () => {
                                   ) : !canEditBox ? (
                                     <span
                                       className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-slate-200 text-slate-700"
-                                      title="Returned to vendor or fully used (initial weight set, net weight zero) — view only"
+                                      title={
+                                        isLotReturnedToVendor
+                                          ? 'This lot was returned to the vendor — view only'
+                                          : 'Returned to vendor or fully used (initial weight set, net weight zero) — view only'
+                                      }
                                     >
                                       View only
                                     </span>
