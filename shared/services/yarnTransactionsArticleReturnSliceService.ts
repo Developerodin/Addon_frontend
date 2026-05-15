@@ -15,7 +15,7 @@ export interface ArticleReturnSliceCone {
   id: string;
   barcode?: string;
   yarnName?: string;
-  status: "Awaiting" | "Returned";
+  status: "Awaiting" | "Returned" | "Consumed" | "Closed";
   articleId?: string;
   articleNumber?: string;
 }

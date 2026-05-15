@@ -288,7 +288,7 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
                                   <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Box Info</th>
                                   <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">PO & Yarn</th>
                                   <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Attributes</th>
-                                  <th className="px-3 py-2 text-center font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Quantity</th>
+                                  <th className="px-3 py-2 text-center font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Net Weight</th>
                                   <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">QC Status</th>
                                   <th className="px-3 py-2 text-right pr-4 font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Date</th>
                                 </tr>

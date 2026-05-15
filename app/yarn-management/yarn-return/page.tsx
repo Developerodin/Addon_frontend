@@ -35,7 +35,7 @@ import {
   type ArticleReturnSliceResponse,
 } from "@/shared/services/yarnTransactionsArticleReturnSliceService";
 
-type ConeStatus = "Awaiting" | "Returned";
+type ConeStatus = "Awaiting" | "Returned" | "Consumed" | "Closed";
 type OrderStatus = "Awaiting Return" | "In Progress" | "Partial" | "Returned";
 type ReturnStatus = "Awaiting" | "Partial" | "Returned";
 
@@ -116,10 +116,43 @@ interface ArticleRow {
   status: OrderStatus;
   cones: Cone[];
   plannedQuantity: number;
-  yarnNames: string; // Comma-separated unique yarn names from cones
+  yarnNames: string; // Comma-separated yarn names for cones still awaiting return only
+  /** From GET …/article-return-slice when loaded (authoritative vs derived cone list). */
+  pendingConeCount?: number;
+  returnedConeCount?: number;
   /** Lazy machine mode: raw ids for GET article-return-slice (may be code in id field). */
   sliceFetchArticleId?: string;
   sliceFetchArticleNumber?: string;
+}
+
+/** Only these cones are still eligible for return scanning and yarn-name summaries. */
+function coneIsAwaitingReturn(cone: Pick<Cone, "status">): boolean {
+  return cone.status === "Awaiting";
+}
+
+function awaitingConeCount(cones: Cone[]): number {
+  return cones.filter(coneIsAwaitingReturn).length;
+}
+
+/** Comma-separated distinct yarn names from cones still awaiting return (article row + table). */
+function yarnNamesCsvFromAwaitingCones(cones: Cone[]): string {
+  const awaiting = cones.filter(coneIsAwaitingReturn);
+  return Array.from(new Set(awaiting.map((c) => c.yarnName).filter(Boolean))).join(", ");
+}
+
+/** Pending cones for UI: prefer backend `pendingConeCount` from article-return-slice. */
+function pendingConesDisplay(row: ArticleRow): number {
+  if (typeof row.pendingConeCount === "number" && Number.isFinite(row.pendingConeCount)) {
+    return Math.max(0, row.pendingConeCount);
+  }
+  return awaitingConeCount(row.cones);
+}
+
+function returnedConesDisplay(row: ArticleRow): number {
+  if (typeof row.returnedConeCount === "number" && Number.isFinite(row.returnedConeCount)) {
+    return Math.max(0, row.returnedConeCount);
+  }
+  return row.cones.filter((c) => c.status === "Returned").length;
 }
 
 function mapSliceStatusToOrderStatus(s: ArticleReturnSliceResponse["status"]): OrderStatus {
@@ -128,8 +161,16 @@ function mapSliceStatusToOrderStatus(s: ArticleReturnSliceResponse["status"]): O
   return "Awaiting Return";
 }
 
+function normalizeSliceConeStatus(raw: ArticleReturnSliceCone["status"] | string): ConeStatus {
+  const s = String(raw ?? "").trim().toLowerCase();
+  if (s === "returned") return "Returned";
+  if (s === "consumed") return "Consumed";
+  if (s === "closed") return "Closed";
+  return "Awaiting";
+}
+
 function mapSliceConeToPageCone(sc: ArticleReturnSliceCone): Cone {
-  const st: ConeStatus = sc.status === "Returned" ? "Returned" : "Awaiting";
+  const st = normalizeSliceConeStatus(sc.status);
   return {
     id: String(sc.id),
     barcode: String(sc.barcode ?? sc.id),
@@ -193,6 +234,7 @@ function articleRowFromSlice(
 ): ArticleRow {
   const rowPrefix =
     normalizeArticleRefId(slice.articleId) || String(slice.articleNumber || "").trim() || "article";
+  const cones = slice.cones.map(mapSliceConeToPageCone);
   return {
     rowId: `${rowPrefix}-${slice.orderId}`,
     articleId: normalizeArticleRefId(slice.articleId) || slice.articleNumber,
@@ -204,9 +246,11 @@ function articleRowFromSlice(
     knittingSupervisor: slice.knittingSupervisor,
     knittingCompletedAt: slice.knittingCompletedAt ?? "",
     status: mapSliceStatusToOrderStatus(slice.status),
-    cones: slice.cones.map(mapSliceConeToPageCone),
+    cones,
     plannedQuantity,
-    yarnNames: slice.yarnNames,
+    yarnNames: yarnNamesCsvFromAwaitingCones(cones),
+    pendingConeCount: slice.pendingConeCount,
+    returnedConeCount: slice.returnedConeCount,
   };
 }
 
@@ -277,9 +321,12 @@ interface ReturnTransaction {
 }
 
 const getOrderStatusFromCones = (cones: Cone[]): OrderStatus => {
-  if (cones.length === 0) return "Awaiting Return";
-  const returned = cones.filter((cone) => cone.status === "Returned").length;
-  if (returned === cones.length) {
+  const relevant = cones.filter(
+    (cone) => cone.status === "Awaiting" || cone.status === "Returned"
+  );
+  if (relevant.length === 0) return "Awaiting Return";
+  const returned = relevant.filter((cone) => cone.status === "Returned").length;
+  if (returned === relevant.length) {
     return "Returned";
   }
   if (returned > 0) {
@@ -292,7 +339,7 @@ const buildHistoryRecord = (order: ProductionOrder): ReturnRecord => {
   const returnedCones = order.cones.filter(
     (cone) => cone.status === "Returned"
   ).length;
-  const pendingCones = order.cones.length - returnedCones;
+  const pendingCones = order.cones.filter(coneIsAwaitingReturn).length;
   let status: ReturnStatus = "Awaiting";
   if (order.status === "Returned") {
     status = "Returned";
@@ -358,7 +405,7 @@ function resolvePreservedArticleSelection(
     conesForArticle = order.cones;
   }
 
-  const pendingCones = conesForArticle.filter((c) => c.status !== "Returned");
+  const pendingCones = conesForArticle.filter(coneIsAwaitingReturn);
   if (pendingCones.length === 0) return null;
 
   return { orderId: order.id, articleRowId: preserve.articleRowId };
@@ -1040,9 +1087,9 @@ const statusBadgeColor = (status: ReturnStatus | OrderStatus) => {
   }
 };
 
-/** One line per distinct yarn; repeats as `name*count` (scan panel + yarn names drawer). Only pending (not yet returned) cones. */
+/** One line per distinct yarn; repeats as `name*count` (scan panel + yarn names drawer). Only cones still awaiting return. */
 const yarnSummaryLinesFromCones = (cones: Cone[]): string[] => {
-  const pending = cones.filter((c) => c.status !== "Returned");
+  const pending = cones.filter(coneIsAwaitingReturn);
   const counts = new Map<string, number>();
   for (const c of pending) {
     const name = (c.yarnName || "").trim();
@@ -1675,7 +1722,7 @@ const YarnReturnPage = () => {
         if (conesForArticle.length === 0 && order.cones.length > 0 && soleArticle) {
           conesForArticle = order.cones;
         }
-        const yarnNames = Array.from(new Set(conesForArticle.map((c) => c.yarnName).filter(Boolean))).join(", ");
+        const yarnNames = yarnNamesCsvFromAwaitingCones(conesForArticle);
         rows.push({
           rowId: `${rowPrefix}-${order.id}`,
           articleId: artNorm || String(artId ?? "").trim() || rowPrefix,
@@ -1702,34 +1749,33 @@ const YarnReturnPage = () => {
     [quickReturnOrder, machineArticleCatalogRows.length]
   );
 
-  // Pending article rows: include unloaded catalog rows; exclude fully returned once slice is loaded.
+  // Pending article rows: unloaded catalog stubs stay listed; loaded rows use slice pendingConeCount when present.
   const pendingArticles = useMemo(() => {
     return articleRows.filter((row) => {
+      if (typeof row.pendingConeCount === "number") return row.pendingConeCount > 0;
       if (row.cones.length === 0) return true;
-      return row.cones.some((cone) => cone.status !== "Returned");
+      return row.cones.some(coneIsAwaitingReturn);
     });
   }, [articleRows]);
 
   const totalPendingCones = useMemo(
-    () =>
-      articleRows.reduce(
-        (sum, row) => sum + row.cones.filter((c) => c.status !== "Returned").length,
-        0
-      ),
+    () => articleRows.reduce((sum, row) => sum + pendingConesDisplay(row), 0),
     [articleRows]
   );
 
   const totalReturnedCones = useMemo(
-    () =>
-      articleRows.reduce((sum, row) => sum + row.cones.filter((c) => c.status === "Returned").length, 0),
+    () => articleRows.reduce((sum, row) => sum + returnedConesDisplay(row), 0),
     [articleRows]
   );
 
-  /** Article lines fully returned (slice loaded, all cones Returned). */
+  /** Article lines with nothing left to return (slice count or derived). */
   const totalCompletedOrders = useMemo(() => {
-    return articleRows.filter(
-      (row) => row.cones.length > 0 && row.cones.every((cone) => cone.status === "Returned")
-    ).length;
+    return articleRows.filter((row) => {
+      if (typeof row.pendingConeCount === "number") {
+        return row.pendingConeCount === 0 && returnedConesDisplay(row) > 0;
+      }
+      return row.cones.length > 0 && !row.cones.some(coneIsAwaitingReturn);
+    }).length;
   }, [articleRows]);
 
   const selectedArticleRow = useMemo(
@@ -1772,7 +1818,7 @@ const YarnReturnPage = () => {
     if (conesForArticle.length === 0 && order.cones.length > 0 && soleArticle) {
       conesForArticle = order.cones;
     }
-    const yarnNames = Array.from(new Set(conesForArticle.map((c) => c.yarnName).filter(Boolean))).join(", ");
+    const yarnNames = yarnNamesCsvFromAwaitingCones(conesForArticle);
     return {
       rowId: `${artId}-${order.id}`,
       articleId: artId,
@@ -1971,7 +2017,7 @@ const YarnReturnPage = () => {
           )
         : order.cones;
       if (conesForArticle.length === 0) return false;
-      return conesForArticle.every((c) => c.status === "Returned");
+      return conesForArticle.length > 0 && !conesForArticle.some(coneIsAwaitingReturn);
     },
     []
   );
@@ -2467,9 +2513,7 @@ const YarnReturnPage = () => {
 
       // Find the cone in the selected order (try multiple matching strategies)
       // Only search in pending cones (not returned ones) - this prevents showing returned cones
-      const pendingCones = orderCtx.cones.filter(
-        (item) => item.status !== "Returned"
-      );
+      const pendingCones = orderCtx.cones.filter(coneIsAwaitingReturn);
 
       // If no pending cones, this order has no cones to return (quick return: still allow API-built cone)
       if (pendingCones.length === 0 && !showQuickReturnDrawer) {
@@ -3056,7 +3100,7 @@ const YarnReturnPage = () => {
               : allItems
                   .map((i) => ({ itemId: i.itemId, articleNumber: i.articleNumber }))
                   .filter((x) => !!x.itemId);
-          const pendingBefore = orderForSubmit.cones.filter((c) => c.status !== "Returned").length;
+          const pendingBefore = orderForSubmit.cones.filter(coneIsAwaitingReturn).length;
           const justReturnedLastBatch = results.length >= pendingBefore;
           if (itemsToUpdate.length > 0) {
             try {
@@ -3419,7 +3463,7 @@ const YarnReturnPage = () => {
                         {filteredArticleRows.map((row) => {
                           const sliceDataLoaded =
                             !isMachineCatalogLazyMode || Boolean(articleSliceCache[row.rowId]);
-                          const actualPendingCones = row.cones.filter((c) => c.status !== "Returned").length;
+                          const actualPendingCones = pendingConesDisplay(row);
                           const isSelected = selectedArticleRowId === row.rowId;
                           return (
                             <button
@@ -3533,12 +3577,14 @@ const YarnReturnPage = () => {
                           </tr>
                         ) : (
                           selectedTableArticleRows.map((row) => {
-                            const actualPendingCones = row.cones.filter((c) => c.status !== "Returned").length;
+                            const actualPendingCones = pendingConesDisplay(row);
                             return (
                               <tr key={row.rowId} className="hover:bg-gray-50/50 transition-colors">
                                 <td className="pl-[10px] pr-1.5 py-2 border border-gray-200 text-[12px] font-bold text-gray-900">{row.articleNumber}</td>
                                 <td className="px-1.5 py-2 border border-gray-200 text-center">
-                                  {row.cones.some((c) => (c.yarnName || "").trim()) ? (
+                                  {row.cones.some(
+                                    (c) => coneIsAwaitingReturn(c) && (c.yarnName || "").trim()
+                                  ) ? (
                                     <button
                                       type="button"
                                       onClick={(e) => {
@@ -3700,9 +3746,9 @@ const YarnReturnPage = () => {
                               <p className="text-xs text-gray-500">Floor: {selectedOrder.floor}</p>
                               <p className="text-xs text-gray-500">
                                 Cones:{" "}
-                                {(selectedArticleRow ? selectedArticleRow.cones : selectedOrder.cones).filter(
-                                  (c) => c.status !== "Returned"
-                                ).length}{" "}
+                                {selectedArticleRow
+                                  ? pendingConesDisplay(selectedArticleRow)
+                                  : awaitingConeCount(selectedOrder.cones)}{" "}
                                 pending
                               </p>
                             </div>
@@ -3958,10 +4004,9 @@ const YarnReturnPage = () => {
                             <p className="text-xs text-gray-500">Floor: {quickReturnOrder.floor}</p>
                             <p className="text-xs text-gray-500">
                               Cones:{" "}
-                              {(effectiveArticleRowForScan
-                                ? effectiveArticleRowForScan.cones
-                                : quickReturnOrder.cones
-                              ).filter((c) => c.status !== "Returned").length}{" "}
+                              {effectiveArticleRowForScan
+                                ? pendingConesDisplay(effectiveArticleRowForScan)
+                                : awaitingConeCount(quickReturnOrder.cones)}{" "}
                               pending
                             </p>
                           </div>
