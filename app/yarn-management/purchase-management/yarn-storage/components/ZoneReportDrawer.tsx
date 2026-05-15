@@ -99,19 +99,19 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
     fetchReportData();
   }, [isOpen, zoneType]);
 
-  // Use API summary if available, otherwise calculate on frontend
-  // LT: boxWeight only (boxes in LT storage)
-  // ST: coneWeight - tearWeight only (cones in ST storage, net weight)
-  const totalWeight = summary?.totalWeight ?? (
-    zoneType === "LT"
-      ? boxes.reduce((sum, b) => sum + (b.boxWeight ?? 0), 0)
-      : cones.reduce((sum, c) => sum + ((c.coneWeight ?? 0) - (c.tearWeight ?? 0)), 0)
-  );
-  
   const yarnTypes = summary?.yarnTypes ?? new Set([
     ...boxes.map((b) => b.yarnName || "Unknown"),
     ...cones.map((c) => c.yarnName || "Unknown"),
   ]).size;
+
+  const totalConeGrossWeight = cones.reduce(
+    (sum, c) => sum + (c.coneWeight ?? 0),
+    0
+  );
+  const totalConeNetWeight = cones.reduce(
+    (sum, c) => sum + ((c.coneWeight ?? 0) - (c.tearWeight ?? 0)),
+    0
+  );
 
   const handleDownloadExcel = () => {
     const hasData = boxes.length > 0 || cones.length > 0;
@@ -141,16 +141,23 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
       }
 
       if (cones.length > 0) {
-        const coneRows = cones.map((c) => ({
-          "Cone Barcode": c.barcode,
-          "Box ID": c.boxId,
-          "PO Number": c.poNumber,
-          "Yarn Name": c.yarnName ?? "-",
-          "Shade Code": c.shadeCode ?? "-",
-          "Cone Weight (kg)": c.coneWeight ?? 0,
-          "Rack Code": c.rackCode ?? c.coneStorageId ?? "-",
-          "Rack Barcode": c.rackBarcode ?? "-",
-        }));
+        const coneRows = cones.map((c) => {
+          // coneWeight in API/DB is gross; net = gross - tear
+          const gross = c.coneWeight ?? 0;
+          const tear = c.tearWeight ?? 0;
+          return {
+            "Cone Barcode": c.barcode,
+            "Box ID": c.boxId,
+            "PO Number": c.poNumber,
+            "Yarn Name": c.yarnName ?? "-",
+            "Shade Code": c.shadeCode ?? "-",
+            "Cone Gross Weight (kg)": gross,
+            "Cone Tear Weight (kg)": tear,
+            "Cone Net Weight (kg)": gross - tear,
+            "Rack Code": c.rackCode ?? c.coneStorageId ?? "-",
+            "Rack Barcode": c.rackBarcode ?? "-",
+          };
+        });
         const wsCone = XLSX.utils.json_to_sheet(coneRows);
         XLSX.utils.book_append_sheet(wb, wsCone, "Cones");
       }
@@ -222,7 +229,7 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
                 <div>
                   <div className="font-semibold text-gray-900">View Summary</div>
                   <div className="text-xs text-gray-500">
-                    Total boxes, weight, yarn types
+                    Totals, cone gross and net weight, yarn types
                   </div>
                 </div>
               </button>
@@ -262,23 +269,9 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <div className="text-xs font-medium text-gray-500 uppercase">
-                      Total Boxes
-                    </div>
-                    <div className="text-2xl font-bold text-gray-900">{boxes.length}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-medium text-gray-500 uppercase">
                       Total Cones
                     </div>
                     <div className="text-2xl font-bold text-gray-900">{cones.length}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-medium text-gray-500 uppercase">
-                      Total Weight (kg)
-                    </div>
-                    <div className="text-2xl font-bold text-gray-900">
-                      {totalWeight.toFixed(2)}
-                    </div>
                   </div>
                   <div>
                     <div className="text-xs font-medium text-gray-500 uppercase">
@@ -287,6 +280,22 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
                     <div className="text-2xl font-bold text-gray-900">{yarnTypes}</div>
                   </div>
                   <div>
+                    <div className="text-xs font-medium text-gray-500 uppercase">
+                      Total cone gross (kg)
+                    </div>
+                    <div className="text-2xl font-bold text-gray-900">
+                      {totalConeGrossWeight.toFixed(2)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-medium text-gray-500 uppercase">
+                      Total cone net (kg)
+                    </div>
+                    <div className="text-2xl font-bold text-gray-900">
+                      {totalConeNetWeight.toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="col-span-2">
                     <div className="text-xs font-medium text-gray-500 uppercase">
                       Zone
                     </div>
@@ -357,8 +366,14 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
                         <th className="px-3 py-2 text-left font-bold text-gray-600">
                           Yarn
                         </th>
+                        <th className="px-3 py-2 text-right font-bold text-gray-600" title="Stored as coneWeight">
+                          Gross (kg)
+                        </th>
                         <th className="px-3 py-2 text-right font-bold text-gray-600">
-                          Weight
+                          Tear (kg)
+                        </th>
+                        <th className="px-3 py-2 text-right font-bold text-gray-600" title="coneWeight minus tearWeight">
+                          Net (kg)
                         </th>
                         <th className="px-3 py-2 text-left font-bold text-gray-600">
                           Rack
@@ -366,20 +381,26 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
                       </tr>
                     </thead>
                     <tbody>
-                      {cones.map((c) => (
-                        <tr
-                          key={c._id ?? c.barcode}
-                          className="border-b border-gray-100 hover:bg-gray-50"
-                        >
-                          <td className="px-3 py-2 font-mono">{c.barcode}</td>
-                          <td className="px-3 py-2 text-primary font-medium">{c.poNumber}</td>
-                          <td className="px-3 py-2 truncate max-w-[120px]" title={c.yarnName}>
-                            {c.yarnName ?? "-"}
-                          </td>
-                          <td className="px-3 py-2 text-right font-bold">{c.coneWeight ?? 0} kg</td>
-                          <td className="px-3 py-2 font-mono">{c.rackCode ?? c.coneStorageId ?? "-"}</td>
-                        </tr>
-                      ))}
+                      {cones.map((c) => {
+                        const gross = c.coneWeight ?? 0;
+                        const tear = c.tearWeight ?? 0;
+                        return (
+                          <tr
+                            key={c._id ?? c.barcode}
+                            className="border-b border-gray-100 hover:bg-gray-50"
+                          >
+                            <td className="px-3 py-2 font-mono">{c.barcode}</td>
+                            <td className="px-3 py-2 text-primary font-medium">{c.poNumber}</td>
+                            <td className="px-3 py-2 truncate max-w-[120px]" title={c.yarnName}>
+                              {c.yarnName ?? "-"}
+                            </td>
+                            <td className="px-3 py-2 text-right font-bold">{gross}</td>
+                            <td className="px-3 py-2 text-right font-bold">{tear}</td>
+                            <td className="px-3 py-2 text-right font-bold">{gross - tear}</td>
+                            <td className="px-3 py-2 font-mono">{c.rackCode ?? c.coneStorageId ?? "-"}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
