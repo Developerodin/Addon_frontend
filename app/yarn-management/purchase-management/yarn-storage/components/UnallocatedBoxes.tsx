@@ -12,9 +12,36 @@ interface UnallocatedBoxesProps {
 }
 
 /**
- * Same rules as backend `isYarnBoxActiveForProcessing` / PO process page: fully consumed
- * (cones issued + no remaining box weight) or vendor-returned boxes must not appear as
- * “allocate to storage” candidates.
+ * True when API reports net weight and cone count both exactly zero (fully used).
+ * Missing fields are not treated as zero, so incomplete rows still show.
+ * @param box - Yarn box from API
+ */
+function isZeroNetWeightAndCones(box: YarnBox): boolean {
+  if (box.boxWeight == null || Number(box.boxWeight) !== 0) {
+    return false;
+  }
+  const cones = box.numberOfCones ?? box.coneData?.numberOfCones;
+  if (cones == null || Number(cones) !== 0) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * True when initial net weight was captured and net weight is now zero (fully used box).
+ * @param box - Yarn box from API
+ */
+function isFullyUsedAfterInitialCaptureForUnallocated(box: YarnBox): boolean {
+  const initialRaw = box.initialBoxWeight;
+  const initial = initialRaw != null && initialRaw !== '' ? Number(initialRaw) : NaN;
+  const w = Number(box.boxWeight ?? 0);
+  return Number.isFinite(initial) && initial > 0 && Number.isFinite(w) && w <= 0;
+}
+
+/**
+ * Eligible for “allocate to storage” on the unallocated list: not vendor-returned, not fully used
+ * after initial capture, not net-zero weight with zero cones (nothing left to allocate).
+ * Uses `isActiveForProcessing` when API sends it; otherwise mirrors vendor + fully-used rules.
  * @param box - Yarn box from API
  */
 function isYarnBoxEligibleForUnallocatedStorage(box: YarnBox): boolean {
@@ -22,12 +49,28 @@ function isYarnBoxEligibleForUnallocatedStorage(box: YarnBox): boolean {
   if (vendorReturn != null && String(vendorReturn).trim() !== '') {
     return false;
   }
+  if (isFullyUsedAfterInitialCaptureForUnallocated(box)) {
+    return false;
+  }
+  if (isZeroNetWeightAndCones(box)) {
+    return false;
+  }
   if (typeof box.isActiveForProcessing === 'boolean') {
     return box.isActiveForProcessing;
   }
-  const conesIssued = box.coneData?.conesIssued === true;
-  const w = Number(box.boxWeight ?? 0);
-  return !conesIssued || w > 0;
+  return true;
+}
+
+/**
+ * Formats a numeric weight field for kg display (treats 0 as valid).
+ * @param value - Weight from API (`boxWeight` / `grossWeight` / `initialBoxWeight`)
+ */
+function formatWeightKg(value: number | undefined | null): string {
+  const n = value == null ? NaN : Number(value);
+  if (Number.isNaN(n)) {
+    return "-";
+  }
+  return `${n} kg`;
 }
 
 /**
@@ -447,7 +490,7 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
         <div>
           <h3 className="text-xs font-bold text-gray-800">Unallocated Boxes</h3>
           <p className="text-[10px] text-gray-500 mt-0.5">
-            Purchase orders with PO Accepted, Partially Accepted, Goods Received, or Partially Received status — boxes from accepted lots only, excluding fully consumed or vendor-returned boxes
+            Purchase orders with PO Accepted, Partially Accepted, Goods Received, or Partially Received status — boxes from accepted lots only, excluding vendor-returned boxes, fully consumed boxes, and rows with net weight 0 and 0 cones
           </p>
         </div>
         <button
@@ -573,7 +616,25 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
                       <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Barcode</th>
                       <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Name</th>
                       <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Shade Code</th>
-                      <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box Weight (kg)</th>
+                      <th
+                        scope="col"
+                        className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200"
+                        aria-label="Initial long-term net weight in kilograms when first stored in LT"
+                      >
+                        Initial LT weight (kg)
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200"
+                      >
+                        Net Weight (kg)
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200"
+                      >
+                        Gross Weight (kg)
+                      </th>
                       <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Number of Cones</th>
                       <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Lot Number</th>
                       <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Received Date</th>
@@ -598,10 +659,16 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
                             {box.shadeCode || "-"}
                           </td>
                           <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900">
-                            {box.boxWeight ? `${box.boxWeight} kg` : "-"}
+                            {formatWeightKg(box.initialBoxWeight)}
                           </td>
                           <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900">
-                            {box.numberOfCones || "-"}
+                            {formatWeightKg(box.boxWeight)}
+                          </td>
+                          <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900">
+                            {formatWeightKg(box.grossWeight)}
+                          </td>
+                          <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900">
+                            {box.numberOfCones ?? "-"}
                           </td>
                           <td className="px-1.5 py-2 border border-gray-200 text-xs text-gray-900">
                             {box.lotNumber || "-"}

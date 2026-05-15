@@ -169,15 +169,32 @@ const mapAPIOrderToReceivedOrder = (apiOrder: any): ReceivedOrder => {
 };
 
 /**
- * Whether the box may be edited on the PO receive process page (mirrors backend `ACTIVE_BOX_FILTER`).
+ * True when initial net weight was captured and current net weight is zero (box fully used — view-only on process).
+ * @param box - Yarn box from API
+ */
+function isYarnBoxFullyUsedNetZeroAfterInitial(box: YarnBox): boolean {
+  const initialRaw = box.initialBoxWeight;
+  const initial = initialRaw != null && initialRaw !== '' ? Number(initialRaw) : NaN;
+  const w = Number(box.boxWeight ?? 0);
+  return Number.isFinite(initial) && initial > 0 && Number.isFinite(w) && w <= 0;
+}
+
+/**
+ * Whether the box may be edited on the PO receive process page (mirrors backend `isYarnBoxActiveForProcessing`).
+ * Read-only when returned to vendor, or when initial net weight was captured (positive) and current net weight is zero (fully used).
  */
 function isYarnBoxEditableOnProcessPage(box: YarnBox): boolean {
+  const vendorReturn = (box as { returnedToVendorAt?: string | null }).returnedToVendorAt;
+  if (vendorReturn != null && String(vendorReturn).trim() !== '') {
+    return false;
+  }
+  if (isYarnBoxFullyUsedNetZeroAfterInitial(box)) {
+    return false;
+  }
   if (typeof box.isActiveForProcessing === 'boolean') {
     return box.isActiveForProcessing;
   }
-  const conesIssued = box.coneData?.conesIssued === true;
-  const w = Number(box.boxWeight ?? 0);
-  return !conesIssued || w > 0;
+  return true;
 }
 
 /**
@@ -222,6 +239,17 @@ function isDeletableUnusedPlaceholderBox(
   if (serverBw > 0 || serverGw > 0 || draftBw > 0 || draftGw > 0) return false;
 
   return true;
+}
+
+/**
+ * Formats yarn box `initialBoxWeight` for read-only table cells (kg; header carries unit).
+ * @param raw - `YarnBox.initialBoxWeight` from API
+ */
+function formatInitialBoxWeightKgDisplay(raw: unknown): string {
+  if (raw === undefined || raw === null || raw === '') return '-';
+  const n = typeof raw === 'number' ? raw : parseFloat(String(raw).trim());
+  if (!Number.isFinite(n)) return '-';
+  return String(n);
 }
 
 const ProcessOrderPage = () => {
@@ -940,7 +968,9 @@ const ProcessOrderPage = () => {
 
       if (foundBox) {
         if (!isYarnBoxEditableOnProcessPage(foundBox)) {
-          toast.error(`Box ${foundBox.boxId} is view only (inactive or fully transferred)`);
+          toast.error(
+            `Box ${foundBox.boxId} is view only (returned to vendor or fully used after initial weight)`
+          );
           setBarcodeScanValue('');
           return;
         }
@@ -1604,7 +1634,9 @@ const ProcessOrderPage = () => {
     }
 
     if (!isYarnBoxEditableOnProcessPage(box)) {
-      toast.error('This box is view only and cannot be updated');
+      toast.error(
+        'This box is view only (returned to vendor or fully used after initial weight) and cannot be updated'
+      );
       return;
     }
 
@@ -3240,8 +3272,15 @@ const ProcessOrderPage = () => {
                             <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Name</th>
                             <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Shade Code</th>
                             <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Lot Number</th>
+                            <th
+                              className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200"
+                              scope="col"
+                              title="Original net weight captured for this box (read-only)"
+                            >
+                              Initial Wt (kg)
+                            </th>
                             <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Gross Wt (kg)</th>
-                            <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box Weight (kg)</th>
+                            <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box Net Weight (kg)</th>
                             <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">No. of Cones</th>
                             <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
                           </tr>
@@ -3352,6 +3391,14 @@ const ProcessOrderPage = () => {
                                 <td className="px-1.5 py-2 border border-gray-200">
                                   <span className="text-[12px] text-gray-900">{data.lotNumber || '-'}</span>
                                 </td>
+                                <td className="px-1.5 py-2 border border-gray-200 bg-gray-50/40">
+                                  <span
+                                    className="text-[12px] text-gray-700 tabular-nums"
+                                    title="Read-only: initialBoxWeight from inventory (audit reference)"
+                                  >
+                                    {formatInitialBoxWeightKgDisplay(box.initialBoxWeight)}
+                                  </span>
+                                </td>
                                 <td className="px-1.5 py-2 border border-gray-200">
                                   <span
                                     className="text-[12px] text-gray-900"
@@ -3432,7 +3479,7 @@ const ProcessOrderPage = () => {
                                       placeholder={`0.00 (max ${MAX_BOX_WEIGHT_KG})`}
                                       title={`Box net weight (kg); maximum ${MAX_BOX_WEIGHT_KG} kg`}
                                       inputMode="decimal"
-                                      aria-label={`Box weight in kilograms, maximum ${MAX_BOX_WEIGHT_KG}`}
+                                      aria-label={`Box net weight in kilograms, maximum ${MAX_BOX_WEIGHT_KG}`}
                                     />
                                   ) : (
                                     <span className="text-[12px] text-gray-900">{data.boxWeight || '-'}</span>
@@ -3520,7 +3567,7 @@ const ProcessOrderPage = () => {
                                   ) : !canEditBox ? (
                                     <span
                                       className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-slate-200 text-slate-700"
-                                      title="Inactive or fully transferred — view only"
+                                      title="Returned to vendor or fully used (initial weight set, net weight zero) — view only"
                                     >
                                       View only
                                     </span>
@@ -3634,8 +3681,15 @@ const ProcessOrderPage = () => {
                           <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Yarn Name</th>
                           <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Shade Code</th>
                           <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Lot Number</th>
+                          <th
+                            className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200"
+                            scope="col"
+                            title="Original net weight captured for this box (read-only)"
+                          >
+                            Initial Wt (kg)
+                          </th>
                           <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Gross Wt (kg)</th>
-                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box Weight (kg)</th>
+                          <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Box Net Weight (kg)</th>
                           <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">No. of Cones</th>
                           <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
                         </tr>
@@ -3745,6 +3799,14 @@ const ProcessOrderPage = () => {
                               <td className="px-1.5 py-2 border border-gray-200">
                                 <span className="text-[12px] text-yellow-600 font-medium">{data.lotNumber || 'Not assigned'}</span>
                               </td>
+                              <td className="px-1.5 py-2 border border-gray-200 bg-gray-50/40">
+                                <span
+                                  className="text-[12px] text-gray-700 tabular-nums"
+                                  title="Read-only: initialBoxWeight from inventory (audit reference)"
+                                >
+                                  {formatInitialBoxWeightKgDisplay(box.initialBoxWeight)}
+                                </span>
+                              </td>
                               <td className="px-1.5 py-2 border border-gray-200">
                                 <span
                                   className="text-[12px] text-gray-900"
@@ -3825,7 +3887,7 @@ const ProcessOrderPage = () => {
                                     placeholder={`0.00 (max ${MAX_BOX_WEIGHT_KG})`}
                                     title={`Box net weight (kg); maximum ${MAX_BOX_WEIGHT_KG} kg`}
                                     inputMode="decimal"
-                                    aria-label={`Box weight in kilograms, maximum ${MAX_BOX_WEIGHT_KG}`}
+                                    aria-label={`Box net weight in kilograms, maximum ${MAX_BOX_WEIGHT_KG}`}
                                   />
                                 ) : (
                                   <span className="text-[12px] text-gray-900">{data.boxWeight || '-'}</span>
@@ -3913,7 +3975,7 @@ const ProcessOrderPage = () => {
                                 ) : !canEditBox ? (
                                   <span
                                     className="inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-slate-200 text-slate-700"
-                                    title="Inactive or fully transferred — view only"
+                                    title="Returned to vendor or fully used (initial weight set, net weight zero) — view only"
                                   >
                                     View only
                                   </span>
@@ -4066,7 +4128,7 @@ const ProcessOrderPage = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600 mb-1 block">Box Weight (kg)</label>
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">Box Net Weight (kg)</label>
                   <div className="mt-0.5 text-xs text-gray-900 bg-gray-50 p-1.5 rounded border border-gray-200">
                     {(() => {
                       const boxId = selectedBoxForDetails._id || selectedBoxForDetails.id || selectedBoxForDetails.boxId;

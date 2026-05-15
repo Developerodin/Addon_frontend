@@ -34,6 +34,8 @@ export interface YarnBox {
   grossWeight?: number;
   /** Net/box weight (user-entered). */
   boxWeight?: number;
+  /** Snapshot when first stored in LT; used for remaining-in-LT math (often null until allocated to LT). */
+  initialBoxWeight?: number | null;
   numberOfCones?: number;
   receivedDate?: string;
   orderDate?: string;
@@ -53,7 +55,7 @@ export interface YarnBox {
     };
     numberOfCones: number;
   };
-  /** From GET when `include_inactive=true`: false means read-only on PO receive process. */
+  /** From GET when `include_inactive=true`: false when returned to vendor or fully used (initial weight set, net zero). */
   isActiveForProcessing?: boolean;
 }
 
