@@ -16,6 +16,9 @@ import {
 import { QZTrayLoader, QZTrayStatus, QZTrayUntrustedWarning, QZTrayRequestBlocked } from "@/shared/components/qzTray";
 import { printContainerLabels, connectQZ, getDefaultPrinter, isQZLoaded } from "@/shared/utils/qzTrayOther";
 
+/** Exact text (after trim + uppercase) users must enter to confirm a single-container reset. */
+const SINGLE_CONTAINER_RESET_CONFIRM_PHRASE = "RESET";
+
 function getPagination(current: number, total: number): (number | "...")[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
   if (current <= 4) return [1, 2, 3, 4, 5, "...", total];
@@ -47,6 +50,9 @@ const ContainersMasterPage = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [resettingActive, setResettingActive] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetContainerTarget, setResetContainerTarget] = useState<ContainerMaster | null>(null);
+  const [resetContainerConfirmInput, setResetContainerConfirmInput] = useState("");
+  const [resettingContainerId, setResettingContainerId] = useState<string | null>(null);
 
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [printModalContainers, setPrintModalContainers] = useState<ContainerMaster[]>([]);
@@ -198,6 +204,43 @@ const ContainersMasterPage = () => {
       toast.error(err instanceof Error ? err.message : "Reset failed");
     } finally {
       setResettingActive(false);
+    }
+  };
+
+  /** Opens typed-confirmation modal to clear active assignments for one container. */
+  const openResetContainerModal = (row: ContainerMaster) => {
+    setResetContainerTarget(row);
+    setResetContainerConfirmInput("");
+  };
+
+  /** Closes the single-container reset modal and clears transient input. */
+  const closeResetContainerModal = () => {
+    setResetContainerTarget(null);
+    setResetContainerConfirmInput("");
+  };
+
+  /** Clears active floor/items via API after phrase validation. */
+  const handleConfirmedResetOneContainer = async () => {
+    if (!resetContainerTarget) return;
+    if (resetContainerConfirmInput.trim().toUpperCase() !== SINGLE_CONTAINER_RESET_CONFIRM_PHRASE) {
+      toast.error(`Enter ${SINGLE_CONTAINER_RESET_CONFIRM_PHRASE} exactly to confirm`);
+      return;
+    }
+    const { _id: targetId, barcode } = resetContainerTarget;
+    setResettingContainerId(targetId);
+    try {
+      await containersMasterService.clearActiveByBarcode(barcode);
+      toast.success("Container reset — active assignments cleared");
+      closeResetContainerModal();
+      if (activeItemsContainer?._id === targetId) {
+        setShowActiveItemsDrawer(false);
+        setActiveItemsContainer(null);
+      }
+      fetchList();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Reset failed");
+    } finally {
+      setResettingContainerId(null);
     }
   };
 
@@ -566,6 +609,20 @@ const ContainersMasterPage = () => {
                         <button type="button" onClick={() => openEditModal(row)} className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100 transition-colors" title="Edit">
                           <i className="ri-pencil-line text-xs"></i>
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => openResetContainerModal(row)}
+                          disabled={resettingContainerId === row._id}
+                          className="w-7 h-7 flex items-center justify-center bg-amber-50 text-amber-600 border border-amber-100 rounded hover:bg-amber-100 transition-colors disabled:opacity-50"
+                          title="Reset container — clears active floor and items"
+                          aria-label={`Reset container ${row.barcode}`}
+                        >
+                          {resettingContainerId === row._id ? (
+                            <i className="ri-loader-4-line text-xs animate-spin" aria-hidden />
+                          ) : (
+                            <i className="ri-restart-line text-xs" aria-hidden />
+                          )}
+                        </button>
                         {/* Delete icon in action - commented out
                         <button type="button" onClick={() => handleDelete(row._id)} disabled={deletingId === row._id} className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 border border-red-100 rounded hover:bg-red-100 transition-colors" title="Delete">
                           {deletingId === row._id ? <i className="ri-loader-4-line text-xs animate-spin"></i> : <i className="ri-delete-bin-line text-xs"></i>}
@@ -722,6 +779,79 @@ const ContainersMasterPage = () => {
               )}
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Single container reset — typed confirmation */}
+      {resetContainerTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          role="presentation"
+          onClick={(e) => e.target === e.currentTarget && closeResetContainerModal()}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-md w-full p-5"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reset-one-container-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="reset-one-container-title" className="text-sm font-bold text-gray-800 mb-1">
+              Reset container
+            </h3>
+            <p className="text-[12px] text-gray-600 mb-2">
+              This clears <strong>active floor</strong> and <strong>active items</strong> for{" "}
+              <span className="font-mono">{resetContainerTarget.barcode}</span>
+              {resetContainerTarget.containerName ? ` (${resetContainerTarget.containerName})` : ""}.
+            </p>
+            <p className="text-[11px] font-bold text-amber-800 mb-2">
+              Type <span className="font-mono">{SINGLE_CONTAINER_RESET_CONFIRM_PHRASE}</span> to confirm.
+            </p>
+            <label htmlFor="reset-container-confirm-input" className="sr-only">
+              Confirmation text — type {SINGLE_CONTAINER_RESET_CONFIRM_PHRASE}
+            </label>
+            <input
+              id="reset-container-confirm-input"
+              type="text"
+              autoComplete="off"
+              value={resetContainerConfirmInput}
+              onChange={(e) => setResetContainerConfirmInput(e.target.value)}
+              placeholder={SINGLE_CONTAINER_RESET_CONFIRM_PHRASE}
+              className="w-full border border-gray-200 rounded px-3 py-2 text-[12px] mb-4 focus:ring-0 focus:border-amber-400"
+              aria-describedby="reset-one-container-hint"
+            />
+            <p id="reset-one-container-hint" className="text-[11px] text-gray-500 -mt-2 mb-4">
+              This cannot be undone from this screen — inventory records elsewhere are unchanged.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={closeResetContainerModal}
+                className="px-3 py-1.5 bg-white border border-gray-200 text-[11px] font-bold rounded hover:bg-gray-50"
+                disabled={!!resettingContainerId}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmedResetOneContainer}
+                disabled={
+                  !!resettingContainerId ||
+                  resetContainerConfirmInput.trim().toUpperCase() !== SINGLE_CONTAINER_RESET_CONFIRM_PHRASE
+                }
+                className="px-3 py-1.5 bg-amber-600 text-white text-[11px] font-bold rounded hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {resettingContainerId === resetContainerTarget._id ? (
+                  <span className="inline-flex items-center gap-1">
+                    <i className="ri-loader-4-line animate-spin" aria-hidden />
+                    Resetting…
+                  </span>
+                ) : (
+                  "Reset container"
+                )}
+              </button>
             </div>
           </div>
         </div>
