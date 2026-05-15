@@ -84,6 +84,30 @@ function normalizeConeWeightFieldInput(raw: string): { value: string; clamped: b
 }
 
 /**
+ * Resolves kg for summaries: uses the weight input string when it parses to a finite value greater than 0,
+ * otherwise falls back to persisted {@link YarnCone.coneWeight}.
+ *
+ * @param cone - Yarn cone row
+ * @param inputs - Draft field state keyed by cone id
+ * @returns weight in kg, or `null` when neither source yields a positive finite weight
+ */
+function getEffectiveConeWeightKgForTotal(
+  cone: YarnCone,
+  inputs: Record<string, { coneWeight: string; tearWeight: string; coneStorageId: string }>
+): number | null {
+  const raw = inputs[cone._id]?.coneWeight?.trim() ?? "";
+  const fromInput = parseFloat(raw);
+  if (raw !== "" && Number.isFinite(fromInput) && fromInput > 0) {
+    return fromInput;
+  }
+  const saved = cone.coneWeight;
+  if (typeof saved === "number" && Number.isFinite(saved) && saved > 0) {
+    return saved;
+  }
+  return null;
+}
+
+/**
  * Tailwind utility classes for the cone issue-status pill, color-coded by lifecycle:
  *  - issued     -> blue (out for production)
  *  - used       -> gray (consumed, no yarn left, locked)
@@ -412,6 +436,23 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     boxEnrichment?.supplierName;
   const effectivePoNumber = box?.poNumber ?? boxEnrichment?.poNumber;
 
+  const coneWeightTotalSummary = useMemo(() => {
+    let totalKg = 0;
+    let withWeightCount = 0;
+    for (const c of cones) {
+      const w = getEffectiveConeWeightKgForTotal(c, coneInputs);
+      if (w != null) {
+        totalKg += w;
+        withWeightCount += 1;
+      }
+    }
+    return {
+      totalKg,
+      withWeightCount,
+      coneCount: cones.length,
+    };
+  }, [cones, coneInputs]);
+
   const handleConeBarcodeScan = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter") return;
 
@@ -457,7 +498,7 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
       const { value: normalized, clamped } = normalizeConeWeightFieldInput(value);
       next = normalized;
       if (clamped) {
-        toast.error(`Cone weight cannot exceed ${MAX_CONE_WEIGHT_KG} kg`);
+        toast.error(`Cone gross weight cannot exceed ${MAX_CONE_WEIGHT_KG} kg`);
       }
     }
     setConeInputs((prev) => ({
@@ -483,12 +524,12 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
     const coneStorageId = inputs.coneStorageId.trim();
 
     if (!Number.isFinite(coneWeight) || coneWeight <= 0) {
-      toast.error("Enter valid cone weight");
+      toast.error("Enter valid cone gross weight");
       return;
     }
 
     if (coneWeight > MAX_CONE_WEIGHT_KG) {
-      toast.error(`Cone weight cannot exceed ${MAX_CONE_WEIGHT_KG} kg`);
+      toast.error(`Cone gross weight cannot exceed ${MAX_CONE_WEIGHT_KG} kg`);
       return;
     }
 
@@ -1099,7 +1140,19 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                     <tr className="bg-gray-50/30">
                       <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Cone Barcode</th>
                       <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                        Cone Weight (kg, max {MAX_CONE_WEIGHT_KG})
+                        <span className="block">Cone Gross Weight (kg, max {MAX_CONE_WEIGHT_KG})</span>
+                        <span
+                          className="mt-1 block normal-case tracking-normal font-semibold text-[10px] text-emerald-800"
+                          aria-live="polite"
+                          aria-label={`Total cone gross weight ${coneWeightTotalSummary.totalKg.toFixed(4)} kilograms across ${coneWeightTotalSummary.withWeightCount} of ${coneWeightTotalSummary.coneCount} cones with a recorded weight`}
+                        >
+                          Σ total:{" "}
+                          <span className="font-mono tabular-nums">
+                            {coneWeightTotalSummary.totalKg.toFixed(4)}
+                          </span>{" "}
+                          kg ({coneWeightTotalSummary.withWeightCount}/{coneWeightTotalSummary.coneCount}{" "}
+                          cones)
+                        </span>
                       </th>
                       <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Tear Weight (kg)</th>
                       <th className="px-1.5 py-2 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Issue Status</th>
@@ -1128,8 +1181,8 @@ const ProcessedBoxPage: React.FC<ProcessedBoxPageProps> = ({ params }) => {
                               type="text"
                               inputMode="decimal"
                               data-cone-weight={cone._id}
-                              aria-label={`Cone weight in kilograms, maximum ${MAX_CONE_WEIGHT_KG}`}
-                              title={`Cone weight (kg); max ${MAX_CONE_WEIGHT_KG}`}
+                              aria-label={`Cone gross weight in kilograms, maximum ${MAX_CONE_WEIGHT_KG}`}
+                              title={`Cone gross weight (kg); max ${MAX_CONE_WEIGHT_KG}`}
                               className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
                               value={coneInputs[cone._id]?.coneWeight || ""}
                               onChange={(e) =>
