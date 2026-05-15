@@ -11,6 +11,46 @@ interface UnallocatedBoxesProps {
   onBoxAllocate?: (orderId: string) => void;
 }
 
+/**
+ * Same rules as backend `isYarnBoxActiveForProcessing` / PO process page: fully consumed
+ * (cones issued + no remaining box weight) or vendor-returned boxes must not appear as
+ * “allocate to storage” candidates.
+ * @param box - Yarn box from API
+ */
+function isYarnBoxEligibleForUnallocatedStorage(box: YarnBox): boolean {
+  const vendorReturn = (box as { returnedToVendorAt?: string | null }).returnedToVendorAt;
+  if (vendorReturn != null && String(vendorReturn).trim() !== '') {
+    return false;
+  }
+  if (typeof box.isActiveForProcessing === 'boolean') {
+    return box.isActiveForProcessing;
+  }
+  const conesIssued = box.coneData?.conesIssued === true;
+  const w = Number(box.boxWeight ?? 0);
+  return !conesIssued || w > 0;
+}
+
+/**
+ * @param boxesData - Raw boxes for the PO
+ * @param acceptedLotNumbers - Lots accepted on the PO receive flow
+ */
+function filterBoxesForUnallocatedAllocation(
+  boxesData: YarnBox[],
+  acceptedLotNumbers: string[]
+): YarnBox[] {
+  return boxesData.filter((box) => {
+    const isUnallocated = box.storedStatus === false || box.storedStatus === undefined;
+    const isFromAcceptedLot = Boolean(
+      box.lotNumber && acceptedLotNumbers.includes(box.lotNumber)
+    );
+    return (
+      isUnallocated &&
+      isFromAcceptedLot &&
+      isYarnBoxEligibleForUnallocatedStorage(box)
+    );
+  });
+}
+
 const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
   onBoxAllocate,
 }) => {
@@ -280,18 +320,7 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
           boxesData = [response as YarnBox];
         }
 
-        // Filter boxes:
-        // 1. storedStatus is false (unallocated)
-        // 2. lotNumber matches one of the accepted lots
-        const unallocatedBoxes = boxesData.filter(
-          (box: any) => {
-            const isUnallocated = box.storedStatus === false || box.storedStatus === undefined;
-            const isFromAcceptedLot = box.lotNumber && acceptedLotNumbers.includes(box.lotNumber);
-            return isUnallocated && isFromAcceptedLot;
-          }
-        );
-
-        setBoxes(unallocatedBoxes);
+        setBoxes(filterBoxesForUnallocatedAllocation(boxesData, acceptedLotNumbers));
       } catch (error) {
         console.error("Failed to fetch boxes:", error);
         toast.error(
@@ -390,18 +419,7 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
         boxesData = [response as YarnBox];
       }
 
-      // Filter boxes:
-      // 1. storedStatus is false (unallocated)
-      // 2. lotNumber matches one of the accepted lots
-      const unallocatedBoxes = boxesData.filter(
-        (box: any) => {
-          const isUnallocated = box.storedStatus === false || box.storedStatus === undefined;
-          const isFromAcceptedLot = box.lotNumber && acceptedLotNumbers.includes(box.lotNumber);
-          return isUnallocated && isFromAcceptedLot;
-        }
-      );
-
-      setBoxes(unallocatedBoxes);
+      setBoxes(filterBoxesForUnallocatedAllocation(boxesData, acceptedLotNumbers));
     } catch (error) {
       console.error("Failed to allocate box:", error);
       toast.error(
@@ -429,7 +447,7 @@ const UnallocatedBoxes: React.FC<UnallocatedBoxesProps> = ({
         <div>
           <h3 className="text-xs font-bold text-gray-800">Unallocated Boxes</h3>
           <p className="text-[10px] text-gray-500 mt-0.5">
-            Purchase orders with PO Accepted, Partially Accepted, Goods Received, or Partially Received status - showing boxes from accepted lots only
+            Purchase orders with PO Accepted, Partially Accepted, Goods Received, or Partially Received status — boxes from accepted lots only, excluding fully consumed or vendor-returned boxes
           </p>
         </div>
         <button
