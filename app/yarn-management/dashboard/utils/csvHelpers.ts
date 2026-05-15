@@ -37,26 +37,32 @@ function parseKgField(value: unknown): number {
 }
 
 /**
- * True when the box should appear on the unallocated export: at least one of net (box)
- * or gross weight is present and greater than zero.
+ * Kg counted toward dashboard unallocated for this box (boxWeight only; gross ignored).
  * @param box - Yarn box without storage slot.
  */
-function hasPositiveBoxOrGrossWeight(box: YarnBox): boolean {
+function effectiveUnallocatedKg(box: YarnBox): number {
   const net = parseKgField(box.boxWeight);
-  const gross = parseKgField(box.grossWeight);
-  return (
-    (Number.isFinite(net) && net > 0) || (Number.isFinite(gross) && gross > 0)
-  );
+  if (Number.isFinite(net) && net > 0) return net;
+  return 0;
+}
+
+/**
+ * True when the box has positive net box weight (gross-only rows are excluded).
+ * @param box - Yarn box without storage slot.
+ */
+function hasPositiveBoxWeight(box: YarnBox): boolean {
+  const net = parseKgField(box.boxWeight);
+  return Number.isFinite(net) && net > 0;
 }
 
 /**
  * Maps yarn boxes without storage to one CSV row per box (PO / lot / QC context for ops).
- * Omits boxes with no positive box (net) and no positive gross weight.
+ * Omits boxes with no positive boxWeight.
  */
 export function buildUnallocatedBoxExportRows(
   boxes: YarnBox[]
 ): Record<string, string | number | boolean>[] {
-  return boxes.filter(hasPositiveBoxOrGrossWeight).map((box) => ({
+  return boxes.filter(hasPositiveBoxWeight).map((box) => ({
     "Yarn Name": box.yarnName || "",
     "PO Number": box.poNumber || "",
     Supplier: supplierLabel(box),
@@ -68,6 +74,7 @@ export function buildUnallocatedBoxExportRows(
     Cones: box.numberOfCones ?? "",
     "Box Weight (kg)": box.boxWeight ?? "",
     "Gross Weight (kg)": box.grossWeight ?? "",
+    "Unallocated kg (box weight only)": effectiveUnallocatedKg(box),
     "QC Status": box.qcData?.status || "",
     "Received Date": formatDateForCsv(box.receivedDate ?? box.createdAt),
     "Stored Status": box.storedStatus === true ? "Allocated" : "Unallocated",

@@ -24,7 +24,19 @@ export function useYarnDashboardExports(
     try {
       setExporting(true);
 
-      const allInventory = await yarnInventoryService.getAllYarnInventories();
+      const invParams: Omit<YarnInventoryQueryParams, "limit" | "page"> = {};
+      if (searchTerm.trim()) {
+        invParams.yarn_name = searchTerm.trim();
+      }
+      if (statusFilter !== "all") {
+        if (statusFilter === "Low Stock") {
+          invParams.inventory_status = "low_stock";
+        } else if (statusFilter === "In Stock") {
+          invParams.inventory_status = "in_stock";
+        }
+      }
+
+      const allInventory = await yarnInventoryService.getAllYarnInventories(invParams);
 
       const exportData = allInventory.map((item) => {
         const totalWeight =
@@ -72,7 +84,7 @@ export function useYarnDashboardExports(
     } finally {
       setExporting(false);
     }
-  }, []);
+  }, [searchTerm, statusFilter]);
 
   const handleExportUnallocatedReport = useCallback(async () => {
     try {

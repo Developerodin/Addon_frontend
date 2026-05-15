@@ -210,6 +210,7 @@ const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
             type="button"
             onClick={onExportExcel}
             disabled={exporting || exportingUnallocated || loading}
+            title="CSV: one row per yarn (same columns as the table). Respects yarn search and status filter. Sum Unallocated column to compare with the Unallocated card when filters match."
             className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-[11px] font-bold rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {exporting ? (
@@ -229,7 +230,7 @@ const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
             onClick={onExportUnallocated}
             disabled={exporting || exportingUnallocated || loading}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-amber-300 text-amber-900 text-[11px] font-bold rounded hover:bg-amber-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            title="CSV: one row per box without storage — PO, supplier, box id, lot, QC. Respects yarn search and status filter."
+            title="CSV: one row per unallocated box. Sum “Unallocated kg (box weight only)” — matches the Unallocated card (boxWeight > 0 only; gross is not counted). Respects yarn search and status filter."
             aria-label="Export unallocated boxes report as CSV"
           >
             {exportingUnallocated ? (
