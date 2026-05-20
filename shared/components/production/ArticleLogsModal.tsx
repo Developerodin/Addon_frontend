@@ -6,6 +6,8 @@ import { productionService } from "@/shared/services/productionService";
 interface ArticleLogsModalProps {
   articleId: string;
   articleNumber?: string;
+  /** When article-scoped logs are empty, also load order-level logs for this PO line */
+  orderId?: string;
   isOpen: boolean;
   onClose: () => void;
   /** When true, render only inner content for use inside a side drawer */
@@ -25,9 +27,28 @@ interface LogEntry {
   metadata?: any;
 }
 
+/**
+ * Normalizes a log document from the API into the shape used by this modal.
+ * @param raw - Log row from paginated API
+ * @returns Log entry for display
+ */
+const normalizeLogEntry = (raw: Record<string, unknown>): LogEntry => ({
+  id: String(raw.id ?? raw._id ?? ''),
+  action: String(raw.action ?? ''),
+  timestamp: String(raw.timestamp ?? raw.date ?? ''),
+  user: typeof raw.user === 'string' ? raw.user : undefined,
+  details: raw.previousValue || raw.newValue ? { previousValue: raw.previousValue, newValue: raw.newValue } : raw.metadata,
+  fromFloor: raw.fromFloor as string | undefined,
+  toFloor: raw.toFloor as string | undefined,
+  quantity: typeof raw.quantity === 'number' ? raw.quantity : undefined,
+  remarks: raw.remarks as string | undefined,
+  metadata: raw.metadata,
+});
+
 const ArticleLogsModal: React.FC<ArticleLogsModalProps> = ({
   articleId,
   articleNumber,
+  orderId,
   isOpen,
   onClose,
   embedInDrawer
@@ -46,29 +67,53 @@ const ArticleLogsModal: React.FC<ArticleLogsModalProps> = ({
   const loadLogs = async () => {
     setIsLoading(true);
     try {
-      const response = await productionService.getArticleLogs(articleId, {
-        ...filters,
-        limit: 1000 // Load all logs
-      });
+      const queryOpts = {
+        action: filters.action || undefined,
+        dateFrom: filters.dateFrom || undefined,
+        dateTo: filters.dateTo || undefined,
+        floor: filters.floor || undefined,
+        sortBy: filters.sortBy,
+        limit: 500,
+        page: 1,
+      };
 
-      if (response.success) {
-        setLogs(response.data.results);
-      } else {
-        toast.error('Failed to load logs');
+      const response = await productionService.getArticleLogs(articleId, queryOpts);
+
+      if (!response.success) {
+        toast.error(response.error?.message || 'Failed to load logs');
+        setLogs([]);
+        return;
       }
-    } catch (error: any) {
+
+      let rows = (response.data?.results ?? []).map((row) =>
+        normalizeLogEntry(row as Record<string, unknown>)
+      );
+
+      if (rows.length === 0 && orderId) {
+        const orderResponse = await productionService.getOrderLogs(orderId, queryOpts);
+        if (orderResponse.success) {
+          rows = (orderResponse.data?.results ?? []).map((row) =>
+            normalizeLogEntry(row as Record<string, unknown>)
+          );
+        }
+      }
+
+      setLogs(rows);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to load logs';
       console.error('Error loading logs:', error);
-      toast.error(error.message || 'Failed to load logs');
+      toast.error(message);
+      setLogs([]);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && articleId) {
       loadLogs();
     }
-  }, [isOpen, filters]);
+  }, [isOpen, articleId, orderId, filters]);
 
   const handleFilterChange = (key: string, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }));

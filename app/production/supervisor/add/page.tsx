@@ -11,6 +11,7 @@ import {
   listMachineOrderAssignments,
   getAssignmentByMachineId,
   addProductionOrderItemsToAssignment,
+  getMachinePendingQuantities,
   OrderStatus,
   type MachineOrderAssignment,
 } from "@/shared/services/machineOrderAssignmentService";
@@ -119,6 +120,9 @@ const AddOrderPage = () => {
   const [machineActiveNeedleMap, setMachineActiveNeedleMap] = useState<Map<string, string>>(new Map());
   /** Machine ID -> assignment (for PO count in Select machine modal) */
   const [assignmentsByMachineId, setAssignmentsByMachineId] = useState<Map<string, MachineOrderAssignment>>(new Map());
+  /** Machine ID -> total pending knitting qty (loaded when machine drawer opens) */
+  const [machinePendingQtyMap, setMachinePendingQtyMap] = useState<Map<string, number>>(new Map());
+  const [isLoadingMachinePendingQty, setIsLoadingMachinePendingQty] = useState(false);
   /** Needles attribute value ID -> display name (for filtering machines by product's Needles) */
   const [needlesValueIdToName, setNeedlesValueIdToName] = useState<Record<string, string>>({});
 
@@ -179,6 +183,73 @@ const AddOrderPage = () => {
       setIsLoadingMachines(false);
     }
   };
+
+  /** Load pending knitting qty for machines visible in the select-machine drawer. */
+  useEffect(() => {
+    if (!showMachineModal || machineModalArticleIndex === null) {
+      setMachinePendingQtyMap(new Map());
+      setIsLoadingMachinePendingQty(false);
+      return;
+    }
+
+    const article = formData.articles[machineModalArticleIndex];
+    const needleSize = article?.needleSizeFromProduct?.trim();
+    if (!needleSize) {
+      setMachinePendingQtyMap(new Map());
+      return;
+    }
+
+    const machinesForNeedle = machines.filter((m) => {
+      const id = m._id ?? m.id;
+      const activeNeedle = String(
+        (id ? machineActiveNeedleMap.get(String(id)) ?? '' : '') || (m.activeNeedle ?? '')
+      ).trim();
+      return activeNeedle === needleSize;
+    });
+    const q = machineSearchQuery.trim().toLowerCase();
+    const filtered = q
+      ? machinesForNeedle.filter(
+          (m) =>
+            (m.machineCode ?? '').toLowerCase().includes(q) ||
+            (m.machineNumber ?? '').toLowerCase().includes(q) ||
+            (m.model ?? '').toLowerCase().includes(q) ||
+            (m.floor ?? '').toLowerCase().includes(q)
+        )
+      : machinesForNeedle;
+
+    const ids = filtered.map((m) => String(m._id ?? m.id ?? '')).filter(Boolean);
+    if (ids.length === 0) {
+      setMachinePendingQtyMap(new Map());
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setIsLoadingMachinePendingQty(true);
+      try {
+        const data = await getMachinePendingQuantities(ids);
+        if (cancelled) return;
+        const map = new Map<string, number>();
+        data.results.forEach((row) => map.set(String(row.machineId), row.pendingQuantity ?? 0));
+        setMachinePendingQtyMap(map);
+      } catch {
+        if (!cancelled) setMachinePendingQtyMap(new Map());
+      } finally {
+        if (!cancelled) setIsLoadingMachinePendingQty(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    showMachineModal,
+    machineModalArticleIndex,
+    formData.articles,
+    machines,
+    machineActiveNeedleMap,
+    machineSearchQuery,
+  ]);
 
   // Fetch Needles attribute option values (id -> name) for resolving product's Needles when filtering machines
   useEffect(() => {
@@ -1082,7 +1153,7 @@ const AddOrderPage = () => {
         <div className="fixed inset-0 z-50 flex">
           <div className="absolute inset-0 z-0 bg-black/50" onClick={() => { setShowMachineModal(false); setMachineModalArticleIndex(null); setMachineSearchQuery(''); }} aria-hidden />
           <div className="relative z-10 ml-auto w-full max-w-xl h-full bg-white shadow-xl flex flex-col border-l border-gray-200" onClick={(e) => e.stopPropagation()}>
-            <div className="p-[10px] border-b border-gray-200 flex justify-between items-center">
+            <div className="shrink-0 p-[10px] border-b border-gray-200 flex justify-between items-center">
               <div>
                 <h3 className="text-sm font-bold text-gray-800">Select Machine</h3>
                 <p className="text-xs text-gray-500 mt-0.5">
@@ -1109,7 +1180,7 @@ const AddOrderPage = () => {
               </button>
             </div>
             {machineModalArticleIndex !== null && formData.articles[machineModalArticleIndex]?.needleSizeFromProduct?.trim() && (
-              <div className="p-[10px] border-b border-gray-200">
+              <div className="shrink-0 p-[10px] border-b border-gray-200">
                 <input
                   type="text"
                   className="bg-white border border-gray-200 text-[11px] rounded px-3 py-1.5 w-full focus:ring-0 focus:border-purple-300"
@@ -1119,7 +1190,7 @@ const AddOrderPage = () => {
                 />
               </div>
             )}
-            <div className="flex-1 overflow-y-auto p-4 min-h-0">
+            <div className="flex-1 min-h-0 flex flex-col p-4 pt-0">
               {(() => {
                 const article =
                   machineModalArticleIndex !== null
@@ -1159,12 +1230,18 @@ const AddOrderPage = () => {
                     </p>
                   </div>
                 ) : (
-                  <div className="max-h-[50vh] overflow-y-auto border border-gray-200 rounded overflow-x-auto">
+                  <div className="flex-1 min-h-0 overflow-auto border border-gray-200 rounded">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
                         <tr>
                           <th className="text-left px-3 py-2 font-semibold text-gray-700">Machine</th>
                           <th className="text-left px-3 py-2 font-semibold text-gray-700">Active Needle</th>
+                          <th
+                            className="text-left px-3 py-2 font-semibold text-gray-700"
+                            title="Total knitting units still pending on this machine queue"
+                          >
+                            Pending Qty
+                          </th>
                           <th className="text-left px-3 py-2 font-semibold text-gray-700"># POs</th>
                           <th className="text-left px-3 py-2 font-semibold text-gray-700">Action</th>
                         </tr>
@@ -1180,6 +1257,15 @@ const AddOrderPage = () => {
                             <tr key={id} className="hover:bg-gray-50">
                               <td className="px-3 py-2 font-medium text-gray-900">{machine.machineCode}</td>
                               <td className="px-3 py-2 text-gray-700">{activeNeedle || '—'}</td>
+                              <td className="px-3 py-2 text-gray-700 tabular-nums">
+                                {isLoadingMachinePendingQty ? (
+                                  <span className="text-gray-400 text-xs" aria-label="Loading pending quantity">
+                                    …
+                                  </span>
+                                ) : (
+                                  (id ? machinePendingQtyMap.get(String(id)) : undefined)?.toLocaleString() ?? '0'
+                                )}
+                              </td>
                               <td className="px-3 py-2 text-gray-600">{poCount}</td>
                               <td className="px-3 py-2">
                                 <button

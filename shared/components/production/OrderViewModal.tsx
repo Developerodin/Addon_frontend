@@ -1,45 +1,11 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { toast } from "react-hot-toast";
-import { productionService, ProductionOrder } from "@/shared/services/productionService";
+import { productionService } from "@/shared/services/productionService";
 import ArticleLogsModal from "./ArticleLogsModal";
+import OrderViewArticlesTab, { type OrderViewArticle } from "./OrderViewArticlesTab";
 
-interface Article {
-  id: string;
-  _id?: string;
-  articleNumber: string;
-  plannedQuantity: number;
-  completedQuantity?: number;
-  linkingType: string;
-  priority: string;
-  status: string;
-  progress: number;
-  currentFloor: string;
-  finalQualityConfirmed?: boolean;
-  remarks?: string;
-  m1Quantity?: number;
-  m2Quantity?: number;
-  m3Quantity?: number;
-  m4Quantity?: number;
-  createdAt?: string;
-  updatedAt?: string;
-  completedAt?: string;
-  startedAt?: string;
-  floorQuantities?: {
-    [key: string]: {
-      received?: number;
-      completed?: number;
-      remaining?: number;
-      transferred?: number;
-      m1Quantity?: number;
-      m2Quantity?: number;
-      m3Quantity?: number;
-      m4Quantity?: number;
-      repairStatus?: string;
-      repairRemarks?: string;
-    };
-  };
-}
+type Article = OrderViewArticle;
 
 interface ProductionOrder {
   id: string;
@@ -112,13 +78,6 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose, embedIn
     }
   };
 
-  const handleArticleClick = (article: Article) => {
-    setSelectedArticle(article);
-    // Use _id for logs API, fallback to id if _id is not available
-    const articleId = article._id || article.id;
-    loadArticleLogs(articleId);
-  };
-
   const handleLogsArticleSelect = (article: Article) => {
     setSelectedLogsArticle(article);
     // Use _id for logs API, fallback to id if _id is not available
@@ -174,19 +133,6 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose, embedIn
     return floorClasses[floor as keyof typeof floorClasses] || 'bg-gray-100 text-gray-800';
   };
 
-  const formatDate = (dateString?: string) => {
-    return dateString ? new Date(dateString).toLocaleString() : 'N/A';
-  };
-
-  const calculateProgress = (article: Article) => {
-    // Use the progress field from API data if available, otherwise calculate from completed/planned
-    if (article.progress !== undefined) {
-      return article.progress;
-    }
-    if (!article.plannedQuantity || article.plannedQuantity === 0) return 0;
-    return Math.round(((article.completedQuantity || 0) / article.plannedQuantity) * 100);
-  };
-
   const content = (
     <div className={`bg-white overflow-hidden flex flex-col h-full ${embedInDrawer ? '' : 'rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh]'}`}>
         {/* Header */}
@@ -204,55 +150,51 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose, embedIn
         </div>
 
         {/* Order Info */}
-        <div className="p-6 border-b border-gray-200 bg-gray-50">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="px-3 py-2 border-b border-gray-200 bg-gray-50">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
             <div>
-              <label className="text-sm font-medium text-gray-500">Priority</label>
-              <div className="mt-1">
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(order.priority)}`}>
+              <span className="text-gray-500">Priority</span>
+              <div className="mt-0.5">
+                <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${getPriorityBadge(order.priority)}`}>
                   {order.priority}
                 </span>
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium text-gray-500">Status</label>
-              <div className="mt-1">
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(order.status)}`}>
+              <span className="text-gray-500">Status</span>
+              <div className="mt-0.5">
+                <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${getStatusBadge(order.status)}`}>
                   {order.status}
                 </span>
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium text-gray-500">Current Floor</label>
-              <div className="mt-1">
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getFloorBadge(order.currentFloor || order.floor || 'Unknown')}`}>
+              <span className="text-gray-500">Current Floor</span>
+              <div className="mt-0.5">
+                <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${getFloorBadge(order.currentFloor || order.floor || 'Unknown')}`}>
                   {order.currentFloor || order.floor || 'Unknown'}
                 </span>
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium text-gray-500">Articles</label>
-              <div className="mt-1 text-lg font-semibold text-gray-900">
-                {order.articles.length}
-              </div>
+              <span className="text-gray-500">Articles</span>
+              <div className="mt-0.5 text-[12px] font-bold text-gray-900">{order.articles.length}</div>
             </div>
           </div>
-          
-          {order.orderNote && (
-            <div className="mt-4">
-              <label className="text-sm font-medium text-gray-500">Order Note</label>
-              <p className="mt-1 text-gray-900">{order.orderNote}</p>
-            </div>
-          )}
 
+          {order.orderNote && (
+            <p className="mt-2 text-[10px] text-gray-600">
+              <span className="font-medium text-gray-500">Note:</span> {order.orderNote}
+            </p>
+          )}
         </div>
 
         {/* Tabs */}
         <div className="border-b border-gray-200">
-          <nav className="flex space-x-8 px-6">
+          <nav className="flex space-x-6 px-3" aria-label="Order detail tabs">
             <button
               onClick={() => setActiveTab('articles')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-2.5 px-1 border-b-2 font-medium text-[11px] ${
                 activeTab === 'articles'
                   ? 'border-primary text-primary'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -262,7 +204,7 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose, embedIn
             </button>
             <button
               onClick={() => setActiveTab('logs')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-2.5 px-1 border-b-2 font-medium text-[11px] ${
                 activeTab === 'logs'
                   ? 'border-primary text-primary'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -274,205 +216,28 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose, embedIn
         </div>
 
         {/* Content */}
-        <div className="p-6 max-h-96 overflow-y-auto">
+        <div className="p-2 flex-1 overflow-y-auto min-h-0">
           {activeTab === 'articles' && (
-            <div className="space-y-4">
-              {order.articles.map((article, index) => (
-                <div
-                  key={article.id}
-                  className={`border rounded-lg p-4 cursor-pointer transition-colors ${
-                    selectedArticle?.id === article.id
-                      ? 'border-primary bg-primary-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                  onClick={() => handleArticleClick(article)}
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center space-x-3">
-                          <h3 className="text-lg font-medium text-gray-900">
-                            {article.articleNumber || 'Unknown Article'}
-                          </h3>
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityBadge(article.priority || 'Unknown')}`}>
-                            {article.priority || 'Unknown'}
-                          </span>
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(article.status || 'Unknown')}`}>
-                            {article.status || 'Unknown'}
-                          </span>
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getFloorBadge(article.currentFloor || 'Unknown')}`}>
-                            {article.currentFloor || 'Unknown'}
-                          </span>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                        <div>
-                          <span className="text-gray-500">Planned:</span>
-                          <span className="ml-1 font-medium">{(article.plannedQuantity || 0).toLocaleString()}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Completed:</span>
-                          <span className="ml-1 font-medium">{(article.completedQuantity || 0).toLocaleString()}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Linking Type:</span>
-                          <span className="ml-1 font-medium">{article.linkingType || 'N/A'}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">Progress:</span>
-                          <span className="ml-1 font-medium">{calculateProgress(article)}%</span>
-                        </div>
-                      </div>
-                      
-                      {/* Article Dates */}
-                      <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-gray-500">
-                        <div>
-                          <span className="font-medium">Created:</span> {formatDate(article.createdAt)}
-                        </div>
-                        <div>
-                          <span className="font-medium">Started:</span> {formatDate(article.startedAt)}
-                        </div>
-                        <div>
-                          <span className="font-medium">Completed:</span> {formatDate(article.completedAt)}
-                        </div>
-                      </div>
-                      
-                      {/* Final Quality Status */}
-                      {article.finalQualityConfirmed !== undefined && (
-                        <div className="mt-2 text-xs">
-                          <span className="font-medium text-gray-600">Final Quality:</span>
-                          <span className={`ml-1 px-2 py-0.5 rounded text-xs ${
-                            article.finalQualityConfirmed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {article.finalQualityConfirmed ? 'Confirmed' : 'Pending'}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Overall Progress Bar */}
-                      <div className="mt-3">
-                        <div className="flex justify-between text-xs text-gray-500 mb-1">
-                          <span>Overall Progress</span>
-                          <span>{calculateProgress(article)}%</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className="bg-primary h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${calculateProgress(article)}%` }}
-                          ></div>
-                        </div>
-                      </div>
-
-                      {/* Floor-wise Progress */}
-                      {article.floorQuantities && (
-                        <div className="mt-4">
-                          <h4 className="text-sm font-medium text-gray-700 mb-3">Floor-wise Progress</h4>
-                          <div className="space-y-3">
-                            {Object.entries(article.floorQuantities).map(([floor, data]) => {
-                              const floorName = floor.replace(/([A-Z])/g, ' $1').trim();
-                              const received = data.received || 0;
-                              const completed = data.completed || 0;
-                              const remaining = data.remaining || 0;
-                              const transferred = data.transferred || 0;
-                              const completionPercentage = received > 0 ? Math.round((completed / received) * 100) : 0;
-                              
-                              return (
-                                <div key={floor} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                                  <div className="flex justify-between items-center mb-3">
-                                    <span className="text-sm font-medium text-gray-700 capitalize">
-                                      {floorName}
-                                    </span>
-                                    <span className="text-xs text-gray-500">
-                                      {completed.toLocaleString()} / {received.toLocaleString()} ({completionPercentage}%)
-                                    </span>
-                                  </div>
-                                  
-                                  {/* Progress Bar */}
-                                  <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
-                                    <div
-                                      className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                                      style={{ width: `${completionPercentage}%` }}
-                                    ></div>
-                                  </div>
-                                  
-                                  {/* Quantities Grid */}
-                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                                    <div className="text-center">
-                                      <div className="font-medium text-blue-600">Received</div>
-                                      <div className="text-gray-600">{received.toLocaleString()}</div>
-                                    </div>
-                                    <div className="text-center">
-                                      <div className="font-medium text-green-600">Completed</div>
-                                      <div className="text-gray-600">{completed.toLocaleString()}</div>
-                                    </div>
-                                    <div className="text-center">
-                                      <div className="font-medium text-yellow-600">Remaining</div>
-                                      <div className="text-gray-600">{remaining.toLocaleString()}</div>
-                                    </div>
-                                    <div className="text-center">
-                                      <div className="font-medium text-purple-600">Transferred</div>
-                                      <div className="text-gray-600">{transferred.toLocaleString()}</div>
-                                    </div>
-                                  </div>
-                                  
-                                  {/* Quality Categories for Checking floors */}
-                                  {(floor === 'checking' || floor === 'finalChecking' || floor === 'dispatch') && (
-                                    <div className="mt-3 pt-3 border-t border-gray-300">
-                                      <div className="text-xs font-medium text-gray-600 mb-2">Quality Categories:</div>
-                                      <div className="grid grid-cols-4 gap-2 text-xs">
-                                        <div className="text-center">
-                                          <div className="font-medium text-green-600">M1</div>
-                                          <div className="text-gray-600">{data.m1Quantity || 0}</div>
-                                        </div>
-                                        <div className="text-center">
-                                          <div className="font-medium text-yellow-600">M2</div>
-                                          <div className="text-gray-600">{data.m2Quantity || 0}</div>
-                                        </div>
-                                        <div className="text-center">
-                                          <div className="font-medium text-orange-600">M3</div>
-                                          <div className="text-gray-600">{data.m3Quantity || 0}</div>
-                                        </div>
-                                        <div className="text-center">
-                                          <div className="font-medium text-red-600">M4</div>
-                                          <div className="text-gray-600">{data.m4Quantity || 0}</div>
-                                        </div>
-                                      </div>
-                                      {data.repairStatus && (
-                                        <div className="mt-2 text-xs">
-                                          <span className="font-medium text-gray-600">Repair Status:</span>
-                                          <span className={`ml-1 px-2 py-0.5 rounded text-xs ${
-                                            data.repairStatus === 'Required' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
-                                          }`}>
-                                            {data.repairStatus}
-                                          </span>
-                                        </div>
-                                      )}
-                                      {data.repairRemarks && (
-                                        <div className="mt-1 text-xs text-gray-600">
-                                          <span className="font-medium">Repair Remarks:</span> {data.repairRemarks}
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-
-                      {article.remarks && (
-                        <div className="mt-2 text-sm text-gray-600">
-                          <span className="font-medium">Remarks:</span> {article.remarks}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <OrderViewArticlesTab
+              order={{
+                id: order.id,
+                orderNumber: order.orderNumber,
+                priority: order.priority,
+                status: order.status,
+                currentFloor: order.currentFloor,
+                floor: order.floor,
+                orderNote: order.orderNote,
+                createdAt: order.createdAt,
+                updatedAt: order.updatedAt,
+              }}
+              articles={order.articles}
+              getStatusBadge={getStatusBadge}
+              getPriorityBadge={getPriorityBadge}
+              getFloorBadge={getFloorBadge}
+              onViewLogs={handleViewArticleLogs}
+              onSelectArticle={setSelectedArticle}
+              selectedArticleId={selectedArticle?.id ?? selectedArticle?._id ?? null}
+            />
           )}
 
           {activeTab === 'logs' && (

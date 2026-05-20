@@ -870,9 +870,10 @@ class ProductionService {
     return this.request(`/reports/order-tracking/${orderId}`);
   }
 
-  /** Article-wise production report. Optional: articleNumber (factoryCode), limit (default 50, max 100), page (default 1), logsPerArticle (default 20, max 100). */
+  /** Article-wise production report. Use `search` for partial match on article number / knitting code; `articleNumber` for exact match. */
   async getArticleWiseReport(filters: {
     articleNumber?: string;
+    search?: string;
     limit?: number;
     page?: number;
     logsPerArticle?: number;

@@ -5,6 +5,23 @@ import { PRODUCTION_FLOORS } from "@/shared/services/teamMasterService";
 export type FloorType = 'Knitting' | 'Linking' | 'Checking' | 'Washing' | 'Boarding' | 'Final Checking' | 'Branding' | 'Warehouse' | 'Dispatch';
 export type LinkingType = 'Auto Linking' | 'Rosso Linking' | 'Hand Linking';
 
+/** camelCase keys used in article.floorQuantities */
+export const CANONICAL_FLOOR_TO_KEY: Record<string, string> = {
+  Knitting: 'knitting',
+  Linking: 'linking',
+  Checking: 'checking',
+  Washing: 'washing',
+  Boarding: 'boarding',
+  Silicon: 'silicon',
+  'Secondary Checking': 'secondaryChecking',
+  Branding: 'branding',
+  'Final Checking': 'finalChecking',
+  Warehouse: 'warehouse',
+  Dispatch: 'dispatch',
+};
+
+const QUALITY_FLOOR_KEYS = new Set(['checking', 'secondaryChecking', 'finalChecking', 'dispatch']);
+
 /** Normalize floor name for comparison (lowercase, no spaces) */
 const normalizeFloorName = (f: string) => (f ?? "").trim().replace(/\s+/g, "").toLowerCase();
 
@@ -19,7 +36,7 @@ function processMatchesFloor(processName: string, floorName: string): boolean {
  * Map process name (e.g. "Linking (hand/auto)") to PRODUCTION_FLOORS value (e.g. "Linking").
  * Used by getNextFloorFromProcesses - must be defined before it.
  */
-function mapProcessNameToFloor(processName: string): string {
+export function mapProcessNameToFloor(processName: string): string {
   const nextNorm = normalizeFloorName(processName);
   const exact = PRODUCTION_FLOORS.find((f) => normalizeFloorName(f) === nextNorm);
   if (exact) return exact;
@@ -212,3 +229,108 @@ export const getFloorColor = (floor: FloorType): string => {
   
   return colors[floor] || 'bg-gray-100 text-gray-800';
 };
+
+/**
+ * Resolve applicable floor keys for an article from its product processes.
+ * Auto Linking articles skip the Linking floor even if present on the product.
+ */
+export function getApplicableFloorKeysFromProcesses(
+  processes: ArticleProcess[] | null | undefined,
+  linkingType?: LinkingType
+): string[] {
+  if (!processes?.length) return [];
+
+  const floorKeys = new Set<string>();
+  for (const process of processes) {
+    const canonicalFloor = mapProcessNameToFloor(process.name);
+    const floorKey = CANONICAL_FLOOR_TO_KEY[canonicalFloor];
+    if (floorKey) floorKeys.add(floorKey);
+  }
+
+  if (linkingType === 'Auto Linking') {
+    floorKeys.delete('linking');
+  }
+
+  return PRODUCTION_FLOORS
+    .map((floor) => CANONICAL_FLOOR_TO_KEY[floor])
+    .filter((key): key is string => Boolean(key && floorKeys.has(key)));
+}
+
+/** Whether floorQuantities row has any recorded movement. */
+export function floorHasActivity(data?: {
+  received?: number;
+  completed?: number;
+  transferred?: number;
+  remaining?: number;
+}): boolean {
+  if (!data) return false;
+  return (
+    (data.received ?? 0) > 0 ||
+    (data.completed ?? 0) > 0 ||
+    (data.transferred ?? 0) > 0 ||
+    (data.remaining ?? 0) > 0
+  );
+}
+
+/** Sort floor keys in canonical production order. */
+export function sortFloorKeys(keys: string[]): string[] {
+  const order = PRODUCTION_FLOORS.map((floor) => CANONICAL_FLOOR_TO_KEY[floor]);
+  return [...keys].sort((a, b) => {
+    const ai = order.indexOf(a);
+    const bi = order.indexOf(b);
+    if (ai === -1 && bi === -1) return a.localeCompare(b);
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
+}
+
+/**
+ * Floors to show for admin progress tracking.
+ * Prefer full product process route; fall back to floorQuantities when processes are unavailable.
+ */
+export function resolveArticleDisplayFloorKeys(
+  floorQuantities: Record<string, unknown> | undefined,
+  processes: ArticleProcess[] | null | undefined,
+  linkingType?: LinkingType
+): string[] {
+  const knownFloorKeys = new Set(Object.values(CANONICAL_FLOOR_TO_KEY));
+  const processFloors = getApplicableFloorKeysFromProcesses(processes, linkingType);
+
+  if (processFloors.length > 0) {
+    const keys = new Set(processFloors);
+    if (floorQuantities) {
+      for (const [key, data] of Object.entries(floorQuantities)) {
+        if (knownFloorKeys.has(key) && floorHasActivity(data as Parameters<typeof floorHasActivity>[0])) {
+          keys.add(key);
+        }
+      }
+    }
+    return sortFloorKeys([...keys]);
+  }
+
+  if (floorQuantities && Object.keys(floorQuantities).length > 0) {
+    const activeKeys = Object.entries(floorQuantities)
+      .filter(([key, data]) => knownFloorKeys.has(key) && floorHasActivity(data as Parameters<typeof floorHasActivity>[0]))
+      .map(([key]) => key);
+    if (activeKeys.length > 0) return sortFloorKeys(activeKeys);
+    return sortFloorKeys(Object.keys(floorQuantities).filter((key) => knownFloorKeys.has(key)));
+  }
+
+  let fallback = PRODUCTION_FLOORS.map((floor) => CANONICAL_FLOOR_TO_KEY[floor]).filter(Boolean);
+  if (linkingType === 'Auto Linking') {
+    fallback = fallback.filter((key) => key !== 'linking');
+  }
+  return fallback;
+}
+
+/** Whether a floor key tracks M1–M4 quality buckets. */
+export function floorKeyHasQualityMetrics(floorKey: string): boolean {
+  return QUALITY_FLOOR_KEYS.has(floorKey);
+}
+
+/** Human-readable label for a floorQuantities key. */
+export function getFloorKeyDisplayName(floorKey: string): string {
+  const entry = Object.entries(CANONICAL_FLOOR_TO_KEY).find(([, key]) => key === floorKey);
+  return entry?.[0] ?? floorKey.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase());
+}

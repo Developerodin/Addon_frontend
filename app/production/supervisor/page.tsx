@@ -56,6 +56,7 @@ const ProductionSupervisorPage = () => {
     linkingType: '',
     floor: ''
   });
+  const [sortBy, setSortBy] = useState('createdAt:desc');
   const [totalPages, setTotalPages] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
 
@@ -63,11 +64,10 @@ const ProductionSupervisorPage = () => {
   const [articleViewResults, setArticleViewResults] = useState<ArticleWiseReportArticle[]>([]);
   const [articleViewLoading, setArticleViewLoading] = useState(false);
   const [articleViewPage, setArticleViewPage] = useState(1);
-  const [articleViewLimit, setArticleViewLimit] = useState(50);
+  const [articleViewLimit, setArticleViewLimit] = useState(10);
   const [articleViewTotalPages, setArticleViewTotalPages] = useState(1);
   const [articleViewTotal, setArticleViewTotal] = useState(0);
   const [articleFilter, setArticleFilter] = useState('');
-  const [articleViewLogsPerArticle, setArticleViewLogsPerArticle] = useState(20);
 
   // Load orders from API
   const loadOrders = async () => {
@@ -80,7 +80,7 @@ const ProductionSupervisorPage = () => {
         ...(filters.priority && { priority: filters.priority }),
         ...(filters.floor && { currentFloor: filters.floor }),
         ...(searchQuery && { search: searchQuery }),
-        sortBy: 'createdAt',
+        sortBy,
         populate: 'articles'
       };
 
@@ -103,7 +103,7 @@ const ProductionSupervisorPage = () => {
             ...(filters.status && { status: filters.status }),
             ...(filters.priority && { priority: filters.priority }),
             ...(filters.floor && { currentFloor: filters.floor }),
-            sortBy: 'createdAt',
+            sortBy,
             populate: 'articles'
           });
 
@@ -136,14 +136,15 @@ const ProductionSupervisorPage = () => {
     }
   };
 
-  // Debounced search effect
+  // Load orders only on Orders tab (Article view uses its own API — not tied to order pagination)
   useEffect(() => {
+    if (activeTab !== 'orders') return;
     const timeoutId = setTimeout(() => {
       loadOrders();
-    }, 500); // 500ms delay
+    }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [currentPage, itemsPerPage, filters, searchQuery]);
+  }, [activeTab, currentPage, itemsPerPage, filters, searchQuery, sortBy]);
 
   // Load article-wise report when on Article view tab
   const loadArticleView = async () => {
@@ -152,14 +153,20 @@ const ProductionSupervisorPage = () => {
       const response = await productionService.getArticleWiseReport({
         page: articleViewPage,
         limit: Math.min(articleViewLimit, 100),
-        logsPerArticle: Math.min(articleViewLogsPerArticle, 100),
-        ...(articleFilter.trim() && { articleNumber: articleFilter.trim() }),
+        logsPerArticle: 0,
+        ...(articleFilter.trim() && { search: articleFilter.trim() }),
       });
       if (response.success && response.data) {
         const data = response.data as ArticleWiseReportResponse;
         setArticleViewResults(data.results || []);
-        setArticleViewTotalPages(data.totalPages ?? 1);
-        setArticleViewTotal(data.total ?? 0);
+        const total = data.total ?? 0;
+        const tp = data.totalPages ?? 0;
+        const safeTotalPages = total === 0 ? 1 : Math.max(1, tp);
+        setArticleViewTotalPages(safeTotalPages);
+        setArticleViewTotal(total);
+        if (articleViewPage > safeTotalPages) {
+          setArticleViewPage(safeTotalPages);
+        }
       } else {
         toast.error(response.error?.message || 'Failed to load article report');
         setArticleViewResults([]);
@@ -176,7 +183,16 @@ const ProductionSupervisorPage = () => {
     if (activeTab !== 'article-view') return;
     const t = setTimeout(() => loadArticleView(), articleFilter ? 400 : 0);
     return () => clearTimeout(t);
-  }, [activeTab, articleViewPage, articleViewLimit, articleViewLogsPerArticle, articleFilter]);
+  }, [activeTab, articleViewPage, articleViewLimit, articleFilter]);
+
+  /** Changes article-view page and scrolls the list into view. */
+  const handleArticleViewPageChange = (page: number) => {
+    const next = Math.max(1, Math.min(page, articleViewTotalPages));
+    setArticleViewPage(next);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   // No client-side filtering needed since we're using API filtering
   const paginatedOrders = orders;
@@ -288,6 +304,14 @@ const ProductionSupervisorPage = () => {
     setSelectAll(false);
   };
 
+  /** Updates order list sort (newest/oldest) and resets pagination. */
+  const handleSortChange = (value: string) => {
+    setSortBy(value);
+    setCurrentPage(1);
+    setSelectedOrders([]);
+    setSelectAll(false);
+  };
+
   const clearFilters = () => {
     setFilters({
       status: '',
@@ -355,7 +379,7 @@ const ProductionSupervisorPage = () => {
     return priorityClasses[priority as keyof typeof priorityClasses] || 'bg-gray-100 text-gray-800';
   };
 
-  const isDrawerOpen = showViewModal || showOrderLogsModal;
+  const isDrawerOpen = showViewModal || showOrderLogsModal || showArticleLogsModal;
 
   return (
     <div className="main-content !p-[10px]">
@@ -400,11 +424,14 @@ const ProductionSupervisorPage = () => {
               <button
                 type="button"
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
-                onClick={loadOrders}
-                disabled={isLoading}
-                title="Refresh Orders"
+                onClick={() => {
+                  if (activeTab === 'article-view') void loadArticleView();
+                  else if (activeTab === 'orders') void loadOrders();
+                }}
+                disabled={activeTab === 'article-view' ? articleViewLoading : isLoading}
+                title={activeTab === 'article-view' ? 'Refresh Article view' : 'Refresh Orders'}
               >
-                <i className={`ri-refresh-line text-xs ${isLoading ? 'animate-spin' : ''}`}></i> Refresh
+                <i className={`ri-refresh-line text-xs ${(activeTab === 'article-view' ? articleViewLoading : isLoading) ? 'animate-spin' : ''}`}></i> Refresh
               </button>
               {selectedOrders.length > 0 && (
                 <button
@@ -482,34 +509,39 @@ const ProductionSupervisorPage = () => {
                 <YarnEstimationTab />
               ) : activeTab === 'article-view' ? (
                 <>
-                  <div className="p-[10px] mb-2 flex flex-wrap items-center gap-2">
-                    <input
-                      type="text"
-                      className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-40 placeholder:text-gray-400 font-medium"
-                      placeholder="Filter by article..."
-                      value={articleFilter}
-                      onChange={(e) => setArticleFilter(e.target.value)}
-                    />
-                    <select
-                      className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5"
-                      value={articleViewLimit}
-                      onChange={(e) => { setArticleViewLimit(Number(e.target.value)); setArticleViewPage(1); }}
-                    >
-                      <option value={10}>10</option>
-                      <option value={25}>25</option>
-                      <option value={50}>50</option>
-                      <option value={100}>100</option>
-                    </select>
-                    <select
-                      className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5"
-                      value={articleViewLogsPerArticle}
-                      onChange={(e) => { setArticleViewLogsPerArticle(Number(e.target.value)); setArticleViewPage(1); }}
-                    >
-                      <option value={10}>10 logs</option>
-                      <option value={20}>20</option>
-                      <option value={50}>50</option>
-                      <option value={100}>100</option>
-                    </select>
+                  <div className="p-[10px] mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <label className="relative flex items-center">
+                      <span className="sr-only">Search articles</span>
+                      <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none" aria-hidden="true" />
+                      <input
+                        type="text"
+                        className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-48 placeholder:text-gray-400 font-medium"
+                        placeholder="Search article or knitting code..."
+                        value={articleFilter}
+                        onChange={(e) => {
+                          setArticleFilter(e.target.value);
+                          setArticleViewPage(1);
+                        }}
+                        aria-label="Search all articles by article number or knitting code"
+                      />
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <label htmlFor="article-view-page-size" className="text-[11px] font-medium text-gray-600 whitespace-nowrap">
+                        Articles / page
+                      </label>
+                      <select
+                        id="article-view-page-size"
+                        className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5"
+                        value={articleViewLimit}
+                        onChange={(e) => { setArticleViewLimit(Number(e.target.value)); setArticleViewPage(1); }}
+                        aria-label="How many distinct articles to show per page"
+                      >
+                        <option value={10}>10</option>
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                    </div>
                     <button
                       type="button"
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700"
@@ -543,6 +575,7 @@ const ProductionSupervisorPage = () => {
                               <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Status</th>
                               <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Progress</th>
                               <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Priority</th>
+                              <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300">Actions</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -555,6 +588,7 @@ const ProductionSupervisorPage = () => {
                                   <td className={`px-1.5 py-2.5 text-[12px] text-gray-500 border border-gray-300 ${rowIndex > 0 ? 'border-t border-t-gray-400' : ''}`}>—</td>
                                   <td className={`px-1.5 py-2.5 text-[12px] text-gray-500 border border-gray-300 ${rowIndex > 0 ? 'border-t border-t-gray-400' : ''}`}>—</td>
                                   <td className={`px-1.5 py-2.5 text-[12px] text-gray-500 border border-gray-300 ${rowIndex > 0 ? 'border-t border-t-gray-400' : ''}`}>—</td>
+                                  <td className={`px-1.5 py-2.5 text-right pr-[10px] border border-gray-300 ${rowIndex > 0 ? 'border-t border-t-gray-400' : ''}`}>—</td>
                                 </tr>
                               ) : (
                                 row.orders.map((ord, idx) => (
@@ -562,7 +596,14 @@ const ProductionSupervisorPage = () => {
                                     {idx === 0 && (
                                       <td rowSpan={row.orders.length} className={`pl-[10px] pr-1 py-2.5 text-[12px] font-medium text-gray-900 align-top border border-gray-300 border-r-2 border-r-gray-400 bg-gray-50/70 ${rowIndex > 0 ? 'border-t border-t-gray-400' : ''}`}>{row.articleNumber || row.factoryCode}</td>
                                     )}
-                                    <td className={`px-1.5 py-2.5 text-[12px] text-gray-700 border border-gray-300 ${rowIndex > 0 && idx === 0 ? 'border-t border-t-gray-400' : ''}`}>{ord.orderNumber ?? '—'}</td>
+                                    <td className={`px-1.5 py-2.5 text-[12px] text-gray-700 border border-gray-300 ${rowIndex > 0 && idx === 0 ? 'border-t border-t-gray-400' : ''}`}>
+                                      <div>{ord.orderNumber ?? '—'}</div>
+                                      {ord.orderNote && (
+                                        <div className="text-[10px] text-gray-500 font-medium truncate max-w-[180px]" title={ord.orderNote}>
+                                          {ord.orderNote}
+                                        </div>
+                                      )}
+                                    </td>
                                     <td className={`px-1.5 py-2.5 text-[12px] border border-gray-300 ${rowIndex > 0 && idx === 0 ? 'border-t border-t-gray-400' : ''}`}>{ord.plannedQuantity != null ? ord.plannedQuantity.toLocaleString() : '—'}</td>
                                     <td className={`px-1.5 py-2.5 border border-gray-300 ${rowIndex > 0 && idx === 0 ? 'border-t border-t-gray-400' : ''}`}>
                                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${getStatusBadge(ord.orderStatus ?? ord.status ?? '')}`}>{ord.orderStatus ?? ord.status ?? '—'}</span>
@@ -570,6 +611,25 @@ const ProductionSupervisorPage = () => {
                                     <td className={`px-1.5 py-2.5 text-[12px] border border-gray-300 ${rowIndex > 0 && idx === 0 ? 'border-t border-t-gray-400' : ''}`}>{ord.progress != null ? `${ord.progress}%` : '—'}</td>
                                     <td className={`px-1.5 py-2.5 border border-gray-300 ${rowIndex > 0 && idx === 0 ? 'border-t border-t-gray-400' : ''}`}>
                                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${getPriorityBadge(ord.orderPriority ?? ord.priority ?? '')}`}>{ord.orderPriority ?? ord.priority ?? '—'}</span>
+                                    </td>
+                                    <td className={`px-1.5 py-2.5 text-right pr-[10px] border border-gray-300 ${rowIndex > 0 && idx === 0 ? 'border-t border-t-gray-400' : ''}`}>
+                                      {ord.articleId ? (
+                                        <button
+                                          type="button"
+                                          className="w-7 h-7 inline-flex items-center justify-center bg-gray-50 text-gray-500 border border-gray-200 rounded hover:bg-gray-100"
+                                          onClick={() => handleViewArticleLogs({
+                                            id: ord.articleId,
+                                            articleNumber: row.articleNumber || row.factoryCode,
+                                            orderId: ord.orderId ? String(ord.orderId) : undefined,
+                                          })}
+                                          title="View floor and quantity activity logs"
+                                          aria-label={`View logs for article ${row.articleNumber || row.factoryCode}`}
+                                        >
+                                          <i className="ri-file-list-line text-xs" aria-hidden="true" />
+                                        </button>
+                                      ) : (
+                                        '—'
+                                      )}
                                     </td>
                                   </tr>
                                 ))
@@ -579,11 +639,47 @@ const ProductionSupervisorPage = () => {
                         </table>
                       </div>
                       <div className="p-[10px] pt-4 flex flex-wrap items-center justify-between gap-4 border-t border-gray-100">
-                        <div className="text-[11px] font-medium text-[#495057]">Page {articleViewPage} of {articleViewTotalPages} · {articleViewTotal} article(s)</div>
+                        <div className="text-[11px] font-medium text-[#495057]">Showing {articleViewTotal === 0 ? 0 : (articleViewPage - 1) * articleViewLimit + 1} to {Math.min(articleViewPage * articleViewLimit, articleViewTotal)} of {articleViewTotal} article(s)</div>
                         <div className="flex items-center gap-1">
-                          <button className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30" onClick={() => setArticleViewPage((p) => Math.max(1, p - 1))} disabled={articleViewPage <= 1}>Prev</button>
-                          <span className="px-2 text-[11px] text-gray-500">{articleViewPage}</span>
-                          <button className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30" onClick={() => setArticleViewPage((p) => Math.min(articleViewTotalPages, p + 1))} disabled={articleViewPage >= articleViewTotalPages}>Next</button>
+                          <button
+                            type="button"
+                            className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                            onClick={() => handleArticleViewPageChange(articleViewPage - 1)}
+                            disabled={articleViewPage <= 1 || articleViewLoading}
+                          >
+                            Prev
+                          </button>
+                          {Array.from({ length: Math.min(articleViewTotalPages, 7) }, (_, i) => {
+                            const pageNum =
+                              articleViewTotalPages <= 7
+                                ? i + 1
+                                : articleViewPage <= 4
+                                  ? i + 1
+                                  : articleViewPage >= articleViewTotalPages - 3
+                                    ? articleViewTotalPages - 6 + i
+                                    : articleViewPage - 3 + i;
+                            return (
+                              <button
+                                key={pageNum}
+                                type="button"
+                                onClick={() => handleArticleViewPageChange(pageNum)}
+                                disabled={articleViewLoading}
+                                className={`w-7 h-7 flex items-center justify-center text-[11px] font-bold rounded ${
+                                  articleViewPage === pageNum ? 'bg-purple-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-50'
+                                }`}
+                              >
+                                {pageNum}
+                              </button>
+                            );
+                          })}
+                          <button
+                            type="button"
+                            className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                            onClick={() => handleArticleViewPageChange(articleViewPage + 1)}
+                            disabled={articleViewPage >= articleViewTotalPages || articleViewLoading}
+                          >
+                            Next
+                          </button>
                         </div>
                       </div>
                     </>
@@ -599,6 +695,20 @@ const ProductionSupervisorPage = () => {
                     >
                       <i className="ri-filter-3-line text-xs"></i> Filters {hasActiveFilters && <span className="ml-1">●</span>}
                     </button>
+                    <label className="relative flex items-center">
+                      <span className="sr-only">Sort orders</span>
+                      <i className="ri-sort-desc absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none" aria-hidden="true"></i>
+                      <select
+                        className="appearance-none bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded pl-7 pr-6 py-1.5 hover:bg-gray-50 focus:ring-0 focus:border-purple-300 cursor-pointer"
+                        value={sortBy}
+                        onChange={(e) => handleSortChange(e.target.value)}
+                        aria-label="Sort orders"
+                      >
+                        <option value="createdAt:desc">Newest first</option>
+                        <option value="createdAt:asc">Oldest first</option>
+                      </select>
+                      <i className="ri-arrow-down-s-line absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none" aria-hidden="true"></i>
+                    </label>
                     {hasActiveFilters && (
                       <button type="button" className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[11px] font-bold rounded hover:bg-gray-50" onClick={clearFilters}>
                         <i className="ri-close-line text-xs"></i> Clear
@@ -686,6 +796,11 @@ const ProductionSupervisorPage = () => {
                               </td>
                               <td className="px-1.5 py-2.5 border border-gray-200">
                                 <div className="text-[12px] font-bold text-gray-900">{order.orderNumber || order.id}</div>
+                                {order.orderNote && (
+                                  <div className="text-[11px] text-gray-700 font-medium truncate max-w-[240px]" title={order.orderNote}>
+                                    {order.orderNote}
+                                  </div>
+                                )}
                                 <div className="text-[10px] text-gray-500">{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}</div>
                               </td>
                               <td className="px-1.5 py-2.5 text-[12px] font-medium text-gray-600 border border-gray-200">{order.articles.length} · Qty {order.articles.reduce((s, a) => s + (a.plannedQuantity || 0), 0).toLocaleString()}</td>
@@ -735,11 +850,21 @@ const ProductionSupervisorPage = () => {
       {/* Side drawer for modals - opens from right */}
       {isDrawerOpen && (
         <>
-          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => { closeViewModal(); closeOrderLogsModal(); }} aria-hidden />
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => { closeViewModal(); closeOrderLogsModal(); closeArticleLogsModal(); }} aria-hidden />
           <div className="fixed inset-y-0 right-0 w-full max-w-2xl bg-white shadow-2xl z-50 flex flex-col animate-slide-in-right">
             <div className="flex-1 overflow-hidden flex flex-col">
               {showViewModal && selectedOrder && <OrderViewModal order={selectedOrder} onClose={closeViewModal} embedInDrawer />}
               {showOrderLogsModal && selectedOrder && <OrderLogsModal orderId={selectedOrder.id} orderNumber={selectedOrder.orderNumber} isOpen onClose={closeOrderLogsModal} embedInDrawer />}
+              {showArticleLogsModal && selectedArticle?.id && (
+                <ArticleLogsModal
+                  articleId={selectedArticle.id}
+                  articleNumber={selectedArticle.articleNumber}
+                  orderId={selectedArticle.orderId}
+                  isOpen
+                  onClose={closeArticleLogsModal}
+                  embedInDrawer
+                />
+              )}
             </div>
           </div>
         </>

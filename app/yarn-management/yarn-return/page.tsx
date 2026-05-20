@@ -2011,23 +2011,34 @@ const YarnReturnPage = () => {
     [getAssignmentItemsForOrder]
   );
 
-  /** Check if all cones for a specific article are returned. Matches by articleId or articleNumber. */
+  /** Cones on an order that belong to one article (by id or article number). */
+  const conesForArticle = useCallback((order: ProductionOrder, articleId: string | undefined): Cone[] => {
+    const art = order.articles?.find((a) => normId(a.id ?? (a as { _id?: string })._id) === normId(articleId));
+    const artNumber = art?.articleNumber?.trim();
+    const hasArticleInfo = order.cones.some((c) => c.articleId || c.articleNumber);
+    if (!hasArticleInfo) return order.cones;
+    return order.cones.filter(
+      (c) =>
+        normId(c.articleId) === normId(articleId) ||
+        (artNumber && c.articleNumber && String(c.articleNumber).trim() === artNumber)
+    );
+  }, []);
+
+  /** Awaiting-return cone count for one article only (not whole order). */
+  const awaitingConesForArticle = useCallback(
+    (order: ProductionOrder, articleId: string | undefined): number =>
+      conesForArticle(order, articleId).filter(coneIsAwaitingReturn).length,
+    [conesForArticle]
+  );
+
+  /** True when every cone for this article on the order is returned (requires loaded cone rows). */
   const isArticleAllConesReturned = useCallback(
     (order: ProductionOrder, articleId: string | undefined): boolean => {
-      const art = order.articles?.find((a) => normId(a.id ?? (a as any)._id) === normId(articleId));
-      const artNumber = art?.articleNumber?.trim();
-      const hasArticleInfo = order.cones.some((c) => c.articleId || c.articleNumber);
-      const conesForArticle = hasArticleInfo
-        ? order.cones.filter(
-            (c) =>
-              normId(c.articleId) === normId(articleId) ||
-              (artNumber && c.articleNumber && String(c.articleNumber).trim() === artNumber)
-          )
-        : order.cones;
-      if (conesForArticle.length === 0) return false;
-      return conesForArticle.length > 0 && !conesForArticle.some(coneIsAwaitingReturn);
+      const scoped = conesForArticle(order, articleId);
+      if (scoped.length === 0) return false;
+      return !scoped.some(coneIsAwaitingReturn);
     },
-    []
+    [conesForArticle]
   );
 
   const isInitialLoad = machineAssignmentsLoading || (ordersLoading && orders.length === 0);
@@ -3088,49 +3099,41 @@ const YarnReturnPage = () => {
           assignmentForReturn?.id ?? (assignmentForReturn as { _id?: string } | null)?._id;
 
         if (assignmentIdForReturn) {
-          const allItems = getAssignmentItemsForOrder(updatedOrder.id, assignmentForReturn);
-          const articleIdsToUpdate = Array.from(
-            new Set(
-              [
-                ...results.map((r) => r.cone.articleId).filter(Boolean),
-                ...(selectedArticleRow?.articleId ? [selectedArticleRow.articleId] : []),
-                ...allItems.map((i) => i.articleId).filter(Boolean),
-              ].map(String)
-            )
+          const returnedArticleIds = Array.from(
+            new Set(results.map((r) => r.cone.articleId).filter(Boolean).map(String))
           );
-          const itemsToUpdate =
-            articleIdsToUpdate.length > 0
-              ? articleIdsToUpdate
-                  .map((aid) =>
-                    getAssignmentItemForArticle(updatedOrder.id, aid, assignmentForReturn)
-                  )
-                  .filter((x): x is NonNullable<typeof x> => x != null)
-              : allItems
-                  .map((i) => ({ itemId: i.itemId, articleNumber: i.articleNumber }))
-                  .filter((x) => !!x.itemId);
-          const pendingBefore = orderForSubmit.cones.filter(coneIsAwaitingReturn).length;
-          const justReturnedLastBatch = results.length >= pendingBefore;
+          const itemsToUpdate = returnedArticleIds
+            .map((aid) => {
+              const row = getAssignmentItemForArticle(updatedOrder.id, aid, assignmentForReturn);
+              return row ? { ...row, articleId: aid } : null;
+            })
+            .filter((x): x is NonNullable<typeof x> => x != null);
+
           if (itemsToUpdate.length > 0) {
             try {
+              let anyCompleted = false;
               for (const item of itemsToUpdate) {
-                const articleId = allItems.find((i) => i.itemId === item.itemId)?.articleId;
+                const returnedThisBatch = results.filter(
+                  (r) => normId(r.cone.articleId) === normId(item.articleId)
+                ).length;
+                const pendingBeforeArticle = awaitingConesForArticle(orderForSubmit, item.articleId);
+                const justReturnedLastBatchForArticle =
+                  returnedThisBatch > 0 && returnedThisBatch >= pendingBeforeArticle;
                 const allReturned =
-                  justReturnedLastBatch ||
-                  isArticleAllConesReturned(updatedOrder, articleId) ||
-                  updatedOrder.status === "Returned";
+                  justReturnedLastBatchForArticle ||
+                  isArticleAllConesReturned(updatedOrder, item.articleId);
                 const yarnReturnStatus = allReturned ? "Completed" : "In Progress";
+                if (allReturned) anyCompleted = true;
                 await updateAssignmentItemYarnReturnStatus(
                   assignmentIdForReturn,
                   item.itemId,
                   yarnReturnStatus
                 );
               }
-              const anyCompleted =
-                justReturnedLastBatch || updatedOrder.status === "Returned";
               toast.success(
                 anyCompleted
-                  ? "Assignment item return status updated."
-                  : "Assignment item marked in progress."
+                  ? "Assignment yarn return marked completed for returned article(s)."
+                  : "Assignment yarn return marked in progress for returned article(s)."
               );
               if (!showQuickReturnDrawer && selectedMachineAssignment) {
                 await loadOrdersForMachine(selectedMachineAssignment, {

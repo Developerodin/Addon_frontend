@@ -344,6 +344,60 @@ export async function getYarnIssuePendingSummary(): Promise<YarnIssuePendingSumm
   return res.json() as Promise<YarnIssuePendingSummary>;
 }
 
+/** One machine's pending knitting workload from active assignment queue. */
+export interface MachinePendingQuantityResult {
+  machineId: string;
+  machineCode: string | null;
+  activeNeedle: string | null;
+  pendingQuantity: number;
+  activeItemCount: number;
+  generatedAt?: string;
+}
+
+/** Batch response for machine picker drawer. */
+export interface MachinePendingQuantitiesResponse {
+  generatedAt: string;
+  results: MachinePendingQuantityResult[];
+}
+
+/**
+ * Pending knitting quantity for one machine (active queue only).
+ * GET .../machines/:machineId/pending-quantity
+ */
+export async function getMachinePendingQuantity(machineId: string): Promise<MachinePendingQuantityResult> {
+  const res = await fetch(`${BASE}/machines/${encodeURIComponent(machineId)}/pending-quantity`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { message?: string }).message || 'Failed to fetch machine pending quantity');
+  }
+  return res.json() as Promise<MachinePendingQuantityResult>;
+}
+
+/**
+ * Pending knitting quantities for machines shown in the picker drawer.
+ * GET .../machines/pending-quantities?machineIds=id1,id2
+ */
+export async function getMachinePendingQuantities(machineIds: string[]): Promise<MachinePendingQuantitiesResponse> {
+  const ids = [...new Set(machineIds.map((id) => String(id).trim()).filter(Boolean))];
+  if (ids.length === 0) {
+    return { generatedAt: new Date().toISOString(), results: [] };
+  }
+  const q = new URLSearchParams();
+  q.set('machineIds', ids.join(','));
+  const res = await fetch(`${BASE}/machines/pending-quantities?${q.toString()}`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { message?: string }).message || 'Failed to fetch machine pending quantities');
+  }
+  return res.json() as Promise<MachinePendingQuantitiesResponse>;
+}
+
 /** GET /completed-items – assignments with completed PO items (populated). Used for yarn-return machine view. */
 export async function getCompletedItemsAssignments(): Promise<MachineOrderAssignmentTopItems[]> {
   const res = await fetch(`${BASE}/completed-items`, { method: 'GET', headers: getAuthHeaders() });

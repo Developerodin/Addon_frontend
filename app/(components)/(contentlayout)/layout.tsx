@@ -1,6 +1,5 @@
 "use client"
 import PrelineScript from "@/app/PrelineScript"
-import Backtotop from "@/shared/layout-components/backtotop/backtotop"
 import Footer from "@/shared/layout-components/footer/footer"
 import Header from "@/shared/layout-components/header/header"
 import Sidebar from "@/shared/layout-components/sidebar/sidebar"
@@ -61,7 +60,6 @@ const Layout = ({ children, }: any) => {
           </NavigationProvider>
           <Footer />
         </div>
-        <Backtotop />
         <PrelineScript />
       </Fragment>
     </>
