@@ -11,6 +11,7 @@ import ShortTermStorage from "./components/ShortTermStorage";
 import StoragePreferences from "./components/StoragePreferences";
 import UnallocatedBoxes from "./components/UnallocatedBoxes";
 import AllocatedBoxes from "./components/AllocatedBoxes";
+import BoxConesTracker from "./components/BoxConesTracker";
 import {
   RackLocation,
   PackedBox,
@@ -46,7 +47,7 @@ const YarnStorageContent = () => {
   const user = useSelector((state: any) => state.auth?.user);
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<
-    "unallocated" | "allocated" | "long-term" | "short-term"
+    "unallocated" | "allocated" | "long-term" | "short-term" | "tracker"
   >("unallocated");
   const [showPreferences, setShowPreferences] = useState(false);
 
@@ -412,6 +413,19 @@ const YarnStorageContent = () => {
                 <div className="absolute bottom-0 left-0 w-full h-0.5 bg-purple-600 rounded-t-full"></div>
               )}
             </button>
+            <button
+              onClick={() => setActiveTab("tracker")}
+              className={`px-3 py-2 text-[11px] font-bold transition-colors relative ${activeTab === "tracker"
+                ? "text-purple-600"
+                : "text-gray-600 hover:text-gray-900"
+                }`}
+            >
+              <i className="ri-search-eye-line me-1.5 text-xs" aria-hidden />
+              Box &amp; Cones Tracker
+              {activeTab === "tracker" && (
+                <div className="absolute bottom-0 left-0 w-full h-0.5 bg-purple-600 rounded-t-full" />
+              )}
+            </button>
           </div>
         </div>
 
@@ -439,7 +453,7 @@ const YarnStorageContent = () => {
                 showEmptySlots: preferences.showEmptySlots,
               }}
             />
-          ) : (
+          ) : activeTab === "short-term" ? (
             <ShortTermStorage
               inventory={shortTermInventory}
               boxes={boxes}
@@ -451,6 +465,8 @@ const YarnStorageContent = () => {
                 showEmptySlots: preferences.showEmptySlots,
               }}
             />
+          ) : (
+            <BoxConesTracker />
           )}
         </div>
       </div>

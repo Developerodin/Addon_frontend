@@ -99,11 +99,21 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
     fetchReportData();
   }, [isOpen, zoneType]);
 
-  const yarnTypes = summary?.yarnTypes ?? new Set([
-    ...boxes.map((b) => b.yarnName || "Unknown"),
-    ...cones.map((c) => c.yarnName || "Unknown"),
-  ]).size;
+  const isLongTerm = zoneType === "LT";
 
+  const yarnTypes =
+    summary?.yarnTypes ??
+    new Set(
+      isLongTerm
+        ? boxes.map((b) => b.yarnName || "Unknown")
+        : cones.map((c) => c.yarnName || "Unknown")
+    ).size;
+
+  const totalBoxGrossWeight = boxes.reduce((sum, b) => sum + (b.boxWeight ?? 0), 0);
+  const totalBoxNetWeight = boxes.reduce(
+    (sum, b) => sum + (b.boxWeight ?? 0) - (b.tearweight ?? 0),
+    0
+  );
   const totalConeGrossWeight = cones.reduce(
     (sum, c) => sum + (c.coneWeight ?? 0),
     0
@@ -114,7 +124,7 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
   );
 
   const handleDownloadExcel = () => {
-    const hasData = boxes.length > 0 || cones.length > 0;
+    const hasData = isLongTerm ? boxes.length > 0 : boxes.length > 0 || cones.length > 0;
     if (!hasData) {
       toast.error("No data to export");
       return;
@@ -173,8 +183,9 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
 
   if (!isOpen) return null;
 
-  const totalItems = boxes.length + cones.length;
-  const hasData = totalItems > 0;
+  const hasData = isLongTerm
+    ? (summary?.totalBoxes ?? boxes.length) > 0
+    : boxes.length > 0 || cones.length > 0;
 
   return (
     <>
@@ -215,7 +226,9 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
                 <div>
                   <div className="font-semibold text-gray-900">Download Excel</div>
                   <div className="text-xs text-gray-500">
-                    Export boxes & cones with rack, weight, PO
+                    {isLongTerm
+                      ? "Export boxes with rack, weight, PO"
+                      : "Export boxes & cones with rack, weight, PO"}
                   </div>
                 </div>
               </button>
@@ -229,7 +242,9 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
                 <div>
                   <div className="font-semibold text-gray-900">View Summary</div>
                   <div className="text-xs text-gray-500">
-                    Totals, cone gross and net weight, yarn types
+                    {isLongTerm
+                      ? "Totals, box gross and net weight, yarn types"
+                      : "Totals, cone gross and net weight, yarn types"}
                   </div>
                 </div>
               </button>
@@ -243,13 +258,17 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
                 <div>
                   <div className="font-semibold text-gray-900">View Full Report</div>
                   <div className="text-xs text-gray-500">
-                    All boxes & cones with rack, weight, PO
+                    {isLongTerm
+                      ? "All boxes with rack, weight, PO"
+                      : "All boxes & cones with rack, weight, PO"}
                   </div>
                 </div>
               </button>
               {!hasData && !isLoading && (
                 <p className="text-xs text-gray-500 mt-2">
-                  No boxes or cones found in this zone.
+                  {isLongTerm
+                    ? "No boxes found in this zone."
+                    : "No boxes or cones found in this zone."}
                 </p>
               )}
             </div>
@@ -267,34 +286,73 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
                   Zone Summary
                 </h4>
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="text-xs font-medium text-gray-500 uppercase">
-                      Total Cones
-                    </div>
-                    <div className="text-2xl font-bold text-gray-900">{cones.length}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-medium text-gray-500 uppercase">
-                      Yarn Types
-                    </div>
-                    <div className="text-2xl font-bold text-gray-900">{yarnTypes}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-medium text-gray-500 uppercase">
-                      Total cone gross (kg)
-                    </div>
-                    <div className="text-2xl font-bold text-gray-900">
-                      {totalConeGrossWeight.toFixed(2)}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-medium text-gray-500 uppercase">
-                      Total cone net (kg)
-                    </div>
-                    <div className="text-2xl font-bold text-gray-900">
-                      {totalConeNetWeight.toFixed(2)}
-                    </div>
-                  </div>
+                  {isLongTerm ? (
+                    <>
+                      <div>
+                        <div className="text-xs font-medium text-gray-500 uppercase">
+                          Total Boxes
+                        </div>
+                        <div className="text-2xl font-bold text-gray-900">
+                          {summary?.totalBoxes ?? boxes.length}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs font-medium text-gray-500 uppercase">
+                          Yarn Types
+                        </div>
+                        <div className="text-2xl font-bold text-gray-900">{yarnTypes}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs font-medium text-gray-500 uppercase">
+                          Total box gross (kg)
+                        </div>
+                        <div className="text-2xl font-bold text-gray-900">
+                          {(summary?.totalWeight ?? totalBoxGrossWeight).toFixed(2)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs font-medium text-gray-500 uppercase">
+                          Total box net (kg)
+                        </div>
+                        <div className="text-2xl font-bold text-gray-900">
+                          {totalBoxNetWeight.toFixed(2)}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <div className="text-xs font-medium text-gray-500 uppercase">
+                          Total Cones
+                        </div>
+                        <div className="text-2xl font-bold text-gray-900">
+                          {summary?.totalCones ?? cones.length}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs font-medium text-gray-500 uppercase">
+                          Yarn Types
+                        </div>
+                        <div className="text-2xl font-bold text-gray-900">{yarnTypes}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs font-medium text-gray-500 uppercase">
+                          Total cone gross (kg)
+                        </div>
+                        <div className="text-2xl font-bold text-gray-900">
+                          {totalConeGrossWeight.toFixed(2)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs font-medium text-gray-500 uppercase">
+                          Total cone net (kg)
+                        </div>
+                        <div className="text-2xl font-bold text-gray-900">
+                          {(summary?.totalWeight ?? totalConeNetWeight).toFixed(2)}
+                        </div>
+                      </div>
+                    </>
+                  )}
                   <div className="col-span-2">
                     <div className="text-xs font-medium text-gray-500 uppercase">
                       Zone
@@ -314,6 +372,9 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
                 <i className="ri-arrow-left-line" /> Back
               </button>
               <div className="overflow-x-auto border border-gray-200 rounded-lg max-h-[60vh] overflow-y-auto">
+                {isLongTerm && boxes.length === 0 && (
+                  <p className="p-4 text-sm text-gray-500">No boxes in this zone.</p>
+                )}
                 {boxes.length > 0 && (
                   <table className="w-full text-xs">
                     <thead className="bg-gray-50 sticky top-0">
@@ -328,32 +389,44 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
                           Yarn
                         </th>
                         <th className="px-3 py-2 text-right font-bold text-gray-600">
-                          Weight
+                          {isLongTerm ? "Gross (kg)" : "Weight"}
                         </th>
+                        {isLongTerm && (
+                          <th className="px-3 py-2 text-right font-bold text-gray-600">
+                            Net (kg)
+                          </th>
+                        )}
                         <th className="px-3 py-2 text-left font-bold text-gray-600">
                           Rack
                         </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {boxes.map((b) => (
-                        <tr
-                          key={b._id ?? b.boxId ?? b.barcode}
-                          className="border-b border-gray-100 hover:bg-gray-50"
-                        >
-                          <td className="px-3 py-2 font-mono">{b.boxId}</td>
-                          <td className="px-3 py-2 text-primary font-medium">{b.poNumber}</td>
-                          <td className="px-3 py-2 truncate max-w-[120px]" title={b.yarnName}>
-                            {b.yarnName ?? "-"}
-                          </td>
-                          <td className="px-3 py-2 text-right font-bold">{b.boxWeight ?? 0} kg</td>
-                          <td className="px-3 py-2 font-mono">{b.rackCode ?? b.storageLocation ?? "-"}</td>
-                        </tr>
-                      ))}
+                      {boxes.map((b) => {
+                        const gross = b.boxWeight ?? 0;
+                        const net = gross - (b.tearweight ?? 0);
+                        return (
+                          <tr
+                            key={b._id ?? b.boxId ?? b.barcode}
+                            className="border-b border-gray-100 hover:bg-gray-50"
+                          >
+                            <td className="px-3 py-2 font-mono">{b.boxId}</td>
+                            <td className="px-3 py-2 text-primary font-medium">{b.poNumber}</td>
+                            <td className="px-3 py-2 truncate max-w-[120px]" title={b.yarnName}>
+                              {b.yarnName ?? "-"}
+                            </td>
+                            <td className="px-3 py-2 text-right font-bold">{gross}</td>
+                            {isLongTerm && (
+                              <td className="px-3 py-2 text-right font-bold">{net}</td>
+                            )}
+                            <td className="px-3 py-2 font-mono">{b.rackCode ?? b.storageLocation ?? "-"}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
-                {cones.length > 0 && (
+                {!isLongTerm && cones.length > 0 && (
                   <table className="w-full text-xs">
                     <thead className="bg-gray-50 sticky top-0">
                       <tr>

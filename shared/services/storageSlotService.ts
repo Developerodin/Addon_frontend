@@ -43,10 +43,19 @@ export interface SlotWithContents {
   };
 }
 
+/** Zone-level totals from GET /slots/with-contents */
+export interface SlotsWithContentsSummary {
+  totalBoxes: number;
+  totalCones: number;
+  totalWeight: number;
+  yarnTypes: number;
+}
+
 export interface SlotsWithContentsResponse {
   results: SlotWithContents[];
   totalResults: number;
   zoneCode?: string;
+  summary?: SlotsWithContentsSummary;
 }
 
 export interface AddRacksResponse {
@@ -317,6 +326,7 @@ class StorageSlotService {
       results: data.results ?? [],
       totalResults: data.totalResults ?? data.results?.length ?? 0,
       zoneCode: data.zoneCode,
+      summary: data.summary,
     };
   }
 
