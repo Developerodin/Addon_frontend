@@ -2,6 +2,11 @@
 
 import React, { useMemo, useState } from "react";
 import type { ProductionOrder, Article } from "@/shared/services/productionService";
+import {
+  ArticleQrScanPinBanner,
+  ArticleScanToolbarButtons,
+  articleIdsMatch,
+} from "@/shared/components/production/ArticleViewQrScanUi";
 
 export interface ArticleRow {
   article: Article;
@@ -17,6 +22,10 @@ export interface ArticleViewTabProps {
   activeArticleId?: string | null;
   onAssignClick?: () => void;
   onScanContainerClick?: () => void;
+  onScanLabelQrClick?: () => void;
+  onShowAllArticlesChange?: (show: boolean) => void;
+  qrScanPinned?: boolean;
+  onClearQrScanFilter?: () => void;
   showAllArticles?: boolean;
   onShowAllArticlesChange?: (show: boolean) => void;
 }
@@ -44,6 +53,9 @@ export default function ArticleViewTab({
   activeArticleId = null,
   onAssignClick,
   onScanContainerClick,
+  onScanLabelQrClick,
+  qrScanPinned = false,
+  onClearQrScanFilter,
   showAllArticles = false,
   onShowAllArticlesChange,
 }: ArticleViewTabProps) {
@@ -120,16 +132,10 @@ export default function ArticleViewTab({
     return (
       <div className="p-[10px]">
         <div className="flex flex-wrap items-center gap-2 mb-4">
-          {onScanContainerClick && (
-            <button
-              type="button"
-              onClick={onScanContainerClick}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700 shadow-sm transition-colors"
-            >
-              <i className="ri-barcode-line text-xs" />
-              Scan Container
-            </button>
-          )}
+          <ArticleScanToolbarButtons
+            onScanContainerClick={onScanContainerClick}
+            onScanLabelQrClick={onScanLabelQrClick}
+          />
           {onShowAllArticlesChange && (
             <label className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-gray-700 border border-gray-200 rounded bg-white hover:bg-gray-50 cursor-pointer">
               <input type="checkbox" checked={showAllArticles} onChange={(e) => onShowAllArticlesChange(e.target.checked)} className="rounded border-gray-300" />
@@ -150,17 +156,14 @@ export default function ArticleViewTab({
 
   return (
     <div className="p-[10px]">
+      {qrScanPinned && onClearQrScanFilter ? (
+        <ArticleQrScanPinBanner pinned={qrScanPinned} onClear={onClearQrScanFilter} />
+      ) : null}
       <div className="flex flex-wrap items-center gap-2 mb-3">
-        {onScanContainerClick && (
-          <button
-            type="button"
-            onClick={onScanContainerClick}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700 shadow-sm transition-colors"
-          >
-            <i className="ri-barcode-line text-xs" />
-            Scan Container
-          </button>
-        )}
+        <ArticleScanToolbarButtons
+            onScanContainerClick={onScanContainerClick}
+            onScanLabelQrClick={onScanLabelQrClick}
+          />
         {onShowAllArticlesChange && (
           <label className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-gray-700 border border-gray-200 rounded bg-white hover:bg-gray-50 cursor-pointer">
             <input type="checkbox" checked={showAllArticles} onChange={(e) => onShowAllArticlesChange(e.target.checked)} className="rounded border-gray-300" />
@@ -235,7 +238,7 @@ export default function ArticleViewTab({
               const remaining = wash?.remaining ?? Math.max(0, received - transferred);
               const key = (article.id ?? article._id) + "-" + order.id;
               const articleId = article.id ?? article._id;
-              const isActiveRow = Boolean(activeArticleId && articleId && String(articleId) === String(activeArticleId));
+              const isActiveRow = Boolean(activeArticleId && articleId && articleIdsMatch(articleId, activeArticleId) || articleIdsMatch(article._id, activeArticleId));
               return (
                 <tr
                   key={key}

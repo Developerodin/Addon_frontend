@@ -2,6 +2,7 @@ import { API_BASE_URL } from '../data/utilities/api';
 
 export interface ProductionOrder {
   id: string;
+  _id?: string;
   orderNumber: string;
   priority: 'Urgent' | 'High' | 'Medium' | 'Low';
   status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold' | 'Cancelled';
@@ -334,7 +335,8 @@ class ProductionService {
   // Transform API response to match our interfaces
   private transformOrder(order: any): ProductionOrder {
     const transformed = {
-      id: order.id,
+      id: order.id || order._id,
+      _id: order._id || order.id,
       orderNumber: order.orderNumber,
       priority: order.priority,
       status: order.status,
@@ -583,36 +585,27 @@ class ProductionService {
   }
 
   // Floor Operations APIs
-  async getFloorOrders(floor: string, filters: FloorOrderFilters = {}): Promise<ApiResponse<PaginatedResponse<ProductionOrder>>> {
+  async getFloorOrders(
+    floor: string,
+    filters: FloorOrderFilters = {},
+    options?: { cache?: RequestCache }
+  ): Promise<ApiResponse<PaginatedResponse<ProductionOrder>>> {
     const queryParams = new URLSearchParams();
-    
+
     Object.entries(filters).forEach(([key, value]) => {
-      if (value !== undefined && value !== '') {
+      if (value !== undefined && value !== "") {
         queryParams.append(key, String(value));
       }
     });
 
     const queryString = queryParams.toString();
     const endpoint = queryString ? `/floors/${floor}/orders?${queryString}` : `/floors/${floor}/orders`;
-    
-    try {
-      const response = await this.request<any>(endpoint);
-      
-      // Handle both wrapped and direct response formats
-      const responseData = response.success ? response.data : response;
-      
-      // Transform the results
-      const transformedData: PaginatedResponse<ProductionOrder> = {
-        ...responseData,
-        results: responseData.results.map((order: any) => this.transformOrder(order))
-      };
-      
-      return {
-        success: true,
-        data: transformedData
-      };
-    } catch (error) {
-      console.error('Error in getFloorOrders:', error);
+
+    const response = await this.request<any>(endpoint, {
+      cache: options?.cache ?? "default",
+    });
+
+    if (!response.success) {
       return {
         success: false,
         data: {
@@ -620,14 +613,30 @@ class ProductionService {
           page: 1,
           limit: 10,
           totalPages: 0,
-          totalResults: 0
+          totalResults: 0,
         },
-        error: {
-          code: 'FETCH_ERROR',
-          message: error instanceof Error ? error.message : 'Failed to fetch floor orders'
-        }
+        error: response.error ?? {
+          code: "FETCH_ERROR",
+          message: "Failed to fetch floor orders",
+        },
       };
     }
+
+    const responseData = response.data ?? {};
+    const rawResults = Array.isArray(responseData.results) ? responseData.results : [];
+
+    const transformedData: PaginatedResponse<ProductionOrder> = {
+      page: responseData.page ?? 1,
+      limit: responseData.limit ?? rawResults.length,
+      totalPages: responseData.totalPages ?? 1,
+      totalResults: responseData.totalResults ?? rawResults.length,
+      results: rawResults.map((order: unknown) => this.transformOrder(order)),
+    };
+
+    return {
+      success: true,
+      data: transformedData,
+    };
   }
 
   /**

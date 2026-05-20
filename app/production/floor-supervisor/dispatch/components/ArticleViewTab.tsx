@@ -2,6 +2,11 @@
 
 import React, { useMemo, useState } from "react";
 import type { ProductionOrder, Article } from "@/shared/services/productionService";
+import {
+  ArticleQrScanPinBanner,
+  ArticleScanToolbarButtons,
+  articleIdsMatch,
+} from "@/shared/components/production/ArticleViewQrScanUi";
 
 export interface ArticleRow {
   article: Article;
@@ -18,6 +23,10 @@ export interface ArticleViewTabProps {
   activeArticleId?: string | null;
   onAssignClick?: () => void;
   onScanContainerClick?: () => void;
+  onScanLabelQrClick?: () => void;
+  onShowAllArticlesChange?: (show: boolean) => void;
+  qrScanPinned?: boolean;
+  onClearQrScanFilter?: () => void;
   /** Mirrors parent "Show all" toggle (read-only here; parent filters orders). */
   showAllArticles?: boolean;
 }
@@ -48,6 +57,10 @@ export default function ArticleViewTab({
   activeArticleId = null,
   onAssignClick,
   onScanContainerClick,
+  onScanLabelQrClick,
+  onShowAllArticlesChange,
+  qrScanPinned = false,
+  onClearQrScanFilter,
 }: ArticleViewTabProps) {
   const [articleSearch, setArticleSearch] = useState("");
 
@@ -129,18 +142,12 @@ export default function ArticleViewTab({
   if (orders.length === 0) {
     return (
       <div className="p-[10px]">
-        {onScanContainerClick && (
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            <button
-              type="button"
-              onClick={onScanContainerClick}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-teal-600 text-white hover:bg-teal-700 shadow-sm"
-            >
-              <i className="ri-barcode-line text-xs" />
-              Scan Container
-            </button>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <ArticleScanToolbarButtons
+            onScanContainerClick={onScanContainerClick}
+            onScanLabelQrClick={onScanLabelQrClick}
+          />
+        </div>
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
             <i className="ri-file-list-line text-xl text-gray-200" />
@@ -154,17 +161,14 @@ export default function ArticleViewTab({
 
   return (
     <div className="p-[10px]">
+      {qrScanPinned && onClearQrScanFilter ? (
+        <ArticleQrScanPinBanner pinned={qrScanPinned} onClear={onClearQrScanFilter} />
+      ) : null}
       <div className="flex flex-wrap items-center gap-2 mb-3">
-        {onScanContainerClick && (
-          <button
-            type="button"
-            onClick={onScanContainerClick}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-teal-600 text-white hover:bg-teal-700 shadow-sm"
-          >
-            <i className="ri-barcode-line text-xs" />
-            Scan Container
-          </button>
-        )}
+        <ArticleScanToolbarButtons
+            onScanContainerClick={onScanContainerClick}
+            onScanLabelQrClick={onScanLabelQrClick}
+          />
         <div className="relative flex-1 min-w-[140px] max-w-[240px]">
           <input
             type="text"
@@ -216,7 +220,7 @@ export default function ArticleViewTab({
               const remaining = fc?.remaining ?? Math.max(0, received - transferred); // backend sends remaining; fallback for legacy
               const key = (article.id ?? article._id) + "-" + order.id;
               const articleId = article.id ?? article._id;
-              const isActiveRow = Boolean(activeArticleId && articleId && String(articleId) === String(activeArticleId));
+              const isActiveRow = Boolean(activeArticleId && articleId && articleIdsMatch(articleId, activeArticleId) || articleIdsMatch(article._id, activeArticleId));
               return (
                 <tr
                   key={key}

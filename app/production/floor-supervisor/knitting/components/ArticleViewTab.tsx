@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { ProductionOrder, Article } from "@/shared/services/productionService";
 import { listMachineOrderAssignments } from "@/shared/services/machineOrderAssignmentService";
+import { productionArticleRowKey } from "@/shared/utils/productionArticleQr";
 
 export interface ArticleRow {
   article: Article;
@@ -18,9 +19,17 @@ export interface ArticleViewTabProps {
   onShowAllArticlesChange: (show: boolean) => void;
   itemsPerPage: number;
   onItemsPerPageChange: (n: number) => void;
-  onViewOrder: (order: ProductionOrder) => void;
+  onViewOrder: (order: ProductionOrder, article?: Article) => void;
   getStatusBadge: (status: string) => string;
   getPriorityBadge: (priority: string) => string;
+  /** Row key `orderId|articleId` to highlight after QR scan. */
+  highlightedRowKey?: string | null;
+  /** When set, jump to page and scroll this row into view (then call onFocusRowHandled). */
+  focusRowKey?: string | null;
+  onFocusRowHandled?: () => void;
+  onScanQrClick?: () => void;
+  qrScanPinned?: boolean;
+  onClearQrScanFilter?: () => void;
 }
 
 /**
@@ -72,10 +81,17 @@ export default function ArticleViewTab({
   onViewOrder,
   getStatusBadge,
   getPriorityBadge,
+  highlightedRowKey = null,
+  focusRowKey = null,
+  onFocusRowHandled,
+  onScanQrClick,
+  qrScanPinned = false,
+  onClearQrScanFilter,
 }: ArticleViewTabProps) {
   const [articleSearch, setArticleSearch] = useState("");
   const [articlePage, setArticlePage] = useState(1);
   const [articleToMachineMap, setArticleToMachineMap] = useState<Map<string, string>>(new Map());
+  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
 
   useEffect(() => {
     let cancelled = false;
@@ -143,6 +159,23 @@ export default function ArticleViewTab({
     const start = (safeArticlePage - 1) * itemsPerPage;
     return filteredRows.slice(start, start + itemsPerPage);
   }, [filteredRows, safeArticlePage, itemsPerPage]);
+
+  useEffect(() => {
+    if (!focusRowKey) return;
+    const idx = filteredRows.findIndex(
+      ({ order, article }) => productionArticleRowKey(order, article) === focusRowKey
+    );
+    if (idx < 0) {
+      onFocusRowHandled?.();
+      return;
+    }
+    const targetPage = Math.floor(idx / itemsPerPage) + 1;
+    setArticlePage(targetPage);
+    window.setTimeout(() => {
+      rowRefs.current.get(focusRowKey)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      onFocusRowHandled?.();
+    }, 150);
+  }, [focusRowKey, filteredRows, itemsPerPage, onFocusRowHandled]);
 
   /**
    * Exports every row matching search and Show-all filter (not only the current page).
@@ -242,7 +275,31 @@ export default function ArticleViewTab({
 
   return (
     <div className="p-[10px]">
-      <div className="flex flex-wrap items-center gap-2 mb-3">
+      {qrScanPinned && onClearQrScanFilter ? (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2">
+          <p className="text-[11px] text-purple-900 font-medium">
+            Showing article from label QR scan only.
+          </p>
+          <button
+            type="button"
+            onClick={onClearQrScanFilter}
+            className="text-[11px] font-bold text-purple-700 hover:text-purple-900 underline"
+          >
+            Show all articles
+          </button>
+        </div>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        {onScanQrClick && (
+          <button
+            type="button"
+            onClick={onScanQrClick}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded bg-purple-600 text-white hover:bg-purple-700 shadow-sm"
+          >
+            <i className="ri-qr-scan-2-line text-xs" aria-hidden />
+            Scan QR
+          </button>
+        )}
         <div className="relative flex-1 min-w-[160px] max-w-[260px]">
           <input
             type="text"
@@ -331,8 +388,19 @@ export default function ArticleViewTab({
               const m4 = article.floorQuantities?.knitting?.m4Quantity ?? 0;
               const isOverproduction = completed > planned;
               const key = (article.id ?? article._id) + "-" + order.id;
+              const rowKey = productionArticleRowKey(order, article);
+              const isHighlighted = Boolean(highlightedRowKey && rowKey === highlightedRowKey);
               return (
-                <tr key={key} className="hover:bg-gray-50 transition-colors group">
+                <tr
+                  key={key}
+                  ref={(el) => {
+                    if (el) rowRefs.current.set(rowKey, el);
+                    else rowRefs.current.delete(rowKey);
+                  }}
+                  className={`hover:bg-gray-50 transition-colors group ${
+                    isHighlighted ? "ring-2 ring-purple-500 ring-inset bg-purple-50/60" : ""
+                  }`}
+                >
                   <td className="px-2 py-1.5 border-r border-gray-300">
                     <div className="font-medium text-gray-900">{article.articleNumber ?? "—"}</div>
                     <div className="text-gray-500 text-[10px]">{article.linkingType ?? "N/A"}</div>
@@ -377,7 +445,7 @@ export default function ArticleViewTab({
                       <button
                         type="button"
                         className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-400 border border-blue-100 rounded hover:bg-blue-100"
-                        onClick={() => onViewOrder(order)}
+                        onClick={() => onViewOrder(order, article)}
                         title="View order"
                         aria-label={`View order ${order.orderNumber ?? order.id}`}
                       >

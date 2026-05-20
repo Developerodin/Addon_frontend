@@ -21,9 +21,21 @@ export interface ArticleViewTabProps {
   onAssignClick?: () => void;
   /** Called when user clicks Scan Container. */
   onScanContainerClick?: () => void;
+  /** Called when user clicks Scan Label QR. */
+  onScanLabelQrClick?: () => void;
   /** When true, show all articles with received > 0. When false, only remaining > 0. */
   showAllArticles?: boolean;
   onShowAllArticlesChange?: (show: boolean) => void;
+  /** Article view is filtered to a single QR scan result. */
+  qrScanPinned?: boolean;
+  onClearQrScanFilter?: () => void;
+}
+
+/** Compare article ids from QR vs row. */
+function articleIdsMatch(a: unknown, b: unknown): boolean {
+  const left = String(a ?? "").trim();
+  const right = String(b ?? "").trim();
+  return Boolean(left && right && left === right);
 }
 
 /** Flattens orders into rows. Parent already filtered articles. */
@@ -52,8 +64,11 @@ export default function ArticleViewTab({
   activeArticleId = null,
   onAssignClick,
   onScanContainerClick,
+  onScanLabelQrClick,
   showAllArticles = false,
   onShowAllArticlesChange,
+  qrScanPinned = false,
+  onClearQrScanFilter,
 }: ArticleViewTabProps) {
   const [articleSearch, setArticleSearch] = useState("");
 
@@ -137,6 +152,16 @@ export default function ArticleViewTab({
               Scan Container
             </button>
           )}
+          {onScanLabelQrClick && (
+            <button
+              type="button"
+              onClick={onScanLabelQrClick}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border border-purple-300 text-purple-700 bg-white hover:bg-purple-50 shadow-sm"
+            >
+              <i className="ri-qr-scan-2-line text-xs" aria-hidden />
+              Scan Label QR
+            </button>
+          )}
         </div>
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
@@ -151,6 +176,20 @@ export default function ArticleViewTab({
 
   return (
     <div className="p-[10px]">
+      {qrScanPinned && onClearQrScanFilter ? (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2">
+          <p className="text-[11px] text-purple-900 font-medium">
+            Showing article from label QR scan only.
+          </p>
+          <button
+            type="button"
+            onClick={onClearQrScanFilter}
+            className="text-[11px] font-bold text-purple-700 hover:text-purple-900 underline"
+          >
+            Show all articles
+          </button>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2 mb-3">
         {onScanContainerClick && (
           <button
@@ -160,6 +199,16 @@ export default function ArticleViewTab({
           >
             <i className="ri-barcode-line text-xs" />
             Scan Container
+          </button>
+        )}
+        {onScanLabelQrClick && (
+          <button
+            type="button"
+            onClick={onScanLabelQrClick}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border border-purple-300 text-purple-700 bg-white hover:bg-purple-50 shadow-sm"
+          >
+            <i className="ri-qr-scan-2-line text-xs" aria-hidden />
+            Scan Label QR
           </button>
         )}
         {onShowAllArticlesChange && (
@@ -240,7 +289,11 @@ export default function ArticleViewTab({
               const remaining = (article.floorQuantities?.linking?.remaining ?? received - transferred);
               const key = (article.id ?? article._id) + "-" + order.id;
               const articleId = article.id ?? article._id;
-              const isActiveRow = Boolean(activeArticleId && articleId && String(articleId) === String(activeArticleId));
+              const isActiveRow = Boolean(
+                activeArticleId &&
+                  (articleIdsMatch(articleId, activeArticleId) ||
+                    articleIdsMatch(article._id, activeArticleId))
+              );
               return (
                 <tr
                   key={key}

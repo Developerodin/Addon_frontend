@@ -78,16 +78,26 @@ function assignmentItemStatusBadgeClass(status: OrderStatusType | undefined): st
 /**
  * Prioritized queue item that is knitting "running" for this machine: first In Progress among prioritized non–on-hold items.
  */
-function getRunningArticleLabel(a: MachineOrderAssignment): string {
+function getRunningArticleItem(
+  a: MachineOrderAssignment
+): MachineOrderAssignment["productionOrderItems"][number] | null {
   const items = (a.productionOrderItems ?? [])
     .filter((i) => i.priority != null && i.status !== OrderStatus.ON_HOLD)
     .sort((x, y) => (x.priority ?? 999) - (y.priority ?? 999));
-  const running = items.find((i) => i.status === OrderStatus.IN_PROGRESS);
-  if (!running) return "";
-  const order = running.orderNumber?.trim();
-  const art = running.articleNumber?.trim();
-  if (order && art) return `${order} · ${art}`;
-  return art || order || "";
+  return items.find((i) => i.status === OrderStatus.IN_PROGRESS) ?? null;
+}
+
+/**
+ * Accessible label for the running-article table cell (order, note, date, article).
+ */
+function getRunningArticleAriaLabel(item: NonNullable<ReturnType<typeof getRunningArticleItem>>): string {
+  const parts = [
+    item.orderNumber?.trim(),
+    item.orderNote?.trim(),
+    item.orderCreatedAt ? new Date(item.orderCreatedAt).toLocaleDateString() : "",
+    item.articleNumber?.trim(),
+  ].filter(Boolean);
+  return parts.join(" · ");
 }
 
 export interface MachineViewTabProps {
@@ -400,7 +410,7 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
                   {paginatedRows.map((row) => {
                     const { poCount, articleCount } = getItemCounts(row);
                     const needleCount = needleOptionsCount(row);
-                    const runningArticle = getRunningArticleLabel(row);
+                    const runningItem = getRunningArticleItem(row);
                     const isPlaceholder = row.id.startsWith("placeholder-");
                     const machineIdForLogs = getMachineIdFromRow(row);
                     return (
@@ -422,13 +432,34 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
                           {needleCount}
                         </td>
                         <td
-                          className="px-2 py-1.5 text-left border-r border-gray-300 text-gray-800 min-w-[140px] max-w-[220px]"
-                          title={runningArticle || undefined}
+                          className="px-2 py-1.5 text-left border-r border-gray-300 text-gray-800 min-w-[160px] max-w-[240px]"
+                          title={runningItem ? getRunningArticleAriaLabel(runningItem) : undefined}
                         >
-                          {runningArticle ? (
-                            <span className="block truncate text-[11px] font-medium" aria-label={`Running article: ${runningArticle}`}>
-                              {runningArticle}
-                            </span>
+                          {runningItem ? (
+                            <div
+                              className="min-w-0"
+                              aria-label={`Running article: ${getRunningArticleAriaLabel(runningItem)}`}
+                            >
+                              <div className="text-[11px] font-bold text-gray-900 truncate">
+                                {runningItem.orderNumber ?? "—"}
+                                {runningItem.articleNumber ? (
+                                  <span className="font-medium text-gray-700"> · {runningItem.articleNumber}</span>
+                                ) : null}
+                              </div>
+                              {runningItem.orderNote ? (
+                                <div
+                                  className="text-[10px] text-gray-700 font-medium truncate"
+                                  title={runningItem.orderNote}
+                                >
+                                  {runningItem.orderNote}
+                                </div>
+                              ) : null}
+                              <div className="text-[10px] text-gray-500">
+                                {runningItem.orderCreatedAt
+                                  ? new Date(runningItem.orderCreatedAt).toLocaleDateString()
+                                  : "N/A"}
+                              </div>
+                            </div>
                           ) : (
                             <span className="text-gray-400" aria-label="No article in progress on this machine">
                               —

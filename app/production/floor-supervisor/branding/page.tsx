@@ -14,6 +14,8 @@ import UpcomingTab from "../components/UpcomingTab";
 import TransferItemsInput from "./components/TransferItemsInput";
 import { productService } from "@/shared/services/productService";
 import { containersMasterService, hasActiveItems, getContainerArticles } from "@/shared/services/containersMasterService";
+import { useProductionArticleQrScan } from "@/shared/hooks/useProductionArticleQrScan";
+import ArticleQrScanDrawer from "@/shared/components/production/ArticleQrScanDrawer";
 import { teamMasterService, type TeamMaster, PRODUCTION_FLOORS } from "@/shared/services/teamMasterService";
 import { getArticleMongoId, resolveNextFloorFromProcesses } from "@/shared/utils/productionUtils";
 
@@ -211,6 +213,18 @@ const BrandingFloorSupervisorPage = () => {
   };
 
   const paginatedOrders = filterOrdersByReceivedQuantity(orders, showAllArticles);
+
+  const qrScan = useProductionArticleQrScan({
+    floorApiName: "Branding",
+    floorKey: "branding",
+    floorLabel: "Branding",
+    filterOrdersForLookup: (all) => filterOrdersByReceivedQuantity(all, true),
+    setOrders,
+    setShowAllArticles,
+    onArticleFound: (id) => setActiveArticleId(id),
+    goToArticleView: () => setActiveTab("article-view"),
+  });
+  const articleViewOrders = qrScan.qrPinnedArticleOrders ?? paginatedOrders;
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -565,6 +579,16 @@ const BrandingFloorSupervisorPage = () => {
   const handleGetContainerByBarcode = async () => {
     const barcode = containerScanBarcode.trim();
     if (!barcode) return;
+
+        if (await qrScan.tryScanFromContainerInput(barcode)) {
+      setContainerScanLoading(false);
+      setShowContainerScanDrawer(false);
+      setContainerScanBarcode("");
+      return;
+    }
+
+
+
     setContainerScanLoading(true);
     setContainerScanned(null);
     try {
@@ -800,7 +824,7 @@ const BrandingFloorSupervisorPage = () => {
             <UpcomingTab floorName="Branding" />
           ) : activeTab === "article-view" ? (
             <ArticleViewTab
-              orders={paginatedOrders}
+              orders={articleViewOrders}
               onViewOrder={handleViewOrder}
               onUpdateOrder={handleUpdateOrder}
               getStatusBadge={getStatusBadge}
@@ -808,7 +832,14 @@ const BrandingFloorSupervisorPage = () => {
               activeArticleId={activeArticleId}
               onAssignClick={handleOpenAssignDrawer}
               onScanContainerClick={handleScanContainerClick}
+onScanLabelQrClick={qrScan.openDrawer}
               showAllArticles={showAllArticles}
+              onShowAllArticlesChange={(show) => {
+                setShowAllArticles(show);
+                if (!show) qrScan.clearQrPin();
+              }}
+              qrScanPinned={Boolean(qrScan.qrPinnedArticleOrders)}
+              onClearQrScanFilter={qrScan.clearQrPin}
             />
           ) : (
             <>
@@ -1697,6 +1728,15 @@ const BrandingFloorSupervisorPage = () => {
         </div>
         );
       })()}
+
+      <ArticleQrScanDrawer
+        open={qrScan.showDrawer}
+        floorLabel={qrScan.floorLabel}
+        loading={qrScan.loading}
+        feedback={qrScan.feedback}
+        onClose={qrScan.closeDrawer}
+        onScan={qrScan.handleScan}
+      />
     </div>
   );
 };

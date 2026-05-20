@@ -14,6 +14,14 @@ import MyTeamTab from "./components/MyTeamTab";
 import UpcomingTab from "../components/UpcomingTab";
 import { containersMasterService, type ContainerMaster, hasActiveItems, getContainerArticles } from "@/shared/services/containersMasterService";
 import { teamMasterService, type TeamMaster, PRODUCTION_FLOORS } from "@/shared/services/teamMasterService";
+import { parseProductionArticleQr } from "@/shared/utils/productionArticleQr";
+import {
+  resolveProductionArticleQrScan,
+  type ArticleQrScanFeedback,
+} from "@/shared/utils/productionArticleQrScanFlow";
+import ArticleQrScanDrawer from "@/shared/components/production/ArticleQrScanDrawer";
+
+const LINKING_ARTICLE_LOOKUP_LIMIT = 2000;
 
 type LinkingTab = "orders" | "article-view" | "my-team" | "upcoming";
 
@@ -57,6 +65,12 @@ const LinkingFloorSupervisorPage = () => {
 
   // Active article row (after Accept Article Quantity) – blue border + Assign button
   const [activeArticleId, setActiveArticleId] = useState<string | null>(null);
+
+  const [showArticleQrScanDrawer, setShowArticleQrScanDrawer] = useState(false);
+  const [articleQrScanLoading, setArticleQrScanLoading] = useState(false);
+  const [articleQrScanFeedback, setArticleQrScanFeedback] = useState<ArticleQrScanFeedback | null>(null);
+  /** When set, Article view shows only the QR-matched line. */
+  const [qrPinnedArticleOrders, setQrPinnedArticleOrders] = useState<ProductionOrder[] | null>(null);
 
   // Assign drawer: team members (Linking floor), assign to member
   const [showAssignDrawer, setShowAssignDrawer] = useState(false);
@@ -201,6 +215,7 @@ const LinkingFloorSupervisorPage = () => {
   };
 
   const paginatedOrders = filterOrdersByReceivedQuantity(orders, showAllArticles);
+  const articleViewOrders = qrPinnedArticleOrders ?? paginatedOrders;
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -477,6 +492,82 @@ const LinkingFloorSupervisorPage = () => {
     setShowContainerScanDrawer(true);
   };
 
+  const openArticleQrScanDrawer = useCallback(() => {
+    setArticleQrScanFeedback(null);
+    setShowArticleQrScanDrawer(true);
+  }, []);
+
+  const clearQrArticlePin = useCallback(() => {
+    setQrPinnedArticleOrders(null);
+  }, []);
+
+  const handleArticleQrScan = useCallback(
+    async (raw: string): Promise<ArticleQrScanFeedback> => {
+      setArticleQrScanLoading(true);
+      setArticleQrScanFeedback({ type: "info", message: "Loading Linking orders…" });
+      try {
+        const response = await productionService.getFloorOrders(
+          "Linking",
+          { page: 1, limit: LINKING_ARTICLE_LOOKUP_LIMIT },
+          { cache: "no-store" }
+        );
+
+        if (!response.success) {
+          const message =
+            response.error?.message ??
+            "Could not load Linking orders. Check API connection and try again.";
+          setArticleQrScanFeedback({ type: "error", message });
+          toast.error(message, { duration: 6000 });
+          return { type: "error", message };
+        }
+
+        const allOrders = response.data.results ?? [];
+        if (allOrders.length === 0) {
+          const message =
+            "No orders returned for Linking. The article may not be on this floor yet.";
+          setArticleQrScanFeedback({ type: "error", message });
+          toast.error(message, { duration: 6000 });
+          return { type: "error", message };
+        }
+
+        setOrders(allOrders);
+        const lookupOrders = filterOrdersByReceivedQuantity(allOrders, true);
+        const resolved = resolveProductionArticleQrScan(
+          raw,
+          allOrders,
+          lookupOrders,
+          "linking",
+          "Linking"
+        );
+
+        setArticleQrScanFeedback(resolved.feedback);
+
+        if (resolved.status !== "found") {
+          toast.error(resolved.feedback.message, { duration: 6000 });
+          return resolved.feedback;
+        }
+
+        setQrPinnedArticleOrders(resolved.singleArticleOrders);
+        setShowAllArticles(true);
+        setActiveTab("article-view");
+        setActiveArticleId(String(resolved.article._id ?? resolved.article.id));
+        toast.success(resolved.feedback.message, { duration: 4000 });
+        window.setTimeout(() => setShowArticleQrScanDrawer(false), 500);
+        return resolved.feedback;
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to look up article from QR scan.";
+        const feedback: ArticleQrScanFeedback = { type: "error", message };
+        setArticleQrScanFeedback(feedback);
+        toast.error(message, { duration: 6000 });
+        return feedback;
+      } finally {
+        setArticleQrScanLoading(false);
+      }
+    },
+    []
+  );
+
   const normalizeFloor = (f: string | undefined) => (f ?? "").replace(/\s+/g, "").toLowerCase();
   const containerBelongsToCurrentFloor =
     containerScanned && normalizeFloor(containerScanned.container.activeFloor) === normalizeFloor("Linking");
@@ -484,6 +575,19 @@ const LinkingFloorSupervisorPage = () => {
   const handleGetContainerByBarcode = async () => {
     const barcode = containerScanBarcode.trim();
     if (!barcode) return;
+
+    if (parseProductionArticleQr(barcode)) {
+      setContainerScanLoading(true);
+      setArticleQrScanFeedback(null);
+      const feedback = await handleArticleQrScan(barcode);
+      setContainerScanLoading(false);
+      if (feedback.type === "success") {
+        setShowContainerScanDrawer(false);
+        setContainerScanBarcode("");
+      }
+      return;
+    }
+
     setContainerScanLoading(true);
     setContainerScanned(null);
     try {
@@ -728,7 +832,7 @@ const LinkingFloorSupervisorPage = () => {
             <UpcomingTab floorName="Linking" />
           ) : activeTab === "article-view" ? (
             <ArticleViewTab
-              orders={paginatedOrders}
+              orders={articleViewOrders}
               onViewOrder={handleViewOrder}
               onUpdateOrder={handleUpdateOrder}
               getStatusBadge={getStatusBadge}
@@ -736,7 +840,14 @@ const LinkingFloorSupervisorPage = () => {
               activeArticleId={activeArticleId}
               onAssignClick={handleOpenAssignDrawer}
               onScanContainerClick={handleScanContainerClick}
+              onScanLabelQrClick={openArticleQrScanDrawer}
               showAllArticles={showAllArticles}
+              onShowAllArticlesChange={(show) => {
+                setShowAllArticles(show);
+                if (!show) clearQrArticlePin();
+              }}
+              qrScanPinned={Boolean(qrPinnedArticleOrders)}
+              onClearQrScanFilter={clearQrArticlePin}
             />
           ) : (
             <>
@@ -906,10 +1017,10 @@ const LinkingFloorSupervisorPage = () => {
             <div className="flex-1 overflow-y-auto p-[10px]">
               {!containerScanned ? (
                 <div className="space-y-3">
-                  <label className="block text-[11px] font-medium text-[#495057]">Container barcode</label>
+                  <label className="block text-[11px] font-medium text-[#495057]">Label QR or container barcode</label>
                   <input
                     type="text"
-                    placeholder="Scan or enter barcode"
+                    placeholder="Scan article label QR or container barcode"
                     value={containerScanBarcode}
                     onChange={(e) => setContainerScanBarcode(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleGetContainerByBarcode()}
@@ -1416,6 +1527,18 @@ const LinkingFloorSupervisorPage = () => {
         </div>
         );
       })()}
+
+      <ArticleQrScanDrawer
+        open={showArticleQrScanDrawer}
+        floorLabel="Linking"
+        loading={articleQrScanLoading}
+        feedback={articleQrScanFeedback}
+        onClose={() => {
+          setShowArticleQrScanDrawer(false);
+          setArticleQrScanFeedback(null);
+        }}
+        onScan={handleArticleQrScan}
+      />
 
     </div>
   );

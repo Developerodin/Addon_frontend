@@ -14,6 +14,9 @@ import MachineViewTab from "./components/MachineViewTab";
 import ArticleViewTab from "./components/ArticleViewTab";
 import MachineArticlePlanningTab from "./components/MachineArticlePlanningTab";
 import {
+  checkKnittingQuantityBuffer,
+} from "./utils/knittingQuantityValidation";
+import {
   OrderStatus,
   getMachineOrderAssignment,
   updateAssignmentItemStatus,
@@ -26,6 +29,13 @@ import { containersMasterService, hasActiveItems } from "@/shared/services/conta
 import { machinesService } from "@/shared/services/machinesService";
 import { QZTrayLoader, QZTrayStatus, QZTrayUntrustedWarning, QZTrayRequestBlocked } from "@/shared/components/qzTray";
 import { printContainerLabels, isQZLoaded, type PrinterInfo } from "@/shared/utils/qzTray";
+import { openKnittingContainerLabelBrowserPrint } from "./utils/knittingContainerLabelBrowserPrint";
+import { encodeProductionArticleQr } from "@/shared/utils/productionArticleQr";
+import {
+  resolveProductionArticleQrScan,
+  type ArticleQrScanFeedback,
+} from "@/shared/utils/productionArticleQrScanFlow";
+import ArticleQrScanDrawer from "@/shared/components/production/ArticleQrScanDrawer";
 type KnittingTab = "orders" | "machine-view" | "article-view" | "planning";
 
 /** 50×70mm ZPL preset — aligned with Containers Master default for thermal QR labels */
@@ -41,12 +51,21 @@ const KNITTING_CONTAINER_LABEL_QZ_SETTINGS = {
   detailsFontSize: 35,
 };
 
-/** One ZPL job: QR = container barcode, text = article number (`printContainerLabels` handles QZ connect). */
-function sendKnittingContainerLabelPrintJob(barcode: string, articleNumber: string) {
+/** One ZPL job: QR = order+article ids, text = article number. */
+function sendKnittingContainerLabelPrintJob(qrPayload: string, articleNumber: string) {
   return printContainerLabels(
-    [{ barcode, containerName: articleNumber?.trim() || barcode }],
+    [{ barcode: qrPayload, containerName: articleNumber?.trim() || qrPayload }],
     { customSettings: KNITTING_CONTAINER_LABEL_QZ_SETTINGS }
   );
+}
+
+/** Build QR payload for knitting article label from order + article line. */
+function buildKnittingArticleLabelQr(order: ProductionOrder, articleId: string): string | null {
+  const article = order.articles.find((a) => a._id === articleId || a.id === articleId);
+  const orderId = String(order._id ?? order.id ?? "").trim();
+  const mongoArticleId = String(article?._id ?? article?.id ?? articleId).trim();
+  if (!orderId || !mongoArticleId) return null;
+  return encodeProductionArticleQr(orderId, mongoArticleId);
 }
 
 const ORDER_STATUS_OPTIONS: OrderStatusType[] = [
@@ -104,9 +123,37 @@ function machineIdFromAssignmentMachine(m: MachineOrderAssignment["machine"]): s
   return null;
 }
 
+type KnitDoneEntry = { articleNumber: string; quantity: number };
+
+/**
+ * Shows knit-done quantity entered in the update form so supervisors can verify at each step.
+ */
+function KnitDoneQuantityReminder({ entries }: { entries: KnitDoneEntry[] }) {
+  if (entries.length === 0) return null;
+
+  return (
+    <div
+      className="rounded border border-red-300 bg-red-50 px-3 py-2"
+      role="status"
+      aria-label="Knit done quantity entered"
+    >
+      <p className="text-[10px] font-bold text-red-700 uppercase tracking-wide mb-1">Knit done entered</p>
+      {entries.map(({ articleNumber, quantity }) => (
+        <p key={articleNumber} className="text-[14px] font-bold text-red-600 leading-snug">
+          {entries.length > 1 ? `${articleNumber}: ` : ""}
+          {quantity.toLocaleString()}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 const KnittingFloorSupervisorPage = () => {
   const user = useSelector((state: any) => state.auth?.user);
   const isUserRole = user?.role === "user";
+  /** On Hold status action in update modal — admin and super_admin only */
+  const canSetOnHold =
+    user?.role === "admin" || user?.role === "super_admin";
   const [activeTab, setActiveTab] = useState<KnittingTab>("machine-view");
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -138,6 +185,12 @@ const KnittingFloorSupervisorPage = () => {
   const [pendingWeightForContainer, setPendingWeightForContainer] = useState<number | undefined>(undefined);
   const [containerSubmitting, setContainerSubmitting] = useState(false);
   const [containerLabelPrinting, setContainerLabelPrinting] = useState(false);
+  const [showArticleQrScanDrawer, setShowArticleQrScanDrawer] = useState(false);
+  const [articleQrScanLoading, setArticleQrScanLoading] = useState(false);
+  const [articleQrScanFeedback, setArticleQrScanFeedback] = useState<ArticleQrScanFeedback | null>(null);
+  const [highlightedArticleRowKey, setHighlightedArticleRowKey] = useState<string | null>(null);
+  const [focusArticleRowKey, setFocusArticleRowKey] = useState<string | null>(null);
+  const [qrPinnedArticleOrders, setQrPinnedArticleOrders] = useState<ProductionOrder[] | null>(null);
   const [qzStatus, setQzStatus] = useState<{
     scriptLoaded: boolean;
     connected: boolean;
@@ -381,7 +434,8 @@ const KnittingFloorSupervisorPage = () => {
 
   // Apply filtering to orders (Orders tab + shared shaping)
   const paginatedOrders = filterOrdersByReceivedQuantity(orders);
-  const articleTabOrders = filterOrdersByReceivedQuantity(articleViewOrders);
+  const articleTabOrdersBase = filterOrdersByReceivedQuantity(articleViewOrders);
+  const articleTabOrders = qrPinnedArticleOrders ?? articleTabOrdersBase;
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -724,6 +778,63 @@ const KnittingFloorSupervisorPage = () => {
     return false;
   }, [selectedOrder, updateData, initialUpdateData, updateModalReadOnlyFromIndex]);
 
+  /** Articles whose knit-done increment exceeds planned + 15% buffer (transfer or completed). */
+  const quantityBufferViolations = React.useMemo(() => {
+    if (!selectedOrder || !showUpdateModal) return [];
+    const readOnlyFrom = updateModalReadOnlyFromIndex ?? selectedOrder.articles.length;
+    const violations: Array<{
+      articleNumber: string;
+      check: ReturnType<typeof checkKnittingQuantityBuffer>;
+    }> = [];
+
+    for (let idx = 0; idx < readOnlyFrom; idx++) {
+      const article = selectedOrder.articles[idx];
+      const articleId = article?.id || article?._id;
+      if (!articleId) continue;
+
+      const knitDoneInput = updateData[articleId]?.completedQuantity ?? 0;
+      const check = checkKnittingQuantityBuffer(
+        article.plannedQuantity || 0,
+        article.floorQuantities?.knitting?.transferred || 0,
+        article.floorQuantities?.knitting?.completed ?? 0,
+        knitDoneInput
+      );
+
+      if (check.exceedsBuffer) {
+        violations.push({
+          articleNumber: article.articleNumber || `Article ${idx + 1}`,
+          check,
+        });
+      }
+    }
+
+    return violations;
+  }, [selectedOrder, updateData, updateModalReadOnlyFromIndex, showUpdateModal]);
+
+  const hasQuantityBufferViolation = quantityBufferViolations.length > 0;
+
+  /** Knit-done quantities entered in the update form (shown in weight/container modals). */
+  const pendingKnitDoneEntries = React.useMemo((): KnitDoneEntry[] => {
+    if (!selectedOrder) return [];
+    const readOnlyFrom = updateModalReadOnlyFromIndex ?? selectedOrder.articles.length;
+    const entries: KnitDoneEntry[] = [];
+
+    for (let idx = 0; idx < readOnlyFrom; idx++) {
+      const article = selectedOrder.articles[idx];
+      const articleId = article?.id || article?._id;
+      if (!articleId) continue;
+      const quantity = updateData[articleId]?.completedQuantity ?? 0;
+      if (quantity > 0) {
+        entries.push({
+          articleNumber: article.articleNumber || `Article ${idx + 1}`,
+          quantity,
+        });
+      }
+    }
+
+    return entries;
+  }, [selectedOrder, updateData, updateModalReadOnlyFromIndex]);
+
   const handleUpdateSubmit = async (weight?: number) => {
     if (!selectedOrder) return;
 
@@ -751,6 +862,14 @@ const KnittingFloorSupervisorPage = () => {
     if (!hasValidCompletedQuantity) {
       console.log('Validation failed - showing error');
       toast.error('Knitting completed quantity cannot be empty. Please enter a value greater than 0 for at least one article.');
+      return;
+    }
+
+    if (hasQuantityBufferViolation) {
+      const first = quantityBufferViolations[0];
+      toast.error(
+        `${first.articleNumber}: transfer/knit done exceeds planned + 15% buffer (max ${Math.round(first.check.maxAllowed).toLocaleString()}).`
+      );
       return;
     }
 
@@ -884,9 +1003,9 @@ const KnittingFloorSupervisorPage = () => {
 
   const handlePrintKnittingContainerLabel = useCallback(async () => {
     if (!selectedOrder || !containerArticleId) return;
-    const barcode = containerBarcode.trim();
-    if (!barcode) {
-      toast.error("Enter or scan container barcode before printing");
+    const qrPayload = buildKnittingArticleLabelQr(selectedOrder, containerArticleId);
+    if (!qrPayload) {
+      toast.error("Could not build label QR — missing order or article id");
       return;
     }
     if (!isQZLoaded()) {
@@ -921,7 +1040,7 @@ const KnittingFloorSupervisorPage = () => {
     setContainerLabelPrinting(true);
     const toastId = toast.loading("Sending label to printer…");
     try {
-      const result = await sendKnittingContainerLabelPrintJob(barcode, articleNumber);
+      const result = await sendKnittingContainerLabelPrintJob(qrPayload, articleNumber);
       toast.dismiss(toastId);
       if (result.success) {
         toast.success(`Printed ${result.printed} label(s) — ${qzStatus.printer.name}`);
@@ -935,7 +1054,107 @@ const KnittingFloorSupervisorPage = () => {
     } finally {
       setContainerLabelPrinting(false);
     }
-  }, [selectedOrder, containerArticleId, containerBarcode, qzStatus.connected, qzStatus.printer]);
+  }, [selectedOrder, containerArticleId, qzStatus.connected, qzStatus.printer]);
+
+  const handleTestKnittingContainerLabelPrint = useCallback(() => {
+    if (!selectedOrder || !containerArticleId) return;
+    const qrPayload = buildKnittingArticleLabelQr(selectedOrder, containerArticleId);
+    if (!qrPayload) {
+      toast.error("Could not build label QR — missing order or article id");
+      return;
+    }
+    const article = selectedOrder.articles.find(
+      (a) => a._id === containerArticleId || a.id === containerArticleId
+    );
+    const articleNumber = article?.articleNumber ?? article?.factoryCode ?? "—";
+    const opened = openKnittingContainerLabelBrowserPrint({
+      qrPayload,
+      articleNumber,
+      orderNumber: selectedOrder.orderNumber ?? String(selectedOrder.id ?? ""),
+    });
+    if (!opened) {
+      toast.error("Popup blocked. Allow popups for this site to open the test print preview.");
+      return;
+    }
+    toast.success("Test label preview opened — use Print in the popup (no QZ Tray needed)");
+  }, [selectedOrder, containerArticleId]);
+
+  const clearQrArticlePin = useCallback(() => {
+    setQrPinnedArticleOrders(null);
+    setHighlightedArticleRowKey(null);
+  }, []);
+
+  const handleArticleQrScan = useCallback(
+    async (raw: string): Promise<ArticleQrScanFeedback> => {
+      setArticleQrScanLoading(true);
+      setArticleQrScanFeedback({ type: "info", message: "Loading Knitting orders…" });
+      try {
+        const response = await productionService.getFloorOrders(
+          "Knitting",
+          { page: 1, limit: KNITTING_ARTICLE_VIEW_ORDER_LIMIT },
+          { cache: "no-store" }
+        );
+
+        if (!response.success) {
+          const message =
+            response.error?.message ??
+            "Could not load Knitting orders. Check API connection and try again.";
+          setArticleQrScanFeedback({ type: "error", message });
+          toast.error(message, { duration: 6000 });
+          return { type: "error", message };
+        }
+
+        const allOrders = response.data.results ?? [];
+        if (allOrders.length === 0) {
+          const message = "No orders returned for Knitting.";
+          setArticleQrScanFeedback({ type: "error", message });
+          toast.error(message, { duration: 6000 });
+          return { type: "error", message };
+        }
+
+        setArticleViewOrders(allOrders);
+        const lookupOrders = filterOrdersByReceivedQuantity(allOrders);
+        const resolved = resolveProductionArticleQrScan(
+          raw,
+          allOrders,
+          lookupOrders,
+          "knitting",
+          "Knitting"
+        );
+
+        setArticleQrScanFeedback(resolved.feedback);
+
+        if (resolved.status !== "found") {
+          toast.error(resolved.feedback.message, { duration: 6000 });
+          return resolved.feedback;
+        }
+
+        setQrPinnedArticleOrders(resolved.singleArticleOrders);
+        setShowAllKnittingArticles(true);
+        setActiveTab("article-view");
+        setHighlightedArticleRowKey(resolved.rowKey);
+        setFocusArticleRowKey(resolved.rowKey);
+        toast.success(resolved.feedback.message, { duration: 4000 });
+        window.setTimeout(() => setShowArticleQrScanDrawer(false), 500);
+        return resolved.feedback;
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to look up article from QR scan.";
+        const feedback: ArticleQrScanFeedback = { type: "error", message };
+        setArticleQrScanFeedback(feedback);
+        toast.error(message, { duration: 6000 });
+        return feedback;
+      } finally {
+        setArticleQrScanLoading(false);
+      }
+    },
+    []
+  );
+
+  const openArticleQrScanDrawer = useCallback(() => {
+    setArticleQrScanFeedback(null);
+    setShowArticleQrScanDrawer(true);
+  }, []);
 
   return (
     <div className="main-content !p-[10px]">
@@ -984,6 +1203,15 @@ const KnittingFloorSupervisorPage = () => {
               <div className="bg-gray-50 px-2 py-1 rounded border border-gray-200">
                 <QZTrayStatus onStatusChange={setQzStatus} />
               </div>
+              <button
+                type="button"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+                onClick={openArticleQrScanDrawer}
+                title="Scan label QR (PA|orderId|articleId)"
+              >
+                <i className="ri-qr-scan-2-line text-xs" aria-hidden />
+                Scan label QR
+              </button>
               <button
                 type="button"
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
@@ -1065,12 +1293,21 @@ const KnittingFloorSupervisorPage = () => {
               orders={articleTabOrders}
               isLoading={articleViewLoading}
               showAllArticles={showAllKnittingArticles}
-              onShowAllArticlesChange={setShowAllKnittingArticles}
+              onShowAllArticlesChange={(show) => {
+                setShowAllKnittingArticles(show);
+                if (!show) clearQrArticlePin();
+              }}
               itemsPerPage={itemsPerPage}
               onItemsPerPageChange={handleItemsPerPageChange}
               onViewOrder={handleViewOrder}
               getStatusBadge={getStatusBadge}
               getPriorityBadge={getPriorityBadge}
+              highlightedRowKey={highlightedArticleRowKey}
+              focusRowKey={focusArticleRowKey}
+              onFocusRowHandled={() => setFocusArticleRowKey(null)}
+              onScanQrClick={openArticleQrScanDrawer}
+              qrScanPinned={Boolean(qrPinnedArticleOrders)}
+              onClearQrScanFilter={clearQrArticlePin}
             />
           ) : (
             <>
@@ -1278,6 +1515,33 @@ const KnittingFloorSupervisorPage = () => {
               </div>
             </div>
 
+            {hasQuantityBufferViolation && (
+              <div
+                className="text-[11px] text-red-700 bg-red-50 border border-red-300 rounded px-3 py-2 mb-3"
+                role="alert"
+                aria-live="polite"
+              >
+                {quantityBufferViolations.map(({ articleNumber, check }) => (
+                  <p key={articleNumber}>
+                    <strong>{articleNumber}:</strong> Knit done exceeds planned + 15% buffer. Max allowed{" "}
+                    {Math.round(check.maxAllowed).toLocaleString()} (planned{" "}
+                    {check.plannedQuantity.toLocaleString()} + 15%).{" "}
+                    {check.exceedsTransferBuffer && (
+                      <>
+                        Transfer would be {Math.round(check.projectedTransfer).toLocaleString()} (already{" "}
+                        {check.currentTransferred.toLocaleString()} + {check.knitDoneIncrement.toLocaleString()}).
+                      </>
+                    )}{" "}
+                    {check.exceedsCompletedBuffer && (
+                      <>
+                        Total knit done would be {Math.round(check.projectedCompleted).toLocaleString()}.
+                      </>
+                    )}
+                  </p>
+                ))}
+              </div>
+            )}
+
             {/* When from machine view, order can only be updated when first article is In Progress. */}
             {selectedOrder && updateModalAssignmentItems?.[0]?.status === OrderStatus.PENDING && (
               <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-3">
@@ -1340,8 +1604,15 @@ const KnittingFloorSupervisorPage = () => {
                       const receivedQty = article.floorQuantities?.knitting?.received || 0;
                       const transferredQty = article.floorQuantities?.knitting?.transferred || 0;
                       const remainingQty = article.floorQuantities?.knitting?.remaining || 0;
-                      const displayCompleted = isReadOnly ? completedQty : (currentUpdateData.completedQuantity || 0);
-                      const isOverproduction = displayCompleted > plannedQty;
+                      const knitDoneInput = currentUpdateData.completedQuantity || 0;
+                      const quantityBufferCheck = checkKnittingQuantityBuffer(
+                        plannedQty,
+                        transferredQty,
+                        completedQty,
+                        knitDoneInput
+                      );
+                      const exceedsQuantityBuffer = quantityBufferCheck.exceedsBuffer;
+                      const isOverproduction = quantityBufferCheck.projectedCompleted > plannedQty;
                       const isFirstReadOnly = isReadOnly && idx === updateModalReadOnlyFromIndex;
                       /** When opened from machine view, first article must be In Progress before editing quantity/remarks or updating order. */
                       const isLockedByPendingStatus = !isReadOnly && idx === 0 && (assignmentItem?.status ?? OrderStatus.PENDING) === OrderStatus.PENDING;
@@ -1353,7 +1624,7 @@ const KnittingFloorSupervisorPage = () => {
                               <td colSpan={8} className="p-3 border border-gray-300 bg-gray-50 align-top">
                                 <div className="flex justify-end gap-2 mb-3">
                                   <button type="button" onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Cancel</button>
-                                  <button type="button" disabled={!hasUpdateDataChanges || updateModalAssignmentItems?.[0]?.status === OrderStatus.PENDING} onClick={() => setShowWeightModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                                  <button type="button" disabled={!hasUpdateDataChanges || hasQuantityBufferViolation || updateModalAssignmentItems?.[0]?.status === OrderStatus.PENDING} onClick={() => setShowWeightModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
                                     <i className="ri-save-line text-xs"></i> Update Order
                                   </button>
                                 </div>
@@ -1374,13 +1645,20 @@ const KnittingFloorSupervisorPage = () => {
                             <td className="px-1 py-1 text-center text-[10px] text-blue-600 font-medium border border-gray-300">{receivedQty.toLocaleString()}</td>
                             <td className="px-1 py-1 text-center text-[10px] text-green-600 font-medium border border-gray-300">{transferredQty.toLocaleString()}</td>
                             <td className="px-1 py-1 text-center text-[10px] text-orange-600 font-medium border border-gray-300">{remainingQty.toLocaleString()}</td>
-                            <td className="px-1 py-1 border border-gray-300 bg-yellow-50 min-w-0">
+                            <td className={`px-1 py-1 border border-gray-300 min-w-0 ${exceedsQuantityBuffer && !isReadOnly ? "bg-red-50" : "bg-yellow-50"}`}>
                               {isReadOnly ? (
                                 <span className="text-[10px] text-gray-700">{completedQty.toLocaleString()}{isOverproduction ? ` (+${completedQty - plannedQty})` : ""}</span>
                               ) : (
                                 <div className="flex flex-col gap-0.5">
-                                  <NumericInput disabled={isLockedByPendingStatus} className="py-0.5 text-[10px] h-5 border border-gray-300 rounded focus:border-purple-500 focus:ring-1 focus:ring-purple-300 w-full min-w-0 disabled:bg-gray-100 disabled:cursor-not-allowed" value={currentUpdateData.completedQuantity} onChange={(v) => handleQuantityChange(articleId, v)} allowDecimals />
-                                  {isOverproduction && <div className="text-[9px] text-orange-600">+{currentUpdateData.completedQuantity - plannedQty}</div>}
+                                  <NumericInput disabled={isLockedByPendingStatus} className={`py-0.5 text-[10px] h-5 border rounded focus:ring-1 w-full min-w-0 disabled:bg-gray-100 disabled:cursor-not-allowed ${exceedsQuantityBuffer ? "border-red-400 focus:border-red-500 focus:ring-red-300 bg-red-50/50" : "border-gray-300 focus:border-purple-500 focus:ring-purple-300"}`} value={currentUpdateData.completedQuantity} onChange={(v) => handleQuantityChange(articleId, v)} allowDecimals />
+                                  {exceedsQuantityBuffer && (
+                                    <div className="text-[9px] text-red-600 leading-tight">
+                                      Max {Math.round(quantityBufferCheck.maxAllowed).toLocaleString()} total
+                                    </div>
+                                  )}
+                                  {!exceedsQuantityBuffer && isOverproduction && knitDoneInput > 0 && (
+                                    <div className="text-[9px] text-orange-600">+{Math.round(quantityBufferCheck.projectedCompleted - plannedQty)} over planned</div>
+                                  )}
                                 </div>
                               )}
                             </td>
@@ -1474,14 +1752,17 @@ const KnittingFloorSupervisorPage = () => {
                                                   Completed
                                                 </button>
                                               )}
-                                              <button
-                                                type="button"
-                                                onClick={() => handleModalItemStatusChange(assignmentItem!.itemId!, OrderStatus.ON_HOLD)}
-                                                disabled={isDisabled}
-                                                className="px-3 py-1.5 text-[11px] font-bold rounded bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-60"
-                                              >
-                                                On Hold
-                                              </button>
+                                              {canSetOnHold && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleModalItemStatusChange(assignmentItem!.itemId!, OrderStatus.ON_HOLD)}
+                                                  disabled={isDisabled}
+                                                  className="px-3 py-1.5 text-[11px] font-bold rounded bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-60"
+                                                  aria-label="Put assignment item on hold"
+                                                >
+                                                  On Hold
+                                                </button>
+                                              )}
                                             </div>
                                           );
                                         }
@@ -1580,7 +1861,7 @@ const KnittingFloorSupervisorPage = () => {
             {/* Always show actions at bottom */}
             <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-300">
               <button type="button" onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Cancel</button>
-              <button type="button" disabled={!hasUpdateDataChanges || updateModalAssignmentItems?.[0]?.status === OrderStatus.PENDING} onClick={() => setShowWeightModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
+              <button type="button" disabled={!hasUpdateDataChanges || hasQuantityBufferViolation || updateModalAssignmentItems?.[0]?.status === OrderStatus.PENDING} onClick={() => setShowWeightModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
                 <i className="ri-save-line text-xs"></i> Update Order
               </button>
             </div>
@@ -1643,6 +1924,7 @@ const KnittingFloorSupervisorPage = () => {
                   <p className="text-[12px] text-gray-700">
                     Put article quantity on weight scale to capture weight.
                   </p>
+                  <KnitDoneQuantityReminder entries={pendingKnitDoneEntries} />
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-600 mb-1">Weight</label>
                     <div className="flex gap-2">
@@ -1731,6 +2013,7 @@ const KnittingFloorSupervisorPage = () => {
               <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40" onClick={() => { setShowContainerModal(false); setPendingWeightForContainer(undefined); setContainerCheckStatus('idle'); setContainerFetched(null); setContainerQuantity(''); }} aria-hidden>
                 <div className="bg-white rounded-lg shadow-xl border border-gray-300 w-full max-w-sm p-4 flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
                   <h4 className="text-[13px] font-bold text-gray-800 border-b border-gray-200 pb-2">Container & transfer floor</h4>
+                  <KnitDoneQuantityReminder entries={pendingKnitDoneEntries} />
                   <p className="text-[11px] text-gray-600">Enter or scan container barcode. We will check if it is free before allowing update.</p>
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-600 mb-1">Container barcode</label>
@@ -1812,10 +2095,19 @@ const KnittingFloorSupervisorPage = () => {
                   <div className="flex justify-end gap-2 pt-1 flex-wrap">
                     <button
                       type="button"
+                      onClick={handleTestKnittingContainerLabelPrint}
+                      disabled={!containerArticleId}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold text-purple-700 border border-purple-300 rounded hover:bg-purple-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Browser preview — QR = order + article ids, text = article number"
+                    >
+                      <i className="ri-window-line text-xs" />
+                      Test print
+                    </button>
+                    <button
+                      type="button"
                       onClick={handlePrintKnittingContainerLabel}
                       disabled={
                         !containerArticleId ||
-                        !containerBarcode.trim() ||
                         containerLabelPrinting ||
                         !qzStatus.scriptLoaded ||
                         !qzStatus.connected ||
@@ -1831,7 +2123,7 @@ const KnittingFloorSupervisorPage = () => {
                               ? "Connect QZ Tray from the header first"
                               : !qzStatus.printer
                                 ? "No default printer"
-                                : "QZ Tray: 50×70mm — QR = container barcode, text = article number"
+                                : "QZ Tray: 50×70mm — QR = order + article ids, text = article number"
                       }
                     >
                       <i className="ri-printer-line text-xs" />
@@ -1858,6 +2150,18 @@ const KnittingFloorSupervisorPage = () => {
                         const qty = containerQuantity.trim() === '' ? (updateData[articleId]?.completedQuantity ?? 0) : (Number.isFinite(qtyNum) && qtyNum >= 0 ? qtyNum : NaN);
                         if (!Number.isFinite(qty) || qty < 0) {
                           toast.error('Please enter a valid quantity (0 or greater)');
+                          return;
+                        }
+                        const bufferCheck = checkKnittingQuantityBuffer(
+                          article?.plannedQuantity || 0,
+                          article?.floorQuantities?.knitting?.transferred || 0,
+                          article?.floorQuantities?.knitting?.completed ?? 0,
+                          qty
+                        );
+                        if (bufferCheck.exceedsBuffer) {
+                          toast.error(
+                            `Quantity exceeds planned + 15% buffer (max ${Math.round(bufferCheck.maxAllowed).toLocaleString()} total transfer/knit done).`
+                          );
                           return;
                         }
                         setContainerSubmitting(true);
@@ -2069,6 +2373,18 @@ const KnittingFloorSupervisorPage = () => {
           onSuccess={handleTransferSuccess}
         />
       )}
+
+      <ArticleQrScanDrawer
+        open={showArticleQrScanDrawer}
+        floorLabel="Knitting"
+        loading={articleQrScanLoading}
+        feedback={articleQrScanFeedback}
+        onClose={() => {
+          setShowArticleQrScanDrawer(false);
+          setArticleQrScanFeedback(null);
+        }}
+        onScan={handleArticleQrScan}
+      />
     </div>
   );
 };

@@ -28,6 +28,10 @@ export interface ProductionOrderItem {
   priority?: number;
   /** Display only – from populated API; never sent in PATCH */
   orderNumber?: string;
+  /** Display only – order name/note from populated production order */
+  orderNote?: string;
+  /** Display only – production order createdAt from populated API */
+  orderCreatedAt?: string;
   /** Display only – from populated API; never sent in PATCH */
   articleNumber?: string;
   /** Yarn issue status – from API; updated via PATCH .../items/:itemId/yarn-issue-status */
@@ -199,8 +203,10 @@ function normalizeAssignment(raw: any): MachineOrderAssignment {
           article: item.article?.id ?? item.article?._id ?? item.article,
           status: item.status,
           priority: item.priority,
-          orderNumber: item.productionOrder?.orderNumber ?? undefined,
-          articleNumber: item.article?.articleNumber ?? undefined,
+          orderNumber: item.productionOrder?.orderNumber ?? item.orderNumber ?? undefined,
+          orderNote: item.productionOrder?.orderNote ?? item.orderNote ?? undefined,
+          orderCreatedAt: item.productionOrder?.createdAt ?? item.orderCreatedAt ?? undefined,
+          articleNumber: item.article?.articleNumber ?? item.articleNumber ?? undefined,
           yarnIssueStatus: item.yarnIssueStatus,
           yarnReturnStatus: item.yarnReturnStatus,
         }))
