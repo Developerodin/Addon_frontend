@@ -4,6 +4,10 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { ProductionOrder, Article } from "@/shared/services/productionService";
 import { listMachineOrderAssignments } from "@/shared/services/machineOrderAssignmentService";
 import { productionArticleRowKey } from "@/shared/utils/productionArticleQr";
+import {
+  ArticleViewOrderCell,
+  formatArticleViewOrderLabel,
+} from "@/shared/components/production/ArticleViewOrderCell";
 
 export interface ArticleRow {
   article: Article;
@@ -139,6 +143,7 @@ export default function ArticleViewTab({
       (r) =>
         (r.article.articleNumber ?? "").toLowerCase().includes(q) ||
         (r.order.orderNumber ?? "").toLowerCase().includes(q) ||
+        (r.order.orderNote ?? "").toLowerCase().includes(q) ||
         (r.article.linkingType ?? "").toLowerCase().includes(q) ||
         (r.article.knittingCode ?? "").toLowerCase().includes(q)
     );
@@ -210,7 +215,7 @@ export default function ArticleViewTab({
         article.articleNumber ?? "—",
         article.linkingType ?? "N/A",
         article.knittingCode ?? "",
-        order.orderNumber ?? order.id ?? "—",
+        formatArticleViewOrderLabel(order),
         machine,
         order.status ?? "",
         order.priority ?? "",
@@ -411,7 +416,7 @@ export default function ArticleViewTab({
                     )}
                   </td>
                   <td className="px-2 py-1.5 border-r border-gray-300">
-                    <div className="font-medium text-gray-800">{order.orderNumber ?? order.id}</div>
+                    <ArticleViewOrderCell order={order} />
                     <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium mt-0.5 ${getStatusBadge(order.status)}`}>
                       {order.status}
                     </span>
@@ -447,7 +452,7 @@ export default function ArticleViewTab({
                         className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-400 border border-blue-100 rounded hover:bg-blue-100"
                         onClick={() => onViewOrder(order, article)}
                         title="View order"
-                        aria-label={`View order ${order.orderNumber ?? order.id}`}
+                        aria-label={`View order ${formatArticleViewOrderLabel(order)}`}
                       >
                         <i className="ri-eye-line text-xs" aria-hidden />
                       </button>

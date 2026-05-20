@@ -20,7 +20,8 @@ export interface UseProductionArticleQrScanOptions {
   floorLabel: string;
   /** Filter orders for article-view lookup (usually received > 0). */
   filterOrdersForLookup: (orders: ProductionOrder[]) => ProductionOrder[];
-  setOrders: React.Dispatch<React.SetStateAction<ProductionOrder[]>>;
+  /** Updates the wide floor order catalog (not the orders-tab page slice). */
+  setFloorOrderCatalog: React.Dispatch<React.SetStateAction<ProductionOrder[]>>;
   setShowAllArticles: (show: boolean) => void;
   /** Called when scan finds article (e.g. set activeArticleId, highlight row). */
   onArticleFound?: (articleId: string) => void;
@@ -36,7 +37,7 @@ export function useProductionArticleQrScan({
   floorKey,
   floorLabel,
   filterOrdersForLookup,
-  setOrders,
+  setFloorOrderCatalog,
   setShowAllArticles,
   onArticleFound,
   goToArticleView,
@@ -90,7 +91,7 @@ export function useProductionArticleQrScan({
           return { type: "error", message };
         }
 
-        setOrders(allOrders);
+        setFloorOrderCatalog(allOrders);
         const lookupOrders = filterOrdersForLookup(allOrders);
         const resolved = resolveProductionArticleQrScan(
           raw,
@@ -131,7 +132,7 @@ export function useProductionArticleQrScan({
       floorKey,
       floorLabel,
       filterOrdersForLookup,
-      setOrders,
+      setFloorOrderCatalog,
       setShowAllArticles,
       onArticleFound,
       goToArticleView,

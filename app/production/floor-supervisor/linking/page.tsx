@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
@@ -22,12 +22,12 @@ import {
 import ArticleQrScanDrawer from "@/shared/components/production/ArticleQrScanDrawer";
 
 const LINKING_ARTICLE_LOOKUP_LIMIT = 2000;
+const LINKING_ARTICLE_VIEW_ORDER_LIMIT = 2000;
 
 type LinkingTab = "orders" | "article-view" | "my-team" | "upcoming";
 
 const LinkingFloorSupervisorPage = () => {
   const [activeTab, setActiveTab] = useState<LinkingTab>("article-view");
-  const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -53,8 +53,9 @@ const LinkingFloorSupervisorPage = () => {
   const [selectedLogArticleId, setSelectedLogArticleId] = useState<string>('');
   const [articleLogs, setArticleLogs] = useState<any[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalResults, setTotalResults] = useState(0);
+  /** Wide linking-floor order fetch shared by Orders + Article tabs. */
+  const [articleViewOrders, setArticleViewOrders] = useState<ProductionOrder[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
 
   // Scan container flow (Article view): barcode -> get container -> show article details -> Accept Article Quantity
   const [showContainerScanDrawer, setShowContainerScanDrawer] = useState(false);
@@ -93,45 +94,47 @@ const LinkingFloorSupervisorPage = () => {
   /** When false (default): show only articles with remaining > 0. When true: show all with received > 0. */
   const [showAllArticles, setShowAllArticles] = useState(false);
 
-  // Load linking floor orders from API
-  const loadOrders = async () => {
-    setIsLoading(true);
+  /**
+   * Loads linking floor orders for both tabs; client-side filter/pagination matches Article view rules.
+   */
+  const loadFloorOrdersCatalog = useCallback(async () => {
+    setCatalogLoading(true);
     try {
       const apiFilters: FloorOrderFilters = {
-        page: currentPage,
-        limit: itemsPerPage,
+        page: 1,
+        limit: LINKING_ARTICLE_VIEW_ORDER_LIMIT,
         ...(filters.status && { status: filters.status }),
         ...(filters.priority && { priority: filters.priority }),
-        ...(searchQuery && { search: searchQuery })
+        ...(searchQuery && { search: searchQuery }),
       };
-
-      const response = await productionService.getFloorOrders('Linking', apiFilters);
-      
+      const response = await productionService.getFloorOrders("Linking", apiFilters);
       if (response.success) {
-        console.log('Linking orders loaded:', response.data.results);
-        setOrders(response.data.results);
-        setTotalPages(response.data.totalPages);
-        setTotalResults(response.data.totalResults);
+        setArticleViewOrders(response.data.results);
       } else {
-        console.error('Failed to load linking orders:', response.error);
-        toast.error('Failed to load linking orders');
+        console.error("Failed to load linking floor orders:", response.error);
+        toast.error(
+          typeof response.error === "object" && response.error && "message" in response.error
+            ? String((response.error as { message?: string }).message)
+            : "Failed to load linking orders"
+        );
       }
-    } catch (error: any) {
-      console.error('Error loading linking orders:', error);
-      toast.error(error.message || 'Failed to load linking orders');
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Failed to load linking orders";
+      console.error("Error loading linking floor orders:", error);
+      toast.error(msg);
     } finally {
-      setIsLoading(false);
+      setCatalogLoading(false);
     }
-  };
+  }, [filters.status, filters.priority, searchQuery]);
 
-  // Debounced search effect
+  // Reload catalog when Orders or Article tab is active (filters / search)
   useEffect(() => {
+    if (activeTab !== "orders" && activeTab !== "article-view") return;
     const timeoutId = setTimeout(() => {
-      loadOrders();
-    }, 500); // 500ms delay
-
+      void loadFloorOrdersCatalog();
+    }, searchQuery ? 300 : 0);
     return () => clearTimeout(timeoutId);
-  }, [currentPage, itemsPerPage, filters, searchQuery]);
+  }, [activeTab, loadFloorOrdersCatalog, searchQuery]);
 
   // When user enters/scans barcode in update container modal, fetch container (multi-article allowed on same floor)
   useEffect(() => {
@@ -200,9 +203,9 @@ const LinkingFloorSupervisorPage = () => {
     return () => { cancelled = true; };
   }, [showUpdateContainerModal, updateContainerArticleId, selectedOrder?.articles]);
 
-  // Filter orders and articles. Default: only remaining > 0. When showAllArticles: received > 0.
-  const filterOrdersByReceivedQuantity = (orders: ProductionOrder[], showAll: boolean): ProductionOrder[] => {
-    return orders.map(order => {
+  /** Default: remaining > 0. Show all: received > 0 (includes zero remaining). */
+  const filterOrdersByReceivedQuantity = (orderList: ProductionOrder[], showAll: boolean): ProductionOrder[] => {
+    return orderList.map(order => {
       const filteredArticles = order.articles.filter(article => {
         const received = article.floorQuantities?.linking?.received || 0;
         const transferred = article.floorQuantities?.linking?.transferred || 0;
@@ -214,8 +217,33 @@ const LinkingFloorSupervisorPage = () => {
     }).filter(order => order.articles.length > 0);
   };
 
-  const paginatedOrders = filterOrdersByReceivedQuantity(orders, showAllArticles);
-  const articleViewOrders = qrPinnedArticleOrders ?? paginatedOrders;
+  const filteredOrders = useMemo(
+    () => filterOrdersByReceivedQuantity(articleViewOrders, showAllArticles),
+    [articleViewOrders, showAllArticles]
+  );
+
+  const orderTotalPages = Math.max(1, Math.ceil(filteredOrders.length / itemsPerPage));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), orderTotalPages);
+
+  useEffect(() => {
+    setCurrentPage(1);
+    setSelectedOrders([]);
+    setSelectAll(false);
+  }, [showAllArticles]);
+
+  useEffect(() => {
+    setCurrentPage((p) => Math.min(Math.max(1, p), orderTotalPages));
+  }, [orderTotalPages, filteredOrders.length, itemsPerPage]);
+
+  const paginatedOrders = useMemo(() => {
+    const start = (safeCurrentPage - 1) * itemsPerPage;
+    return filteredOrders.slice(start, start + itemsPerPage);
+  }, [filteredOrders, safeCurrentPage, itemsPerPage]);
+
+  const articleTabOrders = qrPinnedArticleOrders ?? articleViewOrders;
+  const ordersPageStart = paginatedOrders.length === 0 ? 0 : (safeCurrentPage - 1) * itemsPerPage + 1;
+  const ordersPageEnd =
+    paginatedOrders.length === 0 ? 0 : (safeCurrentPage - 1) * itemsPerPage + paginatedOrders.length;
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -414,7 +442,7 @@ const LinkingFloorSupervisorPage = () => {
       closeUpdateModal();
       
       // Reload orders to get updated data
-      loadOrders();
+      void loadFloorOrdersCatalog();
     } catch (error: any) {
       console.error('Error updating order:', error);
       toast.error(error.message || 'Failed to update order');
@@ -479,12 +507,13 @@ const LinkingFloorSupervisorPage = () => {
   };
 
   const findArticleInOrders = useCallback((articleId: string): Article | null => {
-    for (const order of paginatedOrders) {
+    const sources = articleViewOrders;
+    for (const order of sources) {
       const a = order.articles.find((ar) => (ar._id || ar.id) === articleId);
       if (a) return a;
     }
     return null;
-  }, [paginatedOrders]);
+  }, [articleViewOrders]);
 
   const handleScanContainerClick = () => {
     setContainerScanned(null);
@@ -530,7 +559,7 @@ const LinkingFloorSupervisorPage = () => {
           return { type: "error", message };
         }
 
-        setOrders(allOrders);
+        setArticleViewOrders(allOrders);
         const lookupOrders = filterOrdersByReceivedQuantity(allOrders, true);
         const resolved = resolveProductionArticleQrScan(
           raw,
@@ -638,7 +667,7 @@ const LinkingFloorSupervisorPage = () => {
       setShowContainerScanDrawer(false);
       setContainerScanned(null);
       setContainerScanBarcode("");
-      loadOrders();
+      void loadFloorOrdersCatalog();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to accept");
     } finally {
@@ -701,7 +730,7 @@ const LinkingFloorSupervisorPage = () => {
       toast.success("Article received recorded.");
       const data = await teamMasterService.list({ workingFloor: "Linking", limit: 200 });
       setAssignTeamMembers(data.results);
-      loadOrders();
+      void loadFloorOrdersCatalog();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to remove active article");
     } finally {
@@ -726,7 +755,7 @@ const LinkingFloorSupervisorPage = () => {
               <div className="w-[3px] h-5 bg-purple-600 rounded-full" />
               <h1 className="text-sm font-bold text-gray-800">Linking Floor Supervisor</h1>
               <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
-                {totalResults}
+                {filteredOrders.length}
               </span>
               <HelpIcon
                 title="Linking Floor Supervisor Dashboard"
@@ -756,11 +785,11 @@ const LinkingFloorSupervisorPage = () => {
               <button
                 type="button"
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
-                onClick={loadOrders}
-                disabled={isLoading}
+                onClick={() => void loadFloorOrdersCatalog()}
+                disabled={catalogLoading}
                 title="Refresh Orders"
               >
-                <i className={`ri-refresh-line text-xs ${isLoading ? 'animate-spin' : ''}`}></i> Refresh
+                <i className={`ri-refresh-line text-xs ${catalogLoading ? 'animate-spin' : ''}`}></i> Refresh
               </button>
             </div>
           </div>
@@ -769,19 +798,19 @@ const LinkingFloorSupervisorPage = () => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
             <div className="bg-blue-50 border border-blue-100 rounded p-2 flex items-center justify-between">
               <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wide">In Progress</span>
-              <span className="text-sm font-bold text-blue-900">{orders.filter(o => o.status === 'In Progress').length}</span>
+              <span className="text-sm font-bold text-blue-900">{articleViewOrders.filter(o => o.status === 'In Progress').length}</span>
             </div>
             <div className="bg-green-50 border border-green-100 rounded p-2 flex items-center justify-between">
               <span className="text-[10px] font-bold text-green-700 uppercase tracking-wide">Completed</span>
-              <span className="text-sm font-bold text-green-900">{orders.filter(o => o.status === 'Completed').length}</span>
+              <span className="text-sm font-bold text-green-900">{articleViewOrders.filter(o => o.status === 'Completed').length}</span>
             </div>
             <div className="bg-yellow-50 border border-yellow-100 rounded p-2 flex items-center justify-between">
               <span className="text-[10px] font-bold text-yellow-700 uppercase tracking-wide">Pending</span>
-              <span className="text-sm font-bold text-yellow-900">{orders.filter(o => o.status === 'Pending').length}</span>
+              <span className="text-sm font-bold text-yellow-900">{articleViewOrders.filter(o => o.status === 'Pending').length}</span>
             </div>
             <div className="bg-red-50 border border-red-100 rounded p-2 flex items-center justify-between">
               <span className="text-[10px] font-bold text-red-700 uppercase tracking-wide">On Hold</span>
-              <span className="text-sm font-bold text-red-900">{orders.filter(o => o.status === 'On Hold').length}</span>
+              <span className="text-sm font-bold text-red-900">{articleViewOrders.filter(o => o.status === 'On Hold').length}</span>
             </div>
           </div>
 
@@ -818,7 +847,15 @@ const LinkingFloorSupervisorPage = () => {
               </button>
             </div>
             <label className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-gray-700 border border-gray-200 rounded bg-white cursor-pointer hover:bg-gray-50 mr-2">
-              <input type="checkbox" checked={showAllArticles} onChange={(e) => setShowAllArticles(e.target.checked)} className="rounded border-gray-300" />
+              <input
+                type="checkbox"
+                checked={showAllArticles}
+                onChange={(e) => {
+                  setShowAllArticles(e.target.checked);
+                  if (!e.target.checked) clearQrArticlePin();
+                }}
+                className="rounded border-gray-300"
+              />
               Show all
             </label>
           </div>
@@ -832,7 +869,8 @@ const LinkingFloorSupervisorPage = () => {
             <UpcomingTab floorName="Linking" />
           ) : activeTab === "article-view" ? (
             <ArticleViewTab
-              orders={articleViewOrders}
+              orders={articleTabOrders}
+              isLoading={catalogLoading}
               onViewOrder={handleViewOrder}
               onUpdateOrder={handleUpdateOrder}
               getStatusBadge={getStatusBadge}
@@ -842,10 +880,8 @@ const LinkingFloorSupervisorPage = () => {
               onScanContainerClick={handleScanContainerClick}
               onScanLabelQrClick={openArticleQrScanDrawer}
               showAllArticles={showAllArticles}
-              onShowAllArticlesChange={(show) => {
-                setShowAllArticles(show);
-                if (!show) clearQrArticlePin();
-              }}
+              itemsPerPage={itemsPerPage}
+              onItemsPerPageChange={handleItemsPerPageChange}
               qrScanPinned={Boolean(qrPinnedArticleOrders)}
               onClearQrScanFilter={clearQrArticlePin}
             />
@@ -916,12 +952,12 @@ const LinkingFloorSupervisorPage = () => {
             </div>
           )}
 
-          {isLoading ? (
+          {catalogLoading && articleViewOrders.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50"></div>
               <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading</p>
             </div>
-          ) : orders.length === 0 ? (
+          ) : articleViewOrders.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
                 <i className="ri-file-list-line text-xl text-gray-200"></i>
@@ -930,6 +966,14 @@ const LinkingFloorSupervisorPage = () => {
               <p className="text-[10px] text-gray-500">
                 {hasActiveFilters ? 'Try adjusting filters or search' : 'No orders on Linking floor'}
               </p>
+            </div>
+          ) : filteredOrders.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                <i className="ri-file-list-line text-xl text-gray-200"></i>
+              </div>
+              <h3 className="text-xs font-bold text-gray-400 mb-1">NO ORDERS WITH REMAINING QTY</h3>
+              <p className="text-[10px] text-gray-500">Turn on Show all to include orders with zero remaining on Linking</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -981,20 +1025,20 @@ const LinkingFloorSupervisorPage = () => {
             </div>
           )}
 
-          {!isLoading && orders.length > 0 && (
+          {filteredOrders.length > 0 && (
             <div className="p-[10px] pt-4 flex flex-wrap items-center justify-between gap-4 border-t border-gray-300">
               <div className="text-[11px] font-medium text-[#495057]">
-                Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalResults)} of {totalResults} entries
+                Showing {ordersPageStart} to {ordersPageEnd} of {filteredOrders.length} entries
               </div>
-              <div className="flex items-center gap-1">
-                <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage <= 1} className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30">Prev</button>
-                {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-                  const pageNum = totalPages <= 7 ? i + 1 : currentPage <= 4 ? i + 1 : currentPage >= totalPages - 3 ? totalPages - 6 + i : currentPage - 3 + i;
+              <div className="flex items-center gap-1" role="navigation" aria-label="Orders pagination">
+                <button onClick={() => handlePageChange(safeCurrentPage - 1)} disabled={safeCurrentPage <= 1} className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30">Prev</button>
+                {Array.from({ length: Math.min(orderTotalPages, 7) }, (_, i) => {
+                  const pageNum = orderTotalPages <= 7 ? i + 1 : safeCurrentPage <= 4 ? i + 1 : safeCurrentPage >= orderTotalPages - 3 ? orderTotalPages - 6 + i : safeCurrentPage - 3 + i;
                   return (
-                    <button key={pageNum} onClick={() => handlePageChange(pageNum)} className={`w-7 h-7 flex items-center justify-center text-[11px] font-bold rounded ${currentPage === pageNum ? 'bg-purple-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-50'}`}>{pageNum}</button>
+                    <button key={pageNum} onClick={() => handlePageChange(pageNum)} className={`w-7 h-7 flex items-center justify-center text-[11px] font-bold rounded ${safeCurrentPage === pageNum ? 'bg-purple-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-50'}`}>{pageNum}</button>
                   );
                 })}
-                <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage >= totalPages} className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30">Next</button>
+                <button onClick={() => handlePageChange(safeCurrentPage + 1)} disabled={safeCurrentPage >= orderTotalPages} className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30">Next</button>
               </div>
             </div>
           )}

@@ -1,12 +1,16 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type { ProductionOrder, Article } from "@/shared/services/productionService";
 import {
   ArticleQrScanPinBanner,
   ArticleScanToolbarButtons,
   articleIdsMatch,
 } from "@/shared/components/production/ArticleViewQrScanUi";
+import {
+  ArticleViewOrderCell,
+  formatArticleViewOrderLabel,
+} from "@/shared/components/production/ArticleViewOrderCell";
 
 export interface ArticleRow {
   article: Article;
@@ -14,29 +18,42 @@ export interface ArticleRow {
 }
 
 export interface ArticleViewTabProps {
-  /** Orders already filtered by parent (remaining > 0 or received > 0 based on showAllArticles). */
   orders: ProductionOrder[];
+  isLoading?: boolean;
   onViewOrder: (order: ProductionOrder, article?: Article) => void;
   onUpdateOrder: (order: ProductionOrder, article?: Article) => void;
   getStatusBadge: (status: string) => string;
   getPriorityBadge: (priority: string) => string;
-  /** Article id that was accepted via container scan – row gets blue border and Assign button. */
   activeArticleId?: string | null;
   onAssignClick?: () => void;
   onScanContainerClick?: () => void;
   onScanLabelQrClick?: () => void;
   showAllArticles?: boolean;
-  onShowAllArticlesChange?: (show: boolean) => void;
+  itemsPerPage: number;
+  onItemsPerPageChange: (n: number) => void;
   qrScanPinned?: boolean;
   onClearQrScanFilter?: () => void;
 }
 
-/** Flattens orders into rows; parent already applied checking-floor article filters. */
+/**
+ * Checking remaining qty (prefers API remaining, else received − transferred).
+ */
+function checkingRemaining(article: Article): number {
+  const checking = article.floorQuantities?.checking;
+  if (checking == null) return 0;
+  if (typeof checking.remaining === "number") return checking.remaining;
+  const received = checking.received ?? 0;
+  const transferred = checking.transferred ?? 0;
+  return Math.max(0, received - transferred);
+}
+
+/** Flattens orders into rows with checking received > 0. */
 function flattenOrdersToArticles(orders: ProductionOrder[]): ArticleRow[] {
   const rows: ArticleRow[] = [];
   for (const order of orders) {
     for (const article of order.articles) {
-      rows.push({ article, order });
+      const received = article.floorQuantities?.checking?.received ?? 0;
+      if (received > 0) rows.push({ article, order });
     }
   }
   return rows;
@@ -48,8 +65,25 @@ function csvCell(value: string | number): string {
   return s;
 }
 
+/**
+ * M2/M3/M4 defect quantities for checking (floor snapshot, then article-level fallback).
+ */
+function checkingDefectQuantities(article: Article): {
+  m2: number;
+  m3: number;
+  m4: number;
+} {
+  const check = article.floorQuantities?.checking;
+  return {
+    m2: check?.m2Quantity ?? article.m2Quantity ?? 0,
+    m3: check?.m3Quantity ?? article.m3Quantity ?? 0,
+    m4: check?.m4Quantity ?? article.m4Quantity ?? 0,
+  };
+}
+
 export default function ArticleViewTab({
   orders,
+  isLoading = false,
   onViewOrder,
   onUpdateOrder,
   getStatusBadge,
@@ -58,24 +92,54 @@ export default function ArticleViewTab({
   onAssignClick,
   onScanContainerClick,
   onScanLabelQrClick,
-  onShowAllArticlesChange,
+  showAllArticles = false,
+  itemsPerPage,
+  onItemsPerPageChange,
   qrScanPinned = false,
   onClearQrScanFilter,
 }: ArticleViewTabProps) {
   const [articleSearch, setArticleSearch] = useState("");
+  const [articlePage, setArticlePage] = useState(1);
 
   const articleRows = useMemo(() => flattenOrdersToArticles(orders), [orders]);
 
+  const visibilityFilteredRows = useMemo(() => {
+    if (showAllArticles) return articleRows;
+    return articleRows.filter((r) => checkingRemaining(r.article) > 0);
+  }, [articleRows, showAllArticles]);
+
   const filteredRows = useMemo(() => {
-    if (!articleSearch.trim()) return articleRows;
+    if (!articleSearch.trim()) return visibilityFilteredRows;
     const q = articleSearch.trim().toLowerCase();
-    return articleRows.filter(
+    return visibilityFilteredRows.filter(
       (r) =>
         (r.article.articleNumber ?? "").toLowerCase().includes(q) ||
         (r.order.orderNumber ?? "").toLowerCase().includes(q) ||
+        (r.order.orderNote ?? "").toLowerCase().includes(q) ||
         (r.article.linkingType ?? "").toLowerCase().includes(q)
     );
-  }, [articleRows, articleSearch]);
+  }, [visibilityFilteredRows, articleSearch]);
+
+  useEffect(() => {
+    setArticlePage(1);
+  }, [showAllArticles, articleSearch, orders]);
+
+  const articleTotalPages = Math.max(1, Math.ceil(filteredRows.length / itemsPerPage));
+
+  useEffect(() => {
+    setArticlePage((p) => Math.min(Math.max(1, p), articleTotalPages));
+  }, [articleTotalPages]);
+
+  const safeArticlePage = Math.min(Math.max(1, articlePage), articleTotalPages);
+  const pagedRows = useMemo(() => {
+    const start = (safeArticlePage - 1) * itemsPerPage;
+    return filteredRows.slice(start, start + itemsPerPage);
+  }, [filteredRows, safeArticlePage, itemsPerPage]);
+
+  /** Changes article-view page (clamped by total pages). */
+  const handleArticlePageChange = (page: number) => {
+    setArticlePage(Math.min(Math.max(1, page), articleTotalPages));
+  };
 
   const handleExportExcel = () => {
     const headers = [
@@ -87,27 +151,34 @@ export default function ArticleViewTab({
       "Planned",
       "Received",
       "Done",
+      "M2",
+      "M3",
+      "M4",
       "Transferred",
       "Remaining",
     ];
 
     const rows = filteredRows.map(({ article, order }) => {
       const planned = article.plannedQuantity ?? 0;
-      const check = (article as { floorQuantities?: { checking?: { received?: number; m1Quantity?: number; transferred?: number; remaining?: number } }; m1Quantity?: number }).floorQuantities?.checking;
+      const check = article.floorQuantities?.checking;
       const received = check?.received ?? 0;
-      const done = check?.m1Quantity ?? (article as { m1Quantity?: number }).m1Quantity ?? 0;
+      const done = check?.m1Quantity ?? article.m1Quantity ?? 0;
       const transferred = check?.transferred ?? 0;
       const remaining = check?.remaining ?? Math.max(0, received - transferred);
+      const { m2, m3, m4 } = checkingDefectQuantities(article);
 
       return [
         article.articleNumber ?? "—",
         article.linkingType ?? "N/A",
-        order.orderNumber ?? order.id ?? "—",
+        formatArticleViewOrderLabel(order),
         order.status ?? "",
         order.priority ?? "",
         planned,
         received,
         done,
+        m2,
+        m3,
+        m4,
         transferred,
         remaining,
       ];
@@ -131,7 +202,16 @@ export default function ArticleViewTab({
     URL.revokeObjectURL(url);
   };
 
-  if (orders.length === 0) {
+  if (isLoading && orders.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4 opacity-50" />
+        <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading articles</p>
+      </div>
+    );
+  }
+
+  if (!isLoading && orders.length === 0) {
     return (
       <div className="p-[10px]">
         <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -145,11 +225,14 @@ export default function ArticleViewTab({
             <i className="ri-file-list-line text-xl text-gray-200" />
           </div>
           <h3 className="text-xs font-bold text-gray-400 mb-1">NO ARTICLES</h3>
-          <p className="text-[10px] text-gray-500">No checking articles in current order set</p>
+          <p className="text-[10px] text-gray-500">No checking articles on this floor</p>
         </div>
       </div>
     );
   }
+
+  const rangeStart = filteredRows.length === 0 ? 0 : (safeArticlePage - 1) * itemsPerPage + 1;
+  const rangeEnd = filteredRows.length === 0 ? 0 : Math.min(safeArticlePage * itemsPerPage, filteredRows.length);
 
   return (
     <div className="p-[10px]">
@@ -164,15 +247,28 @@ export default function ArticleViewTab({
         <div className="relative flex-1 min-w-[140px] max-w-[240px]">
           <input
             type="text"
-            className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-full placeholder:text-gray-400 font-medium"
+            className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-blue-300 w-full placeholder:text-gray-400 font-medium"
             placeholder="Search article, order..."
             value={articleSearch}
             onChange={(e) => setArticleSearch(e.target.value)}
+            aria-label="Search articles and orders"
           />
           <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
         </div>
+        <select
+          className="bg-white border border-gray-300 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5"
+          value={itemsPerPage}
+          onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
+          aria-label="Articles per page"
+        >
+          <option value={10}>Show 10</option>
+          <option value={25}>25</option>
+          <option value={50}>50</option>
+          <option value={100}>100</option>
+        </select>
         <span className="text-[11px] font-medium text-[#495057]">
           {filteredRows.length} article{filteredRows.length !== 1 ? "s" : ""}
+          {isLoading ? " · refreshing…" : ""}
         </span>
         <button
           type="button"
@@ -190,43 +286,25 @@ export default function ArticleViewTab({
         <table className="w-full border-collapse border border-gray-200">
           <thead>
             <tr className="bg-gray-50/30">
-              <th className="pl-[10px] pr-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Article
-              </th>
-              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Order
-              </th>
-              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Planned
-              </th>
-              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Rcv
-              </th>
-              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Done
-              </th>
-              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Trf
-              </th>
-              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Rem
-              </th>
-              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Status
-              </th>
-              <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Actions
-              </th>
+              <th className="pl-[10px] pr-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Article</th>
+              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Order</th>
+              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Planned</th>
+              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Rcv</th>
+              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Done</th>
+              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Trf</th>
+              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Rem</th>
+              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
+              <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filteredRows.map(({ article, order }) => {
+            {pagedRows.map(({ article, order }) => {
               const planned = article.plannedQuantity ?? 0;
-              const check = (article as any).floorQuantities?.checking;
+              const check = (article as { floorQuantities?: { checking?: { received?: number; m1Quantity?: number; transferred?: number; remaining?: number } }; m1Quantity?: number }).floorQuantities?.checking;
               const received = check?.received ?? 0;
-              const completed = check?.m1Quantity ?? (article as any).m1Quantity ?? 0;
+              const completed = check?.m1Quantity ?? (article as { m1Quantity?: number }).m1Quantity ?? 0;
               const transferred = check?.transferred ?? 0;
-              const remaining = check?.remaining ?? Math.max(0, received - transferred); // backend sends remaining; fallback for legacy
+              const remaining = check?.remaining ?? Math.max(0, received - transferred);
               const key = (article.id ?? article._id) + "-" + order.id;
               const articleId = article.id ?? article._id;
               const isActiveRow = Boolean(
@@ -244,44 +322,24 @@ export default function ArticleViewTab({
                     <div className="text-[10px] text-gray-500">{article.linkingType ?? "N/A"}</div>
                   </td>
                   <td className="px-1.5 py-2.5 border border-gray-200">
-                    <div className="text-[12px] font-medium text-gray-800">{order.orderNumber ?? order.id}</div>
-                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium mt-0.5 ${getStatusBadge(order.status)}`}>
-                      {order.status}
-                    </span>
-                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ml-0.5 ${getPriorityBadge(order.priority)}`}>
-                      {order.priority}
-                    </span>
+                    <ArticleViewOrderCell order={order} />
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium mt-0.5 ${getStatusBadge(order.status)}`}>{order.status}</span>
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ml-0.5 ${getPriorityBadge(order.priority)}`}>{order.priority}</span>
                   </td>
-                  <td className="px-1.5 py-2.5 text-center text-[12px] text-gray-700 border border-gray-200">
-                    {planned.toLocaleString()}
-                  </td>
-                  <td className="px-1.5 py-2.5 text-center text-[12px] text-blue-600 font-medium border border-gray-200">
-                    {received.toLocaleString()}
-                  </td>
-                  <td className="px-1.5 py-2.5 text-center text-[12px] text-green-600 font-medium border border-gray-200">
-                    {completed.toLocaleString()}
-                  </td>
-                  <td className="px-1.5 py-2.5 text-center text-[12px] text-green-600 font-medium border border-gray-200">
-                    {transferred.toLocaleString()}
-                  </td>
-                  <td className="px-1.5 py-2.5 text-center text-[12px] text-orange-600 font-medium border border-gray-200">
-                    {remaining.toLocaleString()}
-                  </td>
+                  <td className="px-1.5 py-2.5 text-center text-[12px] text-gray-700 border border-gray-200">{planned.toLocaleString()}</td>
+                  <td className="px-1.5 py-2.5 text-center text-[12px] text-blue-600 font-medium border border-gray-200">{received.toLocaleString()}</td>
+                  <td className="px-1.5 py-2.5 text-center text-[12px] text-green-600 font-medium border border-gray-200">{completed.toLocaleString()}</td>
+                  <td className="px-1.5 py-2.5 text-center text-[12px] text-green-600 font-medium border border-gray-200">{transferred.toLocaleString()}</td>
+                  <td className="px-1.5 py-2.5 text-center text-[12px] text-orange-600 font-medium border border-gray-200">{remaining.toLocaleString()}</td>
                   <td className="px-1.5 py-2.5 border border-gray-200">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${getStatusBadge(order.status)}`}>
-                      {order.status}
-                    </span>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${getStatusBadge(order.status)}`}>{order.status}</span>
                   </td>
                   <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
                     <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 flex-wrap">
                       {onAssignClick && (
                         <button
                           type="button"
-                          className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded ${
-                            isActiveRow
-                              ? "bg-purple-600 text-white hover:bg-purple-700 shadow-sm"
-                              : "bg-purple-50 text-purple-600 border border-purple-100 hover:bg-purple-100"
-                          }`}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded ${isActiveRow ? "bg-blue-600 text-white hover:bg-blue-700 shadow-sm" : "bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-100"}`}
                           onClick={onAssignClick}
                           title="Assign to team member"
                         >
@@ -289,20 +347,10 @@ export default function ArticleViewTab({
                           Assign
                         </button>
                       )}
-                      <button
-                        type="button"
-                        className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-400 border border-blue-100 rounded hover:bg-blue-100"
-                        onClick={() => onViewOrder(order, article)}
-                        title="View order"
-                      >
+                      <button type="button" className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-400 border border-blue-100 rounded hover:bg-blue-100" onClick={() => onViewOrder(order, article)} title="View order" aria-label={`View order ${formatArticleViewOrderLabel(order)}`}>
                         <i className="ri-eye-line text-xs" />
                       </button>
-                      <button
-                        type="button"
-                        className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100"
-                        onClick={() => onUpdateOrder(order, article)}
-                        title="Update order"
-                      >
+                      <button type="button" className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100" onClick={() => onUpdateOrder(order, article)} title="Update order" aria-label={`Update order ${formatArticleViewOrderLabel(order)}`}>
                         <i className="ri-edit-line text-xs" />
                       </button>
                     </div>
@@ -316,6 +364,48 @@ export default function ArticleViewTab({
 
       {filteredRows.length === 0 && articleSearch.trim() && (
         <div className="py-8 text-center text-[11px] text-gray-500">No articles match &quot;{articleSearch.trim()}&quot;</div>
+      )}
+
+      {filteredRows.length === 0 && !articleSearch.trim() && orders.length > 0 && (
+        <div className="py-8 text-center text-[11px] text-gray-500">
+          {showAllArticles
+            ? "No checking lines to display."
+            : "No articles with remaining quantity. Turn on Show all to include completed lines."}
+        </div>
+      )}
+
+      {filteredRows.length > 0 && (
+        <div className="pt-4 flex flex-wrap items-center justify-between gap-4 border-t border-gray-200 mt-3">
+          <div className="text-[11px] font-medium text-[#495057]">
+            Showing {rangeStart} to {rangeEnd} of {filteredRows.length} articles
+          </div>
+          <div className="flex items-center gap-1" role="navigation" aria-label="Article pagination">
+            <button type="button" onClick={() => handleArticlePageChange(safeArticlePage - 1)} disabled={safeArticlePage <= 1} className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30">Prev</button>
+            {Array.from({ length: Math.min(articleTotalPages, 7) }, (_, i) => {
+              const pageNum =
+                articleTotalPages <= 7
+                  ? i + 1
+                  : safeArticlePage <= 4
+                    ? i + 1
+                    : safeArticlePage >= articleTotalPages - 3
+                      ? articleTotalPages - 6 + i
+                      : safeArticlePage - 3 + i;
+              return (
+                <button
+                  key={pageNum}
+                  type="button"
+                  onClick={() => handleArticlePageChange(pageNum)}
+                  className={`w-7 h-7 flex items-center justify-center text-[11px] font-bold rounded ${safeArticlePage === pageNum ? "bg-blue-600 text-white shadow-md" : "text-gray-400 hover:bg-gray-50"}`}
+                  aria-label={`Page ${pageNum}`}
+                  aria-current={safeArticlePage === pageNum ? "page" : undefined}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+            <button type="button" onClick={() => handleArticlePageChange(safeArticlePage + 1)} disabled={safeArticlePage >= articleTotalPages} className="px-3 py-1.5 text-[11px] font-bold text-gray-400 hover:text-gray-600 disabled:opacity-30">Next</button>
+          </div>
+        </div>
       )}
     </div>
   );

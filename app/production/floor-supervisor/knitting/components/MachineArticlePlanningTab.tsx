@@ -258,7 +258,7 @@ export default function MachineArticlePlanningTab({ refreshTrigger }: MachineArt
           <table>
             <thead>
               <tr>
-                <th>Running</th>
+                <th>Season</th>
                 <th>Type</th>
                 <th>Needle</th>
                 <th>M/c No.</th>
@@ -340,7 +340,7 @@ export default function MachineArticlePlanningTab({ refreshTrigger }: MachineArt
           <thead>
             <tr className="bg-gray-100">
               <th className="px-2 py-2 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider border-b border-r border-gray-300">
-                Running
+                Season
               </th>
               <th className="px-2 py-2 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider border-b border-r border-gray-300">
                 Type
