@@ -73,13 +73,14 @@ const ORDER_STATUS_OPTIONS: OrderStatusType[] = [
   OrderStatus.IN_PROGRESS,
   OrderStatus.COMPLETED,
   OrderStatus.ON_HOLD,
+  OrderStatus.SHORT_CLOSE,
   OrderStatus.CANCELLED,
 ];
 
 /** Only first-priority item can be In Progress / Completed; others get Pending, On Hold, Cancelled only. */
 function getStatusOptionsForItem(idx: number, currentStatus?: OrderStatusType): OrderStatusType[] {
   if (idx === 0) return ORDER_STATUS_OPTIONS;
-  const restricted: OrderStatusType[] = [OrderStatus.PENDING, OrderStatus.ON_HOLD, OrderStatus.CANCELLED];
+  const restricted: OrderStatusType[] = [OrderStatus.PENDING, OrderStatus.ON_HOLD, OrderStatus.SHORT_CLOSE, OrderStatus.CANCELLED];
   const current = currentStatus ?? OrderStatus.PENDING;
   if (current === OrderStatus.IN_PROGRESS || current === OrderStatus.COMPLETED) {
     return [current, ...restricted.filter((s) => s !== current)];
@@ -151,9 +152,10 @@ function KnitDoneQuantityReminder({ entries }: { entries: KnitDoneEntry[] }) {
 const KnittingFloorSupervisorPage = () => {
   const user = useSelector((state: any) => state.auth?.user);
   const isUserRole = user?.role === "user";
-  /** On Hold status action in update modal — admin and super_admin only */
+  /** On Hold / Short Close status actions in update modal — admin and super_admin only */
   const canSetOnHold =
     user?.role === "admin" || user?.role === "super_admin";
+  const canShortClose = canSetOnHold;
   const [activeTab, setActiveTab] = useState<KnittingTab>("machine-view");
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -218,6 +220,16 @@ const KnittingFloorSupervisorPage = () => {
     itemId: string;
   } | null>(null);
   const [completingStatus, setCompletingStatus] = useState(false);
+  const [showShortCloseConfirmModal, setShowShortCloseConfirmModal] = useState(false);
+  const [shortCloseConfirmData, setShortCloseConfirmData] = useState<{
+    articleNumber: string;
+    orderNumber: string;
+    transferQty: number;
+    remainingQty: number;
+    receivedQty: number;
+    itemId: string;
+  } | null>(null);
+  const [shortClosingStatus, setShortClosingStatus] = useState(false);
   const [machineViewRefreshTrigger, setMachineViewRefreshTrigger] = useState(0);
   const [activeViewTabIndex, setActiveViewTabIndex] = useState(0);
   const [showLogsSection, setShowLogsSection] = useState(false);
@@ -531,7 +543,12 @@ const KnittingFloorSupervisorPage = () => {
       }
     }
     const items = (assignmentForModal.productionOrderItems ?? [])
-      .filter((i) => i.priority != null && i.status !== OrderStatus.ON_HOLD)
+      .filter(
+        (i) =>
+          i.priority != null &&
+          i.status !== OrderStatus.ON_HOLD &&
+          i.status !== OrderStatus.SHORT_CLOSE
+      )
       .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999))
       .slice(0, 2);
     if (items.length === 0) {
@@ -652,6 +669,50 @@ const KnittingFloorSupervisorPage = () => {
       toast.error(msg);
     } finally {
       setCompletingStatus(false);
+    }
+  };
+
+  /** Open short-close confirm; stops knitting and sends remaining yarn to return queue. */
+  const openShortCloseConfirmModal = (data: {
+    articleNumber: string;
+    orderNumber: string;
+    transferQty: number;
+    remainingQty: number;
+    receivedQty: number;
+    itemId: string;
+  }) => {
+    setShortCloseConfirmData(data);
+    setShowShortCloseConfirmModal(true);
+  };
+
+  const handleShortCloseConfirmYes = async () => {
+    if (!shortCloseConfirmData || !updateModalAssignment?.id) return;
+    setShortClosingStatus(true);
+    try {
+      await updateAssignmentItemStatus(
+        updateModalAssignment.id,
+        shortCloseConfirmData.itemId,
+        OrderStatus.SHORT_CLOSE
+      );
+      setUpdateModalAssignment(null);
+      setUpdateModalNeedleCutoff(null);
+      setUpdateModalAssignmentItems(null);
+      setUpdateModalReadOnlyFromIndex(undefined);
+      setShowShortCloseConfirmModal(false);
+      setShortCloseConfirmData(null);
+      setShowUpdateModal(false);
+      setSelectedOrder(null);
+      setUpdateData({});
+      setInitialUpdateData({});
+      toast.success("Article short closed — remaining yarn queued for return");
+      loadOrders();
+      if (activeTab === "article-view") void loadArticleViewOrders();
+      setMachineViewRefreshTrigger((t) => t + 1);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to short close article";
+      toast.error(msg);
+    } finally {
+      setShortClosingStatus(false);
     }
   };
 
@@ -984,7 +1045,8 @@ const KnittingFloorSupervisorPage = () => {
       'Pending': 'bg-yellow-100 text-yellow-800',
       'In Progress': 'bg-blue-100 text-blue-800',
       'Completed': 'bg-green-100 text-green-800',
-      'On Hold': 'bg-red-100 text-red-800'
+      'On Hold': 'bg-red-100 text-red-800',
+      'Short Close': 'bg-orange-100 text-orange-800'
     };
     return statusClasses[status as keyof typeof statusClasses] || 'bg-gray-100 text-gray-800';
   };
@@ -1763,6 +1825,26 @@ const KnittingFloorSupervisorPage = () => {
                                                   On Hold
                                                 </button>
                                               )}
+                                              {canShortClose && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() =>
+                                                    openShortCloseConfirmModal({
+                                                      articleNumber: article.articleNumber || `Article ${idx + 1}`,
+                                                      orderNumber: selectedOrder?.orderNumber ?? "",
+                                                      transferQty: transferredQty,
+                                                      remainingQty,
+                                                      receivedQty,
+                                                      itemId: assignmentItem!.itemId!,
+                                                    })
+                                                  }
+                                                  disabled={isDisabled}
+                                                  className="px-3 py-1.5 text-[11px] font-bold rounded bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-60"
+                                                  aria-label="Short close assignment item and queue remaining yarn for return"
+                                                >
+                                                  Short Close
+                                                </button>
+                                              )}
                                             </div>
                                           );
                                         }
@@ -1910,6 +1992,72 @@ const KnittingFloorSupervisorPage = () => {
                         </>
                       ) : (
                         "Yes, mark Completed"
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {showShortCloseConfirmModal && shortCloseConfirmData && (
+              <div
+                className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40"
+                onClick={() => {
+                  if (!shortClosingStatus) {
+                    setShowShortCloseConfirmModal(false);
+                    setShortCloseConfirmData(null);
+                  }
+                }}
+                aria-hidden
+              >
+                <div
+                  className="bg-white rounded-lg shadow-xl border border-gray-300 w-full max-w-sm p-4 flex flex-col gap-3"
+                  onClick={(e) => e.stopPropagation()}
+                  role="dialog"
+                  aria-labelledby="short-close-confirm-title"
+                >
+                  <h4 id="short-close-confirm-title" className="text-[13px] font-bold text-gray-800 border-b border-gray-200 pb-2">
+                    Short close article
+                  </h4>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
+                    <span className="text-gray-500">Article number</span>
+                    <span className="font-medium text-gray-900">{shortCloseConfirmData.articleNumber}</span>
+                    <span className="text-gray-500">Transfer quantity</span>
+                    <span className="font-medium text-gray-900">{shortCloseConfirmData.transferQty.toLocaleString()}</span>
+                    <span className="text-gray-500">Remaining quantity</span>
+                    <span className="font-medium text-gray-900">{shortCloseConfirmData.remainingQty.toLocaleString()}</span>
+                    <span className="text-gray-500">Received quantity</span>
+                    <span className="font-medium text-gray-900">{shortCloseConfirmData.receivedQty.toLocaleString()}</span>
+                  </div>
+                  <p className="text-[12px] text-gray-700 pt-1">
+                    This stops knitting for order <strong>{shortCloseConfirmData.orderNumber}</strong>. No more quantity can be
+                    produced on this machine. Remaining yarn will be queued for yarn return.
+                  </p>
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowShortCloseConfirmModal(false);
+                        setShortCloseConfirmData(null);
+                      }}
+                      disabled={shortClosingStatus}
+                      className="px-3 py-1.5 text-[11px] font-bold text-gray-600 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleShortCloseConfirmYes}
+                      disabled={shortClosingStatus}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 text-white text-[11px] font-bold rounded hover:bg-orange-700 disabled:opacity-50"
+                    >
+                      {shortClosingStatus ? (
+                        <>
+                          <span className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                          Short closing…
+                        </>
+                      ) : (
+                        "Yes, short close"
                       )}
                     </button>
                   </div>

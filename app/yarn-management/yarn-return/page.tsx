@@ -36,7 +36,7 @@ import {
 } from "@/shared/services/yarnTransactionsArticleReturnSliceService";
 
 type ConeStatus = "Awaiting" | "Returned" | "Consumed" | "Closed";
-type OrderStatus = "Awaiting Return" | "In Progress" | "Partial" | "Returned";
+type OrderStatus = "Awaiting Return" | "In Progress" | "Partial" | "Returned" | "Short Close";
 type ReturnStatus = "Awaiting" | "Partial" | "Returned";
 
 interface Cone {
@@ -257,7 +257,8 @@ function articleRowFromSlice(
 function buildMachineCatalogArticleRow(
   meta: { orderId: string; orderNumber: string; floor: string },
   art: Article,
-  articleIndex: number
+  articleIndex: number,
+  assignmentItemStatus?: string
 ): ArticleRow {
   const artId = art.id || (art as { _id?: string })._id;
   const artNorm = normalizeArticleRefId(artId);
@@ -275,7 +276,7 @@ function buildMachineCatalogArticleRow(
     floor: meta.floor,
     knittingSupervisor: "N/A",
     knittingCompletedAt: "",
-    status: "Awaiting Return",
+    status: assignmentItemStatus === "Short Close" ? "Short Close" : "Awaiting Return",
     cones: [],
     plannedQuantity: art.plannedQuantity ?? 0,
     yarnNames: "",
@@ -1082,6 +1083,8 @@ const statusBadgeColor = (status: ReturnStatus | OrderStatus) => {
       return "bg-orange-100 text-orange-800";
     case "Returned":
       return "bg-green-100 text-green-800";
+    case "Short Close":
+      return "bg-orange-100 text-orange-800";
     default:
       return "bg-gray-100 text-gray-800";
   }
@@ -1412,7 +1415,21 @@ const YarnReturnPage = () => {
             const rawAid = String(art.id || (art as { _id?: string })._id || "").trim();
             const rawNum = String(art.articleNumber || "").trim();
             if (!rawAid && !rawNum) return;
-            catalogRows.push(buildMachineCatalogArticleRow(meta, art, ai));
+            const matchingItem = items.find((it) => {
+              const artRef = it.article;
+              const itemArtId =
+                typeof artRef === "string"
+                  ? artRef
+                  : String(artRef?.id ?? artRef?._id ?? "").trim();
+              const itemArtNum = String(it.articleNumber ?? (typeof artRef === "object" ? artRef?.articleNumber : "") ?? "").trim();
+              return (
+                (rawAid && itemArtId && rawAid === itemArtId) ||
+                (rawNum && itemArtNum && rawNum === itemArtNum)
+              );
+            });
+            catalogRows.push(
+              buildMachineCatalogArticleRow(meta, art, ai, matchingItem?.status ? String(matchingItem.status) : undefined)
+            );
           });
         }
 
@@ -1625,6 +1642,7 @@ const YarnReturnPage = () => {
           rowId: catalogRow.rowId,
           articleId: catalogRow.articleId,
           articleNumber: catalogRow.articleNumber,
+          status: catalogRow.status === "Short Close" ? "Short Close" : mergedFromApi.status,
         };
         setArticleSliceCache((prev) => ({ ...prev, [catalogRow.rowId]: mergedRow }));
 

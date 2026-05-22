@@ -1,12 +1,13 @@
 import { API_BASE_URL } from '@/shared/data/utilities/api';
 import Cookies from 'js-cookie';
 
-/** Backend OrderStatus enum: Pending, In Progress, Completed, On Hold, Cancelled */
+/** Backend OrderStatus enum: Pending, In Progress, Completed, On Hold, Short Close, Cancelled */
 export const OrderStatus = {
   PENDING: 'Pending',
   IN_PROGRESS: 'In Progress',
   COMPLETED: 'Completed',
   ON_HOLD: 'On Hold',
+  SHORT_CLOSE: 'Short Close',
   CANCELLED: 'Cancelled',
 } as const;
 export type OrderStatusType = (typeof OrderStatus)[keyof typeof OrderStatus];

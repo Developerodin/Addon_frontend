@@ -56,6 +56,13 @@ function getItemCounts(a: MachineOrderAssignment): { poCount: number; articleCou
 }
 
 /**
+ * Statuses that leave the active prioritized knitting queue (on hold or short closed).
+ */
+function isTerminalKnittingQueueStatus(status: OrderStatusType | undefined): boolean {
+  return status === OrderStatus.ON_HOLD || status === OrderStatus.SHORT_CLOSE;
+}
+
+/**
  * Tailwind utility classes for read-only item status in the PO details drawer.
  */
 function assignmentItemStatusBadgeClass(status: OrderStatusType | undefined): string {
@@ -67,6 +74,8 @@ function assignmentItemStatusBadgeClass(status: OrderStatusType | undefined): st
       return "bg-green-100 text-green-800";
     case OrderStatus.ON_HOLD:
       return "bg-amber-100 text-amber-800";
+    case OrderStatus.SHORT_CLOSE:
+      return "bg-orange-100 text-orange-800";
     case OrderStatus.CANCELLED:
       return "bg-red-100 text-red-800";
     case OrderStatus.PENDING:
@@ -82,7 +91,7 @@ function getRunningArticleItem(
   a: MachineOrderAssignment
 ): MachineOrderAssignment["productionOrderItems"][number] | null {
   const items = (a.productionOrderItems ?? [])
-    .filter((i) => i.priority != null && i.status !== OrderStatus.ON_HOLD)
+    .filter((i) => i.priority != null && !isTerminalKnittingQueueStatus(i.status))
     .sort((x, y) => (x.priority ?? 999) - (y.priority ?? 999));
   return items.find((i) => i.status === OrderStatus.IN_PROGRESS) ?? null;
 }
@@ -134,8 +143,8 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
     async (prioritizedItems: typeof poDetailsAssignment.productionOrderItems, fromIndex: number, toIndex: number) => {
       if (!poDetailsAssignment || fromIndex === toIndex || !Array.isArray(prioritizedItems)) return;
       const all = poDetailsAssignment.productionOrderItems ?? [];
-      const onHold = all.filter((i) => i.status === OrderStatus.ON_HOLD);
-      const noPriority = all.filter((i) => i.priority == null && i.status !== OrderStatus.ON_HOLD);
+      const onHold = all.filter((i) => isTerminalKnittingQueueStatus(i.status));
+      const noPriority = all.filter((i) => i.priority == null && !isTerminalKnittingQueueStatus(i.status));
       const reordered = [...prioritizedItems];
       const [removed] = reordered.splice(fromIndex, 1);
       reordered.splice(toIndex, 0, removed);
@@ -570,7 +579,7 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
               </div>
               {(() => {
                 const all = poDetailsAssignment.productionOrderItems ?? [];
-                const hasPrioritized = all.some((i) => i.priority != null && i.status !== OrderStatus.ON_HOLD);
+                const hasPrioritized = all.some((i) => i.priority != null && !isTerminalKnittingQueueStatus(i.status));
                 return hasPrioritized ? (
                   <p className="text-slate-500 dark:text-slate-400 text-xs">Drag rows to change priority</p>
                 ) : null;
@@ -587,10 +596,10 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
                 (() => {
                   const all = [...(poDetailsAssignment.productionOrderItems ?? [])];
                   const prioritizedItems = all
-                    .filter((i) => i.priority != null && i.status !== OrderStatus.ON_HOLD)
+                    .filter((i) => i.priority != null && !isTerminalKnittingQueueStatus(i.status))
                     .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
-                  const onHoldItems = all.filter((i) => i.status === OrderStatus.ON_HOLD);
-                  const noPriorityItems = all.filter((i) => i.priority == null && i.status !== OrderStatus.ON_HOLD);
+                  const onHoldItems = all.filter((i) => isTerminalKnittingQueueStatus(i.status));
+                  const noPriorityItems = all.filter((i) => i.priority == null && !isTerminalKnittingQueueStatus(i.status));
                   const allOrdered = [...prioritizedItems, ...onHoldItems, ...noPriorityItems];
 
                   return (
