@@ -48,6 +48,7 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
     { key: 'Silicon Floor', label: 'Silicon Floor' },
     { key: 'Secondary Checking Floor', label: 'Secondary Checking Floor' },
     { key: 'Branding Floor', label: 'Branding Floor' },
+    { key: 'Re-Boarding Floor', label: 'Re-Boarding Floor' },
     { key: 'Final Checking Floor', label: 'Final Checking Floor' },
     { key: 'Dispatch Floor', label: 'Dispatch Floor' },
     { key: 'Machine Floor', label: 'Machine Floor' },

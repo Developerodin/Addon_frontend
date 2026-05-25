@@ -2,7 +2,7 @@ import { productionService } from "@/shared/services/productionService";
 import type { ArticleProcess } from "@/shared/services/productionService";
 import { PRODUCTION_FLOORS } from "@/shared/services/teamMasterService";
 
-export type FloorType = 'Knitting' | 'Linking' | 'Checking' | 'Washing' | 'Boarding' | 'Final Checking' | 'Branding' | 'Warehouse' | 'Dispatch';
+export type FloorType = 'Knitting' | 'Linking' | 'Checking' | 'Washing' | 'Boarding' | 'Silicon' | 'Secondary Checking' | 'Final Checking' | 'Branding' | 'Re-Boarding' | 'Warehouse' | 'Dispatch';
 export type LinkingType = 'Auto Linking' | 'Rosso Linking' | 'Hand Linking';
 
 /** camelCase keys used in article.floorQuantities */
@@ -15,6 +15,7 @@ export const CANONICAL_FLOOR_TO_KEY: Record<string, string> = {
   Silicon: 'silicon',
   'Secondary Checking': 'secondaryChecking',
   Branding: 'branding',
+  'Re-Boarding': 'reBoarding',
   'Final Checking': 'finalChecking',
   Warehouse: 'warehouse',
   Dispatch: 'dispatch',
@@ -44,6 +45,7 @@ export function mapProcessNameToFloor(processName: string): string {
   if (prefixMatch) return prefixMatch;
   // Process name variations that map to canonical floors
   if (nextNorm.includes("dispatch") && nextNorm.includes("ready")) return "Dispatch";
+  if (nextNorm.includes("reboard") || nextNorm.includes("re-board")) return "Re-Boarding";
   if (nextNorm.includes("secondary") && nextNorm.includes("check")) return "Secondary Checking";
   if (nextNorm.includes("final") && nextNorm.includes("check")) return "Final Checking";
   return processName;
@@ -204,6 +206,7 @@ export const getFloorDisplayName = (floor: FloorType): string => {
     'Boarding': 'Boarding',
     'Final Checking': 'Final Checking',
     'Branding': 'Branding',
+    'Re-Boarding': 'Re-Boarding',
     'Warehouse': 'Warehouse',
     'Dispatch': 'Dispatch',
   };
@@ -223,6 +226,7 @@ export const getFloorColor = (floor: FloorType): string => {
     'Boarding': 'bg-green-100 text-green-800',
     'Final Checking': 'bg-orange-100 text-orange-800',
     'Branding': 'bg-pink-100 text-pink-800',
+    'Re-Boarding': 'bg-emerald-100 text-emerald-800',
     'Warehouse': 'bg-gray-100 text-gray-800',
     'Dispatch': 'bg-teal-100 text-teal-800',
   };

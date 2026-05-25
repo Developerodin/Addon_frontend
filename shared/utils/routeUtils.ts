@@ -46,6 +46,7 @@ export const getFirstAvailableRoute = (permissions: NavigationPermissions | null
     { path: '/production/floor-supervisor/silicon', permission: permissions['Production Planning']?.['Silicon Floor'] },
     { path: '/production/floor-supervisor/secondary-checking', permission: permissions['Production Planning']?.['Secondary Checking Floor'] },
     { path: '/production/floor-supervisor/branding', permission: permissions['Production Planning']?.['Branding Floor'] },
+    { path: '/production/floor-supervisor/re-boarding', permission: permissions['Production Planning']?.['Re-Boarding Floor'] },
     { path: '/production/floor-supervisor/final-checking', permission: permissions['Production Planning']?.['Final Checking Floor'] },
     { path: '/production/floor-supervisor/dispatch', permission: permissions['Production Planning']?.['Dispatch Floor'] },
     { path: '/production/floor-supervisor/machine-floor', permission: permissions['Production Planning']?.['Machine Floor'] },

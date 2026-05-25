@@ -378,6 +378,14 @@ const BaseMenuItems: any = [
       },
       {
         icon: FloorIcon,
+        path: "/production/floor-supervisor/re-boarding",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Re-Boarding Floor",
+      },
+      {
+        icon: FloorIcon,
         path: "/production/floor-supervisor/final-checking",
         type: "link",
         active: false,

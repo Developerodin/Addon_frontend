@@ -70,6 +70,7 @@ export interface Article {
       receivedData?: DispatchReceivedDataEntry[];
     };
     branding: { received: number; completed: number; remaining: number; transferred: number; repairReceived?: number; repairFromFloor?: string; transferredData?: TransferItem[]; receivedData?: Array<TransferItem & { receivedStatusFromPreviousFloor?: string; receivedInContainerId?: string; receivedTimestamp?: string }> };
+    reBoarding: { received: number; completed: number; remaining: number; transferred: number; repairReceived?: number; repairFromFloor?: string };
     /** Warehouse: receive from Dispatch (or prior floor) with line-level receivedData; optional outbound transferredData. */
     warehouse: {
       received: number;
@@ -212,7 +213,7 @@ export interface TransferArticleRequest {
 /** Body for PATCH /articles/:articleId/floor-received-data – append one receivedData entry. */
 export type ProductionFloorName =
   | 'Knitting' | 'Linking' | 'Checking' | 'Washing' | 'Boarding' | 'Silicon'
-  | 'Secondary Checking' | 'Branding' | 'Final Checking' | 'Warehouse' | 'Dispatch';
+  | 'Secondary Checking' | 'Branding' | 'Re-Boarding' | 'Final Checking' | 'Warehouse' | 'Dispatch';
 
 export interface FloorReceivedDataBody {
   floor: ProductionFloorName;
@@ -326,9 +327,9 @@ class ProductionService {
   // Utility function to get floor order based on linking type
   getFloorOrderByLinkingType(linkingType: 'Auto Linking' | 'Rosso Linking' | 'Hand Linking'): string[] {
     if (linkingType === 'Auto Linking') {
-      return ['Knitting', 'Checking', 'Washing', 'Boarding', 'Final Checking', 'Branding', 'Warehouse', 'Dispatch'];
+      return ['Knitting', 'Checking', 'Washing', 'Boarding', 'Silicon', 'Secondary Checking', 'Branding', 'Re-Boarding', 'Final Checking', 'Dispatch', 'Warehouse'];
     } else {
-      return ['Knitting', 'Linking', 'Checking', 'Washing', 'Boarding', 'Final Checking', 'Branding', 'Warehouse', 'Dispatch'];
+      return ['Knitting', 'Linking', 'Checking', 'Washing', 'Boarding', 'Silicon', 'Secondary Checking', 'Branding', 'Re-Boarding', 'Final Checking', 'Dispatch', 'Warehouse'];
     }
   }
 

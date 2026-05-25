@@ -8,6 +8,7 @@ import HelpIcon from '@/shared/components/HelpIcon';
 import yarnCatalogService, { YarnCatalog } from '@/shared/services/yarnCatalogService';
 import { styleCodeService, StyleCode } from '@/shared/services/styleCodeService';
 import { StyleCodeSelectModal } from '@/app/catalog/style-codes/components/StyleCodeSelectModal';
+import { ProcessSequenceEditor } from '@/app/catalog/items/components/ProcessSequenceEditor';
 import { useSelector } from 'react-redux';
 import { isDesignUser, isProductionUser, isFinalUser, shouldShowAttribute, shouldShowAttributeForFinal } from '@/shared/utils/userUtils';
 
@@ -365,20 +366,6 @@ const AddProductPage = () => {
 
   const handleRemoveBomItem = (index: number) => {
     setBomItems(bomItems.filter((_, i) => i !== index));
-  };
-
-  const handleAddProcess = () => {
-    setProcessItems([...processItems, { processId: '' }]);
-  };
-
-  const handleProcessChange = (index: number, value: string) => {
-    const newProcessItems = [...processItems];
-    newProcessItems[index] = { ...newProcessItems[index], processId: value };
-    setProcessItems(newProcessItems);
-  };
-
-  const handleRemoveProcess = (index: number) => {
-    setProcessItems(processItems.filter((_, i) => i !== index));
   };
 
   // Add form state
@@ -1536,66 +1523,13 @@ const AddProductPage = () => {
                 {/* Processes Tab */}
                 {!isDesign && !isFinal && activeTab === 'processes' && (
                   <div>
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-lg font-medium">Production Processes</h3>
-                      <button
-                        type="button"
-                        onClick={handleAddProcess}
-                        className="ti-btn ti-btn-primary"
-                        disabled={isLoading}
-                      >
-                        <i className="ri-add-line me-2"></i> Add Process
-                      </button>
-                    </div>
-                    <div className="table-responsive">
-                      <table className="table whitespace-nowrap table-bordered min-w-full">
-                        <thead>
-                          <tr className="border-b border-gray-200">
-                            <th className="text-start">Process</th>
-                            <th className="text-start">Type</th>
-                            <th className="text-start">Description</th>
-                            <th className="text-start">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {processItems.map((item, index) => (
-                            <tr key={index} className="border-b border-gray-200">
-                              <td>
-                                <select
-                                  className="form-select"
-                                  value={item.processId}
-                                  onChange={(e) => handleProcessChange(index, e.target.value)}
-                                  disabled={isLoading}
-                                >
-                                  <option value="">Select Process</option>
-                                  {availableProcesses.map((process) => (
-                                    <option key={process.id} value={process.id}>
-                                      {process.name}
-                                    </option>
-                                  ))}
-                                </select>
-                              </td>
-                              <td>
-                                {availableProcesses.find(p => p.id === item.processId)?.type || ''}
-                              </td>
-                              <td>
-                                {availableProcesses.find(p => p.id === item.processId)?.description || ''}
-                              </td>
-                              <td>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveProcess(index)}
-                                  className="ti-btn ti-btn-danger ti-btn-sm"
-                                  disabled={isLoading}
-                                >
-                                  <i className="ri-delete-bin-line"></i>
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    <h3 className="text-lg font-medium mb-4">Production Process Sequence</h3>
+                    <ProcessSequenceEditor
+                      items={processItems}
+                      availableProcesses={availableProcesses}
+                      onChange={setProcessItems}
+                      disabled={isLoading}
+                    />
                   </div>
                 )}
 

@@ -37,6 +37,7 @@ export interface NavigationPermissions {
     'Silicon Floor': boolean;
     'Secondary Checking Floor': boolean;
     'Branding Floor': boolean;
+    'Re-Boarding Floor': boolean;
     'Final Checking Floor': boolean;
     'Dispatch Floor': boolean;
     'Machine Floor': boolean;

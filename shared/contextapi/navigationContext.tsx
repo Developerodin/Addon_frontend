@@ -38,6 +38,7 @@ interface NavigationPermissions {
     'Silicon Floor': boolean;
     'Secondary Checking Floor': boolean;
     'Branding Floor': boolean;
+    'Re-Boarding Floor': boolean;
     'Final Checking Floor': boolean;
     'Dispatch Floor': boolean;
     'Machine Floor': boolean;
@@ -164,6 +165,7 @@ const defaultPermissions: NavigationPermissions = {
     'Silicon Floor': false,
     'Secondary Checking Floor': false,
     'Branding Floor': false,
+    'Re-Boarding Floor': false,
     'Final Checking Floor': false,
     'Dispatch Floor': false,
     'Machine Floor': false,

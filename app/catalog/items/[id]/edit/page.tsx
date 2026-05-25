@@ -7,6 +7,7 @@ import { API_BASE_URL } from '@/shared/data/utilities/api';
 import yarnCatalogService, { YarnCatalog } from '@/shared/services/yarnCatalogService';
 import { styleCodeService, StyleCode } from '@/shared/services/styleCodeService';
 import { StyleCodeSelectModal } from '@/app/catalog/style-codes/components/StyleCodeSelectModal';
+import { ProcessSequenceEditor } from '@/app/catalog/items/components/ProcessSequenceEditor';
 import { useSelector } from 'react-redux';
 import { isDesignUser, isProductionUser, isFinalUser, shouldShowAttribute, shouldShowAttributeForFinal } from '@/shared/utils/userUtils';
 
@@ -538,16 +539,6 @@ const EditProductPage = () => {
     });
   };
 
-  const handleProcessChange = (index: number, value: string) => {
-    console.log('Changing process at index', index, 'to value:', value);
-    setFormData(prev => {
-      const newProcesses = [...prev.processes];
-      newProcesses[index] = { processId: value };
-      console.log('New processes array:', newProcesses);
-      return { ...prev, processes: newProcesses };
-    });
-  };
-
   const handleStyleCodeChange = (index: number, field: 'styleCode' | 'eanCode' | 'mrp' | 'brand' | 'pack', value: string | number) => {
     setFormData(prev => {
       const newStyleCodes = [...(prev.styleCodes || [{ styleCodeId: '', styleCode: '', eanCode: '', mrp: 0, brand: '', pack: '' }])];
@@ -631,20 +622,6 @@ const EditProductPage = () => {
     });
     setStyleCodeModalOpen(false);
     setStyleCodeModalIndex(null);
-  };
-
-  const addProcess = () => {
-    setFormData(prev => ({
-      ...prev,
-      processes: [...prev.processes, { processId: '' }]
-    }));
-  };
-
-  const removeProcess = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      processes: prev.processes.filter((_, i) => i !== index)
-    }));
   };
 
   const addBomItem = () => {
@@ -1720,65 +1697,22 @@ const EditProductPage = () => {
                 {/* Processes Tab */}
                 {!isDesign && !isFinal && activeTab === 'processes' && (
                   <div>
-                    {formData.processes.map((proc, index) => {
-                      const currentProcessId = typeof proc.processId === 'object' && proc.processId !== null && 'id' in proc.processId 
-                        ? (proc.processId as any).id 
-                        : proc.processId;
-                      console.log('Current process:', { proc, currentProcessId });
-                      
-                      return (
-                        <div key={index} className="grid grid-cols-12 gap-4 mb-4">
-                          <div className="col-span-4">
-                            <select
-                              className="form-control"
-                              value={currentProcessId}
-                              onChange={(e) => handleProcessChange(index, e.target.value)}
-                            >
-                              <option value="">Select Process</option>
-                              {processes.map((p: ProcessType) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="col-span-3">
-                            <input
-                              type="text"
-                              className="form-control"
-                              value={processes.find(p => p.id === currentProcessId)?.type || ''}
-                              readOnly
-                              placeholder="Type"
-                            />
-                          </div>
-                          <div className="col-span-3">
-                            <input
-                              type="text"
-                              className="form-control"
-                              value={processes.find(p => p.id === currentProcessId)?.description || ''}
-                              readOnly
-                              placeholder="Description"
-                            />
-                          </div>
-                          <div className="col-span-2">
-                            <button
-                              type="button"
-                              onClick={() => removeProcess(index)}
-                              className="ti-btn ti-btn-danger"
-                            >
-                              <i className="ri-delete-bin-line"></i>
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    <button
-                      type="button"
-                      onClick={addProcess}
-                      className="ti-btn ti-btn-primary"
-                    >
-                      Add Process
-                    </button>
+                    <h3 className="text-lg font-medium mb-4">Production Process Sequence</h3>
+                    <ProcessSequenceEditor
+                      items={formData.processes.map((proc) => ({
+                        processId:
+                          typeof proc.processId === 'object' &&
+                          proc.processId !== null &&
+                          'id' in proc.processId
+                            ? String((proc.processId as { id: string }).id)
+                            : String(proc.processId ?? ''),
+                      }))}
+                      availableProcesses={processes}
+                      onChange={(items) =>
+                        setFormData((prev) => ({ ...prev, processes: items }))
+                      }
+                      disabled={isLoading}
+                    />
                   </div>
                 )}
 

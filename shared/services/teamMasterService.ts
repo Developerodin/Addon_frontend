@@ -11,6 +11,7 @@ export const PRODUCTION_FLOORS = [
   'Silicon',
   'Secondary Checking',
   'Branding',
+  'Re-Boarding',
   'Final Checking',
   'Warehouse',
   'Dispatch',
