@@ -1629,13 +1629,81 @@ const FinalCheckingFloorSupervisorPage = () => {
         <>
           <div className="fixed inset-0 bg-black/50 z-40" onClick={closeUpdateModal} aria-hidden />
           <div className="fixed inset-y-0 right-0 w-full max-w-4xl bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right border-l-2 border-gray-300">
-            <div className="flex items-center justify-between px-3 py-2 border-b-2 border-gray-300 bg-gray-50 flex-shrink-0">
-              <h3 className="text-sm font-bold text-gray-800">Update Order — {selectedOrder.orderNumber}</h3>
-              <button onClick={closeUpdateModal} className="text-gray-500 hover:text-gray-800 p-1 rounded border-2 border-gray-300 hover:bg-gray-100">
-                <i className="ri-close-line text-lg"></i>
-              </button>
+            <div className="flex items-center justify-between gap-3 px-3 py-2 border-b-2 border-gray-300 bg-gray-50 flex-shrink-0">
+              <h3 className="text-sm font-bold text-gray-800 truncate min-w-0">Update Order — {selectedOrder.orderNumber}</h3>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button type="button" onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border-2 border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-100 shadow-sm">Cancel</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!selectedOrder) return;
+                    const invalid = modalArticles.some((article) => {
+                      const articleId = article.id || article._id;
+                      if (!articleId) return false;
+                      const update = updateData[articleId];
+                      if (!update) return false;
+                      const actualRemaining = getActualRemainingForArticle(article);
+                      const total = getTransferTotal(update.transferItems ?? []);
+                      if (total > actualRemaining) return true;
+                      return hasTransferItemsExceedingBrandMax(article, update.transferItems ?? []);
+                    });
+                    if (invalid) {
+                      toast.error("Cannot submit: Some articles have transfer quantity exceeding remaining or received per brand");
+                      return;
+                    }
+                    const hasTransferButNoReceived = modalArticles.some(article => {
+                      const aid = article.id || article._id;
+                      const total = getTransferTotal(updateData[aid]?.transferItems ?? []);
+                      const received = article.floorQuantities?.finalChecking?.received ?? 0;
+                      return total > 0 && received <= 0;
+                    });
+                    if (hasTransferButNoReceived) {
+                      toast.error("Transfer requires received work. Accept the container first (scan container → Accept Article Quantity).");
+                      return;
+                    }
+                    const hasAnyM1 = modalArticles.some(article => {
+                      const articleId = article.id || article._id;
+                      const total = getTransferTotal(updateData[articleId]?.transferItems ?? []);
+                      return articleId && total > 0;
+                    });
+                    if (!hasAnyM1) {
+                      handleUpdateSubmit();
+                      return;
+                    }
+                    setUpdateContainerBarcode("");
+                    setUpdateContainerCheckStatus("idle");
+                    setUpdateContainerFetched(null);
+                    const firstWithQty = modalArticles.find((a) => {
+                      const id = a.id ?? a._id;
+                      return id && getTransferTotal(updateData[id]?.transferItems ?? []) > 0;
+                    });
+                    if (firstWithQty) {
+                      const firstId = firstWithQty.id ?? firstWithQty._id ?? "";
+                      setUpdateContainerArticleId(firstId);
+                      setUpdateContainerNextFloor(resolveNextFloorFromProcesses(firstWithQty.processes ?? [], "Final Checking", "Warehouse"));
+                    }
+                    setShowUpdateContainerModal(true);
+                  }}
+                  disabled={modalArticles.some((article) => {
+                    const articleId = article.id || article._id;
+                    if (!articleId) return false;
+                    const update = updateData[articleId];
+                    if (!update) return false;
+                    const actualRemaining = getActualRemainingForArticle(article);
+                    const total = getTransferTotal(update.transferItems ?? []);
+                    if (total > actualRemaining) return true;
+                    return hasTransferItemsExceedingBrandMax(article, update.transferItems ?? []);
+                  })}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-[11px] font-bold rounded hover:bg-teal-700 shadow-sm disabled:opacity-50"
+                >
+                  <i className="ri-save-line text-xs"></i> Update Order
+                </button>
+                <button type="button" onClick={closeUpdateModal} className="text-gray-500 hover:text-gray-800 p-1 rounded border-2 border-gray-300 hover:bg-gray-100" aria-label="Close drawer">
+                  <i className="ri-close-line text-lg"></i>
+                </button>
+              </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-3">
+            <div className="flex-1 overflow-y-auto px-3 pt-3 pb-24">
             {/* Short intro so user knows what to do */}
             <div className="mb-4 px-3 py-2 rounded-md bg-teal-50 border-2 border-teal-200 text-[11px] text-teal-900">
               <strong>How to update:</strong> Select an article below, then (1) enter how many good pieces go to next floor (M1), (2) enter how many you checked in each quality category (M1–M4), (3) optionally move pieces between categories, then click Update Order.
@@ -1946,77 +2014,10 @@ const FinalCheckingFloorSupervisorPage = () => {
                 </div>
               </div>
             </section>
+            <div className="h-20 shrink-0" aria-hidden="true" />
                   </>
                 );
               })()}
-            </div>
-            <div className="flex justify-end gap-2 p-3 border-t-2 border-gray-300 bg-gray-50 flex-shrink-0">
-              <button type="button" onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border-2 border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-100 shadow-sm">Cancel</button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!selectedOrder) return;
-                  const invalid = modalArticles.some((article) => {
-                    const articleId = article.id || article._id;
-                    if (!articleId) return false;
-                    const update = updateData[articleId];
-                    if (!update) return false;
-                    const actualRemaining = getActualRemainingForArticle(article);
-                    const total = getTransferTotal(update.transferItems ?? []);
-                    if (total > actualRemaining) return true;
-                    return hasTransferItemsExceedingBrandMax(article, update.transferItems ?? []);
-                  });
-                  if (invalid) {
-                    toast.error("Cannot submit: Some articles have transfer quantity exceeding remaining or received per brand");
-                    return;
-                  }
-                  const hasTransferButNoReceived = modalArticles.some(article => {
-                    const aid = article.id || article._id;
-                    const total = getTransferTotal(updateData[aid]?.transferItems ?? []);
-                    const received = article.floorQuantities?.finalChecking?.received ?? 0;
-                    return total > 0 && received <= 0;
-                  });
-                  if (hasTransferButNoReceived) {
-                    toast.error("Transfer requires received work. Accept the container first (scan container → Accept Article Quantity).");
-                    return;
-                  }
-                  const hasAnyM1 = modalArticles.some(article => {
-                    const articleId = article.id || article._id;
-                    const total = getTransferTotal(updateData[articleId]?.transferItems ?? []);
-                    return articleId && total > 0;
-                  });
-                  if (!hasAnyM1) {
-                    handleUpdateSubmit();
-                    return;
-                  }
-                  setUpdateContainerBarcode("");
-                  setUpdateContainerCheckStatus("idle");
-                  setUpdateContainerFetched(null);
-                  const firstWithQty = modalArticles.find((a) => {
-                    const id = a.id ?? a._id;
-                    return id && getTransferTotal(updateData[id]?.transferItems ?? []) > 0;
-                  });
-                  if (firstWithQty) {
-                    const firstId = firstWithQty.id ?? firstWithQty._id ?? "";
-                    setUpdateContainerArticleId(firstId);
-                    setUpdateContainerNextFloor(resolveNextFloorFromProcesses(firstWithQty.processes ?? [], "Final Checking", "Warehouse"));
-                  }
-                  setShowUpdateContainerModal(true);
-                }}
-                disabled={modalArticles.some((article) => {
-                  const articleId = article.id || article._id;
-                  if (!articleId) return false;
-                  const update = updateData[articleId];
-                  if (!update) return false;
-                  const actualRemaining = getActualRemainingForArticle(article);
-                  const total = getTransferTotal(update.transferItems ?? []);
-                  if (total > actualRemaining) return true;
-                  return hasTransferItemsExceedingBrandMax(article, update.transferItems ?? []);
-                })}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-[11px] font-bold rounded hover:bg-teal-700 shadow-sm disabled:opacity-50"
-              >
-                <i className="ri-save-line text-xs"></i> Update Order
-              </button>
             </div>
           </div>
         </>

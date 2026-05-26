@@ -1153,13 +1153,72 @@ const BrandingFloorSupervisorPage = () => {
         <>
           <div className="fixed inset-0 bg-black/50 z-40" onClick={closeUpdateModal} aria-hidden />
           <div className="fixed inset-y-0 right-0 w-full max-w-4xl bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right border-l border-gray-200">
-            <div className="flex justify-between items-center p-[10px] border-b border-gray-200">
-              <h3 className="text-sm font-bold text-gray-800">Update Order — {selectedOrder.orderNumber || selectedOrder.id}</h3>
-              <button onClick={closeUpdateModal} className="text-gray-500 hover:text-gray-800 p-1 rounded border border-gray-200 hover:bg-gray-100">
-                <i className="ri-close-line text-lg"></i>
-              </button>
+            <div className="flex justify-between items-center gap-3 p-[10px] border-b border-gray-200 flex-shrink-0">
+              <h3 className="text-sm font-bold text-gray-800 truncate min-w-0">Update Order — {selectedOrder.orderNumber || selectedOrder.id}</h3>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button type="button" onClick={closeUpdateModal} disabled={isLoading} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Cancel</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const getTotal = (items: Array<{ transferred?: number }>) => (items ?? []).reduce((s, i) => s + (i.transferred ?? 0), 0);
+                    const invalid = modalArticles.some((article) => {
+                      const articleId = article.id || article._id;
+                      if (!articleId) return false;
+                      const update = updateData[articleId];
+                      if (!update) return false;
+                      const received = article.floorQuantities?.branding?.received || 0;
+                      const transferred = article.floorQuantities?.branding?.transferred || 0;
+                      const remaining = received - transferred;
+                      const total = getTotal(update.transferItems ?? []);
+                      return total > remaining;
+                    });
+                    if (invalid) {
+                      toast.error("Cannot submit: Some articles have completed quantities exceeding remaining quantities");
+                      return;
+                    }
+                    const firstWithQty = modalArticles.find((a) => {
+                      const id = a.id ?? a._id;
+                      return id && getTotal(updateData[id]?.transferItems ?? []) > 0;
+                    });
+                    if (!firstWithQty) {
+                      toast.error("Enter at least one article with transfer quantity");
+                      return;
+                    }
+                    setUpdateContainerBarcode("");
+                    setUpdateContainerCheckStatus("idle");
+                    setUpdateContainerFetched(null);
+                    const firstId = firstWithQty.id ?? firstWithQty._id ?? "";
+                    setUpdateContainerArticleId(firstId);
+                    setUpdateContainerQuantity(String(getTotal(updateData[firstId]?.transferItems ?? [])));
+                    setUpdateContainerNextFloor("Final Checking");
+                    setShowUpdateContainerModal(true);
+                  }}
+                  disabled={
+                    isLoading ||
+                    modalArticles.some((article) => {
+                      const articleId = article.id || article._id;
+                      if (!articleId) return false;
+                      const update = updateData[articleId];
+                      if (!update) return false;
+                      const received = article.floorQuantities?.branding?.received || 0;
+                      const transferred = article.floorQuantities?.branding?.transferred || 0;
+                      const remaining = received - transferred;
+                      const total = (update.transferItems ?? []).reduce((s, i) => s + (i.transferred ?? 0), 0);
+                      return total > remaining;
+                    }) ||
+                    !modalArticles.some((a) => (updateData[a.id ?? a._id ?? ""]?.transferItems ?? []).reduce((s, i) => s + (i.transferred ?? 0), 0) > 0)
+                  }
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 text-white text-[11px] font-bold rounded hover:bg-amber-700 shadow-sm disabled:opacity-50"
+                >
+                  <i className={`ri-save-line text-xs ${isLoading ? "animate-spin" : ""}`}></i>
+                  {isLoading ? "Updating..." : "Update Order"}
+                </button>
+                <button type="button" onClick={closeUpdateModal} disabled={isLoading} className="text-gray-500 hover:text-gray-800 p-1 rounded border border-gray-200 hover:bg-gray-100" aria-label="Close drawer">
+                  <i className="ri-close-line text-lg"></i>
+                </button>
+              </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-[10px]">
+            <div className="flex-1 overflow-y-auto px-[10px] pt-[10px] pb-24">
             {/* Order Summary */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 p-3 bg-gray-50 rounded-lg">
               <div>
@@ -1307,66 +1366,8 @@ const BrandingFloorSupervisorPage = () => {
                 );
               })}
             </div>
+            <div className="h-20 shrink-0" aria-hidden="true" />
 
-            </div>
-            <div className="flex-shrink-0 flex justify-end gap-2 p-[10px] border-t border-gray-200">
-              <button type="button" onClick={closeUpdateModal} disabled={isLoading} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Cancel</button>
-              <button
-                type="button"
-                onClick={() => {
-                  const getTotal = (items: Array<{ transferred?: number }>) => (items ?? []).reduce((s, i) => s + (i.transferred ?? 0), 0);
-                  const invalid = modalArticles.some((article) => {
-                    const articleId = article.id || article._id;
-                    if (!articleId) return false;
-                    const update = updateData[articleId];
-                    if (!update) return false;
-                    const received = article.floorQuantities?.branding?.received || 0;
-                    const transferred = article.floorQuantities?.branding?.transferred || 0;
-                    const remaining = received - transferred;
-                    const total = getTotal(update.transferItems ?? []);
-                    return total > remaining;
-                  });
-                  if (invalid) {
-                    toast.error("Cannot submit: Some articles have completed quantities exceeding remaining quantities");
-                    return;
-                  }
-                  const firstWithQty = modalArticles.find((a) => {
-                    const id = a.id ?? a._id;
-                    return id && getTotal(updateData[id]?.transferItems ?? []) > 0;
-                  });
-                  if (!firstWithQty) {
-                    toast.error("Enter at least one article with transfer quantity");
-                    return;
-                  }
-                  setUpdateContainerBarcode("");
-                  setUpdateContainerCheckStatus("idle");
-                  setUpdateContainerFetched(null);
-                  const firstId = firstWithQty.id ?? firstWithQty._id ?? "";
-                  setUpdateContainerArticleId(firstId);
-                  setUpdateContainerQuantity(String(getTotal(updateData[firstId]?.transferItems ?? [])));
-                  setUpdateContainerNextFloor("Final Checking");
-                  setShowUpdateContainerModal(true);
-                }}
-                disabled={
-                  isLoading ||
-                  modalArticles.some((article) => {
-                    const articleId = article.id || article._id;
-                    if (!articleId) return false;
-                    const update = updateData[articleId];
-                    if (!update) return false;
-                    const received = article.floorQuantities?.branding?.received || 0;
-                    const transferred = article.floorQuantities?.branding?.transferred || 0;
-                    const remaining = received - transferred;
-                    const total = (update.transferItems ?? []).reduce((s, i) => s + (i.transferred ?? 0), 0);
-                    return total > remaining;
-                  }) ||
-                  !modalArticles.some((a) => (updateData[a.id ?? a._id ?? ""]?.transferItems ?? []).reduce((s, i) => s + (i.transferred ?? 0), 0) > 0)
-                }
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 text-white text-[11px] font-bold rounded hover:bg-amber-700 shadow-sm disabled:opacity-50"
-              >
-                <i className={`ri-save-line text-xs ${isLoading ? "animate-spin" : ""}`}></i>
-                {isLoading ? "Updating..." : "Update Order"}
-              </button>
             </div>
           </div>
         </>

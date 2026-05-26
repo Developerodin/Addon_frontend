@@ -936,13 +936,58 @@ const WashingFloorSupervisorPage = () => {
         <>
           <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={closeUpdateModal} aria-hidden />
           <div className="fixed right-0 top-0 h-full w-full max-w-4xl bg-white shadow-xl z-50 flex flex-col overflow-hidden border-l border-gray-200">
-            <div className="flex items-center justify-between p-[10px] border-b border-gray-200 flex-shrink-0 bg-white">
-              <h3 className="text-sm font-bold text-gray-800">Update Order — {selectedOrder.orderNumber}</h3>
-              <button onClick={closeUpdateModal} className="text-gray-500 hover:text-gray-700 p-1 rounded">
-                <i className="ri-close-line text-lg"></i>
-              </button>
+            <div className="flex items-center justify-between gap-3 p-[10px] border-b border-gray-200 flex-shrink-0 bg-white">
+              <h3 className="text-sm font-bold text-gray-800 truncate min-w-0">Update Order — {selectedOrder.orderNumber}</h3>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 shadow-sm">Cancel</button>
+                <button
+                  onClick={() => {
+                    if (!selectedOrder) return;
+                    const invalid = modalArticles.some(article => {
+                      const articleId = article.id || article._id;
+                      if (!articleId) return false;
+                      const update = updateData[articleId];
+                      if (!update) return false;
+                      const received = article.floorQuantities?.washing?.received || 0;
+                      const transferred = article.floorQuantities?.washing?.transferred || 0;
+                      const remaining = received - transferred;
+                      return update.completedQuantity > remaining;
+                    });
+                    if (invalid) {
+                      toast.error("Cannot submit: Some articles have completed quantity exceeding remaining.");
+                      return;
+                    }
+                    const firstWithQty = modalArticles.find((a) => { const id = a.id ?? a._id; return id && (updateData[id]?.completedQuantity ?? 0) > 0; });
+                    if (!firstWithQty) { toast.error("Enter at least one article with washing completed quantity"); return; }
+                    setUpdateContainerBarcode("");
+                    setUpdateContainerCheckStatus("idle");
+                    setUpdateContainerFetched(null);
+                    const firstId = firstWithQty.id ?? firstWithQty._id ?? "";
+                    setUpdateContainerArticleId(firstId);
+                    setUpdateContainerQuantity(String(updateData[firstId]?.completedQuantity ?? 0));
+                    setUpdateContainerNextFloor("Boarding");
+                    setShowUpdateContainerModal(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 shadow-sm disabled:opacity-50"
+                  disabled={modalArticles.some(article => {
+                    const articleId = article.id || article._id;
+                    if (!articleId) return false;
+                    const update = updateData[articleId];
+                    if (!update) return false;
+                    const received = article.floorQuantities?.washing?.received || 0;
+                    const transferred = article.floorQuantities?.washing?.transferred || 0;
+                    const remaining = received - transferred;
+                    return update.completedQuantity > remaining;
+                  }) || !modalArticles.some((a) => (updateData[a.id ?? a._id ?? ""]?.completedQuantity ?? 0) > 0)}
+                >
+                  <i className="ri-save-line text-xs"></i> Update Order
+                </button>
+                <button onClick={closeUpdateModal} className="text-gray-500 hover:text-gray-700 p-1 rounded" aria-label="Close drawer">
+                  <i className="ri-close-line text-lg"></i>
+                </button>
+              </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-[10px]">
+            <div className="flex-1 overflow-y-auto px-[10px] pt-[10px] pb-24">
             <div className="mb-4 px-3 py-2 rounded-md bg-purple-50 border border-purple-200 text-[11px] text-gray-800">
               <strong>How to update:</strong> Enter washing completed quantity and remarks per article. Then click Update Order, scan the bag/container, select article and next floor, and submit.
             </div>
@@ -1018,51 +1063,7 @@ const WashingFloorSupervisorPage = () => {
                 </table>
               </div>
             </div>
-            </div>
-            <div className="flex justify-end gap-2 p-[10px] border-t border-gray-200 flex-shrink-0 bg-white">
-              <button onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 shadow-sm">Cancel</button>
-              <button
-                onClick={() => {
-                  if (!selectedOrder) return;
-                  const invalid = modalArticles.some(article => {
-                    const articleId = article.id || article._id;
-                    if (!articleId) return false;
-                    const update = updateData[articleId];
-                    if (!update) return false;
-                    const received = article.floorQuantities?.washing?.received || 0;
-                    const transferred = article.floorQuantities?.washing?.transferred || 0;
-                    const remaining = received - transferred;
-                    return update.completedQuantity > remaining;
-                  });
-                  if (invalid) {
-                    toast.error("Cannot submit: Some articles have completed quantity exceeding remaining.");
-                    return;
-                  }
-                  const firstWithQty = modalArticles.find((a) => { const id = a.id ?? a._id; return id && (updateData[id]?.completedQuantity ?? 0) > 0; });
-                  if (!firstWithQty) { toast.error("Enter at least one article with washing completed quantity"); return; }
-                  setUpdateContainerBarcode("");
-                  setUpdateContainerCheckStatus("idle");
-                  setUpdateContainerFetched(null);
-                  const firstId = firstWithQty.id ?? firstWithQty._id ?? "";
-                  setUpdateContainerArticleId(firstId);
-                  setUpdateContainerQuantity(String(updateData[firstId]?.completedQuantity ?? 0));
-                  setUpdateContainerNextFloor("Boarding");
-                  setShowUpdateContainerModal(true);
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 shadow-sm disabled:opacity-50"
-                disabled={modalArticles.some(article => {
-                  const articleId = article.id || article._id;
-                  if (!articleId) return false;
-                  const update = updateData[articleId];
-                  if (!update) return false;
-                  const received = article.floorQuantities?.washing?.received || 0;
-                  const transferred = article.floorQuantities?.washing?.transferred || 0;
-                  const remaining = received - transferred;
-                  return update.completedQuantity > remaining;
-                }) || !modalArticles.some((a) => (updateData[a.id ?? a._id ?? ""]?.completedQuantity ?? 0) > 0)}
-              >
-                <i className="ri-save-line text-xs"></i> Update Order
-              </button>
+            <div className="h-20 shrink-0" aria-hidden="true" />
             </div>
           </div>
         </>
