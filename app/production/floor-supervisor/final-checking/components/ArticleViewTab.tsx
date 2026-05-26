@@ -11,6 +11,7 @@ import {
   ArticleViewOrderCell,
   formatArticleViewOrderLabel,
 } from "@/shared/components/production/ArticleViewOrderCell";
+import { collapseLinesByBrand, formatBrandLine, formatBrandLines } from "@/shared/utils/brandTransfer.util";
 
 export interface ArticleRow {
   article: Article;
@@ -154,8 +155,8 @@ export default function ArticleViewTab({
       "M4",
       "Transferred",
       "Remaining",
-      "Received (Style/Brand)",
-      "Transferred (Style/Brand)",
+      "Received (Brand)",
+      "Transferred (Brand)",
     ];
 
     const rows = filteredRows.map(({ article, order }) => {
@@ -165,13 +166,8 @@ export default function ArticleViewTab({
       const transferred = fc?.transferred ?? 0;
       const remaining = fc?.remaining ?? Math.max(0, received - transferred);
       const { m2, m3, m4 } = finalCheckingDefectQuantities(article);
-      const receivedData = ((fc?.receivedData as Array<{ transferred?: number; styleCode?: string; brand?: string }>) ?? [])
-        .filter((d) => (d.transferred ?? 0) > 0)
-        .map((d) => `${d.transferred ?? 0}${d.styleCode ? ` · ${d.styleCode}` : ""}${d.brand ? ` · ${d.brand}` : ""}`)
-        .join(" | ") || "—";
-      const transferredData = ((fc?.transferredData as Array<{ transferred?: number; styleCode?: string; brand?: string }>) ?? [])
-        .map((d) => `${d.transferred ?? 0}${d.styleCode ? ` · ${d.styleCode}` : ""}${d.brand ? ` · ${d.brand}` : ""}`)
-        .join(" | ") || "—";
+      const receivedData = formatBrandLines(fc?.receivedData as any);
+      const transferredData = formatBrandLines(fc?.transferredData as any);
 
       return [
         article.articleNumber ?? "—",
@@ -298,8 +294,8 @@ export default function ArticleViewTab({
               <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">M1</th>
               <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Trf</th>
               <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Rem</th>
-              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Received (Style/Brand)</th>
-              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Transferred (Style/Brand)</th>
+              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Received (Brand)</th>
+              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Transferred (Brand)</th>
               <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
               <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
             </tr>
@@ -354,20 +350,13 @@ export default function ArticleViewTab({
                     {remaining.toLocaleString()}
                   </td>
                   <td className="px-1.5 py-2.5 border border-gray-200 text-[10px] text-gray-600 max-w-[140px]">
-                    {(fc?.receivedData as Array<{ transferred?: number; styleCode?: string; brand?: string }> | undefined)?.some((d) => (d.transferred ?? 0) > 0) ? (
+                    {collapseLinesByBrand(fc?.receivedData as any).length > 0 ? (
                       <div className="space-y-0.5">
-                        {(fc?.receivedData as Array<{ transferred?: number; styleCode?: string; brand?: string }>)
-                          .filter((d) => (d.transferred ?? 0) > 0)
-                          .slice(0, 3)
-                          .map((d, i) => (
-                            <div key={i} className="truncate">
-                              {d.transferred ?? 0} {d.styleCode ? `· ${d.styleCode}` : ""} {d.brand ? `· ${d.brand}` : ""}
-                            </div>
-                          ))}
-                        {(fc?.receivedData as Array<{ transferred?: number }>).filter((d) => (d.transferred ?? 0) > 0).length > 3 && (
-                          <div className="text-gray-400">
-                            +{(fc?.receivedData as Array<{ transferred?: number }>).filter((d) => (d.transferred ?? 0) > 0).length - 3} more
-                          </div>
+                        {collapseLinesByBrand(fc?.receivedData as any).slice(0, 3).map((d, i) => (
+                          <div key={i} className="truncate">{formatBrandLine(d)}</div>
+                        ))}
+                        {collapseLinesByBrand(fc?.receivedData as any).length > 3 && (
+                          <div className="text-gray-400">+{collapseLinesByBrand(fc?.receivedData as any).length - 3} more</div>
                         )}
                       </div>
                     ) : (
@@ -375,15 +364,13 @@ export default function ArticleViewTab({
                     )}
                   </td>
                   <td className="px-1.5 py-2.5 border border-gray-200 text-[10px] text-gray-600 max-w-[140px]">
-                    {fc?.transferredData?.length ? (
+                    {collapseLinesByBrand(fc?.transferredData as any).length > 0 ? (
                       <div className="space-y-0.5">
-                        {fc.transferredData.slice(0, 3).map((d, i) => (
-                          <div key={i} className="truncate">
-                            {d.transferred ?? 0} {d.styleCode ? `· ${d.styleCode}` : ""} {d.brand ? `· ${d.brand}` : ""}
-                          </div>
+                        {collapseLinesByBrand(fc?.transferredData as any).slice(0, 3).map((d, i) => (
+                          <div key={i} className="truncate">{formatBrandLine(d)}</div>
                         ))}
-                        {fc.transferredData.length > 3 && (
-                          <div className="text-gray-400">+{fc.transferredData.length - 3} more</div>
+                        {collapseLinesByBrand(fc?.transferredData as any).length > 3 && (
+                          <div className="text-gray-400">+{collapseLinesByBrand(fc?.transferredData as any).length - 3} more</div>
                         )}
                       </div>
                     ) : (

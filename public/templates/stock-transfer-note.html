@@ -39,11 +39,10 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .product-table col.col-article { width: 12%; }
-    .product-table col.col-sap { width: 20%; }
-    .product-table col.col-name { width: 40%; }
-    .product-table col.col-qty { width: 12%; }
-    .product-table col.col-box { width: 16%; }
+    .product-table col.col-article { width: 14%; }
+    .product-table col.col-brand { width: 22%; }
+    .product-table col.col-name { width: 44%; }
+    .product-table col.col-qty { width: 20%; }
     .text-left {
       text-align: left !important;
     }
@@ -79,41 +78,42 @@
     <table class="header-table" style="border-top: none;">
       <tr>
         <td class="text-left" style="font-weight: bold; width: 12%;">From</td>
-        <td class="text-left" style="width: 48%;">Unit B7-GF</td>
-        <td class="text-left" style="font-weight: bold; width: 20%;">STN Date:</td>
-        <td class="text-left" style="width: 20%;">{{STN_DATE}}</td>
+        <td class="text-left" style="width: 38%;">Unit B7-GF</td>
+        <td class="text-left" style="font-weight: bold; width: 18%;">STN Date:</td>
+        <td class="text-left" style="width: 32%;">{{STN_DATE}}</td>
       </tr>
       <tr>
         <td class="text-left" style="font-weight: bold;">To</td>
         <td class="text-left">Unit B8-2F</td>
-        <td class="text-left" style="font-weight: bold;">Total Box:</td>
-        <td class="text-left">1</td>
+        <td class="text-left" style="font-weight: bold;">STN No:</td>
+        <td class="text-left">{{STN_SERIAL}}</td>
+      </tr>
+      <tr>
+        <td class="text-left" style="font-weight: bold;">Total Boxes:</td>
+        <td class="text-left" colspan="3">{{TOTAL_BOXES}}</td>
       </tr>
     </table>
 
     <table class="product-table" style="border-top: none;">
       <colgroup>
         <col class="col-article">
-        <col class="col-sap">
+        <col class="col-brand">
         <col class="col-name">
         <col class="col-qty">
-        <col class="col-box">
       </colgroup>
       <tr>
-        <td colspan="5" style="font-size: 13px; font-weight: bold; text-align: center; text-transform: uppercase;">{{CATEGORY_LABEL}}</td>
+        <td colspan="4" style="font-size: 13px; font-weight: bold; text-align: center; text-transform: uppercase;">{{CATEGORY_LABEL}}</td>
       </tr>
       <tr>
         <th>Article No</th>
-        <th>SAP Article No.</th>
+        <th>Brand</th>
         <th>Article Name</th>
         <th>Qty in Pairs</th>
-        <th>Box No.</th>
       </tr>
       {{ARTICLE_ROWS}}
       <tr>
         <td colspan="3" style="text-align: right; font-weight: bold;">Total Qty</td>
         <td style="font-weight: bold;">{{TOTAL_QTY}}</td>
-        <td></td>
       </tr>
     </table>
 

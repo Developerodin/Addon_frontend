@@ -13,7 +13,14 @@ import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuan
 import ArticleViewTab from "./components/ArticleViewTab";
 import MyTeamTab from "./components/MyTeamTab";
 import UpcomingTab from "../components/UpcomingTab";
-import TransferItemsInput from "../branding/components/TransferItemsInput";
+import BrandTransferItemsInput from "@/shared/components/production/BrandTransferItemsInput";
+import {
+  buildBrandOptionsFromRows,
+  collapseLinesByBrand,
+  formatBrandLine,
+  toBrandOnlyTransferItems,
+  validateBrandTransferItems,
+} from "@/shared/utils/brandTransfer.util";
 import { containersMasterService, hasActiveItems, getContainerArticles } from "@/shared/services/containersMasterService";
 import { useProductionArticleQrScan } from "@/shared/hooks/useProductionArticleQrScan";
 import ArticleQrScanDrawer from "@/shared/components/production/ArticleQrScanDrawer";
@@ -264,37 +271,12 @@ const FinalCheckingFloorSupervisorPage = () => {
     return Math.max(0, fc?.remaining ?? (received - transferred));
   };
 
-  /** Build style code options and max qty per style from receivedData (only what we received). */
-  const getArticleM1StyleCodeOptions = (article: Article) => {
+  /** Build brand options and max qty per brand from receivedData. */
+  const getArticleBrandTransferOptions = (article: Article) => {
     const fc = article.floorQuantities?.finalChecking;
     const receivedData = (fc?.receivedData as Array<{ transferred?: number; styleCode?: string; brand?: string }>) ?? [];
-    const transferredData = (fc?.transferredData as Array<{ transferred?: number; styleCode?: string }>) ?? [];
-    const receivedBySc: Record<string, number> = {};
-    const transferredBySc: Record<string, number> = {};
-    for (const d of receivedData) {
-      const sc = (d.styleCode ?? "").trim();
-      if (sc && (d.transferred ?? 0) > 0) {
-        receivedBySc[sc] = (receivedBySc[sc] ?? 0) + (d.transferred ?? 0);
-      }
-    }
-    for (const d of transferredData) {
-      const sc = (d.styleCode ?? "").trim();
-      if (sc) transferredBySc[sc] = (transferredBySc[sc] ?? 0) + (d.transferred ?? 0);
-    }
-    const options: Array<{ styleCode: string; brand?: string }> = [];
-    const seen = new Set<string>();
-    for (const d of receivedData) {
-      const sc = (d.styleCode ?? "").trim();
-      if (sc && (d.transferred ?? 0) > 0 && !seen.has(sc)) {
-        seen.add(sc);
-        options.push({ styleCode: sc, brand: d.brand ?? "" });
-      }
-    }
-    const maxBySc: Record<string, number> = {};
-    for (const sc of Object.keys(receivedBySc)) {
-      maxBySc[sc] = Math.max(0, (receivedBySc[sc] ?? 0) - (transferredBySc[sc] ?? 0));
-    }
-    return { options, styleCodeMaxQuantities: maxBySc };
+    const transferredData = (fc?.transferredData as Array<{ transferred?: number; styleCode?: string; brand?: string }>) ?? [];
+    return buildBrandOptionsFromRows(receivedData, transferredData);
   };
 
   const filteredOrders = useMemo(
@@ -476,15 +458,11 @@ const FinalCheckingFloorSupervisorPage = () => {
   const getTransferTotal = (items: Array<{ transferred?: number }>) =>
     (items ?? []).reduce((s, i) => s + (i.transferred ?? 0), 0);
 
-  /** Check if transfer items exceed per-style-code received for an article. */
-  const hasTransferItemsExceedingStyleCodeMax = (article: Article, items: Array<{ transferred?: number; styleCode?: string }>) => {
-    const { styleCodeMaxQuantities } = getArticleM1StyleCodeOptions(article);
-    const bySc: Record<string, number> = {};
-    for (const i of items ?? []) {
-      const sc = (i.styleCode ?? "").trim();
-      if (sc) bySc[sc] = (bySc[sc] ?? 0) + (i.transferred ?? 0);
-    }
-    return Object.entries(bySc).some(([sc, sum]) => sum > (styleCodeMaxQuantities[sc] ?? Infinity));
+  /** Check if transfer items exceed per-brand received for an article. */
+  const hasTransferItemsExceedingBrandMax = (article: Article, items: Array<{ transferred?: number; brand?: string }>) => {
+    const { brandMaxQuantities } = getArticleBrandTransferOptions(article);
+    const { brandValid } = validateBrandTransferItems(items as any, Infinity, brandMaxQuantities);
+    return !brandValid;
   };
 
   const handleTransferItemsChange = (articleId: string, items: Array<{ transferred: number; styleCode?: string; brand?: string }>) => {
@@ -707,11 +685,11 @@ const FinalCheckingFloorSupervisorPage = () => {
       const actualRemaining = getActualRemainingForArticle(fresh);
       const total = getTransferTotal(update.transferItems ?? []);
       if (total > actualRemaining) return true;
-      return hasTransferItemsExceedingStyleCodeMax(fresh, update.transferItems ?? []);
+      return hasTransferItemsExceedingBrandMax(fresh, update.transferItems ?? []);
     });
 
     if (invalidArticles.length > 0) {
-      toast.error('Cannot submit: Some articles have transfer quantity exceeding remaining or received per style code');
+      toast.error('Cannot submit: Some articles have transfer quantity exceeding remaining or received per brand');
       return;
     }
 
@@ -744,7 +722,7 @@ const FinalCheckingFloorSupervisorPage = () => {
           update.repairStatus !== fresh.repairStatus ||
           update.repairRemarks !== (fresh.repairRemarks || '')
         )) {
-          const validItems = (update.transferItems ?? []).filter((i) => (i.transferred ?? 0) > 0);
+          const validItems = toBrandOnlyTransferItems(update.transferItems ?? []);
           const userId = user?.id ?? user?._id;
           const floorSupervisorId = user?.id ?? user?._id;
           if (validItems.length > 0) {
@@ -1744,14 +1722,10 @@ const FinalCheckingFloorSupervisorPage = () => {
               </div>
               {(fc?.receivedData as any[])?.some((d: any) => (d.transferred ?? 0) > 0) && (
                 <div className="px-3 py-2 border-t border-gray-200 bg-sky-50/50">
-                  <label className="block text-[10px] font-bold text-sky-800 mb-1">Received breakdown (Qty · Style · Brand)</label>
+                  <label className="block text-[10px] font-bold text-sky-800 mb-1">Received breakdown (Qty · Brand)</label>
                   <div className="space-y-0.5 text-[11px] text-gray-700">
-                    {(fc?.receivedData as any[]).filter((d: any) => (d.transferred ?? 0) > 0).map((d: any, i: number) => (
-                      <div key={i}>
-                        <span className="font-medium">{d.transferred ?? 0}</span>
-                        {d.styleCode && <span> · {d.styleCode}</span>}
-                        {d.brand && <span> · {d.brand}</span>}
-                      </div>
+                    {collapseLinesByBrand((fc?.receivedData as any[])?.filter((d: any) => (d.transferred ?? 0) > 0)).map((d, i) => (
+                      <div key={i}>{formatBrandLine(d)}</div>
                     ))}
                   </div>
                 </div>
@@ -1759,17 +1733,13 @@ const FinalCheckingFloorSupervisorPage = () => {
               <p className="px-3 py-1 text-[10px] text-gray-600 bg-amber-50 border-t border-gray-200">Max M1 to transfer = <strong>{remaining}</strong></p>
             </section>
             <section className="mb-4 rounded-md border-2 border-green-300 overflow-hidden">
-              <div className="px-3 py-1.5 bg-green-100 border-b-2 border-green-300 text-[11px] font-bold text-green-900">4. Good quality (M1) — transfer to next floor (Qty · Style · Brand)</div>
+              <div className="px-3 py-1.5 bg-green-100 border-b-2 border-green-300 text-[11px] font-bold text-green-900">4. Good quality (M1) — transfer to next floor (Qty · Brand)</div>
               {(fc?.transferredData as any[])?.length > 0 && (
                 <div className="px-3 py-2 border-b border-gray-200 bg-gray-50/50">
                   <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wide mb-1">Previously transferred</label>
                   <div className="space-y-0.5 text-[11px] text-gray-700">
-                    {(fc?.transferredData as any[]).map((d: any, i: number) => (
-                      <div key={i}>
-                        <span className="font-medium">{d.transferred ?? 0}</span>
-                        {d.styleCode && <span> · {d.styleCode}</span>}
-                        {d.brand && <span> · {d.brand}</span>}
-                      </div>
+                    {collapseLinesByBrand(fc?.transferredData as any[]).map((d, i) => (
+                      <div key={i}>{formatBrandLine(d)}</div>
                     ))}
                   </div>
                 </div>
@@ -1782,16 +1752,16 @@ const FinalCheckingFloorSupervisorPage = () => {
                   return (
                     <>
                       {(() => {
-                        const { options, styleCodeMaxQuantities } = getArticleM1StyleCodeOptions(article);
+                        const { options, brandMaxQuantities } = getArticleBrandTransferOptions(article);
                         const noReceived = options.length === 0;
                         return (
-                          <TransferItemsInput
-                            value={currentUpdateData.transferItems ?? [{ transferred: 0 }]}
+                          <BrandTransferItemsInput
+                            value={currentUpdateData.transferItems ?? [{ transferred: 0, styleCode: "", brand: "" }]}
                             onChange={(items) => handleTransferItemsChange(articleId, items)}
                             maxTotal={actualRemaining}
                             disabled={isFullyTransferred || noReceived}
-                            styleCodeOptions={options}
-                            styleCodeMaxQuantities={noReceived ? undefined : styleCodeMaxQuantities}
+                            brandOptions={options}
+                            brandMaxQuantities={noReceived ? undefined : brandMaxQuantities}
                             placeholder={noReceived ? "No received breakdown — accept article first" : "Add new transfer lines (max: remaining)"}
                           />
                         );
@@ -1994,10 +1964,10 @@ const FinalCheckingFloorSupervisorPage = () => {
                     const actualRemaining = getActualRemainingForArticle(article);
                     const total = getTransferTotal(update.transferItems ?? []);
                     if (total > actualRemaining) return true;
-                    return hasTransferItemsExceedingStyleCodeMax(article, update.transferItems ?? []);
+                    return hasTransferItemsExceedingBrandMax(article, update.transferItems ?? []);
                   });
                   if (invalid) {
-                    toast.error("Cannot submit: Some articles have transfer quantity exceeding remaining or received per style code");
+                    toast.error("Cannot submit: Some articles have transfer quantity exceeding remaining or received per brand");
                     return;
                   }
                   const hasTransferButNoReceived = modalArticles.some(article => {
@@ -2041,7 +2011,7 @@ const FinalCheckingFloorSupervisorPage = () => {
                   const actualRemaining = getActualRemainingForArticle(article);
                   const total = getTransferTotal(update.transferItems ?? []);
                   if (total > actualRemaining) return true;
-                  return hasTransferItemsExceedingStyleCodeMax(article, update.transferItems ?? []);
+                  return hasTransferItemsExceedingBrandMax(article, update.transferItems ?? []);
                 })}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-[11px] font-bold rounded hover:bg-teal-700 shadow-sm disabled:opacity-50"
               >
@@ -2172,28 +2142,18 @@ const FinalCheckingFloorSupervisorPage = () => {
                       <div className="mb-4 p-3 bg-sky-50 rounded-lg border border-sky-200">
                         <label className="form-label text-sky-800 font-semibold">Received breakdown (Style / Brand)</label>
                         <div className="mt-2 space-y-1 text-sm text-gray-700">
-                          {(article.floorQuantities?.finalChecking as any).receivedData
-                            .filter((d: any) => (d.transferred ?? 0) > 0)
-                            .map((d: any, i: number) => (
-                              <div key={i} className="flex gap-2">
-                                <span className="font-medium">{d.transferred ?? 0}</span>
-                                {d.styleCode && <span>· {d.styleCode}</span>}
-                                {d.brand && <span>· {d.brand}</span>}
-                              </div>
-                            ))}
+                          {collapseLinesByBrand((article.floorQuantities?.finalChecking as any).receivedData).map((d, i) => (
+                            <div key={i}>{formatBrandLine(d)}</div>
+                          ))}
                         </div>
                       </div>
                     )}
                     {(article.floorQuantities?.finalChecking as any)?.transferredData?.length > 0 && (
                       <div className="mb-4 p-3 bg-teal-50 rounded-lg border border-teal-200">
-                        <label className="form-label text-teal-800 font-semibold">Transferred breakdown (Style / Brand)</label>
+                        <label className="form-label text-teal-800 font-semibold">Transferred breakdown (Brand)</label>
                         <div className="mt-2 space-y-1 text-sm text-gray-700">
-                          {(article.floorQuantities?.finalChecking as any).transferredData.map((d: any, i: number) => (
-                            <div key={i} className="flex gap-2">
-                              <span className="font-medium">{d.transferred ?? 0}</span>
-                              {d.styleCode && <span>· {d.styleCode}</span>}
-                              {d.brand && <span>· {d.brand}</span>}
-                            </div>
+                          {collapseLinesByBrand((article.floorQuantities?.finalChecking as any).transferredData).map((d, i) => (
+                            <div key={i}>{formatBrandLine(d)}</div>
                           ))}
                         </div>
                       </div>

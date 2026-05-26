@@ -11,8 +11,14 @@ import NumericInput from "@/shared/utils/numericInput";
 import ArticleViewTab from "./components/ArticleViewTab";
 import MyTeamTab from "./components/MyTeamTab";
 import UpcomingTab from "../components/UpcomingTab";
-import TransferItemsInput from "./components/TransferItemsInput";
+import BrandTransferItemsInput from "@/shared/components/production/BrandTransferItemsInput";
 import { productService } from "@/shared/services/productService";
+import {
+  buildBrandOptionsFromProduct,
+  collapseLinesByBrand,
+  formatBrandLine,
+  toBrandOnlyTransferItems,
+} from "@/shared/utils/brandTransfer.util";
 import { containersMasterService, hasActiveItems, getContainerArticles } from "@/shared/services/containersMasterService";
 import { useProductionArticleQrScan } from "@/shared/hooks/useProductionArticleQrScan";
 import ArticleQrScanDrawer from "@/shared/components/production/ArticleQrScanDrawer";
@@ -92,9 +98,9 @@ const BrandingFloorSupervisorPage = () => {
     brandingType: 'Heat Transfer' | 'Embroidery';
     remarks: string;
   }}>({});
-  /** Per-article style codes from GET /products/by-code (factoryCode = articleNumber) */
-  const [articleStyleCodeOptions, setArticleStyleCodeOptions] = useState<Record<string, Array<{ styleCode: string; brand?: string }>>>({});
-  const [articleStyleCodesLoading, setArticleStyleCodesLoading] = useState(false);
+  /** Per-article unique brands from GET /products/by-code (factoryCode = articleNumber) */
+  const [articleBrandOptions, setArticleBrandOptions] = useState<Record<string, Array<{ brand: string }>>>({});
+  const [articleBrandsLoading, setArticleBrandsLoading] = useState(false);
   const [filters, setFilters] = useState({
     status: '',
     priority: '',
@@ -164,19 +170,19 @@ const BrandingFloorSupervisorPage = () => {
     return () => clearTimeout(timeoutId);
   }, [activeTab, loadFloorOrdersCatalog, searchQuery]);
 
-  // When update modal opens, fetch product by factoryCode (articleNumber) per article for style codes
+  // When update modal opens, fetch product by factoryCode (articleNumber) per article for unique brands
   useEffect(() => {
     if (!showUpdateModal || !selectedOrder) {
-      setArticleStyleCodeOptions({});
-      setArticleStyleCodesLoading(false);
+      setArticleBrandOptions({});
+      setArticleBrandsLoading(false);
       return;
     }
     const articles = selectedArticleId
       ? selectedOrder.articles.filter((a) => (a.id ?? a._id) === selectedArticleId)
       : selectedOrder.articles;
-    const opts: Record<string, Array<{ styleCode: string; brand?: string }>> = {};
+    const opts: Record<string, Array<{ brand: string }>> = {};
     let cancelled = false;
-    setArticleStyleCodesLoading(true);
+    setArticleBrandsLoading(true);
     Promise.all(
       articles.map(async (article) => {
         const articleId = article.id || article._id;
@@ -185,15 +191,12 @@ const BrandingFloorSupervisorPage = () => {
         if (!factoryCode) return;
         const product = await productService.getByCode(factoryCode);
         if (cancelled) return;
-        const styleCodes = product?.styleCodes ?? [];
-        opts[articleId] = styleCodes
-          .filter((sc) => sc?.styleCode)
-          .map((sc) => ({ styleCode: String(sc.styleCode), brand: sc.brand ?? "" }));
+        opts[articleId] = buildBrandOptionsFromProduct(product?.styleCodes ?? []);
       })
     ).then(() => {
       if (!cancelled) {
-        setArticleStyleCodeOptions(opts);
-        setArticleStyleCodesLoading(false);
+        setArticleBrandOptions(opts);
+        setArticleBrandsLoading(false);
       }
     });
     return () => { cancelled = true; };
@@ -487,7 +490,7 @@ const BrandingFloorSupervisorPage = () => {
         const newTransferQty = getTransferTotal(update?.transferItems ?? []);
         const hasChanges = newTransferQty > 0 || update?.remarks !== (article.remarks || '');
         if (update && hasChanges) {
-          const validItems = (update.transferItems ?? []).filter((i) => (i.transferred ?? 0) > 0);
+          const validItems = toBrandOnlyTransferItems(update.transferItems ?? []);
           const userId = user?.id ?? user?._id;
           const floorSupervisorId = user?.id ?? user?._id;
           if (validItems.length > 0 && (!userId || !floorSupervisorId)) {
@@ -1181,7 +1184,7 @@ const BrandingFloorSupervisorPage = () => {
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 mb-4">
               <p className="text-xs text-blue-800">
                 <i className="ri-information-line me-1"></i>
-                <strong>Note:</strong> Enter <strong>new</strong> transfer below. Previously transferred is shown separately. Total must not exceed remaining. Use &quot;Add row&quot; for multiple style/brand breakdowns.
+                <strong>Note:</strong> Enter <strong>new</strong> transfer below. Previously transferred is shown separately. Total must not exceed remaining. Use &quot;Add row&quot; for multiple brand breakdowns.
               </p>
             </div>
 
@@ -1271,12 +1274,8 @@ const BrandingFloorSupervisorPage = () => {
                       <div className="border-t border-gray-200 px-2 py-2 bg-gray-50/50">
                         <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wide mb-1">Previously transferred</label>
                         <div className="space-y-0.5 text-[11px] text-gray-700">
-                          {((article as any).floorQuantities.branding.transferredData as any[]).map((d: any, i: number) => (
-                            <div key={i}>
-                              <span className="font-medium">{d.transferred ?? 0}</span>
-                              {d.styleCode && <span> · {d.styleCode}</span>}
-                              {d.brand && <span> · {d.brand}</span>}
-                            </div>
+                          {collapseLinesByBrand((article as any).floorQuantities.branding.transferredData).map((d, i) => (
+                            <div key={i}>{formatBrandLine(d)}</div>
                           ))}
                         </div>
                       </div>
@@ -1284,22 +1283,22 @@ const BrandingFloorSupervisorPage = () => {
                     {/* New transfer section - user enters what they want to transfer now */}
                     <div className="border-t-2 border-amber-200 bg-amber-50/30 px-2 py-2">
                       <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wide">New transfer (Qty · Style · Brand) *</span>
+                        <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wide">New transfer (Qty · Brand) *</span>
                         {isFullyTransferred && (
                           <span className="text-green-600 text-xs font-medium">✓ All transferred</span>
                         )}
                       </div>
-                      <TransferItemsInput
-                        value={currentUpdateData.transferItems ?? [{ transferred: 0 }]}
+                      <BrandTransferItemsInput
+                        value={currentUpdateData.transferItems ?? [{ transferred: 0, styleCode: "", brand: "" }]}
                         onChange={(items) => handleTransferItemsChange(articleId, items)}
                         maxTotal={remainingQty}
-                        disabled={isFullyTransferred || articleStyleCodesLoading || (articleStyleCodeOptions[articleId]?.length ?? 0) === 0}
-                        styleCodeOptions={articleStyleCodeOptions[articleId] ?? []}
+                        disabled={isFullyTransferred || articleBrandsLoading || (articleBrandOptions[articleId]?.length ?? 0) === 0}
+                        brandOptions={articleBrandOptions[articleId] ?? []}
                         placeholder={
-                          articleStyleCodesLoading
-                            ? "Loading style codes..."
-                            : (articleStyleCodeOptions[articleId]?.length ?? 0) === 0
-                              ? "No style codes for this product"
+                          articleBrandsLoading
+                            ? "Loading brands..."
+                            : (articleBrandOptions[articleId]?.length ?? 0) === 0
+                              ? "No brands for this product"
                               : "Add new transfer lines (max: remaining)"
                         }
                       />
@@ -1590,7 +1589,7 @@ const BrandingFloorSupervisorPage = () => {
                                 <div className="space-y-0.5">
                                   {(article.floorQuantities?.branding as any).transferredData.map((d: any, i: number) => (
                                     <div key={i} className="truncate">
-                                      {d.transferred ?? 0} {d.styleCode ? `· ${d.styleCode}` : ""} {d.brand ? `· ${d.brand}` : ""}
+                                      {formatBrandLine(d)}
                                     </div>
                                   ))}
                                 </div>

@@ -11,6 +11,7 @@ import {
   ArticleViewOrderCell,
   formatArticleViewOrderLabel,
 } from "@/shared/components/production/ArticleViewOrderCell";
+import { collapseLinesByBrand, formatBrandLine, formatBrandLines, getDispatchBrandDisplay } from "@/shared/utils/brandTransfer.util";
 
 export interface ArticleRow {
   article: Article;
@@ -33,6 +34,8 @@ export interface ArticleViewTabProps {
   onItemsPerPageChange: (n: number) => void;
   qrScanPinned?: boolean;
   onClearQrScanFilter?: () => void;
+  /** Catalog brands keyed by article id — shown when dispatch receivedData has no brand breakdown */
+  productBrandsByArticleId?: Record<string, string[]>;
 }
 
 /** Dispatch remaining qty (prefers API remaining, else received − transferred). */
@@ -79,6 +82,7 @@ export default function ArticleViewTab({
   onItemsPerPageChange,
   qrScanPinned = false,
   onClearQrScanFilter,
+  productBrandsByArticleId = {},
 }: ArticleViewTabProps) {
   const [articleSearch, setArticleSearch] = useState("");
   const [articlePage, setArticlePage] = useState(1);
@@ -135,8 +139,8 @@ export default function ArticleViewTab({
       "Done",
       "Transferred",
       "Remaining",
-      "Received (Style/Brand)",
-      "Transferred (Style/Brand)",
+      "Received (Brand)",
+      "Transferred (Brand)",
     ];
 
     const rows = filteredRows.map(({ article, order }) => {
@@ -145,13 +149,11 @@ export default function ArticleViewTab({
       const completed = d?.m1Quantity ?? (article as { m1Quantity?: number }).m1Quantity ?? 0;
       const transferred = d?.transferred ?? 0;
       const remaining = d?.remaining ?? Math.max(0, received - transferred);
-      const receivedData = ((d?.receivedData as Array<{ transferred?: number; styleCode?: string; brand?: string }>) ?? [])
-        .filter((row) => (row.transferred ?? 0) > 0)
-        .map((row) => `${row.transferred ?? 0}${row.styleCode ? ` · ${row.styleCode}` : ""}${row.brand ? ` · ${row.brand}` : ""}`)
-        .join(" | ") || "—";
-      const transferredData = ((d?.transferredData as Array<{ transferred?: number; styleCode?: string; brand?: string }>) ?? [])
-        .map((row) => `${row.transferred ?? 0}${row.styleCode ? ` · ${row.styleCode}` : ""}${row.brand ? ` · ${row.brand}` : ""}`)
-        .join(" | ") || "—";
+      const receivedData = (() => {
+        const aid = article.id ?? article._id ?? "";
+        return getDispatchBrandDisplay(d?.receivedData as any, productBrandsByArticleId[aid]).text;
+      })();
+      const transferredData = formatBrandLines(d?.transferredData as any);
 
       return [
         article.articleNumber ?? "—",
@@ -275,8 +277,8 @@ export default function ArticleViewTab({
               <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">M1</th>
               <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Trf</th>
               <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Rem</th>
-              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Received (Style/Brand)</th>
-              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Transferred (Style/Brand)</th>
+              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Received (Brand)</th>
+              <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Transferred (Brand)</th>
               <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
               <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Actions</th>
             </tr>
@@ -297,6 +299,10 @@ export default function ArticleViewTab({
                     articleIdsMatch(article._id, activeArticleId))
               );
               const orderLabel = formatArticleViewOrderLabel(order);
+              const receivedBrandDisplay = getDispatchBrandDisplay(
+                d?.receivedData as any,
+                productBrandsByArticleId[articleId ?? ""]
+              );
               return (
                 <tr
                   key={key}
@@ -331,36 +337,32 @@ export default function ArticleViewTab({
                     {remaining.toLocaleString()}
                   </td>
                   <td className="px-1.5 py-2.5 border border-gray-200 text-[10px] text-gray-600 max-w-[140px]">
-                    {(d?.receivedData as Array<{ transferred?: number; styleCode?: string; brand?: string }> | undefined)?.some((row) => (row.transferred ?? 0) > 0) ? (
-                      <div className="space-y-0.5">
-                        {(d?.receivedData as Array<{ transferred?: number; styleCode?: string; brand?: string }>)
-                          .filter((row) => (row.transferred ?? 0) > 0)
-                          .slice(0, 3)
-                          .map((row, i) => (
-                            <div key={i} className="truncate">
-                              {row.transferred ?? 0} {row.styleCode ? `· ${row.styleCode}` : ""} {row.brand ? `· ${row.brand}` : ""}
-                            </div>
-                          ))}
-                        {(d?.receivedData as Array<{ transferred?: number }>).filter((row) => (row.transferred ?? 0) > 0).length > 3 && (
-                          <div className="text-gray-400">
-                            +{(d?.receivedData as Array<{ transferred?: number }>).filter((row) => (row.transferred ?? 0) > 0).length - 3} more
-                          </div>
-                        )}
+                    {receivedBrandDisplay.text === "—" ? (
+                      "—"
+                    ) : receivedBrandDisplay.fromProduct ? (
+                      <div className="text-indigo-800">
+                        <span className="text-[9px] font-bold uppercase tracking-wide text-indigo-500 block mb-0.5">Catalog</span>
+                        <div className="truncate font-medium">{receivedBrandDisplay.text}</div>
                       </div>
                     ) : (
-                      "—"
+                      <div className="space-y-0.5">
+                        {collapseLinesByBrand(d?.receivedData as any).slice(0, 3).map((line, i) => (
+                          <div key={i} className="truncate">{formatBrandLine(line)}</div>
+                        ))}
+                        {collapseLinesByBrand(d?.receivedData as any).length > 3 && (
+                          <div className="text-gray-400">+{collapseLinesByBrand(d?.receivedData as any).length - 3} more</div>
+                        )}
+                      </div>
                     )}
                   </td>
                   <td className="px-1.5 py-2.5 border border-gray-200 text-[10px] text-gray-600 max-w-[140px]">
-                    {d?.transferredData?.length ? (
+                    {collapseLinesByBrand(d?.transferredData as any).length > 0 ? (
                       <div className="space-y-0.5">
-                        {d.transferredData.slice(0, 3).map((row, i) => (
-                          <div key={i} className="truncate">
-                            {row.transferred ?? 0} {row.styleCode ? `· ${row.styleCode}` : ""} {row.brand ? `· ${row.brand}` : ""}
-                          </div>
+                        {collapseLinesByBrand(d?.transferredData as any).slice(0, 3).map((line, i) => (
+                          <div key={i} className="truncate">{formatBrandLine(line)}</div>
                         ))}
-                        {d.transferredData.length > 3 && (
-                          <div className="text-gray-400">+{d.transferredData.length - 3} more</div>
+                        {collapseLinesByBrand(d?.transferredData as any).length > 3 && (
+                          <div className="text-gray-400">+{collapseLinesByBrand(d?.transferredData as any).length - 3} more</div>
                         )}
                       </div>
                     ) : (

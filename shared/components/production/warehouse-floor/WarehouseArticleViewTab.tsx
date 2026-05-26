@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import type { ProductionOrder, Article } from "@/shared/services/productionService";
 import WarehouseQtyStyleBrandLines, { filterLinesWithQty } from "./WarehouseQtyStyleBrandLines";
+import { collapseLinesByBrand, formatBrandLine } from "@/shared/utils/brandTransfer.util";
 
 export interface WarehouseArticleRow {
   article: Article;
@@ -78,7 +79,7 @@ export default function WarehouseArticleViewTab({
 
   const handleExportExcel = () => {
     const headers = [
-      "Qty · Style · Brand (lines)",
+      "Qty · Brand (lines)",
       "Article (ref)",
       "Linking Type",
       "Order Status",
@@ -94,13 +95,7 @@ export default function WarehouseArticleViewTab({
       const completed = fc?.completed ?? 0;
       const transferred = fc?.transferred ?? 0;
       const remaining = fc?.remaining ?? Math.max(0, received - transferred);
-      const linesCol =
-        filterLinesWithQty(fc?.receivedData)
-          .map(
-            (d) =>
-              `Qty ${d.transferred ?? 0} / Style ${(d.styleCode ?? "—").trim() || "—"} / Brand ${(d.brand ?? "—").trim() || "—"}`
-          )
-          .join(" | ") || "—";
+      const linesCol = collapseLinesByBrand(fc?.receivedData).map((d) => formatBrandLine(d)).join(" | ") || "—";
 
       return [
         linesCol,
@@ -198,7 +193,7 @@ export default function WarehouseArticleViewTab({
           <thead>
             <tr className="bg-gray-50/30">
               <th className="pl-[10px] pr-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 min-w-[160px]">
-                Qty · Style · Brand
+                Qty · Brand
               </th>
               <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider border border-gray-200">
                 Article

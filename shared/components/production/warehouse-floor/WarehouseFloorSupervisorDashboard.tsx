@@ -13,6 +13,7 @@ import WarehouseQtyStyleBrandLines from "./WarehouseQtyStyleBrandLines";
 import WarehouseArticleViewTab from "./WarehouseArticleViewTab";
 import WarehouseMyTeamTab from "./WarehouseMyTeamTab";
 import UpcomingTab from "@/app/production/floor-supervisor/components/UpcomingTab";
+import { collapseLinesByBrand, formatBrandLine } from "@/shared/utils/brandTransfer.util";
 import { teamMasterService, type TeamMaster } from "@/shared/services/teamMasterService";
 
 type WarehouseFloorTab = "orders" | "article-view" | "my-team" | "upcoming";
@@ -1009,7 +1010,7 @@ export default function WarehouseFloorSupervisorDashboard({
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 mb-4">
               <p className="text-xs text-blue-800">
                 <i className="ri-information-line me-1"></i>
-                <strong>Note:</strong> <strong>Completed</strong> is cumulative processing on Warehouse and cannot exceed <strong>received</strong> (from container accept). Line-level <strong>receivedData</strong> / <strong>transferredData</strong> (style · brand · qty) is shown in the WH lines column and below.
+                <strong>Note:</strong> <strong>Completed</strong> is cumulative processing on Warehouse and cannot exceed <strong>received</strong> (from container accept). Line-level <strong>receivedData</strong> / <strong>transferredData</strong> (brand · qty) is shown in the WH lines column and below.
               </p>
             </div>
             {(selectedOrderModalArticles.some((a) => (a.floorQuantities?.warehouse?.receivedData?.length ?? 0) > 0) ||
@@ -1603,12 +1604,10 @@ export default function WarehouseFloorSupervisorDashboard({
                         </div>
                         {item.article && (item.article.floorQuantities?.dispatch?.transferredData?.length ?? 0) > 0 ? (
                           <div className="mt-1 text-[11px] text-amber-900 bg-amber-50 border border-amber-100 rounded p-1.5">
-                            <span className="font-semibold">From Dispatch (style · brand · qty):</span>
+                            <span className="font-semibold">From Dispatch (brand · qty):</span>
                             <ul className="mt-0.5 list-disc list-inside space-y-0.5">
-                              {(item.article.floorQuantities?.dispatch?.transferredData ?? []).map((d, di) => (
-                                <li key={di}>
-                                  {d.transferred} · {d.styleCode || "—"} · {d.brand || "—"}
-                                </li>
+                              {collapseLinesByBrand(item.article.floorQuantities?.dispatch?.transferredData).map((line, di) => (
+                                <li key={di}>{formatBrandLine(line)}</li>
                               ))}
                             </ul>
                           </div>

@@ -25,7 +25,7 @@ const toneClasses: Record<Tone, { border: string; bg: string; qty: string }> = {
 };
 
 /**
- * Primary focus: quantity, style code, brand. Use for warehouse received/transferred line rows.
+ * Quantity + brand line rows for warehouse received/transferred data.
  * `variant="table"` — compact row strip for dense tables. `variant="panel"` — modals / detail.
  */
 export default function WarehouseQtyStyleBrandLines({
@@ -48,19 +48,15 @@ export default function WarehouseQtyStyleBrandLines({
 
   if (variant === "table") {
     return (
-      <div className={`space-y-1.5 min-w-[140px] max-w-[220px] ${className}`}>
+      <div className={`space-y-1.5 min-w-[120px] max-w-[180px] ${className}`}>
         {filtered.map((d, i) => (
           <div key={i} className={`rounded border ${t.border} ${t.bg} px-2 py-1`}>
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
               <span className={`text-sm font-bold tabular-nums leading-none ${t.qty}`}>
                 {(d.transferred ?? 0).toLocaleString()}
               </span>
-              <span className="text-[9px] font-bold uppercase tracking-wide text-gray-500">Style</span>
-              <span className="text-[11px] font-semibold text-gray-900 truncate max-w-[100px]" title={(d.styleCode ?? "").trim() || undefined}>
-                {(d.styleCode ?? "—").trim() || "—"}
-              </span>
               <span className="text-[9px] font-bold uppercase tracking-wide text-gray-500">Brand</span>
-              <span className="text-[11px] font-medium text-gray-800 truncate max-w-[90px]" title={(d.brand ?? "").trim() || undefined}>
+              <span className="text-[11px] font-medium text-gray-800 truncate max-w-[120px]" title={(d.brand ?? "").trim() || undefined}>
                 {(d.brand ?? "—").trim() || "—"}
               </span>
             </div>
@@ -80,10 +76,6 @@ export default function WarehouseQtyStyleBrandLines({
               <span className={`text-xl font-bold tabular-nums leading-tight ${t.qty}`}>
                 {(d.transferred ?? 0).toLocaleString()}
               </span>
-            </div>
-            <div className="min-w-0 flex-1">
-              <span className="text-[9px] font-bold uppercase tracking-wide text-gray-500">Style</span>
-              <div className="text-sm font-semibold text-gray-900 break-words">{(d.styleCode ?? "—").trim() || "—"}</div>
             </div>
             <div className="min-w-0 flex-1">
               <span className="text-[9px] font-bold uppercase tracking-wide text-gray-500">Brand</span>

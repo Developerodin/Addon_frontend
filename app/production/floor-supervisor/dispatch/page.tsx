@@ -14,14 +14,25 @@ import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuan
 import ArticleViewTab from "./components/ArticleViewTab";
 import OrderDispatchBreakdownCell from "./components/OrderDispatchBreakdownCell";
 import MyTeamTab from "./components/MyTeamTab";
+import { TransferNotePrintModal } from "./components/TransferNotePrintModal";
+import { TransferNoteHistoryTab } from "./components/TransferNoteHistoryTab";
 import UpcomingTab from "../components/UpcomingTab";
-import TransferItemsInput from "../branding/components/TransferItemsInput";
+import BrandTransferItemsInput from "@/shared/components/production/BrandTransferItemsInput";
+import {
+  buildBrandOptionsFromProduct,
+  buildBrandOptionsFromRows,
+  collapseLinesByBrand,
+  formatBrandLine,
+  getDispatchBrandDisplay,
+  toBrandOnlyTransferItems,
+  validateBrandTransferItems,
+} from "@/shared/utils/brandTransfer.util";
 import { containersMasterService, hasActiveItems, getContainerArticles } from "@/shared/services/containersMasterService";
 import { useProductionArticleQrScan } from "@/shared/hooks/useProductionArticleQrScan";
 import ArticleQrScanDrawer from "@/shared/components/production/ArticleQrScanDrawer";
 import { teamMasterService, type TeamMaster, PRODUCTION_FLOORS } from "@/shared/services/teamMasterService";
 
-type DispatchTab = "orders" | "article-view" | "my-team" | "upcoming";
+type DispatchTab = "orders" | "article-view" | "my-team" | "upcoming" | "transfer-notes";
 
 const FLOOR_CATALOG_LIMIT = 2000;
 
@@ -95,7 +106,62 @@ const DispatchFloorSupervisorPage = () => {
 
   // Print modal state
   const [showPrintModal, setShowPrintModal] = useState(false);
-  const [printCategoryLabel, setPrintCategoryLabel] = useState("CORE & COLLECTION MIX");
+  const [transferNoteRefreshKey, setTransferNoteRefreshKey] = useState(0);
+
+  /** Per-article product catalog brands (fallback when dispatch receivedData has no brand breakdown) */
+  const [articleProductBrandOptions, setArticleProductBrandOptions] = useState<Record<string, Array<{ brand: string }>>>({});
+  const [articleProductBrandsLoading, setArticleProductBrandsLoading] = useState(false);
+
+  const productBrandsByArticleId = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const [articleId, opts] of Object.entries(articleProductBrandOptions)) {
+      map[articleId] = opts.map((o) => o.brand);
+    }
+    return map;
+  }, [articleProductBrandOptions]);
+
+  /** Batch-load product catalog brands for all articles on the dispatch floor. */
+  const loadProductBrandsForCatalog = useCallback(async (orders: ProductionOrder[]) => {
+    const articles = orders.flatMap((o) => o.articles);
+    const factoryCodes = Array.from(
+      new Set(articles.map((a) => a.articleNumber?.trim()).filter(Boolean) as string[])
+    );
+    if (!factoryCodes.length) {
+      setArticleProductBrandOptions({});
+      return;
+    }
+
+    setArticleProductBrandsLoading(true);
+    try {
+      const brandsByFactory = new Map<string, Array<{ brand: string }>>();
+      const CHUNK_SIZE = 500;
+      for (let i = 0; i < factoryCodes.length; i += CHUNK_SIZE) {
+        const chunk = factoryCodes.slice(i, i + CHUNK_SIZE);
+        const products = await getProductsByFactoryCodes(chunk);
+        for (const product of products) {
+          const fc = String(product.factoryCode ?? "").trim().toLowerCase();
+          const opts = buildBrandOptionsFromProduct(
+            (product as { styleCodes?: unknown[] }).styleCodes
+          );
+          if (fc && opts.length > 0) brandsByFactory.set(fc, opts);
+        }
+      }
+
+      const opts: Record<string, Array<{ brand: string }>> = {};
+      for (const article of articles) {
+        const articleId = article.id || article._id;
+        const fc = String(article.articleNumber ?? "").trim().toLowerCase();
+        if (articleId && fc && brandsByFactory.has(fc)) {
+          opts[articleId] = brandsByFactory.get(fc)!;
+        }
+      }
+      setArticleProductBrandOptions(opts);
+    } catch (error) {
+      console.error("Failed to load product catalog brands:", error);
+    } finally {
+      setArticleProductBrandsLoading(false);
+    }
+  }, []);
 
   /** When false (default): article view lists only articles with dispatch remaining > 0. When true: all with received > 0. */
   const [showAllArticles, setShowAllArticles] = useState(false);
@@ -136,6 +202,15 @@ const DispatchFloorSupervisorPage = () => {
     }, searchQuery ? 300 : 0);
     return () => clearTimeout(timeoutId);
   }, [activeTab, loadFloorOrdersCatalog, searchQuery]);
+
+  useEffect(() => {
+    if (activeTab !== "orders" && activeTab !== "article-view") return;
+    if (floorCatalog.length === 0) {
+      setArticleProductBrandOptions({});
+      return;
+    }
+    void loadProductBrandsForCatalog(floorCatalog);
+  }, [floorCatalog, activeTab, loadProductBrandsForCatalog]);
 
   // Update container modal: debounced barcode check (multi-article allowed on same floor)
   useEffect(() => {
@@ -232,46 +307,29 @@ const DispatchFloorSupervisorPage = () => {
   };
 
   /**
-   * Style/brand options and per-style caps from dispatch receivedData vs already transferred.
-   * If there is received qty but no line breakdown, offer a single "General" line capped by remaining.
+   * Brand options and per-brand caps from dispatch receivedData vs already transferred.
+   * Falls back to product catalog brands when received qty exists but no line breakdown.
    */
-  const getDispatchTransferStyleOptions = (article: Article) => {
+  const getDispatchBrandTransferOptions = (article: Article) => {
     const fc = article.floorQuantities?.dispatch;
     const receivedData = fc?.receivedData ?? [];
     const transferredData = fc?.transferredData ?? [];
-    const receivedBySc: Record<string, number> = {};
-    const transferredBySc: Record<string, number> = {};
-    for (const d of receivedData) {
-      const sc = (d.styleCode ?? "").trim();
-      if (sc && (d.transferred ?? 0) > 0) {
-        receivedBySc[sc] = (receivedBySc[sc] ?? 0) + (d.transferred ?? 0);
-      }
-    }
-    for (const d of transferredData) {
-      const sc = (d.styleCode ?? "").trim();
-      if (sc) transferredBySc[sc] = (transferredBySc[sc] ?? 0) + (d.transferred ?? 0);
-    }
-    const options: Array<{ styleCode: string; brand?: string }> = [];
-    const seen = new Set<string>();
-    for (const d of receivedData) {
-      const sc = (d.styleCode ?? "").trim();
-      if (sc && (d.transferred ?? 0) > 0 && !seen.has(sc)) {
-        seen.add(sc);
-        options.push({ styleCode: sc, brand: d.brand ?? "" });
-      }
-    }
-    const maxBySc: Record<string, number> = {};
-    for (const sc of Object.keys(receivedBySc)) {
-      maxBySc[sc] = Math.max(0, (receivedBySc[sc] ?? 0) - (transferredBySc[sc] ?? 0));
-    }
+    const fromRows = buildBrandOptionsFromRows(receivedData, transferredData);
     const remaining = getActualRemainingForArticle(article);
-    if (options.length === 0 && (fc?.received ?? 0) > 0 && remaining > 0) {
-      return {
-        options: [{ styleCode: "General", brand: "" }],
-        styleCodeMaxQuantities: { General: remaining },
-      };
+
+    if (fromRows.options.length === 0 && (fc?.received ?? 0) > 0 && remaining > 0) {
+      const articleId = article.id || article._id || "";
+      const productBrands = articleProductBrandOptions[articleId] ?? [];
+      if (productBrands.length > 0) {
+        const brandMaxQuantities: Record<string, number> = {};
+        for (const o of productBrands) {
+          brandMaxQuantities[o.brand] = remaining;
+        }
+        return { options: productBrands, brandMaxQuantities, usesProductFallback: true };
+      }
     }
-    return { options, styleCodeMaxQuantities: maxBySc };
+
+    return { ...fromRows, usesProductFallback: false };
   };
 
   const filteredOrders = useMemo(
@@ -424,15 +482,11 @@ const DispatchFloorSupervisorPage = () => {
   const getTransferTotal = (items: Array<{ transferred?: number }>) =>
     (items ?? []).reduce((s, i) => s + (i.transferred ?? 0), 0);
 
-  /** Check if transfer items exceed per-style-code received for an article. */
-  const hasTransferItemsExceedingStyleCodeMax = (article: Article, items: Array<{ transferred?: number; styleCode?: string }>) => {
-    const { styleCodeMaxQuantities } = getDispatchTransferStyleOptions(article);
-    const bySc: Record<string, number> = {};
-    for (const i of items ?? []) {
-      const sc = (i.styleCode ?? "").trim();
-      if (sc) bySc[sc] = (bySc[sc] ?? 0) + (i.transferred ?? 0);
-    }
-    return Object.entries(bySc).some(([sc, sum]) => sum > (styleCodeMaxQuantities[sc] ?? Infinity));
+  /** Check if transfer items exceed per-brand received for an article. */
+  const hasTransferItemsExceedingBrandMax = (article: Article, items: Array<{ transferred?: number; brand?: string }>) => {
+    const { brandMaxQuantities } = getDispatchBrandTransferOptions(article);
+    const { brandValid } = validateBrandTransferItems(items as any, Infinity, brandMaxQuantities);
+    return !brandValid;
   };
 
   const handleTransferItemsChange = (articleId: string, items: Array<{ transferred: number; styleCode?: string; brand?: string }>) => {
@@ -499,11 +553,11 @@ const DispatchFloorSupervisorPage = () => {
       const actualRemaining = getActualRemainingForArticle(fresh);
       const total = getTransferTotal(update.transferItems ?? []);
       if (total > actualRemaining) return true;
-      return hasTransferItemsExceedingStyleCodeMax(fresh, update.transferItems ?? []);
+      return hasTransferItemsExceedingBrandMax(fresh, update.transferItems ?? []);
     });
 
     if (invalidArticles.length > 0) {
-      toast.error('Cannot submit: Some articles have transfer quantity exceeding remaining or received per style code');
+      toast.error('Cannot submit: Some articles have transfer quantity exceeding remaining or received per brand');
       return;
     }
 
@@ -520,9 +574,7 @@ const DispatchFloorSupervisorPage = () => {
         const update = updateData[articleId];
         if (!update) return null;
 
-        const validItems = (update.transferItems ?? []).filter(
-          (i) => (i.transferred ?? 0) > 0 && String(i.styleCode ?? "").trim() !== ""
-        );
+        const validItems = toBrandOnlyTransferItems(update.transferItems ?? []);
         const remarksChanged = update.remarks !== (fresh.remarks || "");
 
         if (validItems.length === 0 && !remarksChanged) {
@@ -803,154 +855,16 @@ const DispatchFloorSupervisorPage = () => {
     return priorityClasses[priority as keyof typeof priorityClasses] || 'bg-gray-100 text-gray-800';
   };
 
-  const handlePrintList = async (categoryLabel: string) => {
-    const escapeHtml = (value: string) =>
-      value
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#39;");
+  const printFilters = useMemo<FloorOrderFilters>(() => ({
+    ...(filters.status && { status: filters.status }),
+    ...(filters.priority && { priority: filters.priority }),
+    ...(searchQuery && { search: searchQuery }),
+  }), [filters.status, filters.priority, searchQuery]);
 
-    type PrintRow = {
-      articleNo: string;
-      sapArticleNo: string;
-      articleName: string;
-      qtyInPairs: number;
-    };
-
-    const buildRowsForArticle = (
-      article: Article,
-      articleNameByFactoryCode: Record<string, string>
-    ): PrintRow[] => {
-      const dispatch = article.floorQuantities?.dispatch;
-      const transferredData = Array.isArray(dispatch?.transferredData) ? dispatch.transferredData : [];
-      const factoryCode = String(article.articleNumber ?? "").trim();
-      const articleName = articleNameByFactoryCode[factoryCode] ?? "—";
-
-      const rows: PrintRow[] = [];
-      transferredData.forEach((row) => {
-        const styleCode = String(row.styleCode ?? "").trim();
-        const qty = Number(row.transferred ?? 0);
-        if (qty <= 0) return;
-
-        rows.push({
-          articleNo: factoryCode || "—",
-          sapArticleNo: styleCode || "—",
-          articleName,
-          qtyInPairs: qty,
-        });
-      });
-
-      return rows;
-    };
-
-    let loadingToast: string | undefined;
-
-    try {
-      loadingToast = toast.loading("Loading pending warehouse print data…");
-      const printFiltersBase: FloorOrderFilters = {
-        limit: 100,
-        ...(filters.status && { status: filters.status }),
-        ...(filters.priority && { priority: filters.priority }),
-        ...(searchQuery && { search: searchQuery }),
-      };
-
-      const printOrders: ProductionOrder[] = [];
-      let printPage = 1;
-      let printTotalPages = 1;
-      const maxPages = 500;
-
-      while (printPage <= printTotalPages && printPage <= maxPages) {
-        const pendingRes = await productionService.getDispatchPendingWarehousePrintOrders({
-          ...printFiltersBase,
-          page: printPage,
-        });
-
-        if (!pendingRes.success || !pendingRes.data) {
-          if (loadingToast !== undefined) toast.dismiss(loadingToast);
-          toast.error(pendingRes.error?.message ?? "Failed to load pending print data");
-          return;
-        }
-
-        printOrders.push(...pendingRes.data.results);
-        printTotalPages = pendingRes.data.totalPages ?? 1;
-        printPage += 1;
-      }
-
-      if (loadingToast !== undefined) toast.dismiss(loadingToast);
-
-      const response = await fetch(`/templates/stock-transfer-note.html?v=${Date.now()}`, { cache: "no-store" });
-      let htmlTemplate = await response.text();
-
-      const factoryCodes = Array.from(
-        new Set(
-          printOrders
-            .flatMap((order) => order.articles.map((article) => String(article.articleNumber ?? "").trim()))
-            .filter(Boolean)
-        )
-      );
-      const productRows = await getProductsByFactoryCodes(factoryCodes).catch(() => []);
-      const articleNameByFactoryCode = productRows.reduce<Record<string, string>>((acc, row) => {
-        const fc = String(row.factoryCode ?? "").trim();
-        const name = String(row.name ?? "").trim();
-        if (fc) acc[fc] = name || "—";
-        return acc;
-      }, {});
-
-      const tableRows = printOrders.flatMap((order) =>
-        order.articles.flatMap((article) => buildRowsForArticle(article, articleNameByFactoryCode))
-      );
-      const totalQty = tableRows.reduce((sum, row) => sum + row.qtyInPairs, 0);
-      const rowsHtml = tableRows.length
-        ? tableRows
-            .map(
-              (row) => `
-      <tr>
-        <td>${escapeHtml(row.articleNo)}</td>
-        <td>${escapeHtml(row.sapArticleNo)}</td>
-        <td class="text-left">${escapeHtml(row.articleName)}</td>
-        <td>${row.qtyInPairs}</td>
-        <td></td>
-      </tr>`
-            )
-            .join("")
-        : `
-      <tr>
-        <td colspan="5">No rows available for print.</td>
-      </tr>`;
-
-      const printDate = new Date().toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      });
-
-      htmlTemplate = htmlTemplate
-        .replace("{{STN_DATE}}", printDate)
-        .replace("{{TOTAL_ROWS}}", String(tableRows.length))
-        .replace("{{ARTICLE_ROWS}}", rowsHtml)
-        .replace("{{TOTAL_QTY}}", String(totalQty))
-        .replace("{{CATEGORY_LABEL}}", escapeHtml(categoryLabel.trim() || "CORE & COLLECTION MIX"));
-
-      const printWindow = window.open("", "_blank");
-      if (printWindow) {
-        printWindow.document.write(htmlTemplate);
-        printWindow.document.close();
-        printWindow.onload = () => {
-          setTimeout(() => {
-            printWindow.print();
-          }, 250);
-        };
-      } else {
-        toast.error("Please allow popups to print list");
-      }
-    } catch (error) {
-      if (loadingToast !== undefined) toast.dismiss(loadingToast);
-      console.error("Error printing list:", error);
-      toast.error("Failed to load print template");
-    }
-  };
+  const handleTransferNoteCreated = useCallback(() => {
+    setTransferNoteRefreshKey((k) => k + 1);
+    void loadFloorOrdersCatalog();
+  }, [loadFloorOrdersCatalog]);
 
   return (
     <div className="main-content !p-[10px]">
@@ -993,7 +907,7 @@ const DispatchFloorSupervisorPage = () => {
               <button
                 type="button"
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
-                onClick={() => { setPrintCategoryLabel(""); setShowPrintModal(true); }}
+                onClick={() => setShowPrintModal(true)}
                 title="Print List"
               >
                 <i className="ri-printer-line text-xs"></i> Print List
@@ -1065,6 +979,13 @@ const DispatchFloorSupervisorPage = () => {
               >
                 Upcoming
               </button>
+              <button
+                type="button"
+                className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "transfer-notes" ? "border-teal-600 text-teal-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+                onClick={() => setActiveTab("transfer-notes")}
+              >
+                Transfer Notes
+              </button>
             </div>
             <label className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-gray-700 border border-gray-200 rounded bg-white cursor-pointer hover:bg-gray-50 mr-2">
               <input type="checkbox" checked={showAllArticles} onChange={(e) => {
@@ -1081,10 +1002,12 @@ const DispatchFloorSupervisorPage = () => {
             <MyTeamTab />
           ) : activeTab === "upcoming" ? (
             <UpcomingTab floorName="Dispatch" />
+          ) : activeTab === "transfer-notes" ? (
+            <TransferNoteHistoryTab refreshKey={transferNoteRefreshKey} />
           ) : activeTab === "article-view" ? (
             <ArticleViewTab
               orders={articleTabOrders}
-              isLoading={catalogLoading}
+              isLoading={catalogLoading || articleProductBrandsLoading}
               onViewOrder={handleViewOrder}
               onUpdateOrder={handleUpdateOrder}
               getStatusBadge={getStatusBadge}
@@ -1098,6 +1021,7 @@ const DispatchFloorSupervisorPage = () => {
               onItemsPerPageChange={handleItemsPerPageChange}
               qrScanPinned={Boolean(qrScan.qrPinnedArticleOrders)}
               onClearQrScanFilter={qrScan.clearQrPin}
+              productBrandsByArticleId={productBrandsByArticleId}
             />
           ) : (
             <>
@@ -1220,7 +1144,7 @@ const DispatchFloorSupervisorPage = () => {
                         )}
                       </td>
                       <td className="px-1.5 py-2.5 border border-gray-200 align-top">
-                        <OrderDispatchBreakdownCell order={order} />
+                        <OrderDispatchBreakdownCell order={order} productBrandsByArticleId={productBrandsByArticleId} />
                       </td>
                       <td className="px-1.5 py-2.5 border border-gray-200">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${getStatusBadge(order.status)}`}>{order.status}</span>
@@ -1524,7 +1448,7 @@ const DispatchFloorSupervisorPage = () => {
             </div>
             <div className="flex-1 overflow-y-auto p-3">
             <div className="mb-4 px-3 py-2 rounded-md bg-teal-50 border-2 border-teal-200 text-[11px] text-teal-900">
-              <strong>How to update:</strong> Pick an article tab, add <strong>new</strong> transfer lines (qty · style code · brand), optional remarks, then <strong>Update Order</strong>. You will scan a container/bag before submit. Dispatch does not use M1–M4 quality buckets.
+              <strong>How to update:</strong> Pick an article tab, add <strong>new</strong> transfer lines (qty · brand), optional remarks, then <strong>Update Order</strong>. You will scan a container/bag before submit. Dispatch does not use M1–M4 quality buckets.
             </div>
             {modalArticles.some((a) => (a.floorQuantities?.dispatch?.received ?? 0) <= 0) && (
               <div className="mb-4 px-3 py-2 rounded-md bg-amber-50 border-2 border-amber-200 text-[11px] text-amber-900">
@@ -1600,34 +1524,33 @@ const DispatchFloorSupervisorPage = () => {
                   </tbody>
                 </table>
               </div>
-              {(fc?.receivedData as any[])?.some((d: any) => (d.transferred ?? 0) > 0) && (
+              {(fc?.receivedData as any[])?.some((d: any) => (d.transferred ?? 0) > 0) ? (
                 <div className="px-3 py-2 border-t border-gray-200 bg-sky-50/50">
-                  <label className="block text-[10px] font-bold text-sky-800 mb-1">Received breakdown (Qty · Style · Brand)</label>
+                  <label className="block text-[10px] font-bold text-sky-800 mb-1">Received breakdown (Qty · Brand)</label>
                   <div className="space-y-0.5 text-[11px] text-gray-700">
-                    {(fc?.receivedData as any[]).filter((d: any) => (d.transferred ?? 0) > 0).map((d: any, i: number) => (
-                      <div key={i}>
-                        <span className="font-medium">{d.transferred ?? 0}</span>
-                        {d.styleCode && <span> · {d.styleCode}</span>}
-                        {d.brand && <span> · {d.brand}</span>}
-                      </div>
+                    {collapseLinesByBrand((fc?.receivedData as any[])?.filter((d: any) => (d.transferred ?? 0) > 0)).map((d, i) => (
+                      <div key={i}>{formatBrandLine(d)}</div>
                     ))}
                   </div>
                 </div>
-              )}
+              ) : (articleProductBrandOptions[articleId]?.length ?? 0) > 0 ? (
+                <div className="px-3 py-2 border-t border-gray-200 bg-indigo-50/50">
+                  <label className="block text-[10px] font-bold text-indigo-800 mb-1">Product brand (catalog)</label>
+                  <div className="text-[11px] text-indigo-900 font-medium">
+                    {getDispatchBrandDisplay(undefined, productBrandsByArticleId[articleId]).text}
+                  </div>
+                </div>
+              ) : null}
               <p className="px-3 py-1 text-[10px] text-gray-600 bg-amber-50 border-t border-gray-200">Max total to transfer this submit = <strong>{remaining}</strong></p>
             </section>
             <section className="mb-4 rounded-md border-2 border-green-300 overflow-hidden">
-              <div className="px-3 py-1.5 bg-green-100 border-b-2 border-green-300 text-[11px] font-bold text-green-900">4. Transfer to next floor (Qty · Style · Brand)</div>
+              <div className="px-3 py-1.5 bg-green-100 border-b-2 border-green-300 text-[11px] font-bold text-green-900">4. Transfer to next floor (Qty · Brand)</div>
               {(fc?.transferredData as any[])?.length > 0 && (
                 <div className="px-3 py-2 border-b border-gray-200 bg-gray-50/50">
                   <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wide mb-1">Previously transferred</label>
                   <div className="space-y-0.5 text-[11px] text-gray-700">
-                    {(fc?.transferredData as any[]).map((d: any, i: number) => (
-                      <div key={i}>
-                        <span className="font-medium">{d.transferred ?? 0}</span>
-                        {d.styleCode && <span> · {d.styleCode}</span>}
-                        {d.brand && <span> · {d.brand}</span>}
-                      </div>
+                    {collapseLinesByBrand(fc?.transferredData as any[]).map((d, i) => (
+                      <div key={i}>{formatBrandLine(d)}</div>
                     ))}
                   </div>
                 </div>
@@ -1640,17 +1563,39 @@ const DispatchFloorSupervisorPage = () => {
                   return (
                     <>
                       {(() => {
-                        const { options, styleCodeMaxQuantities } = getDispatchTransferStyleOptions(article);
-                        const noReceived = options.length === 0;
+                        const { options, brandMaxQuantities, usesProductFallback } = getDispatchBrandTransferOptions(article);
+                        const productBrands = articleProductBrandOptions[articleId] ?? [];
+                        const noReceived =
+                          options.length === 0 &&
+                          !((fc?.received ?? 0) > 0 && getActualRemainingForArticle(article) > 0 && productBrands.length > 0);
+                        const brandOpts =
+                          options.length > 0
+                            ? options
+                            : (fc?.received ?? 0) > 0 && productBrands.length > 0
+                              ? productBrands
+                              : [];
+                        const brandCaps =
+                          brandMaxQuantities ??
+                          (usesProductFallback || (options.length === 0 && productBrands.length > 0)
+                            ? Object.fromEntries(productBrands.map((o) => [o.brand, getActualRemainingForArticle(article)]))
+                            : undefined);
                         return (
-                          <TransferItemsInput
-                            value={currentUpdateData.transferItems ?? [{ transferred: 0 }]}
+                          <BrandTransferItemsInput
+                            value={currentUpdateData.transferItems ?? [{ transferred: 0, styleCode: "", brand: "" }]}
                             onChange={(items) => handleTransferItemsChange(articleId, items)}
                             maxTotal={actualRemaining}
-                            disabled={isFullyTransferred || noReceived}
-                            styleCodeOptions={options}
-                            styleCodeMaxQuantities={noReceived ? undefined : styleCodeMaxQuantities}
-                            placeholder={noReceived ? "Nothing to transfer — accept article / check received first" : "Add new transfer lines (max: remaining)"}
+                            disabled={isFullyTransferred || noReceived || articleProductBrandsLoading}
+                            brandOptions={brandOpts}
+                            brandMaxQuantities={noReceived ? undefined : brandCaps}
+                            placeholder={
+                              articleProductBrandsLoading
+                                ? "Loading brands..."
+                                : noReceived
+                                  ? "Nothing to transfer — accept article / check received first"
+                                  : usesProductFallback || (options.length === 0 && productBrands.length > 0)
+                                    ? "Assign qty by product brand (max: remaining)"
+                                    : "Add new transfer lines (max: remaining)"
+                            }
                           />
                         );
                       })()}
@@ -1687,7 +1632,7 @@ const DispatchFloorSupervisorPage = () => {
                     const actualRemaining = getActualRemainingForArticle(article);
                     const total = getTransferTotal(update.transferItems ?? []);
                     if (total > actualRemaining) return true;
-                    return hasTransferItemsExceedingStyleCodeMax(article, update.transferItems ?? []);
+                    return hasTransferItemsExceedingBrandMax(article, update.transferItems ?? []);
                   });
                   if (invalid) {
                     toast.error("Cannot submit: Some articles have transfer quantity exceeding remaining or received per style code");
@@ -1736,7 +1681,7 @@ const DispatchFloorSupervisorPage = () => {
                   const actualRemaining = getActualRemainingForArticle(article);
                   const total = getTransferTotal(update.transferItems ?? []);
                   if (total > actualRemaining) return true;
-                  return hasTransferItemsExceedingStyleCodeMax(article, update.transferItems ?? []);
+                  return hasTransferItemsExceedingBrandMax(article, update.transferItems ?? []);
                 })}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-[11px] font-bold rounded hover:bg-teal-700 shadow-sm disabled:opacity-50"
               >
@@ -1859,37 +1804,39 @@ const DispatchFloorSupervisorPage = () => {
                           <span className="text-gray-500 font-normal text-base"> / </span>
                           <span className="text-orange-700">{(article.floorQuantities?.dispatch?.remaining ?? 0).toLocaleString()}</span>
                         </div>
-                        <div className="text-xs text-gray-500 mt-1">By style/brand via transfer lines + container</div>
+                        <div className="text-xs text-gray-500 mt-1">By brand via transfer lines + container</div>
                       </div>
                     </div>
 
-                    {(article.floorQuantities?.dispatch?.receivedData?.length ?? 0) > 0 && (
+                    {(article.floorQuantities?.dispatch?.receivedData?.length ?? 0) > 0 ? (
                       <div className="mb-4 p-3 bg-sky-50 rounded-lg border border-sky-200">
-                        <label className="form-label text-sky-800 font-semibold">Received lines (qty · style · brand)</label>
+                        <label className="form-label text-sky-800 font-semibold">Received lines (qty · brand)</label>
                         <div className="mt-2 space-y-1 text-sm text-gray-700">
-                          {(article.floorQuantities?.dispatch?.receivedData ?? []).map((d, i: number) => (
-                            <div key={i} className="flex gap-2 flex-wrap">
-                              <span className="font-medium">{d.transferred ?? 0}</span>
-                              {d.styleCode && <span>· {d.styleCode}</span>}
-                              {d.brand && <span>· {d.brand}</span>}
-                              {d.receivedStatusFromPreviousFloor && (
-                                <span className="text-xs text-gray-500">({d.receivedStatusFromPreviousFloor})</span>
-                              )}
-                            </div>
+                          {collapseLinesByBrand(article.floorQuantities?.dispatch?.receivedData).map((d, i) => (
+                            <div key={i}>{formatBrandLine(d)}</div>
                           ))}
                         </div>
                       </div>
-                    )}
+                    ) : (() => {
+                      const aid = article.id ?? article._id ?? "";
+                      const catalogBrands = productBrandsByArticleId[aid];
+                      if (!catalogBrands?.length) return null;
+                      return (
+                        <div className="mb-4 p-3 bg-indigo-50 rounded-lg border border-indigo-200">
+                          <label className="form-label text-indigo-800 font-semibold">Product brand (catalog)</label>
+                          <div className="mt-2 text-sm text-indigo-900 font-medium">
+                            {getDispatchBrandDisplay(undefined, catalogBrands).text}
+                          </div>
+                          <p className="text-xs text-indigo-600 mt-1">Article skipped branding — brand from product master</p>
+                        </div>
+                      );
+                    })()}
                     {(article.floorQuantities?.dispatch?.transferredData?.length ?? 0) > 0 && (
                       <div className="mb-4 p-3 bg-teal-50 rounded-lg border border-teal-200">
-                        <label className="form-label text-teal-800 font-semibold">Transferred breakdown (Style / Brand)</label>
+                        <label className="form-label text-teal-800 font-semibold">Transferred breakdown (Brand)</label>
                         <div className="mt-2 space-y-1 text-sm text-gray-700">
-                          {(article.floorQuantities?.dispatch?.transferredData ?? []).map((d, i: number) => (
-                            <div key={i} className="flex gap-2">
-                              <span className="font-medium">{d.transferred ?? 0}</span>
-                              {d.styleCode && <span>· {d.styleCode}</span>}
-                              {d.brand && <span>· {d.brand}</span>}
-                            </div>
+                          {collapseLinesByBrand(article.floorQuantities?.dispatch?.transferredData).map((d, i) => (
+                            <div key={i}>{formatBrandLine(d)}</div>
                           ))}
                         </div>
                       </div>
@@ -2091,54 +2038,12 @@ const DispatchFloorSupervisorPage = () => {
         );
       })()}
 
-      {/* Print Category Label Modal */}
-      {showPrintModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowPrintModal(false)}>
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-3 border-b bg-gray-50">
-              <h3 className="text-sm font-semibold text-gray-800">
-                <i className="ri-printer-line mr-1.5"></i>Print Stock Transfer Note
-              </h3>
-              <button onClick={() => setShowPrintModal(false)} className="text-gray-400 hover:text-gray-600">
-                <i className="ri-close-line text-lg"></i>
-              </button>
-            </div>
-            <div className="px-5 py-4">
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Category Label</label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
-                placeholder="e.g. CORE, COLLECTION MIX, CORE & COLLECTION MIX"
-                value={printCategoryLabel}
-                onChange={(e) => setPrintCategoryLabel(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    setShowPrintModal(false);
-                    handlePrintList(printCategoryLabel);
-                  }
-                }}
-                autoFocus
-              />
-              <p className="text-[10px] text-gray-400 mt-1">This label appears at the top of the product table in the printout.</p>
-            </div>
-            <div className="flex justify-end gap-2 px-5 py-3 border-t bg-gray-50">
-              <button
-                onClick={() => setShowPrintModal(false)}
-                className="px-4 py-1.5 text-xs font-semibold text-gray-600 border border-gray-300 rounded hover:bg-gray-100 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => { setShowPrintModal(false); handlePrintList(printCategoryLabel); }}
-                className="px-4 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
-              >
-                <i className="ri-printer-line mr-1"></i>Print
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
+      <TransferNotePrintModal
+        open={showPrintModal}
+        onClose={() => setShowPrintModal(false)}
+        printFilters={printFilters}
+        onCreated={handleTransferNoteCreated}
+      />
 
       <ArticleQrScanDrawer
         open={qrScan.showDrawer}

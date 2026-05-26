@@ -1,0 +1,221 @@
+import type { TransferItem } from "@/shared/services/productionService";
+
+export type BrandTransferLine = { transferred?: number; styleCode?: string; brand?: string };
+
+export interface BrandOption {
+  brand: string;
+}
+
+export interface BrandOptionsResult {
+  options: BrandOption[];
+  brandMaxQuantities: Record<string, number>;
+}
+
+/**
+ * Normalizes brand for dedup / map keys (trim + lowercase).
+ */
+export function normalizeBrand(brand: string | undefined | null): string {
+  return String(brand ?? "").trim().toLowerCase();
+}
+
+/**
+ * Display key preserving original casing from first occurrence.
+ */
+export function brandDisplayKey(brand: string | undefined | null): string {
+  return String(brand ?? "").trim();
+}
+
+/**
+ * Sum transferred qty grouped by brand (ignores styleCode).
+ */
+export function aggregateQtyByBrand(rows: BrandTransferLine[] | undefined): Map<string, number> {
+  const map = new Map<string, number>();
+  const displayByKey = new Map<string, string>();
+
+  for (const row of rows ?? []) {
+    const qty = Number(row?.transferred ?? 0);
+    if (!Number.isFinite(qty) || qty <= 0) continue;
+    const display = brandDisplayKey(row?.brand);
+    if (!display) continue;
+    const key = normalizeBrand(display);
+    displayByKey.set(key, displayByKey.get(key) ?? display);
+    map.set(key, (map.get(key) ?? 0) + qty);
+  }
+
+  return map;
+}
+
+/**
+ * Collapse rows into unique brand lines for display (aggregates legacy styleCode rows).
+ */
+export function collapseLinesByBrand(rows: BrandTransferLine[] | undefined): BrandTransferLine[] {
+  const totals = aggregateQtyByBrand(rows);
+  const displayByKey = new Map<string, string>();
+  for (const row of rows ?? []) {
+    const display = brandDisplayKey(row?.brand);
+    if (!display) continue;
+    const key = normalizeBrand(display);
+    if (!displayByKey.has(key)) displayByKey.set(key, display);
+  }
+  return Array.from(totals.entries()).map(([key, transferred]) => ({
+    transferred,
+    brand: displayByKey.get(key) ?? key,
+    styleCode: "",
+  }));
+}
+
+/**
+ * Build brand dropdown options and per-brand max from received vs transferred rows.
+ */
+export function buildBrandOptionsFromRows(
+  receivedData: BrandTransferLine[] | undefined,
+  transferredData: BrandTransferLine[] | undefined
+): BrandOptionsResult {
+  const receivedByBrand = aggregateQtyByBrand(receivedData);
+  const transferredByBrand = aggregateQtyByBrand(transferredData);
+
+  const displayByKey = new Map<string, string>();
+  for (const row of receivedData ?? []) {
+    const display = brandDisplayKey(row?.brand);
+    if (!display || (row.transferred ?? 0) <= 0) continue;
+    const key = normalizeBrand(display);
+    if (!displayByKey.has(key)) displayByKey.set(key, display);
+  }
+
+  const brandMaxQuantities: Record<string, number> = {};
+  const options: BrandOption[] = [];
+
+  for (const [key, received] of receivedByBrand.entries()) {
+    const display = displayByKey.get(key) ?? key;
+    const transferred = transferredByBrand.get(key) ?? 0;
+    const max = Math.max(0, received - transferred);
+    if (max > 0 || received > 0) {
+      brandMaxQuantities[display] = max;
+      if (!options.some((o) => normalizeBrand(o.brand) === key)) {
+        options.push({ brand: display });
+      }
+    }
+  }
+
+  return { options, brandMaxQuantities };
+}
+
+/**
+ * Extract brand string from a product styleCodes entry (plain or populated StyleCode doc).
+ */
+export function extractBrandFromStyleCodeEntry(sc: unknown): string {
+  if (sc == null || typeof sc !== "object") return "";
+  const o = sc as Record<string, unknown>;
+  return brandDisplayKey(typeof o.brand === "string" ? o.brand : undefined);
+}
+
+/**
+ * Unique brand names from product catalog styleCodes.
+ */
+export function brandsFromProductStyleCodes(styleCodes: unknown[] | undefined): string[] {
+  return buildBrandOptionsFromProduct(styleCodes as Array<{ styleCode?: string; brand?: string }>).map(
+    (o) => o.brand
+  );
+}
+
+/**
+ * Unique brands from product catalog styleCodes.
+ */
+export function buildBrandOptionsFromProduct(
+  styleCodes: Array<{ styleCode?: string; brand?: string }> | unknown[] | undefined
+): BrandOption[] {
+  const seen = new Set<string>();
+  const options: BrandOption[] = [];
+  for (const sc of styleCodes ?? []) {
+    const brand = extractBrandFromStyleCodeEntry(sc) || brandDisplayKey((sc as { brand?: string })?.brand);
+    if (!brand) continue;
+    const key = normalizeBrand(brand);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    options.push({ brand });
+  }
+  return options;
+}
+
+/**
+ * Format product brand list for display (no qty).
+ */
+export function formatProductBrandsList(brands: string[] | undefined): string {
+  if (!brands?.length) return "—";
+  return brands.join("; ");
+}
+
+/**
+ * Dispatch brand display: prefer received/transferred lines; fall back to catalog product brands.
+ */
+export function getDispatchBrandDisplay(
+  receivedData: BrandTransferLine[] | undefined,
+  productBrands: string[] | undefined
+): { text: string; fromProduct: boolean } {
+  const collapsed = collapseLinesByBrand(receivedData);
+  if (collapsed.length > 0) {
+    return { text: collapsed.map(formatBrandLine).join("; "), fromProduct: false };
+  }
+  const brands = productBrands ?? [];
+  if (brands.length > 0) {
+    return { text: formatProductBrandsList(brands), fromProduct: true };
+  }
+  return { text: "—", fromProduct: false };
+}
+
+/**
+ * Format a transfer line for display: "459 · Allen Solly".
+ */
+export function formatBrandLine(line: BrandTransferLine): string {
+  const qty = line?.transferred ?? 0;
+  const brand = brandDisplayKey(line?.brand);
+  if (!brand) return String(qty);
+  return `${qty} · ${brand}`;
+}
+
+/**
+ * Format multiple lines collapsed by brand.
+ */
+export function formatBrandLines(rows: BrandTransferLine[] | undefined): string {
+  const collapsed = collapseLinesByBrand(rows);
+  if (collapsed.length === 0) return "—";
+  return collapsed.map(formatBrandLine).join("; ");
+}
+
+/**
+ * Validates total and per-brand caps for transfer items.
+ */
+export function validateBrandTransferItems(
+  items: TransferItem[],
+  maxTotal: number,
+  brandMaxQuantities?: Record<string, number>
+): { valid: boolean; totalValid: boolean; brandValid: boolean; total: number } {
+  const total = items.reduce((s, i) => s + (i.transferred ?? 0), 0);
+  const totalValid = total <= maxTotal;
+
+  const byBrand: Record<string, number> = {};
+  for (const item of items) {
+    const brand = brandDisplayKey(item.brand);
+    if (!brand) continue;
+    byBrand[brand] = (byBrand[brand] ?? 0) + (item.transferred ?? 0);
+  }
+
+  const brandValid =
+    !brandMaxQuantities ||
+    Object.entries(byBrand).every(([brand, sum]) => sum <= (brandMaxQuantities[brand] ?? Infinity));
+
+  return { valid: totalValid && brandValid, totalValid, brandValid, total };
+}
+
+/**
+ * Maps transfer items to brand-only API payload (styleCode empty).
+ */
+export function toBrandOnlyTransferItems(items: TransferItem[]): TransferItem[] {
+  return items
+    .filter((i) => (i.transferred ?? 0) > 0 && brandDisplayKey(i.brand))
+    .map((i) => ({
+      transferred: i.transferred ?? 0,
+      brand: brandDisplayKey(i.brand),
+      styleCode: "",
+    }));
+}

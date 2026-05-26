@@ -1,12 +1,20 @@
 "use client";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useSelector } from "react-redux";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { productionService, ProductionOrder, FloorOrderFilters } from "@/shared/services/productionService";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
-import NumericInput from "@/shared/utils/numericInput";
 import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuantityDisplay";
+import BrandTransferItemsInput from "@/shared/components/production/BrandTransferItemsInput";
+import { productService } from "@/shared/services/productService";
+import {
+  buildBrandOptionsFromProduct,
+  collapseLinesByBrand,
+  formatBrandLine,
+  toBrandOnlyTransferItems,
+} from "@/shared/utils/brandTransfer.util";
 import ArticleViewTab from "./components/ArticleViewTab";
 import MyTeamTab from "./components/MyTeamTab";
 import UpcomingTab from "../components/UpcomingTab";
@@ -22,6 +30,7 @@ type ReBoardingTab = "orders" | "article-view" | "my-team" | "upcoming";
 const FLOOR_CATALOG_LIMIT = 2000;
 
 const ReBoardingFloorSupervisorPage = () => {
+  const user = useSelector((state: any) => state.auth?.user);
   const [floorCatalog, setFloorCatalog] = useState<ProductionOrder[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -38,7 +47,12 @@ const ReBoardingFloorSupervisorPage = () => {
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [activeUpdateTabIndex, setActiveUpdateTabIndex] = useState(0);
   const [activeViewTabIndex, setActiveViewTabIndex] = useState(0);
-  const [updateData, setUpdateData] = useState<{[key: string]: {completedQuantity: number, remarks: string}}>({});
+  const [updateData, setUpdateData] = useState<{[key: string]: {
+    transferItems: Array<{ transferred: number; styleCode?: string; brand?: string }>;
+    remarks: string;
+  }}>({});
+  const [articleBrandOptions, setArticleBrandOptions] = useState<Record<string, Array<{ brand: string }>>>({});
+  const [articleBrandsLoading, setArticleBrandsLoading] = useState(false);
   const [filters, setFilters] = useState({
     status: '',
     priority: '',
@@ -110,6 +124,37 @@ const ReBoardingFloorSupervisorPage = () => {
   }, [activeTab, loadFloorOrdersCatalog, searchQuery]);
 
   useEffect(() => {
+    if (!showUpdateModal || !selectedOrder) {
+      setArticleBrandOptions({});
+      setArticleBrandsLoading(false);
+      return;
+    }
+    const articles = selectedArticleId
+      ? selectedOrder.articles.filter((a) => (a.id ?? a._id) === selectedArticleId)
+      : selectedOrder.articles;
+    const opts: Record<string, Array<{ brand: string }>> = {};
+    let cancelled = false;
+    setArticleBrandsLoading(true);
+    Promise.all(
+      articles.map(async (article) => {
+        const articleId = article.id || article._id;
+        if (!articleId) return;
+        const factoryCode = article.articleNumber?.trim();
+        if (!factoryCode) return;
+        const product = await productService.getByCode(factoryCode);
+        if (cancelled) return;
+        opts[articleId] = buildBrandOptionsFromProduct(product?.styleCodes ?? []);
+      })
+    ).then(() => {
+      if (!cancelled) {
+        setArticleBrandOptions(opts);
+        setArticleBrandsLoading(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [showUpdateModal, selectedOrder?.id, selectedArticleId]);
+
+  useEffect(() => {
     if (!showUpdateContainerModal) {
       setUpdateContainerCheckStatus("idle");
       setUpdateContainerFetched(null);
@@ -157,7 +202,7 @@ const ReBoardingFloorSupervisorPage = () => {
   // When article changes in modal, sync quantity and next floor from article processes
   useEffect(() => {
     if (!showUpdateContainerModal || !updateContainerArticleId || !selectedOrder) return;
-    setUpdateContainerQuantity(String(updateData[updateContainerArticleId]?.completedQuantity ?? 0));
+    setUpdateContainerQuantity(String(getTransferTotal(updateData[updateContainerArticleId]?.transferItems ?? [])));
     const mongoId = getArticleMongoId(updateContainerArticleId, selectedOrder.articles);
     if (!mongoId) return;
     let cancelled = false;
@@ -261,13 +306,15 @@ const ReBoardingFloorSupervisorPage = () => {
     setSelectedArticleId(article ? (article.id ?? article._id ?? null) : null);
     setActiveUpdateTabIndex(0);
     // Initialize update data with current values
-    const initialData: {[key: string]: {completedQuantity: number, remarks: string}} = {};
+    const initialData: {[key: string]: {
+      transferItems: Array<{ transferred: number; styleCode?: string; brand?: string }>;
+      remarks: string;
+    }} = {};
     order.articles.forEach(article => {
       const articleId = article.id || article._id;
       if (articleId) {
-        // Initialize with 0 for completed quantity
         initialData[articleId] = {
-          completedQuantity: 0,
+          transferItems: [{ transferred: 0, styleCode: "", brand: "" }],
           remarks: article.remarks || ''
         };
       }
@@ -471,12 +518,15 @@ const ReBoardingFloorSupervisorPage = () => {
     setConfirmAssignModal(null);
   };
 
-  const handleQuantityChange = (articleId: string, value: number) => {
+  const getTransferTotal = (items: Array<{ transferred?: number }>) =>
+    (items ?? []).reduce((s, i) => s + (i.transferred ?? 0), 0);
+
+  const handleTransferItemsChange = (articleId: string, items: Array<{ transferred: number; styleCode?: string; brand?: string }>) => {
     setUpdateData(prev => ({
       ...prev,
       [articleId]: {
         ...prev[articleId],
-        completedQuantity: value
+        transferItems: items.length > 0 ? items : [{ transferred: 0, styleCode: "", brand: "" }],
       }
     }));
   };
@@ -505,8 +555,9 @@ const ReBoardingFloorSupervisorPage = () => {
       const received = article.floorQuantities?.reBoarding?.received || 0;
       const transferred = article.floorQuantities?.reBoarding?.transferred || 0;
       const remaining = received - transferred;
+      const total = getTransferTotal(update.transferItems ?? []);
       
-      return update.completedQuantity > remaining;
+      return total > remaining;
     });
 
     if (invalidArticles.length > 0) {
@@ -523,11 +574,21 @@ const ReBoardingFloorSupervisorPage = () => {
         if (!articleId) return null;
         
         const update = updateData[articleId];
-        const reBoardingTransferredQuantity = article.floorQuantities?.reBoarding?.transferred || 0;
-        if (update && (update.completedQuantity !== reBoardingTransferredQuantity || update.remarks !== (article.remarks || ''))) {
+        const newTransferQty = getTransferTotal(update?.transferItems ?? []);
+        const hasChanges = newTransferQty > 0 || update?.remarks !== (article.remarks || '');
+        if (update && hasChanges) {
+          const validItems = toBrandOnlyTransferItems(update.transferItems ?? []);
+          const userId = user?.id ?? user?._id;
+          const floorSupervisorId = user?.id ?? user?._id;
+          if (validItems.length > 0 && (!userId || !floorSupervisorId)) {
+            toast.error("User session required for transfer. Please log in again.");
+            return;
+          }
           const progressData = {
-            completedQuantity: update.completedQuantity,
-            remarks: update.remarks
+            transferredData: validItems.length > 0 ? validItems : undefined,
+            remarks: update.remarks,
+            ...(userId ? { userId } : {}),
+            ...(floorSupervisorId ? { floorSupervisorId } : {}),
           };
           
           try {
@@ -780,58 +841,70 @@ const ReBoardingFloorSupervisorPage = () => {
               <button onClick={closeUpdateModal} className="text-gray-500 hover:text-gray-800 p-1 rounded border-2 border-gray-300 hover:bg-gray-100"><i className="ri-close-line text-lg"></i></button>
             </div>
             <div className="flex-1 overflow-y-auto p-3">
-            <div className="mb-4 px-3 py-2 rounded-md bg-green-50 border-2 border-green-200 text-[11px] text-green-900"><strong>How to update:</strong> Enter re-boarding completed quantity and remarks per article. Then click Update Order, scan the bag/container, select article and next floor, and submit.</div>
-            <section className="mb-4 rounded-md border-2 border-gray-300 bg-gray-50 overflow-hidden">
-              <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800 uppercase">Order</div>
-              <div className="grid grid-cols-2 gap-3 p-3">
-                <div><label className="block text-[10px] font-bold text-gray-600 uppercase mb-0.5">Priority</label><span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border-2 border-gray-300 ${getPriorityBadge(selectedOrder.priority)}`}>{selectedOrder.priority}</span></div>
-                <div><label className="block text-[10px] font-bold text-gray-600 uppercase mb-0.5">Status</label><span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border-2 border-gray-300 ${getStatusBadge(selectedOrder.status)}`}>{selectedOrder.status}</span></div>
-              </div>
-            </section>
-            <div className="border border-gray-300 rounded overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-xs border-collapse">
-                  <thead className="bg-gray-100 border-b border-gray-300">
-                    <tr>
-                      <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Article</th>
-                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Planned</th>
-                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Received</th>
-                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Transferred</th>
-                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Remaining</th>
-                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap bg-green-50">Re-Boarding Completed *</th>
-                      <th className="px-2 py-1.5 text-center font-semibold text-gray-700 whitespace-nowrap">Remarks</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {modalArticles.map((article, idx) => {
-                      const articleId = article.id || article._id;
-                      if (!articleId) return null;
-                      const currentUpdateData = updateData[articleId] || { completedQuantity: 0, remarks: article.remarks || '' };
-                      const plannedQty = article.plannedQuantity || 0;
-                      const receivedQty = article.floorQuantities?.reBoarding?.received || 0;
-                      const transferredQty = article.floorQuantities?.reBoarding?.transferred || 0;
-                      const remainingQty = receivedQty - transferredQty;
-                      const isFullyTransferred = remainingQty <= 0;
-                      return (
-                        <tr key={articleId} className="hover:bg-gray-50">
-                          <td className="px-2 py-1.5 border-r border-gray-300"><div className="font-medium text-gray-900">{article.articleNumber || `Article ${idx + 1}`}</div><div className="text-gray-500 text-xs mt-0.5">{article.linkingType || 'N/A'}</div></td>
-                          <td className="px-2 py-1.5 text-center border-r border-gray-300 text-gray-700">{plannedQty.toLocaleString()}</td>
-                          <td className="px-2 py-1.5 border-r border-gray-300 align-top min-w-[80px]"><ReceivedQuantityDisplay received={receivedQty} repairReceived={article.floorQuantities?.reBoarding?.repairReceived} repairFromFloor={article.floorQuantities?.reBoarding?.repairFromFloor} /></td>
-                          <td className="px-2 py-1.5 text-center border-r border-gray-300 text-green-600 font-medium">{transferredQty.toLocaleString()}</td>
-                          <td className="px-2 py-1.5 text-center border-r border-gray-300 text-orange-600 font-medium">{remainingQty.toLocaleString()}</td>
-                          <td className="px-2 py-1.5 border-r border-gray-300 bg-green-50">
-                            <div className="flex flex-col gap-0.5">
-                              <NumericInput className={`py-1 text-xs h-7 border rounded ${isFullyTransferred ? 'bg-gray-100 border-gray-300 cursor-not-allowed' : currentUpdateData.completedQuantity > remainingQty ? 'border-red-500' : 'border-gray-300'}`} value={currentUpdateData.completedQuantity} onChange={(value) => { if (!isFullyTransferred && value <= remainingQty) handleQuantityChange(articleId, value); }} placeholder={isFullyTransferred ? 'Done' : `Max ${remainingQty}`} disabled={isFullyTransferred} allowDecimals />
-                              {isFullyTransferred ? <span className="text-green-600 text-[10px] font-medium">✓ All transferred</span> : currentUpdateData.completedQuantity > remainingQty ? <span className="text-red-500 text-[10px]">Max {remainingQty}</span> : null}
-                            </div>
-                          </td>
-                          <td className="px-2 py-1.5"><textarea className="w-full py-1 px-2 text-[11px] border border-gray-300 rounded resize-none" rows={1} placeholder="Remarks..." value={currentUpdateData.remarks} onChange={(e) => handleRemarksChange(articleId, e.target.value)} /></td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+            <div className="mb-4 px-3 py-2 rounded-md bg-green-50 border-2 border-green-200 text-[11px] text-green-900"><strong>How to update:</strong> Enter re-boarding transfer by <strong>brand</strong> and remarks per article. Then click Update Order, scan the bag/container, and submit.</div>
+            <div className="space-y-4">
+              {modalArticles.map((article, idx) => {
+                const articleId = article.id || article._id;
+                if (!articleId) return null;
+                const currentUpdateData = updateData[articleId] || { transferItems: [{ transferred: 0, styleCode: "", brand: "" }], remarks: article.remarks || '' };
+                const plannedQty = article.plannedQuantity || 0;
+                const receivedQty = article.floorQuantities?.reBoarding?.received || 0;
+                const transferredQty = article.floorQuantities?.reBoarding?.transferred || 0;
+                const remainingQty = receivedQty - transferredQty;
+                const isFullyTransferred = remainingQty <= 0;
+                return (
+                  <div key={articleId} className="border border-gray-300 rounded overflow-hidden bg-white">
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-xs border-collapse">
+                        <thead className="bg-gray-100 border-b border-gray-300">
+                          <tr>
+                            <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300">Article</th>
+                            <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300">Planned</th>
+                            <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300">Received</th>
+                            <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300">Transferred</th>
+                            <th className="px-2 py-1.5 text-center font-semibold text-gray-700 border-r border-gray-300">Remaining</th>
+                            <th className="px-2 py-1.5 text-left font-semibold text-gray-700">Remarks</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="hover:bg-gray-50">
+                            <td className="px-2 py-1.5 border-r border-gray-300"><div className="font-medium text-gray-900">{article.articleNumber || `Article ${idx + 1}`}</div><div className="text-gray-500 text-xs mt-0.5">{article.linkingType || 'N/A'}</div></td>
+                            <td className="px-2 py-1.5 text-center border-r border-gray-300 text-gray-700">{plannedQty.toLocaleString()}</td>
+                            <td className="px-2 py-1.5 border-r border-gray-300 align-top min-w-[80px]"><ReceivedQuantityDisplay received={receivedQty} repairReceived={article.floorQuantities?.reBoarding?.repairReceived} repairFromFloor={article.floorQuantities?.reBoarding?.repairFromFloor} /></td>
+                            <td className="px-2 py-1.5 text-center border-r border-gray-300 text-green-600 font-medium">{transferredQty.toLocaleString()}</td>
+                            <td className="px-2 py-1.5 text-center border-r border-gray-300 text-orange-600 font-medium">{remainingQty.toLocaleString()}</td>
+                            <td className="px-2 py-1.5"><textarea className="w-full py-1 px-2 text-[11px] border border-gray-300 rounded resize-none" rows={1} placeholder="Remarks..." value={currentUpdateData.remarks} onChange={(e) => handleRemarksChange(articleId, e.target.value)} /></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    {(article.floorQuantities?.reBoarding as any)?.transferredData?.length > 0 && (
+                      <div className="border-t border-gray-200 px-2 py-2 bg-gray-50/50">
+                        <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wide mb-1">Previously transferred</label>
+                        <div className="space-y-0.5 text-[11px] text-gray-700">
+                          {collapseLinesByBrand((article.floorQuantities?.reBoarding as any).transferredData).map((d, i) => (
+                            <div key={i}>{formatBrandLine(d)}</div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div className="border-t-2 border-green-200 bg-green-50/30 px-2 py-2">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[10px] font-bold text-green-800 uppercase tracking-wide">New transfer (Qty · Brand) *</span>
+                        {isFullyTransferred && <span className="text-green-600 text-xs font-medium">✓ All transferred</span>}
+                      </div>
+                      <BrandTransferItemsInput
+                        value={currentUpdateData.transferItems ?? [{ transferred: 0, styleCode: "", brand: "" }]}
+                        onChange={(items) => handleTransferItemsChange(articleId, items)}
+                        maxTotal={remainingQty}
+                        disabled={isFullyTransferred || articleBrandsLoading || (articleBrandOptions[articleId]?.length ?? 0) === 0}
+                        brandOptions={articleBrandOptions[articleId] ?? []}
+                        placeholder={articleBrandsLoading ? "Loading brands..." : (articleBrandOptions[articleId]?.length ?? 0) === 0 ? "No brands for this product" : "Add transfer lines (max: remaining)"}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
             </div>
             <div className="flex justify-end gap-2 p-3 border-t-2 border-gray-300 bg-gray-50 flex-shrink-0">
@@ -839,14 +912,14 @@ const ReBoardingFloorSupervisorPage = () => {
               <button
                 onClick={() => {
                   if (!selectedOrder) return;
-                  const invalid = modalArticles.some(article => { const articleId = article.id || article._id; if (!articleId) return false; const update = updateData[articleId]; if (!update) return false; const received = article.floorQuantities?.reBoarding?.received || 0; const transferred = article.floorQuantities?.reBoarding?.transferred || 0; const remaining = received - transferred; return update.completedQuantity > remaining; });
-                  if (invalid) { toast.error("Cannot submit: Some articles have completed quantity exceeding remaining."); return; }
-                  const firstWithQty = modalArticles.find((a) => { const id = a.id ?? a._id; return id && (updateData[id]?.completedQuantity ?? 0) > 0; });
-                  if (!firstWithQty) { toast.error("Enter at least one article with re-boarding completed quantity"); return; }
-                  setUpdateContainerBarcode(""); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); const firstId = firstWithQty.id ?? firstWithQty._id ?? ""; setUpdateContainerArticleId(firstId); setUpdateContainerQuantity(String(updateData[firstId]?.completedQuantity ?? 0)); setUpdateContainerNextFloor("Secondary Checking"); setShowUpdateContainerModal(true);
+                  const invalid = modalArticles.some(article => { const articleId = article.id || article._id; if (!articleId) return false; const update = updateData[articleId]; if (!update) return false; const received = article.floorQuantities?.reBoarding?.received || 0; const transferred = article.floorQuantities?.reBoarding?.transferred || 0; const remaining = received - transferred; return getTransferTotal(update.transferItems ?? []) > remaining; });
+                  if (invalid) { toast.error("Cannot submit: Some articles have transfer quantity exceeding remaining."); return; }
+                  const firstWithQty = modalArticles.find((a) => { const id = a.id ?? a._id; return id && getTransferTotal(updateData[id]?.transferItems ?? []) > 0; });
+                  if (!firstWithQty) { toast.error("Enter at least one article with transfer quantity"); return; }
+                  setUpdateContainerBarcode(""); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); const firstId = firstWithQty.id ?? firstWithQty._id ?? ""; setUpdateContainerArticleId(firstId); setUpdateContainerQuantity(String(getTransferTotal(updateData[firstId]?.transferItems ?? []))); setUpdateContainerNextFloor("Secondary Checking"); setShowUpdateContainerModal(true);
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-[11px] font-bold rounded hover:bg-green-700 shadow-sm disabled:opacity-50"
-                disabled={modalArticles.some(article => { const articleId = article.id || article._id; if (!articleId) return false; const update = updateData[articleId]; if (!update) return false; const received = article.floorQuantities?.reBoarding?.received || 0; const transferred = article.floorQuantities?.reBoarding?.transferred || 0; const remaining = received - transferred; return update.completedQuantity > remaining; }) || !modalArticles.some((a) => (updateData[a.id ?? a._id ?? ""]?.completedQuantity ?? 0) > 0)}
+                disabled={modalArticles.some(article => { const articleId = article.id || article._id; if (!articleId) return false; const update = updateData[articleId]; if (!update) return false; const received = article.floorQuantities?.reBoarding?.received || 0; const transferred = article.floorQuantities?.reBoarding?.transferred || 0; const remaining = received - transferred; return getTransferTotal(update.transferItems ?? []) > remaining; }) || !modalArticles.some((a) => getTransferTotal(updateData[a.id ?? a._id ?? ""]?.transferItems ?? []) > 0)}
               ><i className="ri-save-line text-xs"></i> Update Order</button>
             </div>
           </div>
@@ -860,7 +933,7 @@ const ReBoardingFloorSupervisorPage = () => {
           .map((a) => {
             const id = a.id ?? a._id;
             if (!id) return null;
-            const qty = updateData[id]?.completedQuantity ?? 0;
+            const qty = getTransferTotal(updateData[id]?.transferItems ?? []);
             return qty > 0 ? { article: a, quantity: qty } : null;
           })
           .filter((x): x is { article: Article; quantity: number } => Boolean(x));

@@ -9,6 +9,7 @@ import {
   type ContainerMaster,
 } from "@/shared/services/containersMasterService";
 import { productionService, type Article } from "@/shared/services/productionService";
+import { collapseLinesByBrand, formatBrandLine } from "@/shared/utils/brandTransfer.util";
 
 const ACCEPTED_FLOORS = ["warehouse", "warehouseinward"];
 
@@ -200,12 +201,10 @@ export default function WarehouseScanContainerDrawer({ open, onClose, onAccepted
                       )}
                       {item.transferItems && item.transferItems.length > 0 && (
                         <div className="mt-1 text-[11px] text-emerald-900 bg-emerald-50 border border-emerald-100 rounded p-1.5">
-                          <span className="font-semibold">Style breakdown:</span>
+                          <span className="font-semibold">Brand breakdown:</span>
                           <ul className="mt-0.5 list-disc list-inside space-y-0.5">
-                            {item.transferItems.map((ti, tIdx) => (
-                              <li key={tIdx}>
-                                {ti.transferred} · {ti.styleCode || "—"} · {ti.brand || "—"}
-                              </li>
+                            {collapseLinesByBrand(item.transferItems).map((line, tIdx) => (
+                              <li key={tIdx}>{formatBrandLine(line)}</li>
                             ))}
                           </ul>
                         </div>
@@ -221,12 +220,10 @@ export default function WarehouseScanContainerDrawer({ open, onClose, onAccepted
                     </div>
                     {item.article && (item.article.floorQuantities?.dispatch?.transferredData?.length ?? 0) > 0 ? (
                       <div className="mt-1 text-[11px] text-amber-900 bg-amber-50 border border-amber-100 rounded p-1.5">
-                        <span className="font-semibold">From Dispatch (style · brand · qty):</span>
+                        <span className="font-semibold">From Dispatch (brand · qty):</span>
                         <ul className="mt-0.5 list-disc list-inside space-y-0.5">
-                          {(item.article.floorQuantities?.dispatch?.transferredData ?? []).map((d, di) => (
-                            <li key={di}>
-                              {d.transferred} · {d.styleCode || "—"} · {d.brand || "—"}
-                            </li>
+                          {collapseLinesByBrand(item.article.floorQuantities?.dispatch?.transferredData).map((line, di) => (
+                            <li key={di}>{formatBrandLine(line)}</li>
                           ))}
                         </ul>
                       </div>

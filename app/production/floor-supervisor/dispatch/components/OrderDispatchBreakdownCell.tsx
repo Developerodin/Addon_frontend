@@ -2,43 +2,57 @@
 
 import React from "react";
 import type { ProductionOrder } from "@/shared/services/productionService";
+import {
+  collapseLinesByBrand,
+  formatProductBrandsList,
+} from "@/shared/utils/brandTransfer.util";
 
 type BreakdownRow = {
   article: string;
   kind: "in" | "out";
-  styleCode: string;
   brand: string;
   qty: number;
+  fromCatalog?: boolean;
 };
 
 /**
- * Compact per-order table: dispatch receivedData (in) and transferredData (out) by article, style, brand, qty.
+ * Compact per-order table: dispatch receivedData (in) and transferredData (out) by article, brand, qty.
+ * Falls back to product catalog brands when received lines have no brand breakdown.
  */
-export default function OrderDispatchBreakdownCell({ order }: { order: ProductionOrder }) {
+export default function OrderDispatchBreakdownCell({
+  order,
+  productBrandsByArticleId,
+}: {
+  order: ProductionOrder;
+  productBrandsByArticleId?: Record<string, string[]>;
+}) {
   const rows: BreakdownRow[] = [];
   for (const a of order.articles) {
     const d = a.floorQuantities?.dispatch;
     if (!d) continue;
     const an = a.articleNumber?.trim() || "—";
+    const articleId = a.id ?? a._id ?? "";
     const rd = d.receivedData ?? [];
-    for (const r of rd) {
-      rows.push({
-        article: an,
-        kind: "in",
-        styleCode: (r.styleCode ?? "").trim() || "—",
-        brand: (r.brand ?? "").trim() || "—",
-        qty: r.transferred ?? 0,
-      });
+    const rdCollapsed = collapseLinesByBrand(rd);
+    if (rdCollapsed.length > 0) {
+      for (const line of rdCollapsed) {
+        rows.push({ article: an, kind: "in", brand: line.brand ?? "—", qty: line.transferred ?? 0 });
+      }
+    } else {
+      const catalogBrands = productBrandsByArticleId?.[articleId];
+      if ((d.received ?? 0) > 0 && catalogBrands?.length) {
+        rows.push({
+          article: an,
+          kind: "in",
+          brand: formatProductBrandsList(catalogBrands),
+          qty: d.received ?? 0,
+          fromCatalog: true,
+        });
+      }
     }
     const td = d.transferredData ?? [];
-    for (const r of td) {
-      rows.push({
-        article: an,
-        kind: "out",
-        styleCode: (r.styleCode ?? "").trim() || "—",
-        brand: (r.brand ?? "").trim() || "—",
-        qty: r.transferred ?? 0,
-      });
+    for (const line of collapseLinesByBrand(td)) {
+      rows.push({ article: an, kind: "out", brand: line.brand ?? "—", qty: line.transferred ?? 0 });
     }
   }
 
@@ -47,28 +61,30 @@ export default function OrderDispatchBreakdownCell({ order }: { order: Productio
   }
 
   return (
-    <div className="max-w-[320px] overflow-x-auto">
+    <div className="max-w-[280px] overflow-x-auto">
       <table className="text-[9px] border-collapse w-full border border-gray-200">
         <thead>
           <tr className="bg-gray-50">
             <th className="border border-gray-200 px-1 py-0.5 text-left font-bold text-gray-600">Art</th>
             <th className="border border-gray-200 px-1 py-0.5 text-left font-bold text-gray-600">Dir</th>
-            <th className="border border-gray-200 px-1 py-0.5 text-left font-bold text-gray-600">Style</th>
             <th className="border border-gray-200 px-1 py-0.5 text-left font-bold text-gray-600">Brand</th>
             <th className="border border-gray-200 px-1 py-0.5 text-right font-bold text-gray-600">Qty</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={i} className={r.kind === "out" ? "bg-teal-50/50" : "bg-white"}>
+            <tr key={i} className={r.kind === "out" ? "bg-teal-50/50" : r.fromCatalog ? "bg-indigo-50/40" : "bg-white"}>
               <td className="border border-gray-200 px-1 py-0.5 font-medium text-gray-800 whitespace-nowrap">{r.article}</td>
               <td className="border border-gray-200 px-1 py-0.5 whitespace-nowrap">
-                {r.kind === "in" ? <span className="text-sky-700 font-semibold">In</span> : <span className="text-teal-800 font-semibold">Out</span>}
+                {r.kind === "in" ? (
+                  <span className={`font-semibold ${r.fromCatalog ? "text-indigo-700" : "text-sky-700"}`}>
+                    {r.fromCatalog ? "Cat" : "In"}
+                  </span>
+                ) : (
+                  <span className="text-teal-800 font-semibold">Out</span>
+                )}
               </td>
-              <td className="border border-gray-200 px-1 py-0.5 max-w-[72px] truncate" title={r.styleCode}>
-                {r.styleCode}
-              </td>
-              <td className="border border-gray-200 px-1 py-0.5 max-w-[64px] truncate" title={r.brand}>
+              <td className="border border-gray-200 px-1 py-0.5 max-w-[90px] truncate" title={r.brand}>
                 {r.brand}
               </td>
               <td className="border border-gray-200 px-1 py-0.5 text-right font-semibold tabular-nums">{r.qty}</td>
