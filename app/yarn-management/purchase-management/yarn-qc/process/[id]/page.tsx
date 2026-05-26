@@ -637,7 +637,7 @@ const ProcessQCOrderPage = () => {
         <div className="p-[10px]">
           {/* Header Section */}
           <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <Link
                 href="/yarn-management/purchase-management/yarn-qc"
                 className="text-gray-500 hover:text-gray-700 transition-colors"
@@ -646,11 +646,44 @@ const ProcessQCOrderPage = () => {
                 <i className="ri-arrow-left-line text-sm"></i>
               </Link>
               <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
-              <h1 className="text-sm font-bold text-gray-800">QC Process Order</h1>
-              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+              <h1 className="text-sm font-bold text-gray-800 truncate">QC Process Order</h1>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm shrink-0">
                 {order.purchaseOrderNumber}
               </span>
             </div>
+            {scannedBox && !scannedBox.qcData && (
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <Link
+                  href="/yarn-management/purchase-management/yarn-qc"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-600 text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm"
+                  onClick={(e) => {
+                    if (isSubmitting) {
+                      e.preventDefault();
+                    }
+                  }}
+                >
+                  Cancel
+                </Link>
+                <button
+                  type="button"
+                  onClick={handleSubmitQC}
+                  disabled={isSubmitting || !qcStatus || !qcBy.trim()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <i className="ri-loader-4-line animate-spin text-xs"></i>
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-check-line text-xs"></i>
+                      Update QC Status
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
             {/* QC Approve All - commented out
             {order.receivedLotDetails && order.receivedLotDetails.length > 0 && hasPendingLots && (
               <button
@@ -1166,40 +1199,10 @@ const ProcessQCOrderPage = () => {
                 />
               </div>
 
-              <div className="flex gap-2 justify-end pt-3 border-t border-gray-200">
-                <Link
-                  href="/yarn-management/purchase-management/yarn-qc"
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-600 text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm"
-                  onClick={(e) => {
-                    if (isSubmitting) {
-                      e.preventDefault();
-                    }
-                  }}
-                >
-                  Cancel
-                </Link>
-                <button
-                  type="button"
-                  onClick={handleSubmitQC}
-                  disabled={isSubmitting || !qcStatus || !qcBy.trim()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <i className="ri-loader-4-line animate-spin text-xs"></i>
-                      Submitting...
-                    </>
-                  ) : (
-                    <>
-                      <i className="ri-check-line text-xs"></i>
-                      Update QC Status
-                    </>
-                  )}
-                </button>
-              </div>
             </div>
           </div>
         )}
+        <div className="h-20 shrink-0" aria-hidden="true" />
       </div>
     </div>
   );
