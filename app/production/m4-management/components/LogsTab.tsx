@@ -161,7 +161,7 @@ export default function LogsTab({ refreshKey = 0 }: LogsTabProps) {
                       : "—"}
                   </td>
                   <td className="border border-gray-300 px-1 py-1 text-right font-semibold">{log.quantity}</td>
-                  <td className="border border-gray-300 px-1 py-1">{log.userName || log.userId}</td>
+                  <td className="border border-gray-300 px-1 py-1">{log.userName || "—"}</td>
                   <td className="border border-gray-300 px-1 py-1 max-w-[160px]" title={log.remarks}>
                     <span className="line-clamp-2">{log.remarks || "—"}</span>
                   </td>

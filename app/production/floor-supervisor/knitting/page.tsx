@@ -126,6 +126,14 @@ function machineIdFromAssignmentMachine(m: MachineOrderAssignment["machine"]): s
 
 type KnitDoneEntry = { articleNumber: string; quantity: number };
 
+type M4ConfirmEntry = {
+  articleId: string;
+  articleNumber: string;
+  m4Increment: number;
+  currentM4: number;
+  newTotalM4: number;
+};
+
 /**
  * Shows knit-done quantity entered in the update form so supervisors can verify at each step.
  */
@@ -230,6 +238,9 @@ const KnittingFloorSupervisorPage = () => {
     itemId: string;
   } | null>(null);
   const [shortClosingStatus, setShortClosingStatus] = useState(false);
+  /** M4-only submit: confirm entered defect qty before saving (skips weight/container). */
+  const [showM4ConfirmModal, setShowM4ConfirmModal] = useState(false);
+  const [m4ConfirmSubmitting, setM4ConfirmSubmitting] = useState(false);
   const [machineViewRefreshTrigger, setMachineViewRefreshTrigger] = useState(0);
   const [activeViewTabIndex, setActiveViewTabIndex] = useState(0);
   const [showLogsSection, setShowLogsSection] = useState(false);
@@ -530,6 +541,8 @@ const KnittingFloorSupervisorPage = () => {
     setPendingWeightForContainer(undefined);
     setContainerCheckStatus('idle');
     setContainerFetched(null);
+    setShowM4ConfirmModal(false);
+    setM4ConfirmSubmitting(false);
   };
 
   /** Open the same data-entry (update) modal from machine view: only priority orders, first editable, rest read-only. */
@@ -896,6 +909,149 @@ const KnittingFloorSupervisorPage = () => {
     return entries;
   }, [selectedOrder, updateData, updateModalReadOnlyFromIndex]);
 
+  /** True when any editable article has knit-done increment > 0. */
+  const hasKnitDoneInput = React.useMemo(() => {
+    if (!selectedOrder) return false;
+    const readOnlyFrom = updateModalReadOnlyFromIndex ?? selectedOrder.articles.length;
+
+    for (let idx = 0; idx < readOnlyFrom; idx++) {
+      const article = selectedOrder.articles[idx];
+      const articleId = article?.id || article?._id;
+      if (!articleId) continue;
+      if ((updateData[articleId]?.completedQuantity ?? 0) > 0) return true;
+    }
+
+    return false;
+  }, [selectedOrder, updateData, updateModalReadOnlyFromIndex]);
+
+  /** Articles with M4+ increment and no knit-done on the same row (M4-only path). */
+  const pendingM4OnlyEntries = React.useMemo((): M4ConfirmEntry[] => {
+    if (!selectedOrder) return [];
+    const readOnlyFrom = updateModalReadOnlyFromIndex ?? selectedOrder.articles.length;
+    const entries: M4ConfirmEntry[] = [];
+
+    for (let idx = 0; idx < readOnlyFrom; idx++) {
+      const article = selectedOrder.articles[idx];
+      const articleId = article?.id || article?._id;
+      if (!articleId) continue;
+
+      const m4Increment = updateData[articleId]?.m4Quantity ?? 0;
+      const knitDoneInput = updateData[articleId]?.completedQuantity ?? 0;
+      if (m4Increment > 0 && knitDoneInput <= 0) {
+        const currentM4 = article.floorQuantities?.knitting?.m4Quantity || 0;
+        entries.push({
+          articleId,
+          articleNumber: article.articleNumber || `Article ${idx + 1}`,
+          m4Increment,
+          currentM4,
+          newTotalM4: currentM4 + m4Increment,
+        });
+      }
+    }
+
+    return entries;
+  }, [selectedOrder, updateData, updateModalReadOnlyFromIndex]);
+
+  /**
+   * Routes Update Order: knit-done → weight/container flow; M4-only → confirm popup.
+   */
+  const handleUpdateOrderClick = () => {
+    if (hasKnitDoneInput) {
+      setShowWeightModal(true);
+      return;
+    }
+
+    if (pendingM4OnlyEntries.length > 0) {
+      setShowM4ConfirmModal(true);
+      return;
+    }
+
+    toast.error('Enter knit done quantity or M4 quantity to update.');
+  };
+
+  /**
+   * Saves M4 defect quantity only — no weight, container, or transfer.
+   */
+  const handleM4OnlySubmit = async () => {
+    if (!selectedOrder || pendingM4OnlyEntries.length === 0) return;
+
+    const userId = user?.id ?? user?._id;
+    const floorSupervisorId = user?.id ?? user?._id;
+    if (!userId || !floorSupervisorId) {
+      toast.error('User session required to save M4 quantity.');
+      return;
+    }
+
+    const machineIdFromModal = updateModalAssignment
+      ? machineIdFromAssignmentMachine(updateModalAssignment.machine)
+      : null;
+
+    try {
+      setM4ConfirmSubmitting(true);
+
+      const updatePromises = pendingM4OnlyEntries.map(async (entry) => {
+        const article = selectedOrder.articles.find(
+          (a) => (a.id || a._id) === entry.articleId
+        );
+        if (!article) return null;
+
+        const update = updateData[entry.articleId];
+        const progressData: {
+          m4Quantity: number;
+          userId: string;
+          floorSupervisorId: string;
+          remarks?: string;
+          machineId?: string;
+        } = {
+          m4Quantity: entry.newTotalM4,
+          userId,
+          floorSupervisorId,
+        };
+
+        if (update?.remarks !== undefined && update.remarks !== (article.remarks ?? '')) {
+          progressData.remarks = update.remarks;
+        }
+        if (machineIdFromModal) {
+          progressData.machineId = machineIdFromModal;
+        }
+
+        const response = await productionService.updateArticleProgress(
+          'Knitting',
+          selectedOrder.id,
+          article._id || article.id,
+          progressData
+        );
+
+        if (!response.success) {
+          throw new Error(response.error?.message || 'Failed to update M4 quantity');
+        }
+
+        return response.data;
+      });
+
+      const results = await Promise.allSettled(updatePromises);
+      const failedUpdates = results.filter((result) => result.status === 'rejected');
+
+      if (failedUpdates.length > 0) {
+        console.error('Some M4 updates failed:', failedUpdates);
+        toast.error(`${failedUpdates.length} article(s) failed to update M4 quantity`);
+      } else {
+        toast.success('M4 quantity saved successfully');
+        closeUpdateModal();
+        loadOrders();
+        if (activeTab === 'article-view') void loadArticleViewOrders();
+        setMachineViewRefreshTrigger((prev) => prev + 1);
+      }
+    } catch (error: unknown) {
+      console.error('Error saving M4 quantity:', error);
+      const message = error instanceof Error ? error.message : 'Failed to save M4 quantity';
+      toast.error(message);
+    } finally {
+      setM4ConfirmSubmitting(false);
+      setShowM4ConfirmModal(false);
+    }
+  };
+
   const handleUpdateSubmit = async (weight?: number) => {
     if (!selectedOrder) return;
 
@@ -936,6 +1092,13 @@ const KnittingFloorSupervisorPage = () => {
 
     try {
       setIsLoading(true);
+
+      const userId = user?.id ?? user?._id;
+      const floorSupervisorId = user?.id ?? user?._id;
+      if (!userId || !floorSupervisorId) {
+        toast.error('User session required to update order.');
+        return;
+      }
       
       // Update each article that has changes
       const updatePromises = selectedOrder.articles.map(async (article) => {
@@ -957,12 +1120,16 @@ const KnittingFloorSupervisorPage = () => {
           remarks: string;
           m4Quantity: number;
           weight: number;
+          userId: string;
+          floorSupervisorId: string;
           machineId?: string;
         } = {
           completedQuantity: update.completedQuantity,
           remarks: update.remarks,
           m4Quantity: m4QuantityToSend,
           weight: totalWeightToSend,
+          userId,
+          floorSupervisorId,
         };
 
         const machineIdFromModal = updateModalAssignment
@@ -1699,7 +1866,7 @@ const KnittingFloorSupervisorPage = () => {
                               <td colSpan={8} className="p-3 border border-gray-300 bg-gray-50 align-top">
                                 <div className="flex justify-end gap-2 mb-3">
                                   <button type="button" onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Cancel</button>
-                                  <button type="button" disabled={!hasUpdateDataChanges || hasQuantityBufferViolation || updateModalAssignmentItems?.[0]?.status === OrderStatus.PENDING} onClick={() => setShowWeightModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                                  <button type="button" disabled={!hasUpdateDataChanges || hasQuantityBufferViolation || updateModalAssignmentItems?.[0]?.status === OrderStatus.PENDING} onClick={handleUpdateOrderClick} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
                                     <i className="ri-save-line text-xs"></i> Update Order
                                   </button>
                                 </div>
@@ -1956,12 +2123,78 @@ const KnittingFloorSupervisorPage = () => {
             {/* Always show actions at bottom */}
             <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-300">
               <button type="button" onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Cancel</button>
-              <button type="button" disabled={!hasUpdateDataChanges || hasQuantityBufferViolation || updateModalAssignmentItems?.[0]?.status === OrderStatus.PENDING} onClick={() => setShowWeightModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
+              <button type="button" disabled={!hasUpdateDataChanges || hasQuantityBufferViolation || updateModalAssignmentItems?.[0]?.status === OrderStatus.PENDING} onClick={handleUpdateOrderClick} className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
                 <i className="ri-save-line text-xs"></i> Update Order
               </button>
             </div>
 
             {/* Complete confirmation modal – show article summary, then mark Completed and close drawer on Yes */}
+            {showM4ConfirmModal && pendingM4OnlyEntries.length > 0 && (
+              <div
+                className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40"
+                onClick={() => {
+                  if (!m4ConfirmSubmitting) setShowM4ConfirmModal(false);
+                }}
+                aria-hidden
+              >
+                <div
+                  className="bg-white rounded-lg shadow-xl border border-gray-300 w-full max-w-sm p-4 flex flex-col gap-3"
+                  onClick={(e) => e.stopPropagation()}
+                  role="dialog"
+                  aria-labelledby="m4-confirm-title"
+                  aria-modal="true"
+                >
+                  <h4 id="m4-confirm-title" className="text-[13px] font-bold text-gray-800 border-b border-gray-200 pb-2">
+                    Confirm M4 defect quantity
+                  </h4>
+                  <p className="text-[11px] text-gray-600">
+                    No knit done quantity entered. Only M4 will be saved — no container or transfer.
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    {pendingM4OnlyEntries.map((entry) => (
+                      <div
+                        key={entry.articleId}
+                        className="rounded border border-red-200 bg-red-50/50 px-3 py-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]"
+                      >
+                        <span className="text-gray-500">Article</span>
+                        <span className="font-medium text-gray-900">{entry.articleNumber}</span>
+                        <span className="text-gray-500">M4 + (enter)</span>
+                        <span className="font-bold text-red-700">{entry.m4Increment.toLocaleString()}</span>
+                        <span className="text-gray-500">New M4 total</span>
+                        <span className="font-medium text-gray-900">{entry.newTotalM4.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowM4ConfirmModal(false)}
+                      disabled={m4ConfirmSubmitting}
+                      className="px-3 py-1.5 text-[11px] font-bold text-gray-600 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleM4OnlySubmit}
+                      disabled={m4ConfirmSubmitting}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-[11px] font-bold rounded hover:bg-red-700 disabled:opacity-50"
+                      aria-label="Confirm and save M4 quantity"
+                    >
+                      {m4ConfirmSubmitting ? (
+                        <>
+                          <span className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                          Saving…
+                        </>
+                      ) : (
+                        'Confirm'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {showCompleteConfirmModal && completeConfirmData && (
               <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40" onClick={() => { if (!completingStatus) { setShowCompleteConfirmModal(false); setCompleteConfirmData(null); } }} aria-hidden>
                 <div className="bg-white rounded-lg shadow-xl border border-gray-300 w-full max-w-sm p-4 flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>

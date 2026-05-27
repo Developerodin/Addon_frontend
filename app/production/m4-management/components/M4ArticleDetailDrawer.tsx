@@ -116,7 +116,7 @@ export default function M4ArticleDetailDrawer({
                           <td className="border border-gray-300 px-1 py-1">{log.sourceFloor || "—"}</td>
                           <td className="border border-gray-300 px-1 py-1">{log.machineCode || log.machineName || "—"}</td>
                           <td className="border border-gray-300 px-1 py-1 text-right">{log.quantity}</td>
-                          <td className="border border-gray-300 px-1 py-1">{log.userName || log.userId}</td>
+                          <td className="border border-gray-300 px-1 py-1">{log.userName || "—"}</td>
                           <td className="border border-gray-300 px-1 py-1 max-w-[120px] truncate" title={log.remarks}>
                             {log.remarks || "—"}
                           </td>
