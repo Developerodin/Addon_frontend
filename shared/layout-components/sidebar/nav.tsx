@@ -400,6 +400,22 @@ const BaseMenuItems: any = [
         selected: false,
         title: "Dispatch Floor",
       },
+      {
+        icon: FloorIcon,
+        path: "/production/m4-management",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "M4 Management",
+      },
+      {
+        icon: FloorIcon,
+        path: "/production/m3-management",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "M3 Management",
+      },
       // Warehouse Floor – commented out from navbar
       // {
       //   icon: FloorIcon,

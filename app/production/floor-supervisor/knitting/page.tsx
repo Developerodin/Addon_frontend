@@ -952,13 +952,26 @@ const KnittingFloorSupervisorPage = () => {
         const userEnteredWeight = weight != null && !Number.isNaN(weight) ? weight : 0;
         const totalWeightToSend = previousWeight + userEnteredWeight;
 
-        const progressData = {
+        const progressData: {
+          completedQuantity: number;
+          remarks: string;
+          m4Quantity: number;
+          weight: number;
+          machineId?: string;
+        } = {
           completedQuantity: update.completedQuantity,
           remarks: update.remarks,
           m4Quantity: m4QuantityToSend,
-          weight: totalWeightToSend
+          weight: totalWeightToSend,
         };
-          
+
+        const machineIdFromModal = updateModalAssignment
+          ? machineIdFromAssignmentMachine(updateModalAssignment.machine)
+          : null;
+        if (machineIdFromModal) {
+          progressData.machineId = machineIdFromModal;
+        }
+
           try {
             const response = await productionService.updateArticleProgress(
               'Knitting',

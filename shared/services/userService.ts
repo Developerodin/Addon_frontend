@@ -40,6 +40,8 @@ export interface NavigationPermissions {
     'Re-Boarding Floor': boolean;
     'Final Checking Floor': boolean;
     'Dispatch Floor': boolean;
+    'M4 Management': boolean;
+    'M3 Management': boolean;
     'Machine Floor': boolean;
     'Warehouse Floor': boolean;
   };

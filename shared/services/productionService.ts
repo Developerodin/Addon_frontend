@@ -210,6 +210,142 @@ export interface TransferArticleRequest {
   batchNumber?: string;
 }
 
+/** M4 snapshot per article */
+export interface M4Snapshot {
+  byFloor: {
+    knitting: number;
+    checking: number;
+    secondaryChecking: number;
+    finalChecking: number;
+  };
+  onHand: number;
+  outwardTotal: number;
+  availableForOutward: number;
+}
+
+/** M4 Management article row */
+export interface M4ArticleRow {
+  id: string;
+  _id?: string;
+  articleNumber: string;
+  orderId: string;
+  orderNumber: string;
+  orderNote?: string;
+  priority?: string;
+  status?: string;
+  linkingType?: string;
+  m4Snapshot: M4Snapshot;
+}
+
+export interface M4ArticlesResponse {
+  results: M4ArticleRow[];
+  page: number;
+  limit: number;
+  totalPages: number;
+  totalResults: number;
+}
+
+/** M4 ledger log entry */
+export interface M4LogEntry {
+  id: string;
+  type: 'ENTRY' | 'OUTWARD';
+  articleId: string;
+  orderId: string;
+  orderNumber: string;
+  articleNumber: string;
+  sourceFloor?: string | null;
+  quantity: number;
+  previousOnHand?: number;
+  newOnHand?: number;
+  previousOutwardTotal?: number;
+  newOutwardTotal?: number;
+  availableAfter?: number;
+  remarks?: string;
+  userId: string;
+  userName?: string;
+  floorSupervisorId?: string;
+  machineId?: string;
+  machineCode?: string;
+  machineName?: string;
+  timestamp: string;
+}
+
+export interface M4Statistics {
+  articleCount: number;
+  totalOnHand: number;
+  totalOutwarded: number;
+  totalAvailable: number;
+}
+
+export interface M4ArticleSummary extends M4ArticleRow {
+  recentLogs: M4LogEntry[];
+}
+
+/** M3 snapshot per article (checking floors only) */
+export interface M3Snapshot {
+  byFloor: {
+    checking: number;
+    secondaryChecking: number;
+    finalChecking: number;
+  };
+  onHand: number;
+  outwardTotal: number;
+  availableForOutward: number;
+}
+
+export interface M3ArticleRow {
+  id: string;
+  _id?: string;
+  articleNumber: string;
+  orderId: string;
+  orderNumber: string;
+  orderNote?: string;
+  priority?: string;
+  status?: string;
+  linkingType?: string;
+  m3Snapshot: M3Snapshot;
+}
+
+export interface M3ArticlesResponse {
+  results: M3ArticleRow[];
+  page: number;
+  limit: number;
+  totalPages: number;
+  totalResults: number;
+}
+
+export interface M3LogEntry {
+  id: string;
+  type: 'ENTRY' | 'OUTWARD';
+  articleId: string;
+  orderId: string;
+  orderNumber: string;
+  articleNumber: string;
+  sourceFloor?: string | null;
+  quantity: number;
+  previousOnHand?: number;
+  newOnHand?: number;
+  previousOutwardTotal?: number;
+  newOutwardTotal?: number;
+  availableAfter?: number;
+  remarks?: string;
+  userId: string;
+  userName?: string;
+  floorSupervisorId?: string;
+  timestamp: string;
+}
+
+export interface M3Statistics {
+  articleCount: number;
+  totalOnHand: number;
+  totalOutwarded: number;
+  totalAvailable: number;
+}
+
+export interface M3ArticleSummary extends M3ArticleRow {
+  recentLogs: M3LogEntry[];
+}
+
 /** Body for PATCH /articles/:articleId/floor-received-data – append one receivedData entry. */
 export type ProductionFloorName =
   | 'Knitting' | 'Linking' | 'Checking' | 'Washing' | 'Boarding' | 'Silicon'
@@ -1032,6 +1168,109 @@ class ProductionService {
     const endpoint = queryString ? `/logs/audit-trail/${orderId}?${queryString}` : `/logs/audit-trail/${orderId}`;
     
     return this.request<PaginatedResponse<any>>(endpoint);
+  }
+
+  // M4 Management APIs
+  async getM4Articles(filters: {
+    orderId?: string;
+    search?: string;
+    limit?: number;
+    page?: number;
+    sortBy?: string;
+  } = {}): Promise<ApiResponse<M4ArticlesResponse>> {
+    const queryParams = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') queryParams.append(key, String(value));
+    });
+    const qs = queryParams.toString();
+    return this.request<M4ArticlesResponse>(qs ? `/m4/articles?${qs}` : '/m4/articles');
+  }
+
+  async getM4Logs(filters: {
+    articleId?: string;
+    orderId?: string;
+    type?: 'ENTRY' | 'OUTWARD';
+    sourceFloor?: string;
+    machineId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    search?: string;
+    limit?: number;
+    page?: number;
+    sortBy?: string;
+  } = {}): Promise<ApiResponse<PaginatedResponse<M4LogEntry>>> {
+    const queryParams = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') queryParams.append(key, String(value));
+    });
+    const qs = queryParams.toString();
+    return this.request<PaginatedResponse<M4LogEntry>>(qs ? `/m4/logs?${qs}` : '/m4/logs');
+  }
+
+  async getM4Statistics(): Promise<ApiResponse<M4Statistics>> {
+    return this.request<M4Statistics>('/m4/statistics');
+  }
+
+  async getM4ArticleSummary(articleId: string, logLimit = 20): Promise<ApiResponse<M4ArticleSummary>> {
+    return this.request<M4ArticleSummary>(`/m4/articles/${articleId}/summary?logLimit=${logLimit}`);
+  }
+
+  async markM4Outward(articleId: string, body: { quantity: number; remarks: string }): Promise<ApiResponse<{ article: M4ArticleRow; log: M4LogEntry }>> {
+    return this.request(`/m4/articles/${articleId}/outward`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  // M3 Management APIs (checking floors only)
+  async getM3Articles(filters: {
+    orderId?: string;
+    search?: string;
+    limit?: number;
+    page?: number;
+    sortBy?: string;
+  } = {}): Promise<ApiResponse<M3ArticlesResponse>> {
+    const queryParams = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') queryParams.append(key, String(value));
+    });
+    const qs = queryParams.toString();
+    return this.request<M3ArticlesResponse>(qs ? `/m3/articles?${qs}` : '/m3/articles');
+  }
+
+  async getM3Logs(filters: {
+    articleId?: string;
+    orderId?: string;
+    type?: 'ENTRY' | 'OUTWARD';
+    sourceFloor?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    search?: string;
+    limit?: number;
+    page?: number;
+    sortBy?: string;
+  } = {}): Promise<ApiResponse<PaginatedResponse<M3LogEntry>>> {
+    const queryParams = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') queryParams.append(key, String(value));
+    });
+    const qs = queryParams.toString();
+    return this.request<PaginatedResponse<M3LogEntry>>(qs ? `/m3/logs?${qs}` : '/m3/logs');
+  }
+
+  async getM3Statistics(): Promise<ApiResponse<M3Statistics>> {
+    return this.request<M3Statistics>('/m3/statistics');
+  }
+
+  async getM3ArticleSummary(articleId: string, logLimit = 20): Promise<ApiResponse<M3ArticleSummary>> {
+    return this.request<M3ArticleSummary>(`/m3/articles/${articleId}/summary?logLimit=${logLimit}`);
+  }
+
+  async markM3Outward(articleId: string, body: { quantity: number; remarks: string }): Promise<ApiResponse<{ article: M3ArticleRow; log: M3LogEntry }>> {
+    return this.request(`/m3/articles/${articleId}/outward`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
   }
 
   // Bulk Operations APIs
