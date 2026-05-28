@@ -233,8 +233,10 @@ export default function StoreAnalysisPage() {
       <>
         <Seo title="Store Analysis - Analytics" />
         <Pageheader currentpage="Store Analysis" activepage="Analytics" mainpage="Store Analysis" />
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <div className="px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
         </div>
       </>
     );
@@ -245,20 +247,22 @@ export default function StoreAnalysisPage() {
       <>
         <Seo title="Store Analysis - Analytics" />
         <Pageheader currentpage="Store Analysis" activepage="Analytics" mainpage="Store Analysis" />
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center max-w-md mx-auto">
-            <div className="bg-red-50 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-              <i className="ri-error-warning-line text-2xl text-red-500"></i>
+        <div className="px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center max-w-md mx-auto">
+              <div className="bg-red-50 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                <i className="ri-error-warning-line text-2xl text-red-500"></i>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Unable to Load Data</h3>
+              <p className="text-gray-600 mb-6">{error}</p>
+              <button
+                onClick={fetchStoreData}
+                className="inline-flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors duration-200"
+              >
+                <i className="ri-refresh-line mr-2"></i>
+                Try Again
+              </button>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Unable to Load Data</h3>
-            <p className="text-gray-600 mb-6">{error}</p>
-            <button 
-              onClick={fetchStoreData}
-              className="inline-flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors duration-200"
-            >
-              <i className="ri-refresh-line mr-2"></i>
-              Try Again
-            </button>
           </div>
         </div>
       </>
@@ -271,7 +275,8 @@ export default function StoreAnalysisPage() {
     <>
       <Seo title={`${storeInfo.storeName} - Store Analysis`} />
       <Pageheader currentpage={storeInfo.storeName} activepage="Analytics" mainpage="Store Analysis" />
-      
+
+      <div className="px-4 sm:px-6 lg:px-8 py-4">
       {/* Back to Analytics */}
       <div className="mb-6">
         <div className="flex items-center justify-between">
@@ -945,6 +950,7 @@ export default function StoreAnalysisPage() {
           </div>
         </div>
       )}
+      </div>
     </>
   );
 } 

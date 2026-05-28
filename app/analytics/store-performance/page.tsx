@@ -210,7 +210,8 @@ export default function StorePerformancePage() {
   return (
     <>
       <Seo title="Store Performance - Complete Data" />
-      
+
+      <div className="px-4 sm:px-6 lg:px-8 py-4">
       {/* Data Table */}
       <ExploreDataTable
         title="Store Performance - Complete Data"
@@ -278,6 +279,7 @@ export default function StorePerformancePage() {
           </div>
         }
       />
+      </div>
     </>
   );
 } 
