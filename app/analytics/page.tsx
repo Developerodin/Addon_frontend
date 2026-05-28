@@ -91,17 +91,11 @@ export default function AnalyticsPage() {
   // Use global error handler for ApexCharts errors
   useGlobalErrorHandler();
 
-  // Set initial date range to last 8 months
+  // Set initial date range: from Jan 1, 2025 to today
   React.useEffect(() => {
-    const today = new Date();
-    const eightMonthsAgo = new Date();
-    eightMonthsAgo.setMonth(today.getMonth() - 8);
-    
-    // Format dates as YYYY-MM-DD
-    const dateFrom = eightMonthsAgo.toISOString().split('T')[0];
-    const dateTo = today.toISOString().split('T')[0];
-    
-    // Only update if the current date range is different
+    const dateFrom = '2025-01-01';
+    const dateTo = new Date().toISOString().split('T')[0];
+
     if (dateRange.dateFrom !== dateFrom || dateRange.dateTo !== dateTo) {
       updateDateRange('dateFrom', dateFrom);
       updateDateRange('dateTo', dateTo);
