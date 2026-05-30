@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, UpdateNavigationRequest } from '@/shared/services/userService';
 import {
   mergeYarnIssuePermissions,
+  mergeNavigationWithDefaults,
   EMPTY_YARN_ISSUE_NAV_DEFAULTS,
 } from '@/shared/contextapi/navigationContext';
 
@@ -27,20 +28,7 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
       console.log('Setting navigation for user:', user.id, user.name);
       console.log('User navigation data:', user.navigation);
       const rawNav = user.navigation as Partial<User['navigation']>;
-      const ym = rawNav['Yarn Management'] as Record<string, unknown> | undefined;
-      const normalized: Partial<User['navigation']> = ym
-        ? {
-            ...rawNav,
-            'Yarn Management': {
-              ...(ym as object),
-              'Yarn Issue': mergeYarnIssuePermissions(
-                ym['Yarn Issue'] as Parameters<typeof mergeYarnIssuePermissions>[0],
-                EMPTY_YARN_ISSUE_NAV_DEFAULTS
-              ),
-            } as User['navigation']['Yarn Management'],
-          }
-        : rawNav;
-      setNavigation(normalized);
+      setNavigation(mergeNavigationWithDefaults(rawNav));
     }
   }, [user, isOpen]);
 
@@ -92,7 +80,7 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
     if (!user) return;
     
     try {
-      await onSave(user.id, { navigation });
+      await onSave(user.id, { navigation: mergeNavigationWithDefaults(navigation) });
       onClose();
     } catch (error) {
       console.error('Failed to save navigation:', error);

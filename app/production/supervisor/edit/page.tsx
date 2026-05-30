@@ -15,6 +15,7 @@ import {
   OrderStatus,
   type MachineOrderAssignment,
   type OrderStatusType,
+  type ProductionOrderItem,
 } from "@/shared/services/machineOrderAssignmentService";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import NumericInput from "@/shared/utils/numericInput";
@@ -773,6 +774,26 @@ const EditOrderContent = () => {
   };
 
   /**
+   * Build machine-assignment sync payload for one order article.
+   * Existing queue rows omit status so merge preserves In Progress / yarn fields.
+   * New rows default to Pending.
+   */
+  const buildOrderItemPayloadForSync = (
+    existingItem: ProductionOrderItem | undefined,
+    productionOrderId: string,
+    articleMongoId: string
+  ): { productionOrder: string; article: string; status?: OrderStatusType } => {
+    const payload: { productionOrder: string; article: string; status?: OrderStatusType } = {
+      productionOrder: productionOrderId,
+      article: articleMongoId,
+    };
+    if (!existingItem) {
+      payload.status = OrderStatus.PENDING;
+    }
+    return payload;
+  };
+
+  /**
    * Machine can be reassigned anytime except when the queue row is terminal (completed/cancelled),
    * so yarn issue / production In Progress rows keep their statuses when moved to another needle assignment.
    */
@@ -897,7 +918,7 @@ const EditOrderContent = () => {
             status: (i.status ?? OrderStatus.PENDING) as OrderStatusType,
           }));
           const articlesOnThisMachine = formData.articles.filter((a) => toMid(a.machineId) === mid);
-          const newItems: { productionOrder: string; article: string; status: OrderStatusType }[] = [];
+          const newItems: { productionOrder: string; article: string; status?: OrderStatusType }[] = [];
           for (let i = 0; i < articlesOnThisMachine.length; i++) {
             const a = articlesOnThisMachine[i];
             const formIndex = formData.articles.indexOf(a);
@@ -906,11 +927,12 @@ const EditOrderContent = () => {
               console.warn("Edit: no real article id for form article", a.articleNumber, "at index", formIndex);
               continue;
             }
-            newItems.push({
-              productionOrder: orderId!,
-              article: articleId,
-              status: OrderStatus.PENDING,
-            });
+            const existingItem = currentItems.find(
+              (item) =>
+                String(item.productionOrder) === String(orderId) &&
+                String(item.article) === String(articleId)
+            );
+            newItems.push(buildOrderItemPayloadForSync(existingItem, orderId!, articleId));
           }
           const merged = [...payloadOther, ...newItems];
           try {

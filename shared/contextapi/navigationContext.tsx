@@ -130,6 +130,63 @@ export function mergeYarnIssuePermissions(
   return { ...defaults };
 }
 
+/**
+ * Deep-merge partial navigation with canonical defaults for complete PATCH payloads.
+ * @param partial - User navigation from API or form state
+ * @returns Full navigation object aligned with backend schema
+ */
+export function mergeNavigationWithDefaults(
+  partial: Partial<NavigationPermissions> | undefined
+): NavigationPermissions {
+  if (!partial) {
+    return { ...defaultPermissions };
+  }
+
+  return {
+    ...defaultPermissions,
+    ...partial,
+    Catalog: {
+      ...defaultPermissions.Catalog,
+      ...(partial.Catalog || {}),
+    },
+    Sales: {
+      ...defaultPermissions.Sales,
+      ...(partial.Sales || {}),
+    },
+    'Production Planning': {
+      ...defaultPermissions['Production Planning'],
+      ...(partial['Production Planning'] || {}),
+    },
+    'Yarn Management': {
+      ...defaultPermissions['Yarn Management'],
+      ...(partial['Yarn Management'] || {}),
+      'Yarn Master': {
+        ...defaultPermissions['Yarn Management']['Yarn Master'],
+        ...(partial['Yarn Management']?.['Yarn Master'] || {}),
+      },
+      'Purchase Management': {
+        ...defaultPermissions['Yarn Management']['Purchase Management'],
+        ...(partial['Yarn Management']?.['Purchase Management'] || {}),
+      },
+      'Yarn Issue': mergeYarnIssuePermissions(
+        partial['Yarn Management']?.['Yarn Issue'] as
+          | boolean
+          | NavigationPermissions['Yarn Management']['Yarn Issue']
+          | undefined,
+        defaultPermissions['Yarn Management']['Yarn Issue']
+      ),
+    },
+    'Warehouse Management': {
+      ...defaultPermissions['Warehouse Management'],
+      ...(partial['Warehouse Management'] || {}),
+    },
+    'Vendor PO': {
+      ...defaultPermissions['Vendor PO'],
+      ...(partial['Vendor PO'] || {}),
+    },
+  };
+}
+
 const NavigationContext = createContext<NavigationContextType | undefined>(undefined);
 
 // Default permissions (all false for security)
@@ -279,51 +336,7 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
     // If user exists, try to load permissions
     if (user && user.navigation) {
       console.log('Setting navigation permissions from user:', user.navigation);
-      // Merge with default permissions to ensure all keys exist
-      const mergedPermissions = {
-        ...defaultPermissions,
-        ...user.navigation,
-        // Ensure nested objects are properly merged
-        Catalog: {
-          ...defaultPermissions.Catalog,
-          ...(user.navigation.Catalog || {})
-        },
-        Sales: {
-          ...defaultPermissions.Sales,
-          ...(user.navigation.Sales || {})
-        },
-        'Production Planning': {
-          ...defaultPermissions['Production Planning'],
-          ...(user.navigation['Production Planning'] || {})
-        },
-        'Yarn Management': {
-          ...defaultPermissions['Yarn Management'],
-          ...(user.navigation['Yarn Management'] || {}),
-          'Yarn Master': {
-            ...defaultPermissions['Yarn Management']['Yarn Master'],
-            ...(user.navigation['Yarn Management']?.['Yarn Master'] || {})
-          },
-          'Purchase Management': {
-            ...defaultPermissions['Yarn Management']['Purchase Management'],
-            ...(user.navigation['Yarn Management']?.['Purchase Management'] || {})
-          },
-          'Yarn Issue': mergeYarnIssuePermissions(
-            user.navigation['Yarn Management']?.['Yarn Issue'] as
-              | boolean
-              | NavigationPermissions['Yarn Management']['Yarn Issue']
-              | undefined,
-            defaultPermissions['Yarn Management']['Yarn Issue']
-          ),
-        },
-        'Warehouse Management': {
-          ...defaultPermissions['Warehouse Management'],
-          ...(user.navigation['Warehouse Management'] || {})
-        },
-        'Vendor PO': {
-          ...defaultPermissions['Vendor PO'],
-          ...(user.navigation['Vendor PO'] || {})
-        },
-      };
+      const mergedPermissions = mergeNavigationWithDefaults(user.navigation);
       setPermissions(mergedPermissions);
       // Cache permissions for faster loading on refresh
       localStorage.setItem('navigationPermissions', JSON.stringify(mergedPermissions));

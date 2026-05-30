@@ -8,6 +8,7 @@ import { UpdateUserRequest, User } from '@/shared/services/userService';
 import NavigationPermissions from '@/app/users/components/NavigationPermissions';
 import {
   mergeYarnIssuePermissions,
+  mergeNavigationWithDefaults,
   EMPTY_YARN_ISSUE_NAV_DEFAULTS,
 } from '@/shared/contextapi/navigationContext';
 import { toast } from 'react-hot-toast';
@@ -86,20 +87,7 @@ const EditUserPage = () => {
                 timezone: currentUser.timezone
             });
             const rawNav = currentUser.navigation;
-            const ym = rawNav['Yarn Management'] as Record<string, unknown> | undefined;
-            const navigationNormalized: Partial<User['navigation']> = ym
-                ? {
-                    ...rawNav,
-                    'Yarn Management': {
-                        ...(ym as object),
-                        'Yarn Issue': mergeYarnIssuePermissions(
-                            ym['Yarn Issue'] as Parameters<typeof mergeYarnIssuePermissions>[0],
-                            EMPTY_YARN_ISSUE_NAV_DEFAULTS
-                        ),
-                    } as User['navigation']['Yarn Management'],
-                }
-                : rawNav;
-            setNavigation(navigationNormalized);
+            setNavigation(mergeNavigationWithDefaults(rawNav));
         }
     }, [currentUser]);
 
@@ -198,8 +186,8 @@ const EditUserPage = () => {
             // Update user basic information
             await updateUser(userId, updateData);
             
-            // Update user navigation permissions
-            await updateUserNavigation(userId, { navigation });
+            // Update user navigation permissions (merge with defaults so all required keys are sent)
+            await updateUserNavigation(userId, { navigation: mergeNavigationWithDefaults(navigation) });
             
             toast.success('User updated successfully');
             router.push('/users');
