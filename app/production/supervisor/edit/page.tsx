@@ -119,6 +119,8 @@ const EditOrderContent = () => {
   /** Machine ID -> total pending knitting qty (loaded when machine drawer opens) */
   const [machinePendingQtyMap, setMachinePendingQtyMap] = useState<Map<string, number>>(new Map());
   const [isLoadingMachinePendingQty, setIsLoadingMachinePendingQty] = useState(false);
+  /** Article id awaiting user confirmation before removal from the order */
+  const [articlePendingDelete, setArticlePendingDelete] = useState<string | null>(null);
 
   // Load order data and machines (same APIs as add page: listMachineOrderAssignments, getMachineActiveNeedleMap via fetchMachines)
   useEffect(() => {
@@ -764,12 +766,34 @@ const EditOrderContent = () => {
     }));
   };
 
+  /**
+   * Removes an article from the order after confirmation.
+   * @param {string} articleId - Local article row id
+   */
   const removeArticle = (articleId: string) => {
     if (formData.articles.length > 1) {
       setFormData(prev => ({
         ...prev,
         articles: prev.articles.filter(article => article.id !== articleId)
       }));
+    }
+  };
+
+  /**
+   * Opens the delete confirmation modal for the given article row.
+   * @param {string} articleId - Local article row id
+   */
+  const requestRemoveArticle = (articleId: string) => {
+    if (formData.articles.length > 1) {
+      setArticlePendingDelete(articleId);
+    }
+  };
+
+  /** Confirms article removal and closes the delete modal. */
+  const confirmRemoveArticle = () => {
+    if (articlePendingDelete) {
+      removeArticle(articlePendingDelete);
+      setArticlePendingDelete(null);
     }
   };
 
@@ -1347,9 +1371,10 @@ const EditOrderContent = () => {
                               {formData.articles.length > 1 && (
                                 <button
                                   type="button"
-                                  onClick={() => removeArticle(article.id)}
+                                  onClick={() => requestRemoveArticle(article.id)}
                                   className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-600 border border-red-100 rounded hover:bg-red-100"
                                   title="Remove Article"
+                                  aria-label={`Remove article ${article.articleNumber || index + 1}`}
                                 >
                                   <i className="ri-delete-bin-line text-xs"></i>
                                 </button>
@@ -1763,6 +1788,61 @@ const EditOrderContent = () => {
           </div>
         </div>
       )}
+
+      {articlePendingDelete && (() => {
+        const pendingArticle = formData.articles.find((a) => a.id === articlePendingDelete);
+        const articleLabel = pendingArticle?.articleNumber?.trim() || 'this article';
+        return (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+            role="presentation"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setArticlePendingDelete(null);
+              }
+            }}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-article-title"
+              aria-describedby="delete-article-desc"
+              className="bg-white rounded-2xl shadow-xl max-w-md w-full border border-gray-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-100 mb-4">
+                  <i className="ri-delete-bin-line text-2xl text-red-600" aria-hidden />
+                </div>
+                <h3 id="delete-article-title" className="text-lg font-semibold text-gray-900 text-center mb-2">
+                  Remove article?
+                </h3>
+                <p id="delete-article-desc" className="text-sm text-gray-600 text-center mb-6">
+                  Are you sure you want to delete{' '}
+                  <span className="font-semibold text-gray-900">{articleLabel}</span>
+                  {' '}from this production order? This change will apply when you save the order.
+                </p>
+                <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setArticlePendingDelete(null)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmRemoveArticle}
+                    className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700"
+                  >
+                    Yes, delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
