@@ -102,6 +102,35 @@ function productionOrderNoForApi(order: ProductionOrder): string {
 /** Gross scale weight at or below this (kg) treats the batch as empty return (no short-term rack). */
 const EMPTY_CONE_MAX_GROSS_WEIGHT_KG = 0.125;
 
+/** Maximum gross/net weight (kg) allowed per cone on yarn return (modal values are per cone). */
+const MAX_RETURN_CONE_GROSS_WEIGHT_KG = 10;
+
+/**
+ * Validates per-cone return weights against the gross weight ceiling.
+ * @param {number} grossKg - Total gross weight from the return modal
+ * @param {number} netKg - Total net weight (gross − tear)
+ * @returns {string|null} User-facing error message, or null if within limits
+ */
+function returnConeWeightLimitError(grossKg: number, netKg: number): string | null {
+  if (Number.isFinite(grossKg) && grossKg > MAX_RETURN_CONE_GROSS_WEIGHT_KG) {
+    return `Gross weight cannot exceed ${MAX_RETURN_CONE_GROSS_WEIGHT_KG} kg per cone.`;
+  }
+  if (Number.isFinite(netKg) && netKg > MAX_RETURN_CONE_GROSS_WEIGHT_KG) {
+    return `Net weight cannot exceed ${MAX_RETURN_CONE_GROSS_WEIGHT_KG} kg per cone.`;
+  }
+  return null;
+}
+
+/**
+ * True when a gross weight field value parses to more than the per-cone maximum.
+ * @param {string} value - Raw input string
+ * @returns {boolean}
+ */
+function isReturnGrossOverLimit(value: string): boolean {
+  const n = parseFloat(value);
+  return Number.isFinite(n) && n > MAX_RETURN_CONE_GROSS_WEIGHT_KG;
+}
+
 /** Article row for article-wise display. Links to parent order for cones. */
 interface ArticleRow {
   rowId: string;
@@ -1225,16 +1254,22 @@ const YarnReturnPage = () => {
 
       const w = await fetchWeightLatest("return");
       if (cancelled || w == null || w <= 0) return;
+      const truncatedWeight = Math.trunc(w * 1000) / 1000;
+      if (truncatedWeight > MAX_RETURN_CONE_GROSS_WEIGHT_KG) {
+        toast.error(
+          `Scale reading ${truncatedWeight.toFixed(3)} kg exceeds ${MAX_RETURN_CONE_GROSS_WEIGHT_KG} kg per cone. Check the scale or enter weight manually.`
+        );
+        return;
+      }
       // Use three decimal places from scale without rounding (truncate)
       setTransactionForm((prev) => {
-        const tear = parseFloat(prev.totalTearWeight) || 0;
-        const truncatedWeight = Math.trunc(w * 1000) / 1000;
-        const net = Math.max(0, truncatedWeight - tear);
-        const truncatedNet = Math.trunc(net * 1000) / 1000;
+        const tearFromPrev = parseFloat(prev.totalTearWeight) || 0;
+        const net = Math.max(0, truncatedWeight - tearFromPrev);
+        const netTrunc = Math.trunc(net * 1000) / 1000;
         return {
           ...prev,
           totalWeight: truncatedWeight.toFixed(3),
-          totalNetWeight: truncatedNet.toFixed(3),
+          totalNetWeight: netTrunc.toFixed(3),
         };
       });
     })();
@@ -1248,6 +1283,18 @@ const YarnReturnPage = () => {
   }, [transactionForm.totalWeight]);
 
   const batchIsEmptyByGross = grossReturnBatchWeight <= EMPTY_CONE_MAX_GROSS_WEIGHT_KG;
+
+  /** True when modal gross/net exceeds per-cone maximum (disables Return Yarn). */
+  const returnWeightExceedsLimit = useMemo(() => {
+    const gross = parseFloat(transactionForm.totalWeight);
+    const net = parseFloat(transactionForm.totalNetWeight);
+    return (
+      returnConeWeightLimitError(
+        Number.isFinite(gross) ? gross : 0,
+        Number.isFinite(net) ? net : 0
+      ) != null
+    );
+  }, [transactionForm.totalWeight, transactionForm.totalNetWeight]);
 
   /** Clear rack assignments when gross weight indicates an empty batch (no ST storage). */
   useEffect(() => {
@@ -2683,16 +2730,26 @@ const YarnReturnPage = () => {
   };
 
   const handleTransactionFormChange = (field: string, value: string) => {
+    if (field === "totalWeight" && isReturnGrossOverLimit(value)) {
+      toast.error(
+        `Gross weight cannot exceed ${MAX_RETURN_CONE_GROSS_WEIGHT_KG} kg per cone.`
+      );
+      return;
+    }
+
     setTransactionForm((prev) => {
       const updated = { ...prev, [field]: value };
-      
-      // Calculate totalNetWeight when totalWeight or totalTearWeight changes
+
       if (field === "totalWeight" || field === "totalTearWeight") {
         const totalWeight = parseFloat(updated.totalWeight) || 0;
         const totalTearWeight = parseFloat(updated.totalTearWeight) || 0;
-        updated.totalNetWeight = (totalWeight - totalTearWeight).toFixed(2);
+        const net = totalWeight - totalTearWeight;
+        if (returnConeWeightLimitError(totalWeight, net)) {
+          return prev;
+        }
+        updated.totalNetWeight = net.toFixed(2);
       }
-      
+
       return updated;
     });
   };
@@ -2716,6 +2773,12 @@ const YarnReturnPage = () => {
 
     if (Number.isNaN(totalWeight) || totalWeight < 0) {
       toast.error("Enter a valid total weight.");
+      return;
+    }
+
+    const weightLimitErr = returnConeWeightLimitError(totalWeight, totalNetWeight);
+    if (weightLimitErr) {
+      toast.error(weightLimitErr);
       return;
     }
 
@@ -4329,11 +4392,16 @@ const YarnReturnPage = () => {
                       <div className="flex gap-2">
                         <input
                           ref={returnModalPrimaryInputRef}
-                          type="text"
+                          type="number"
                           inputMode="decimal"
+                          min={0}
+                          max={MAX_RETURN_CONE_GROSS_WEIGHT_KG}
+                          step={0.001}
                           className="form-control flex-1"
-                          placeholder="Enter total weight"
+                          placeholder={`0 – ${MAX_RETURN_CONE_GROSS_WEIGHT_KG} kg`}
                           aria-describedby="yarn-return-gross-hint"
+                          aria-valuemin={0}
+                          aria-valuemax={MAX_RETURN_CONE_GROSS_WEIGHT_KG}
                           value={transactionForm.totalWeight}
                           onChange={(e) => handleTransactionFormChange("totalWeight", e.target.value)}
                         />
@@ -4344,19 +4412,31 @@ const YarnReturnPage = () => {
                             try {
                               const w = await fetchWeightLatest("return");
                               if (w != null && w > 0) {
-                                // Use three decimal places from scale without rounding (truncate)
                                 const truncatedWeight = Math.trunc(w * 1000) / 1000;
+                                const tear = parseFloat(transactionForm.totalTearWeight) || 0;
+                                const truncatedNet =
+                                  Math.trunc(Math.max(0, truncatedWeight - tear) * 1000) / 1000;
+                                const scaleBtnLimitErr = returnConeWeightLimitError(
+                                  truncatedWeight,
+                                  truncatedNet
+                                );
+                                if (scaleBtnLimitErr) {
+                                  toast.error(
+                                    `Scale reading ${truncatedWeight.toFixed(3)} kg exceeds ${MAX_RETURN_CONE_GROSS_WEIGHT_KG} kg per cone.`
+                                  );
+                                  return;
+                                }
                                 setTransactionForm((prev) => {
-                                  const tear = parseFloat(prev.totalTearWeight) || 0;
-                                  const net = Math.max(0, truncatedWeight - tear);
-                                  const truncatedNet = Math.trunc(net * 1000) / 1000;
+                                  const tearFromPrev = parseFloat(prev.totalTearWeight) || 0;
+                                  const net = Math.max(0, truncatedWeight - tearFromPrev);
+                                  const netTrunc = Math.trunc(net * 1000) / 1000;
                                   return {
                                     ...prev,
                                     totalWeight: truncatedWeight.toFixed(3),
-                                    totalNetWeight: truncatedNet.toFixed(3),
+                                    totalNetWeight: netTrunc.toFixed(3),
                                   };
                                 });
-                                toast.success(`Weight from scale: ${ (Math.trunc(w * 1000) / 1000).toFixed(3) } kg`);
+                                toast.success(`Weight from scale: ${truncatedWeight.toFixed(3)} kg`);
                               } else {
                                 toast.error("Could not get weight from scale.");
                               }
@@ -4372,8 +4452,9 @@ const YarnReturnPage = () => {
                         </button>
                       </div>
                       <p className="text-xs text-gray-500 mt-2" id="yarn-return-gross-hint">
-                        Gross total weight ≤ {EMPTY_CONE_MAX_GROSS_WEIGHT_KG} kg is treated as an empty batch (no short-term
-                        rack). Above that, assign one validated ST-zone rack per cone below.
+                        Per cone: max {MAX_RETURN_CONE_GROSS_WEIGHT_KG} kg gross. Gross ≤{" "}
+                        {EMPTY_CONE_MAX_GROSS_WEIGHT_KG} kg is an empty batch (no short-term rack). Above that, assign one
+                        validated ST-zone rack per cone below.
                       </p>
                     </div>
 
@@ -4516,7 +4597,12 @@ const YarnReturnPage = () => {
                     <button
                       type="submit"
                       className="ti-btn ti-btn-primary"
-                      disabled={submittingReturn}
+                      disabled={submittingReturn || returnWeightExceedsLimit}
+                      title={
+                        returnWeightExceedsLimit
+                          ? `Maximum ${MAX_RETURN_CONE_GROSS_WEIGHT_KG} kg per cone`
+                          : undefined
+                      }
                     >
                       {submittingReturn ? (
                         <>
