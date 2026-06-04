@@ -3,73 +3,86 @@ import { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { authActions } from '@/shared/redux/actions/authActions';
 import { API_BASE_URL } from '@/shared/data/utilities/api';
+import { isAccessTokenExpired, isAccessTokenValid } from '@/shared/utils/authToken';
 import Cookies from 'js-cookie';
 
+/**
+ * Validates stored tokens once on app startup and syncs Redux with the backend.
+ */
 export const useAuthInitialization = () => {
   const dispatch = useDispatch();
-  const { user, isAuthenticated, loading } = useSelector((state: any) => state.auth);
+  const { user, isAuthenticated, authInitialized } = useSelector((state: any) => state.auth);
 
   useEffect(() => {
-    const initializeAuth = async () => {
-      // Check if user is already loaded
-      if (user || loading) {
-        return;
-      }
+    if (authInitialized) {
+      return;
+    }
 
-      // Check if we have tokens
+    let cancelled = false;
+
+    const initializeAuth = async () => {
       const accessToken = Cookies.get('accessToken');
       const refreshToken = Cookies.get('refreshToken');
 
-      if (!accessToken && !refreshToken) {
-        console.log('No tokens found, user not authenticated');
-        return;
-      }
+      const markInitialized = () => {
+        if (!cancelled) {
+          dispatch(authActions.authInitialized());
+        }
+      };
+
+      const clearSession = () => {
+        void dispatch(authActions.sessionExpired());
+      };
 
       try {
-        console.log('Initializing auth with existing tokens...');
-        console.log('Access token:', accessToken ? 'Present' : 'Missing');
-        
-        // Call the backend API directly
-        const apiUrl = `${API_BASE_URL}/users/me`;
-        console.log('Calling backend API:', apiUrl);
-        
-        const response = await fetch(apiUrl, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-        });
-
-        console.log('Backend response status:', response.status);
-        console.log('Backend response ok:', response.ok);
-
-        if (response.ok) {
-          const userData = await response.json();
-          console.log('Loaded user data on initialization:', userData);
-          console.log('User navigation permissions:', userData.navigation);
-          
-          // Dispatch login success to update Redux store
-          dispatch(authActions.loginSuccess(userData));
-        } else if (response.status === 401) {
-          console.log('Token expired or invalid, clearing tokens');
-          // Clear invalid tokens
-          Cookies.remove('accessToken');
-          Cookies.remove('refreshToken');
-        } else {
-          const errorText = await response.text();
-          console.log('Failed to load user data, status:', response.status);
-          console.log('Error response:', errorText);
-          // Don't clear tokens for other errors, might be temporary
+        if (!accessToken && !refreshToken) {
+          if (user || isAuthenticated) {
+            clearSession();
+          }
+          return;
         }
-      } catch (error) {
-        console.error('Error initializing auth:', error);
-        // Don't clear tokens on network errors, might be temporary
+
+        if (!accessToken || isAccessTokenExpired(accessToken)) {
+          clearSession();
+          return;
+        }
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+        try {
+          const response = await fetch(`${API_BASE_URL}/users/me`, {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            signal: controller.signal,
+          });
+
+          if (response.ok) {
+            const userData = await response.json();
+            dispatch(authActions.loginSuccess(userData));
+          } else {
+            clearSession();
+          }
+        } catch (error) {
+          console.error('Error initializing auth:', error);
+          clearSession();
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      } finally {
+        markInitialized();
       }
     };
 
-    initializeAuth();
-  }, [dispatch, user, loading]);
+    void initializeAuth();
 
-  return { user, isAuthenticated, loading };
+    return () => {
+      cancelled = true;
+    };
+  }, [dispatch, authInitialized, user, isAuthenticated]);
+
+  return useSelector((state: any) => state.auth);
 };

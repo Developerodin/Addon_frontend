@@ -136,7 +136,8 @@ export default function YarnReportCalcInfoPopover({
                   <span className="font-bold">purRet</span>: lastUpdateDate{" "}
                   <span className="font-semibold">{startDate}</span> →{" "}
                   <span className="font-semibold">{endDate}</span>{" "}
-                  (YarnPurchaseOrder, lot_rejected / po_rejected)
+                  (YarnPurchaseOrder lot_rejected / po_rejected; plus YarnPoVendorReturn
+                  return-to-supplier by completedAt)
                 </li>
                 <li>
                   <span className="font-bold">issued</span>: transactionDate{" "}

@@ -5,8 +5,18 @@ const initialState = {
     user: null,
     loading: false,
     error: null,
-    isAuthenticated: false
+    isAuthenticated: false,
+    authInitialized: false,
 };
+
+/** Clears cached navigation permissions from localStorage after logout. */
+function clearNavigationCache(): void {
+    if (typeof window === 'undefined') {
+        return;
+    }
+    localStorage.removeItem('navigationPermissions');
+    localStorage.removeItem('cachedUserId');
+}
 
 export const authReducer = (state = initialState, action: any) => {
     switch (action.type) {
@@ -23,7 +33,8 @@ export const authReducer = (state = initialState, action: any) => {
                 loading: false,
                 user: action.payload,
                 isAuthenticated: true,
-                error: null
+                error: null,
+                authInitialized: true,
             };
 
         case AUTH_TYPES.LOGIN_FAILURE:
@@ -31,13 +42,21 @@ export const authReducer = (state = initialState, action: any) => {
                 ...state,
                 loading: false,
                 error: action.payload,
-                isAuthenticated: false
+                isAuthenticated: false,
+                authInitialized: true,
             };
 
         case AUTH_TYPES.LOGOUT:
             Cookies.remove('accessToken');
             Cookies.remove('refreshToken');
-            return initialState;
+            clearNavigationCache();
+            return { ...initialState, authInitialized: true };
+
+        case AUTH_TYPES.AUTH_INITIALIZED:
+            return {
+                ...state,
+                authInitialized: true,
+            };
 
         default:
             return state;

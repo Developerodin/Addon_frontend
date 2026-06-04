@@ -20,13 +20,37 @@ export const authActions = {
     logout: () => async (dispatch: any) => {
         // Remove refreshToken from client
         Cookies.remove('refreshToken', { path: '/' });
+        Cookies.remove('accessToken', { path: '/' });
         // Remove accessToken from server
-        await fetch('/api/auth/logout', { 
-            method: 'POST',
-            credentials: 'include' // Ensure cookies are sent
-        });
+        try {
+            await fetch('/api/auth/logout', {
+                method: 'POST',
+                credentials: 'include',
+            });
+        } catch (error) {
+            console.error('Logout API failed:', error);
+        }
         dispatch({ type: AUTH_TYPES.LOGOUT });
     },
+
+    /** Clears invalid or expired session without requiring user interaction. */
+    sessionExpired: () => async (dispatch: any) => {
+        Cookies.remove('refreshToken', { path: '/' });
+        Cookies.remove('accessToken', { path: '/' });
+        try {
+            await fetch('/api/auth/logout', {
+                method: 'POST',
+                credentials: 'include',
+            });
+        } catch (error) {
+            console.error('Session cleanup failed:', error);
+        }
+        dispatch({ type: AUTH_TYPES.LOGOUT });
+    },
+
+    authInitialized: () => ({
+        type: AUTH_TYPES.AUTH_INITIALIZED,
+    }),
 
     login: (email: string, password: string) => async (dispatch: any) => {
         try {

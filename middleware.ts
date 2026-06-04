@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { isAccessTokenExpired } from '@/shared/utils/authToken'
 
 // Define the paths that should be protected
 const protectedPaths = [
@@ -29,28 +30,59 @@ const publicPaths = [
   '/auth/forgot-password'
 ]
 
+/**
+ * Clears an invalid access token cookie on the response.
+ */
+function clearAccessTokenCookie(response: NextResponse): void {
+  response.cookies.set('accessToken', '', {
+    path: '/',
+    maxAge: 0,
+    sameSite: 'lax',
+  })
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const token = request.cookies.get('accessToken')?.value
-
- 
+  const tokenExpired = token ? isAccessTokenExpired(token) : true
+  const hasValidToken = Boolean(token) && !tokenExpired
 
   // Check if the path should be protected
   const isProtectedPath = protectedPaths.some(path => pathname.startsWith(path))
   const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
 
-  // If it's a protected path and there's no token, redirect to login
-  if (isProtectedPath && !token) {
+  // Root: send users with a valid session to dashboard, expired/missing to login
+  if (pathname === '/') {
+    if (hasValidToken) {
+      return NextResponse.redirect(new URL('/dashboards/main', request.url))
+    }
+    const response = NextResponse.redirect(new URL('/auth/login', request.url))
+    if (token && tokenExpired) {
+      clearAccessTokenCookie(response)
+    }
+    return response
+  }
+
+  // Protected routes require a non-expired token
+  if (isProtectedPath && !hasValidToken) {
     const loginUrl = new URL('/auth/login', request.url)
-    return NextResponse.redirect(loginUrl)
+    const response = NextResponse.redirect(loginUrl)
+    if (token && tokenExpired) {
+      clearAccessTokenCookie(response)
+    }
+    return response
   }
 
-  // If user is logged in and tries to access auth pages, redirect to dashboard
-  if (isPublicPath && token) {
-    const dashboardUrl = new URL('/dashboards/main', request.url)
-    return NextResponse.redirect(dashboardUrl)
+  // Auth pages: only redirect away when the token is still valid
+  if (isPublicPath && hasValidToken) {
+    return NextResponse.redirect(new URL('/dashboards/main', request.url))
   }
 
+  if (isPublicPath && token && tokenExpired) {
+    const response = NextResponse.next()
+    clearAccessTokenCookie(response)
+    return response
+  }
 
   return NextResponse.next()
 }
@@ -58,14 +90,7 @@ export function middleware(request: NextRequest) {
 // Configure which paths the middleware should run on
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - assets (public assets)
-     */
+    '/',
     '/((?!api|_next/static|_next/image|favicon.ico|assets).*)',
   ],
 }

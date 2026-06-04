@@ -9,6 +9,7 @@ import store from "@/shared/redux/store"
 import { Fragment, Suspense, useState } from "react"
 import { connect } from "react-redux"
 import { NavigationProvider } from "@/shared/contextapi/navigationContext"
+import { RequireAuth } from "@/shared/components/auth/RequireAuth"
 
 const Layout = ({ children, }: any) => {
 
@@ -31,36 +32,40 @@ const Layout = ({ children, }: any) => {
 
 
       <Fragment>
-        <Switcher />
-        <div className='page'>
-          <NavigationProvider>
-            <Header />
-            <Suspense
-              fallback={
-                <aside
-                  className="app-sidebar"
-                  id="sidebar"
-                  aria-busy="true"
-                  aria-label="Loading navigation"
-                >
-                  <div className="main-sidebar-header" />
-                  <div className="main-sidebar min-h-[200px]" />
-                </aside>
-              }
-            >
-              <Sidebar />
-            </Suspense>
-            <div className='content'>
-              <div className='main-content' style={{ paddingLeft: 0, paddingRight: 0 }}
-                onClick={Bodyclickk}
+        <RequireAuth>
+          <Switcher />
+          <div className='page'>
+            <NavigationProvider>
+              <Header />
+              <Suspense
+                fallback={
+                  <aside
+                    className="app-sidebar"
+                    id="sidebar"
+                    aria-busy="true"
+                    aria-label="Loading navigation"
+                  >
+                    <div className="main-sidebar-header" />
+                    <div className="main-sidebar min-h-[200px]" />
+                  </aside>
+                }
               >
-                {children}
+                <Sidebar />
+              </Suspense>
+              <div className='content'>
+                <div
+                  className='main-content'
+                  style={{ paddingLeft: 0, paddingRight: 0 }}
+                  onClick={Bodyclickk}
+                >
+                  {children}
+                </div>
               </div>
-            </div>
-          </NavigationProvider>
-          <Footer />
-        </div>
-        <PrelineScript />
+            </NavigationProvider>
+            <Footer />
+          </div>
+          <PrelineScript />
+        </RequireAuth>
       </Fragment>
     </>
   )

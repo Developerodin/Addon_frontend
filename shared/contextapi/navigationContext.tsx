@@ -324,11 +324,11 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
     console.log('Navigation context - User data:', user);
     console.log('Navigation context - User navigation:', user?.navigation);
     
-    // Clear cache if no user (logout scenario)
+    // Clear cache if no user (logout or expired session)
     if (!user) {
       localStorage.removeItem('navigationPermissions');
       localStorage.removeItem('cachedUserId');
-      setPermissions(defaultPermissions);
+      setPermissions(null);
       setIsLoading(false);
       return;
     }

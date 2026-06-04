@@ -103,7 +103,7 @@ function productionOrderNoForApi(order: ProductionOrder): string {
 const EMPTY_CONE_MAX_GROSS_WEIGHT_KG = 0.125;
 
 /** Maximum gross/net weight (kg) allowed per cone on yarn return (modal values are per cone). */
-const MAX_RETURN_CONE_GROSS_WEIGHT_KG = 10;
+const MAX_RETURN_CONE_GROSS_WEIGHT_KG = 7;
 
 /**
  * Validates per-cone return weights against the gross weight ceiling.
