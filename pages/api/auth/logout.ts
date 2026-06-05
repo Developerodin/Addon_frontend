@@ -1,4 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import {
+  getRequestProtocol,
+  shouldUseSecureCookies,
+} from '@/shared/utils/cookieSecurity';
 
 /**
  * API route: POST /api/auth/logout — clears accessToken cookie.
@@ -8,13 +12,9 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const origin = (req.headers.origin || req.headers.referer || '') as string;
-  const isDevelopment = process.env.NODE_ENV !== 'production';
-  const isLocalNetwork =
-    origin.includes('localhost') ||
-    origin.includes('127.0.0.1') ||
-    /^http:\/\/192\.168\.\d+\.\d+/.test(origin);
-  const useSecure = !isDevelopment && !isLocalNetwork;
+  const host = req.headers.host || 'localhost';
+  const requestUrl = `${getRequestProtocol(req.headers)}://${host}${req.url || ''}`;
+  const useSecure = shouldUseSecureCookies(getRequestProtocol(req.headers, requestUrl));
 
   res.setHeader('Set-Cookie', [
     `accessToken=; Path=/; HttpOnly=false; SameSite=Lax; Max-Age=0${useSecure ? '; Secure' : ''}`,

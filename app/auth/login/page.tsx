@@ -79,7 +79,7 @@ const Signinbasic = () => {
                                      style={{
                                          boxShadow: '8px 8px 16px rgba(0, 0, 0, 0.2), -8px -8px 16px rgba(255, 255, 255, 0.05)'
                                      }}>
-                                    <img src="../../../assets/images/brand-logos/desktop-logo.png" alt="logo" className="h-6 w-6"/>
+                                    <img src="/assets/images/brand-logos/desktop-logo.png" alt="logo" className="h-6 w-6"/>
                                 </div>
                             </div>
 
