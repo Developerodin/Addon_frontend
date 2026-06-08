@@ -11,6 +11,11 @@ import {
   ArticleViewOrderCell,
   formatArticleViewOrderLabel,
 } from "@/shared/components/production/ArticleViewOrderCell";
+import {
+  formatProductionQty,
+  normalizeProductionQty,
+  productionQtyCsvValue,
+} from "@/shared/utils/halfStepQuantity";
 
 export interface ArticleRow {
   article: Article;
@@ -41,10 +46,10 @@ export interface ArticleViewTabProps {
 function checkingRemaining(article: Article): number {
   const checking = article.floorQuantities?.checking;
   if (checking == null) return 0;
-  if (typeof checking.remaining === "number") return checking.remaining;
+  if (typeof checking.remaining === "number") return normalizeProductionQty(checking.remaining);
   const received = checking.received ?? 0;
   const transferred = checking.transferred ?? 0;
-  return Math.max(0, received - transferred);
+  return normalizeProductionQty(Math.max(0, received - transferred));
 }
 
 /** Flattens orders into rows with checking received > 0. */
@@ -75,9 +80,9 @@ function checkingDefectQuantities(article: Article): {
 } {
   const check = article.floorQuantities?.checking;
   return {
-    m2: check?.m2Quantity ?? article.m2Quantity ?? 0,
-    m3: check?.m3Quantity ?? article.m3Quantity ?? 0,
-    m4: check?.m4Quantity ?? article.m4Quantity ?? 0,
+    m2: normalizeProductionQty(check?.m2Quantity ?? article.m2Quantity ?? 0),
+    m3: normalizeProductionQty(check?.m3Quantity ?? article.m3Quantity ?? 0),
+    m4: normalizeProductionQty(check?.m4Quantity ?? article.m4Quantity ?? 0),
   };
 }
 
@@ -159,12 +164,12 @@ export default function ArticleViewTab({
     ];
 
     const rows = filteredRows.map(({ article, order }) => {
-      const planned = article.plannedQuantity ?? 0;
+      const planned = normalizeProductionQty(article.plannedQuantity ?? 0);
       const check = article.floorQuantities?.checking;
-      const received = check?.received ?? 0;
-      const done = check?.m1Quantity ?? article.m1Quantity ?? 0;
-      const transferred = check?.transferred ?? 0;
-      const remaining = check?.remaining ?? Math.max(0, received - transferred);
+      const received = normalizeProductionQty(check?.received ?? 0);
+      const done = normalizeProductionQty(check?.m1Quantity ?? article.m1Quantity ?? 0);
+      const transferred = normalizeProductionQty(check?.transferred ?? 0);
+      const remaining = normalizeProductionQty(check?.remaining ?? Math.max(0, received - transferred));
       const { m2, m3, m4 } = checkingDefectQuantities(article);
 
       return [
@@ -173,14 +178,14 @@ export default function ArticleViewTab({
         formatArticleViewOrderLabel(order),
         order.status ?? "",
         order.priority ?? "",
-        planned,
-        received,
-        done,
-        m2,
-        m3,
-        m4,
-        transferred,
-        remaining,
+        productionQtyCsvValue(planned),
+        productionQtyCsvValue(received),
+        productionQtyCsvValue(done),
+        productionQtyCsvValue(m2),
+        productionQtyCsvValue(m3),
+        productionQtyCsvValue(m4),
+        productionQtyCsvValue(transferred),
+        productionQtyCsvValue(remaining),
       ];
     });
 
@@ -291,6 +296,9 @@ export default function ArticleViewTab({
               <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Planned</th>
               <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Rcv</th>
               <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Done</th>
+              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-yellow-800 uppercase tracking-wider border border-gray-200 bg-yellow-50/50">M2</th>
+              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-orange-800 uppercase tracking-wider border border-gray-200 bg-orange-50/50">M3</th>
+              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-red-800 uppercase tracking-wider border border-gray-200 bg-red-50/50">M4</th>
               <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Trf</th>
               <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Rem</th>
               <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Status</th>
@@ -299,12 +307,13 @@ export default function ArticleViewTab({
           </thead>
           <tbody>
             {pagedRows.map(({ article, order }) => {
-              const planned = article.plannedQuantity ?? 0;
+              const planned = normalizeProductionQty(article.plannedQuantity ?? 0);
               const check = (article as { floorQuantities?: { checking?: { received?: number; m1Quantity?: number; transferred?: number; remaining?: number } }; m1Quantity?: number }).floorQuantities?.checking;
-              const received = check?.received ?? 0;
-              const completed = check?.m1Quantity ?? (article as { m1Quantity?: number }).m1Quantity ?? 0;
-              const transferred = check?.transferred ?? 0;
-              const remaining = check?.remaining ?? Math.max(0, received - transferred);
+              const received = normalizeProductionQty(check?.received ?? 0);
+              const completed = normalizeProductionQty(check?.m1Quantity ?? (article as { m1Quantity?: number }).m1Quantity ?? 0);
+              const { m2, m3, m4 } = checkingDefectQuantities(article);
+              const transferred = normalizeProductionQty(check?.transferred ?? 0);
+              const remaining = normalizeProductionQty(check?.remaining ?? Math.max(0, received - transferred));
               const key = (article.id ?? article._id) + "-" + order.id;
               const articleId = article.id ?? article._id;
               const isActiveRow = Boolean(
@@ -326,11 +335,14 @@ export default function ArticleViewTab({
                     <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium mt-0.5 ${getStatusBadge(order.status)}`}>{order.status}</span>
                     <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ml-0.5 ${getPriorityBadge(order.priority)}`}>{order.priority}</span>
                   </td>
-                  <td className="px-1.5 py-2.5 text-center text-[12px] text-gray-700 border border-gray-200">{planned.toLocaleString()}</td>
-                  <td className="px-1.5 py-2.5 text-center text-[12px] text-blue-600 font-medium border border-gray-200">{received.toLocaleString()}</td>
-                  <td className="px-1.5 py-2.5 text-center text-[12px] text-green-600 font-medium border border-gray-200">{completed.toLocaleString()}</td>
-                  <td className="px-1.5 py-2.5 text-center text-[12px] text-green-600 font-medium border border-gray-200">{transferred.toLocaleString()}</td>
-                  <td className="px-1.5 py-2.5 text-center text-[12px] text-orange-600 font-medium border border-gray-200">{remaining.toLocaleString()}</td>
+                  <td className="px-1.5 py-2.5 text-center text-[12px] text-gray-700 border border-gray-200">{formatProductionQty(planned)}</td>
+                  <td className="px-1.5 py-2.5 text-center text-[12px] text-blue-600 font-medium border border-gray-200">{formatProductionQty(received)}</td>
+                  <td className="px-1.5 py-2.5 text-center text-[12px] text-green-600 font-medium border border-gray-200">{formatProductionQty(completed)}</td>
+                  <td className="px-1.5 py-2.5 text-center text-[12px] text-yellow-700 font-medium border border-gray-200 bg-yellow-50/30">{formatProductionQty(m2)}</td>
+                  <td className="px-1.5 py-2.5 text-center text-[12px] text-orange-700 font-medium border border-gray-200 bg-orange-50/30">{formatProductionQty(m3)}</td>
+                  <td className="px-1.5 py-2.5 text-center text-[12px] text-red-700 font-medium border border-gray-200 bg-red-50/30">{formatProductionQty(m4)}</td>
+                  <td className="px-1.5 py-2.5 text-center text-[12px] text-green-600 font-medium border border-gray-200">{formatProductionQty(transferred)}</td>
+                  <td className="px-1.5 py-2.5 text-center text-[12px] text-orange-600 font-medium border border-gray-200">{formatProductionQty(remaining)}</td>
                   <td className="px-1.5 py-2.5 border border-gray-200">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${getStatusBadge(order.status)}`}>{order.status}</span>
                   </td>

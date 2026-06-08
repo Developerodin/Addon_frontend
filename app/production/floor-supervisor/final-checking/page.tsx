@@ -7,7 +7,7 @@ import HelpIcon from "@/shared/components/HelpIcon";
 import { productionService, ProductionOrder, FloorOrderFilters, Article } from "@/shared/services/productionService";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import NumericInput from "@/shared/utils/numericInput";
-import { getFirstHalfStepError, HALF_STEP_QTY_ERROR } from "@/shared/utils/halfStepQuantity";
+import { formatProductionQty, getFirstHalfStepError, HALF_STEP_QTY_ERROR } from "@/shared/utils/halfStepQuantity";
 import RepairTransferModal from "@/shared/components/production/RepairTransferModal";
 import { getPreviousFloor, getArticleMongoId, resolveNextFloorFromProcesses } from "@/shared/utils/productionUtils";
 import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuantityDisplay";
@@ -1167,19 +1167,25 @@ const FinalCheckingFloorSupervisorPage = () => {
             <div className="bg-green-50 border border-green-100 rounded p-2 flex items-center justify-between">
               <span className="text-[10px] font-bold text-green-700 uppercase tracking-wide">M1 Good</span>
               <span className="text-sm font-bold text-green-900">
-                {floorCatalog.reduce((sum, order) => sum + order.articles.reduce((articleSum, article) => articleSum + (article.floorQuantities?.finalChecking?.m1Quantity || article.m1Quantity || 0), 0), 0)}
+                {formatProductionQty(
+                  floorCatalog.reduce((sum, order) => sum + order.articles.reduce((articleSum, article) => articleSum + (article.floorQuantities?.finalChecking?.m1Quantity || article.m1Quantity || 0), 0), 0)
+                )}
               </span>
             </div>
             <div className="bg-yellow-50 border border-yellow-100 rounded p-2 flex items-center justify-between">
               <span className="text-[10px] font-bold text-yellow-700 uppercase tracking-wide">M2 Repair</span>
               <span className="text-sm font-bold text-yellow-900">
-                {floorCatalog.reduce((sum, order) => sum + order.articles.reduce((articleSum, article) => articleSum + (article.floorQuantities?.finalChecking?.m2Quantity || article.m2Quantity || 0), 0), 0)}
+                {formatProductionQty(
+                  floorCatalog.reduce((sum, order) => sum + order.articles.reduce((articleSum, article) => articleSum + (article.floorQuantities?.finalChecking?.m2Quantity || article.m2Quantity || 0), 0), 0)
+                )}
               </span>
             </div>
             <div className="bg-red-50 border border-red-100 rounded p-2 flex items-center justify-between">
               <span className="text-[10px] font-bold text-red-700 uppercase tracking-wide">M3+M4</span>
               <span className="text-sm font-bold text-red-900">
-                {floorCatalog.reduce((sum, order) => sum + order.articles.reduce((articleSum, article) => articleSum + (article.floorQuantities?.finalChecking?.m3Quantity || article.m3Quantity || 0) + (article.floorQuantities?.finalChecking?.m4Quantity || article.m4Quantity || 0), 0), 0)}
+                {formatProductionQty(
+                  floorCatalog.reduce((sum, order) => sum + order.articles.reduce((articleSum, article) => articleSum + (article.floorQuantities?.finalChecking?.m3Quantity || article.m3Quantity || 0) + (article.floorQuantities?.finalChecking?.m4Quantity || article.m4Quantity || 0), 0), 0)
+                )}
               </span>
             </div>
           </div>

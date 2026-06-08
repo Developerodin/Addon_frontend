@@ -56,3 +56,34 @@ export function getFirstHalfStepError(fields: HalfStepField[]): string | null {
   }
   return null;
 }
+
+const QTY_DUST_EPSILON = 1e-6;
+
+/**
+ * Normalizes a production quantity: snaps float dust to 0 and rounds to 2 decimals.
+ */
+export function normalizeProductionQty(n: number | null | undefined): number {
+  const v = Number(n ?? 0);
+  if (!Number.isFinite(v)) return 0;
+  if (Math.abs(v) < QTY_DUST_EPSILON) return 0;
+  return Math.round(v * 100) / 100;
+}
+
+/**
+ * Formats a production quantity for display (up to 2 decimal places).
+ */
+export function formatProductionQty(n: number | null | undefined): string {
+  return normalizeProductionQty(n).toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
+
+/**
+ * CSV-safe production quantity string (no scientific notation, max 2 decimal places).
+ */
+export function productionQtyCsvValue(n: number | null | undefined): string {
+  const v = normalizeProductionQty(n);
+  if (Number.isInteger(v)) return String(v);
+  return v.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+}

@@ -53,6 +53,23 @@ export function useProductionArticleQrScan({
     setQrPinnedArticleOrders(null);
   }, []);
 
+  /**
+   * Patches articles inside the QR-pinned catalog slice (when scan filter is active).
+   */
+  const patchQrPinnedArticles = useCallback(
+    (patch: (articles: ProductionOrder["articles"]) => ProductionOrder["articles"]) => {
+      setQrPinnedArticleOrders((prev) =>
+        prev
+          ? prev.map((order) => ({
+              ...order,
+              articles: patch(order.articles),
+            }))
+          : prev
+      );
+    },
+    []
+  );
+
   const openDrawer = useCallback(() => {
     setFeedback(null);
     setShowDrawer(true);
@@ -160,6 +177,7 @@ export function useProductionArticleQrScan({
     closeDrawer,
     handleScan,
     clearQrPin,
+    patchQrPinnedArticles,
     tryScanFromContainerInput,
     floorLabel,
   };

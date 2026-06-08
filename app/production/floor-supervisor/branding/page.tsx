@@ -28,6 +28,7 @@ import { teamMasterService, type TeamMaster, PRODUCTION_FLOORS } from "@/shared/
 import { getArticleMongoId, resolveNextFloorFromProcesses } from "@/shared/utils/productionUtils";
 
 type BrandingTab = "orders" | "article-view" | "my-team" | "upcoming";
+type BrandingTypeOption = "Heat Transfer" | "Embroidery" | "";
 
 const FLOOR_CATALOG_LIMIT = 2000;
 
@@ -97,7 +98,7 @@ const BrandingFloorSupervisorPage = () => {
   const [activeViewTabIndex, setActiveViewTabIndex] = useState(0);
   const [updateData, setUpdateData] = useState<{[key: string]: {
     transferItems: Array<{ transferred: number; styleCode?: string; brand?: string }>;
-    brandingType: 'Heat Transfer' | 'Embroidery';
+    brandingType: BrandingTypeOption;
     remarks: string;
   }}>({});
   /** Per-article unique brands from GET /products/by-code (factoryCode = articleNumber) */
@@ -134,6 +135,8 @@ const BrandingFloorSupervisorPage = () => {
   const [updateContainerNextFloor, setUpdateContainerNextFloor] = useState("Final Checking");
   const [updateContainerSubmitting, setUpdateContainerSubmitting] = useState(false);
   const [showAllArticles, setShowAllArticles] = useState(false);
+  /** Article id currently saving branding type (instant PATCH on select). */
+  const [brandingTypeSavingId, setBrandingTypeSavingId] = useState<string | null>(null);
 
   /** Loads branding floor orders for both tabs; filter + paginate client-side. */
   const loadFloorOrdersCatalog = useCallback(async () => {
@@ -286,7 +289,7 @@ const BrandingFloorSupervisorPage = () => {
     // Initialize update data: transferItems = empty (user enters NEW transfer only). Previously transferred shown separately.
     const initialData: {[key: string]: {
       transferItems: Array<{ transferred: number; styleCode?: string; brand?: string }>;
-      brandingType: 'Heat Transfer' | 'Embroidery';
+      brandingType: BrandingTypeOption;
       remarks: string;
     }} = {};
     order.articles.forEach(article => {
@@ -294,7 +297,7 @@ const BrandingFloorSupervisorPage = () => {
       if (articleId) {
         initialData[articleId] = {
           transferItems: [{ transferred: 0 }],
-          brandingType: article.brandingType || 'Heat Transfer',
+          brandingType: article.brandingType ?? "",
           remarks: article.remarks || ''
         };
       }
@@ -435,14 +438,77 @@ const BrandingFloorSupervisorPage = () => {
     }));
   };
 
-  const handleBrandingTypeChange = (articleId: string, value: 'Heat Transfer' | 'Embroidery') => {
-    setUpdateData(prev => ({
+  /** True when article row matches either business id or Mongo _id. */
+  const articleRowMatches = useCallback(
+    (a: Article, rowId: string, mongoId: string) =>
+      a.id === rowId ||
+      a._id === rowId ||
+      a.id === mongoId ||
+      a._id === mongoId,
+    []
+  );
+
+  /** Syncs branding type into modal order state and floor catalog after instant save. */
+  const patchArticleBrandingType = useCallback(
+    (rowId: string, mongoId: string, brandingType?: 'Heat Transfer' | 'Embroidery') => {
+      const patchArticles = (articles: Article[]) =>
+        articles.map((a) =>
+          articleRowMatches(a, rowId, mongoId) ? { ...a, brandingType } : a
+        );
+
+      setSelectedOrder((prev) =>
+        prev ? { ...prev, articles: patchArticles(prev.articles) } : null
+      );
+      setFloorCatalog((prev) =>
+        prev.map((order) => ({ ...order, articles: patchArticles(order.articles) }))
+      );
+      qrScan.patchQrPinnedArticles(patchArticles);
+    },
+    [articleRowMatches, qrScan]
+  );
+
+  /** Saves branding type immediately via dedicated API when user changes the dropdown. */
+  const handleBrandingTypeChange = async (articleId: string, value: 'Heat Transfer' | 'Embroidery') => {
+    const article = selectedOrder?.articles.find(
+      (a) => articleRowMatches(a, articleId, articleId)
+    );
+    if (!article) return;
+
+    const mongoId = article._id ?? article.id ?? articleId;
+    const previousValue = article.brandingType;
+    if (previousValue === value) return;
+
+    setUpdateData((prev) => ({
       ...prev,
       [articleId]: {
         ...prev[articleId],
-        brandingType: value
-      }
+        brandingType: value,
+      },
     }));
+    patchArticleBrandingType(articleId, mongoId, value);
+    setBrandingTypeSavingId(articleId);
+
+    try {
+      const response = await productionService.updateArticleBrandingType(mongoId, value);
+      if (!response.success) {
+        throw new Error(response.error?.message || 'Failed to save branding type');
+      }
+      const savedType = response.data?.brandingType ?? value;
+      patchArticleBrandingType(articleId, mongoId, savedType);
+      toast.success('Branding type saved');
+    } catch (error: unknown) {
+      setUpdateData((prev) => ({
+        ...prev,
+        [articleId]: {
+          ...prev[articleId],
+          brandingType: previousValue ?? "",
+        },
+      }));
+      patchArticleBrandingType(articleId, mongoId, previousValue);
+      toast.error(error instanceof Error ? error.message : 'Failed to save branding type');
+    } finally {
+      setBrandingTypeSavingId(null);
+    }
   };
 
   const handleRemarksChange = (articleId: string, value: string) => {
@@ -510,18 +576,19 @@ const BrandingFloorSupervisorPage = () => {
         const update = updateData[articleId];
         const brandingTransferredQuantity = article.floorQuantities?.branding?.transferred || 0;
         const newTransferQty = getTransferTotal(update?.transferItems ?? []);
-        const hasChanges = newTransferQty > 0 || update?.remarks !== (article.remarks || '');
+        const hasChanges =
+          newTransferQty > 0 ||
+          update?.remarks !== (article.remarks || "");
         if (update && hasChanges) {
           const validItems = toBrandOnlyTransferItems(update.transferItems ?? []);
           const userId = user?.id ?? user?._id;
           const floorSupervisorId = user?.id ?? user?._id;
-          if (validItems.length > 0 && (!userId || !floorSupervisorId)) {
-            toast.error("User session required for transfer. Please log in again.");
+          if (!userId || !floorSupervisorId) {
+            toast.error("User session required for update. Please log in again.");
             return;
           }
           const progressData = {
             transferredData: validItems.length > 0 ? validItems : undefined,
-            brandingType: update.brandingType,
             remarks: update.remarks,
             ...(userId ? { userId } : {}),
             ...(floorSupervisorId ? { floorSupervisorId } : {}),
@@ -1277,7 +1344,7 @@ const BrandingFloorSupervisorPage = () => {
 
                 const currentUpdateData = updateData[articleId] || {
                   transferItems: [{ transferred: 0 }],
-                  brandingType: article.brandingType || "Heat Transfer",
+                  brandingType: article.brandingType ?? "",
                   remarks: article.remarks || "",
                 };
 
@@ -1321,10 +1388,22 @@ const BrandingFloorSupervisorPage = () => {
                             <td className="px-2 py-1.5 text-center border-r border-gray-300 text-orange-600 font-medium">{remainingQty.toLocaleString()}</td>
                             <td className="px-2 py-1.5 border-r border-gray-300">
                               <select
-                                className="form-select text-xs py-1 px-2 h-7 w-full"
+                                className={`form-select text-xs py-1 px-2 h-7 w-full disabled:opacity-60 ${!currentUpdateData.brandingType ? "text-gray-400" : ""}`}
                                 value={currentUpdateData.brandingType}
-                                onChange={(e) => handleBrandingTypeChange(articleId, e.target.value as "Heat Transfer" | "Embroidery")}
+                                onChange={(e) => {
+                                  const next = e.target.value;
+                                  if (next === "Heat Transfer" || next === "Embroidery") {
+                                    void handleBrandingTypeChange(articleId, next);
+                                  }
+                                }}
+                                disabled={brandingTypeSavingId === articleId}
+                                aria-label={`Branding type for ${article.articleNumber ?? articleId}`}
+                                aria-busy={brandingTypeSavingId === articleId}
+                                required
                               >
+                                <option value="" disabled>
+                                  Select branding type
+                                </option>
                                 <option value="Heat Transfer">Heat Transfer</option>
                                 <option value="Embroidery">Embroidery</option>
                               </select>

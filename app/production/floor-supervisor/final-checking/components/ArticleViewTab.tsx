@@ -12,6 +12,11 @@ import {
   formatArticleViewOrderLabel,
 } from "@/shared/components/production/ArticleViewOrderCell";
 import { collapseLinesByBrand, formatBrandLine, formatBrandLines } from "@/shared/utils/brandTransfer.util";
+import {
+  formatProductionQty,
+  normalizeProductionQty,
+  productionQtyCsvValue,
+} from "@/shared/utils/halfStepQuantity";
 
 export interface ArticleRow {
   article: Article;
@@ -40,10 +45,10 @@ export interface ArticleViewTabProps {
 function finalCheckingRemaining(article: Article): number {
   const fc = article.floorQuantities?.finalChecking;
   if (fc == null) return 0;
-  if (typeof fc.remaining === "number") return fc.remaining;
+  if (typeof fc.remaining === "number") return normalizeProductionQty(fc.remaining);
   const received = fc.received ?? 0;
   const transferred = fc.transferred ?? 0;
-  return Math.max(0, received - transferred);
+  return normalizeProductionQty(Math.max(0, received - transferred));
 }
 
 /** Flattens orders into rows with final checking received > 0. */
@@ -74,9 +79,9 @@ function finalCheckingDefectQuantities(article: Article): {
 } {
   const fc = article.floorQuantities?.finalChecking;
   return {
-    m2: fc?.m2Quantity ?? article.m2Quantity ?? 0,
-    m3: fc?.m3Quantity ?? article.m3Quantity ?? 0,
-    m4: fc?.m4Quantity ?? article.m4Quantity ?? 0,
+    m2: normalizeProductionQty(fc?.m2Quantity ?? article.m2Quantity ?? 0),
+    m3: normalizeProductionQty(fc?.m3Quantity ?? article.m3Quantity ?? 0),
+    m4: normalizeProductionQty(fc?.m4Quantity ?? article.m4Quantity ?? 0),
   };
 }
 
@@ -161,10 +166,10 @@ export default function ArticleViewTab({
 
     const rows = filteredRows.map(({ article, order }) => {
       const fc = article.floorQuantities?.finalChecking;
-      const received = fc?.received ?? 0;
-      const completed = fc?.m1Quantity ?? article.m1Quantity ?? 0;
-      const transferred = fc?.transferred ?? 0;
-      const remaining = fc?.remaining ?? Math.max(0, received - transferred);
+      const received = normalizeProductionQty(fc?.received ?? 0);
+      const completed = normalizeProductionQty(fc?.m1Quantity ?? article.m1Quantity ?? 0);
+      const transferred = normalizeProductionQty(fc?.transferred ?? 0);
+      const remaining = normalizeProductionQty(fc?.remaining ?? Math.max(0, received - transferred));
       const { m2, m3, m4 } = finalCheckingDefectQuantities(article);
       const receivedData = formatBrandLines(fc?.receivedData as any);
       const transferredData = formatBrandLines(fc?.transferredData as any);
@@ -175,14 +180,14 @@ export default function ArticleViewTab({
         formatArticleViewOrderLabel(order),
         order.status ?? "",
         order.priority ?? "",
-        article.plannedQuantity ?? 0,
-        received,
-        completed,
-        m2,
-        m3,
-        m4,
-        transferred,
-        remaining,
+        productionQtyCsvValue(article.plannedQuantity ?? 0),
+        productionQtyCsvValue(received),
+        productionQtyCsvValue(completed),
+        productionQtyCsvValue(m2),
+        productionQtyCsvValue(m3),
+        productionQtyCsvValue(m4),
+        productionQtyCsvValue(transferred),
+        productionQtyCsvValue(remaining),
         receivedData,
         transferredData,
       ];
@@ -292,6 +297,9 @@ export default function ArticleViewTab({
               <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Planned</th>
               <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Rcv</th>
               <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">M1</th>
+              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-yellow-800 uppercase tracking-wider border border-gray-200 bg-yellow-50/50">M2</th>
+              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-orange-800 uppercase tracking-wider border border-gray-200 bg-orange-50/50">M3</th>
+              <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-red-800 uppercase tracking-wider border border-gray-200 bg-red-50/50">M4</th>
               <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Trf</th>
               <th className="px-1.5 py-2.5 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Rem</th>
               <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Received (Brand)</th>
@@ -302,12 +310,13 @@ export default function ArticleViewTab({
           </thead>
           <tbody>
             {pagedRows.map(({ article, order }) => {
-              const planned = article.plannedQuantity ?? 0;
+              const planned = normalizeProductionQty(article.plannedQuantity ?? 0);
               const fc = article.floorQuantities?.finalChecking;
-              const received = fc?.received ?? 0;
-              const completed = fc?.m1Quantity ?? (article as { m1Quantity?: number }).m1Quantity ?? 0;
-              const transferred = fc?.transferred ?? 0;
-              const remaining = fc?.remaining ?? Math.max(0, received - transferred);
+              const received = normalizeProductionQty(fc?.received ?? 0);
+              const completed = normalizeProductionQty(fc?.m1Quantity ?? (article as { m1Quantity?: number }).m1Quantity ?? 0);
+              const { m2, m3, m4 } = finalCheckingDefectQuantities(article);
+              const transferred = normalizeProductionQty(fc?.transferred ?? 0);
+              const remaining = normalizeProductionQty(fc?.remaining ?? Math.max(0, received - transferred));
               const key = (article.id ?? article._id) + "-" + order.id;
               const articleId = article.id ?? article._id;
               const isActiveRow = Boolean(
@@ -335,19 +344,28 @@ export default function ArticleViewTab({
                     </span>
                   </td>
                   <td className="px-1.5 py-2.5 text-center text-[12px] text-gray-700 border border-gray-200">
-                    {planned.toLocaleString()}
+                    {formatProductionQty(planned)}
                   </td>
                   <td className="px-1.5 py-2.5 text-center text-[12px] text-teal-600 font-medium border border-gray-200">
-                    {received.toLocaleString()}
+                    {formatProductionQty(received)}
                   </td>
                   <td className="px-1.5 py-2.5 text-center text-[12px] text-green-600 font-medium border border-gray-200">
-                    {completed.toLocaleString()}
+                    {formatProductionQty(completed)}
+                  </td>
+                  <td className="px-1.5 py-2.5 text-center text-[12px] text-yellow-700 font-medium border border-gray-200 bg-yellow-50/30">
+                    {formatProductionQty(m2)}
+                  </td>
+                  <td className="px-1.5 py-2.5 text-center text-[12px] text-orange-700 font-medium border border-gray-200 bg-orange-50/30">
+                    {formatProductionQty(m3)}
+                  </td>
+                  <td className="px-1.5 py-2.5 text-center text-[12px] text-red-700 font-medium border border-gray-200 bg-red-50/30">
+                    {formatProductionQty(m4)}
                   </td>
                   <td className="px-1.5 py-2.5 text-center text-[12px] text-green-600 font-medium border border-gray-200">
-                    {transferred.toLocaleString()}
+                    {formatProductionQty(transferred)}
                   </td>
                   <td className="px-1.5 py-2.5 text-center text-[12px] text-orange-600 font-medium border border-gray-200">
-                    {remaining.toLocaleString()}
+                    {formatProductionQty(remaining)}
                   </td>
                   <td className="px-1.5 py-2.5 border border-gray-200 text-[10px] text-gray-600 max-w-[140px]">
                     {collapseLinesByBrand(fc?.receivedData as any).length > 0 ? (

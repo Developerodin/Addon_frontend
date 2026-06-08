@@ -37,6 +37,7 @@ export interface Article {
   currentFloor: string;
   machineId?: string | any; // Can be string or populated object
   remarks?: string;
+  brandingType?: 'Heat Transfer' | 'Embroidery';
   knittingCode?: string;
   quantityFromPreviousFloor?: number;
   m1Quantity: number;
@@ -186,6 +187,7 @@ export interface UpdateArticleProgressRequest {
   /** Required for transfer: floor supervisor object id */
   floorSupervisorId?: string;
   remarks?: string;
+  brandingType?: 'Heat Transfer' | 'Embroidery';
   m1Quantity?: number;
   m2Quantity?: number;
   m3Quantity?: number;
@@ -511,6 +513,7 @@ class ProductionService {
       currentFloor: article.currentFloor,
       machineId: article.machineId,
       remarks: article.remarks,
+      brandingType: article.brandingType,
       knittingCode: article.knittingCode,
       quantityFromPreviousFloor: article.quantityFromPreviousFloor,
       m1Quantity: article.m1Quantity,
@@ -841,6 +844,30 @@ class ProductionService {
       method: 'PATCH',
       body: JSON.stringify(progressData),
     });
+  }
+
+  /**
+   * PATCH /articles/:articleId/branding-type – save branding type immediately on select.
+   */
+  async updateArticleBrandingType(
+    articleId: string,
+    brandingType: 'Heat Transfer' | 'Embroidery'
+  ): Promise<ApiResponse<Article>> {
+    const response = await this.request<any>(`/articles/${articleId}/branding-type`, {
+      method: 'PATCH',
+      body: JSON.stringify({ brandingType }),
+    });
+    if (!response.success || !response.data) {
+      return response as ApiResponse<Article>;
+    }
+    const orderId =
+      typeof response.data.orderId === 'object'
+        ? response.data.orderId?._id ?? response.data.orderId?.id
+        : response.data.orderId;
+    return {
+      success: true,
+      data: this.transformArticle(response.data, orderId ?? ''),
+    };
   }
 
   /** PATCH /articles/:articleId/floor-received-data – append one receivedData entry for the floor. */
