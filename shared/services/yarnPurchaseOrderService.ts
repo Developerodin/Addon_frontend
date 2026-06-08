@@ -138,6 +138,15 @@ export interface ReceivedLotPoItem {
   receivedQuantity: number;
 }
 
+export interface ReceivedLotQcData {
+  user?: string;
+  username?: string;
+  date?: string;
+  remarks?: string;
+  status?: 'qc_approved' | 'qc_rejected' | string;
+  mediaUrl?: Record<string, string>;
+}
+
 export interface ReceivedLotDetail {
   lotNumber: string;
   numberOfCones: number;
@@ -147,7 +156,8 @@ export interface ReceivedLotDetail {
   netWeight: number;
   numberOfBoxes: number;
   poItems: ReceivedLotPoItem[];
-  status: 'lot_pending' | 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected';
+  status: 'lot_pending' | 'lot_qc_pending' | 'lot_accepted' | 'lot_rejected' | 'lot_returned_to_vendor';
+  qcData?: ReceivedLotQcData;
 }
 
 export interface UpdatePurchaseOrderWithReceivedLotsPayload {
@@ -617,13 +627,18 @@ class YarnPurchaseOrderService {
   }
 
   /**
-   * POST finalize vendor return (archive cones, sync inventory).
+   * POST finalize vendor return (archive cones, sync inventory, issue challan).
    */
   async finalizeVendorReturnSession(
     sessionId: string,
     body?: { idempotencyKey?: string }
-  ): Promise<Record<string, unknown>> {
-    return this.makeRequest<Record<string, unknown>>(
+  ): Promise<{
+    vendorReturn?: Record<string, unknown>;
+    purchaseOrder?: Record<string, unknown>;
+    challan?: Record<string, unknown>;
+    idempotent?: boolean;
+  }> {
+    return this.makeRequest(
       `/vendor-return/sessions/${encodeURIComponent(sessionId)}/finalize`,
       {
         method: 'POST',

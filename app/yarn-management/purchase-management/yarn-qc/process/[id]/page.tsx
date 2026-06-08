@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
@@ -9,8 +9,10 @@ import { toast } from "react-hot-toast";
 import yarnPurchaseOrderService, { PurchaseOrderStatus } from "@/shared/services/yarnPurchaseOrderService";
 import { QcVendorReturnSection } from "./QcVendorReturnSection";
 import { QcLotVendorReturn } from "./QcLotVendorReturn";
+import { YarnQcLotHistorySection } from "./YarnQcLotHistorySection";
 import yarnBoxService, { YarnBox } from "@/shared/services/yarnBoxService";
 import { FileUploadService } from "@/shared/services/fileUploadService";
+import { parseQcMediaUrls } from "../../yarnQcHistoryService";
 
 interface ReceivedItem {
   id: string;
@@ -151,12 +153,30 @@ interface UploadedMediaItem {
   uploadedAt: string;
 }
 
+/**
+ * Hydrates upload preview state from persisted qcData.mediaUrl on a yarn box.
+ */
+function mediaUrlToUploadedItems(mediaUrl?: Record<string, string>): UploadedMediaItem[] {
+  return parseQcMediaUrls(mediaUrl).map((item, index) => ({
+    id: `saved-${item.key}-${index}`,
+    type: item.type,
+    url: item.url,
+    fileName: item.key,
+    fileKey: item.key,
+    mimeType: item.type === "video" ? "video/mp4" : "image/jpeg",
+    size: 0,
+    uploadedAt: "",
+  }));
+}
+
 const ProcessQCOrderPage = () => {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { hasSubPermission, isLoading } = useNavigation();
   const user = useSelector((state: any) => state.auth?.user);
   const orderId = params?.id as string;
+  const isHistoryView = searchParams?.get("view") === "history";
 
   const [order, setOrder] = useState<ReceivedOrder | null>(null);
   /** Raw PO `currentStatus` from API (needed for return-to-vendor UI guards). */
@@ -325,20 +345,23 @@ const ProcessQCOrderPage = () => {
       console.log('Box details received:', boxDetails);
       
       setScannedBox(boxDetails);
-      
+
       // If QC is already done, pre-fill the form with existing QC data
       if (boxDetails.qcData) {
         setQcStatus(boxDetails.qcData.status === 'qc_approved' ? 'QC Accepted' : 'QC Rejected');
         setQcNotes(boxDetails.qcData.remarks || '');
         setQcBy(boxDetails.qcData.username || '');
+        setUploadedMedia(mediaUrlToUploadedItems(boxDetails.qcData.mediaUrl));
         toast.success(`Box ${boxDetails.boxId} found - QC already completed`);
       } else {
+        setUploadedMedia([]);
         toast.success(`Box ${boxDetails.boxId} found`);
       }
     } catch (error) {
       console.error('Failed to fetch box details:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to fetch box details');
       setScannedBox(null);
+      setUploadedMedia([]);
     } finally {
       setIsLoadingBox(false);
       // Don't clear barcode value, keep it for reference
@@ -646,44 +669,13 @@ const ProcessQCOrderPage = () => {
                 <i className="ri-arrow-left-line text-sm"></i>
               </Link>
               <div className="w-[3px] h-5 bg-purple-600 rounded-full"></div>
-              <h1 className="text-sm font-bold text-gray-800 truncate">QC Process Order</h1>
+              <h1 className="text-sm font-bold text-gray-800 truncate">
+                {isHistoryView ? "QC History" : "QC Process Order"}
+              </h1>
               <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm shrink-0">
                 {order.purchaseOrderNumber}
               </span>
             </div>
-            {scannedBox && !scannedBox.qcData && (
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <Link
-                  href="/yarn-management/purchase-management/yarn-qc"
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-600 text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm"
-                  onClick={(e) => {
-                    if (isSubmitting) {
-                      e.preventDefault();
-                    }
-                  }}
-                >
-                  Cancel
-                </Link>
-                <button
-                  type="button"
-                  onClick={handleSubmitQC}
-                  disabled={isSubmitting || !qcStatus || !qcBy.trim()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <i className="ri-loader-4-line animate-spin text-xs"></i>
-                      Submitting...
-                    </>
-                  ) : (
-                    <>
-                      <i className="ri-check-line text-xs"></i>
-                      Update QC Status
-                    </>
-                  )}
-                </button>
-              </div>
-            )}
             {/* QC Approve All - commented out
             {order.receivedLotDetails && order.receivedLotDetails.length > 0 && hasPendingLots && (
               <button
@@ -770,7 +762,7 @@ const ProcessQCOrderPage = () => {
               </div>
             )}
           </div>
-          {user?.id && user?.email && (
+          {!isHistoryView && user?.id && user?.email && (
             <QcVendorReturnSection
               orderId={orderId}
               poNumber={order.purchaseOrderNumber}
@@ -788,8 +780,15 @@ const ProcessQCOrderPage = () => {
           )}
         </div>
 
+        {isHistoryView && (
+          <YarnQcLotHistorySection
+            orderId={orderId}
+            poNumber={order.purchaseOrderNumber}
+          />
+        )}
+
         {/* Received Lot Details Section */}
-        {order.receivedLotDetails && order.receivedLotDetails.length > 0 && (
+        {!isHistoryView && order.receivedLotDetails && order.receivedLotDetails.length > 0 && (
           <div className="p-[10px] border-t border-gray-100">
             <h3 className="text-xs font-bold text-gray-800 mb-3">
               Received Lot Details ({order.receivedLotDetails.length})
@@ -885,7 +884,9 @@ const ProcessQCOrderPage = () => {
           </div>
         )}
 
-        {/* Barcode Scanner Section */}
+        {/* Barcode Scanner + QC form — hidden in history view */}
+        {!isHistoryView && (
+        <>
         <div className="p-[10px] border-t border-gray-100">
           <h3 className="text-xs font-bold text-gray-800 mb-3">Scan Box Barcode</h3>
           <div className="flex flex-col sm:flex-row gap-2">
@@ -938,6 +939,7 @@ const ProcessQCOrderPage = () => {
                 onClick={() => {
                   setScannedBox(null);
                   setBarcodeScanValue('');
+                  setUploadedMedia([]);
                 }}
                 className="text-gray-400 hover:text-gray-600 transition text-xs"
                 title="Clear box details"
@@ -1074,6 +1076,33 @@ const ProcessQCOrderPage = () => {
                       </div>
                     )}
                   </div>
+                  {uploadedMedia.length > 0 && (
+                    <div className="mt-3 border-t border-blue-200 pt-2">
+                      <p className="mb-2 text-[9px] font-bold uppercase tracking-wide text-blue-700">
+                        QC Attachments
+                      </p>
+                      <ul className="flex flex-wrap gap-2">
+                        {uploadedMedia.map((item) => (
+                          <li key={item.id}>
+                            <a
+                              href={item.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 rounded border border-blue-200 bg-white px-2 py-1 text-[10px] font-semibold text-blue-800 hover:bg-blue-50"
+                            >
+                              <i
+                                className={
+                                  item.type === "video" ? "ri-video-line" : "ri-image-line"
+                                }
+                                aria-hidden
+                              />
+                              {item.fileName}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1083,9 +1112,11 @@ const ProcessQCOrderPage = () => {
         {/* Media Upload Section - Show when box is scanned */}
         {scannedBox && (
           <div className="p-[10px] border-t border-gray-100">
-            <h3 className="text-xs font-bold text-gray-800 mb-3">Upload Images & Videos</h3>
+            <h3 className="text-xs font-bold text-gray-800 mb-3">Upload Images &amp; Videos (Optional)</h3>
             <div className="mb-3">
-              <label className="text-xs font-medium text-gray-600 mb-1 block">Upload QC Images/Videos</label>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">
+                Upload QC Images/Videos <span className="text-gray-400 font-normal">(optional)</span>
+              </label>
               <input
                 type="file"
                 multiple
@@ -1095,7 +1126,7 @@ const ProcessQCOrderPage = () => {
                 className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
               />
               <p className="text-[10px] text-gray-500 mt-1">
-                Upload images or videos showing the quality inspection of this box
+                Optional — attach images or videos for this lot QC. Saved to S3 and shown in QC history.
               </p>
             </div>
 
@@ -1202,7 +1233,42 @@ const ProcessQCOrderPage = () => {
             </div>
           </div>
         )}
-        <div className="h-20 shrink-0" aria-hidden="true" />
+
+        {scannedBox && !scannedBox.qcData && (
+          <div className="flex items-center justify-end gap-2 border-t border-gray-100 p-[10px] mb-[400px]">
+            <Link
+              href="/yarn-management/purchase-management/yarn-qc"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-600 text-[11px] font-bold rounded border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm"
+              onClick={(e) => {
+                if (isSubmitting) {
+                  e.preventDefault();
+                }
+              }}
+            >
+              Cancel
+            </Link>
+            <button
+              type="button"
+              onClick={handleSubmitQC}
+              disabled={isSubmitting || !qcStatus || !qcBy.trim()}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? (
+                <>
+                  <i className="ri-loader-4-line animate-spin text-xs"></i>
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <i className="ri-check-line text-xs"></i>
+                  Update QC Status
+                </>
+              )}
+            </button>
+          </div>
+        )}
+        </>
+        )}
       </div>
     </div>
   );

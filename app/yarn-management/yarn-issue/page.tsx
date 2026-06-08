@@ -18,6 +18,7 @@ import AssignmentsCards, {
   sortMachineAssignmentsByYarnIssueTone,
 } from "@/app/catalog/needle-configuration/components/AssignmentsCards";
 import YarnSummaryDrawer from "@/app/yarn-management/yarn-issue/YarnSummaryDrawer";
+import { YarnIssueActivityLogDrawer } from "@/app/yarn-management/yarn-issue/YarnIssueActivityLogDrawer";
 
 type RequirementStatus = "Not Issued" | "Partially Issued" | "Issued";
 
@@ -402,13 +403,10 @@ const YarnIssuePage = () => {
   const [submittingTransaction, setSubmittingTransaction] = useState(false);
   const [showScanIssuePanel, setShowScanIssuePanel] = useState(false);
   const [showActivityLogPanel, setShowActivityLogPanel] = useState(false);
+  const [activityLogRefreshKey, setActivityLogRefreshKey] = useState(0);
   const [showYarnSummaryPanel, setShowYarnSummaryPanel] = useState(false);
   const [completingYarnIssue, setCompletingYarnIssue] = useState(false);
-  const [yarnTransactions, setYarnTransactions] = useState<YarnTransaction[]>([]);
   const [allYarnTransactions, setAllYarnTransactions] = useState<YarnTransaction[]>([]); // For order status calculations
-  const [transactionsLoading, setTransactionsLoading] = useState(false);
-  const [startDate, setStartDate] = useState<string>("");
-  const [endDate, setEndDate] = useState<string>("");
   const [fetchingWeight, setFetchingWeight] = useState(false);
   const barcodeInputRef = useRef<HTMLInputElement | null>(null);
   const focusBarcodeInput = useCallback(() => {
@@ -474,52 +472,6 @@ const YarnIssuePage = () => {
 
     fetchAllTransactions();
   }, [hasPermission]);
-
-  // Fetch yarn-issued transactions with date filters for logs panel
-  useEffect(() => {
-    const fetchTransactions = async () => {
-      if (!hasPermission || !showActivityLogPanel) return;
-      
-      setTransactionsLoading(true);
-      try {
-        const token = getAccessToken();
-        
-        // Build query parameters for date filtering
-        const queryParams = new URLSearchParams();
-        if (startDate) {
-          queryParams.append("start_date", startDate);
-        }
-        if (endDate) {
-          queryParams.append("end_date", endDate);
-        }
-        
-        const url = `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued${
-          queryParams.toString() ? `?${queryParams.toString()}` : ""
-        }`;
-        
-        const response = await fetch(url, {
-          headers: {
-            "Content-Type": "application/json",
-            ...(token && { Authorization: `Bearer ${token}` }),
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch yarn transactions");
-        }
-
-        const data = await response.json();
-        setYarnTransactions(data || []);
-      } catch (error) {
-        console.error("Error fetching yarn transactions:", error);
-        toast.error("Failed to load yarn transactions");
-      } finally {
-        setTransactionsLoading(false);
-      }
-    };
-
-    fetchTransactions();
-  }, [hasPermission, showActivityLogPanel, startDate, endDate]);
 
   // Fetch top-items (machines with active PO items) – single API, all data included
   useEffect(() => {
@@ -923,15 +875,6 @@ const YarnIssuePage = () => {
   //     });
   //   }
   // }, [orders, selectedOrderId]);
-
-  /** Activity log: newest first (by createdAt, then transactionDate). */
-  const yarnTransactionsNewestFirst = useMemo(() => {
-    return [...yarnTransactions].sort((a, b) => {
-      const ta = new Date(a.createdAt || a.transactionDate).getTime();
-      const tb = new Date(b.createdAt || b.transactionDate).getTime();
-      return tb - ta;
-    });
-  }, [yarnTransactions]);
 
   const filteredOrders = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -1397,31 +1340,8 @@ const YarnIssuePage = () => {
         const refreshedData = await refreshResponse.json();
         setAllYarnTransactions(refreshedData || []);
         
-        // Also refresh filtered transactions if logs panel is open
         if (showActivityLogPanel) {
-          const queryParams = new URLSearchParams();
-          if (startDate) {
-            queryParams.append("start_date", startDate);
-          }
-          if (endDate) {
-            queryParams.append("end_date", endDate);
-          }
-          
-          const filteredUrl = `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued${
-            queryParams.toString() ? `?${queryParams.toString()}` : ""
-          }`;
-          
-          const filteredResponse = await fetch(filteredUrl, {
-            headers: {
-              "Content-Type": "application/json",
-              ...(token && { Authorization: `Bearer ${token}` }),
-            },
-          });
-          
-          if (filteredResponse.ok) {
-            const filteredData = await filteredResponse.json();
-            setYarnTransactions(filteredData || []);
-          }
+          setActivityLogRefreshKey((k) => k + 1);
         }
       }
 
@@ -2055,166 +1975,11 @@ const YarnIssuePage = () => {
 
       <YarnSummaryDrawer open={showYarnSummaryPanel} onClose={() => setShowYarnSummaryPanel(false)} />
 
-      {/* Issue Activity Log Side Panel */}
-      {showActivityLogPanel && (
-        <>
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity"
-            onClick={() => setShowActivityLogPanel(false)}
-          />
-          {/* Side Panel */}
-          <div className="fixed top-0 right-0 h-full w-full max-w-6xl bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out flex flex-col">
-            <div className="box h-full flex flex-col min-h-0">
-              <div className="box-header border-b border-gray-200 flex-shrink-0 px-4 py-4">
-                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 w-full">
-                  <div className="flex flex-wrap items-center gap-3 min-w-0">
-                    <h3 className="box-title text-lg mb-0 leading-tight shrink-0">Issue Activity Log</h3>
-                    <div className="grid grid-cols-2 gap-2 w-[200px] sm:w-[220px] shrink-0">
-                      <div className="min-w-0">
-                        <label className="block text-[10px] font-semibold text-gray-600 mb-0.5 leading-tight">
-                          Start Date
-                        </label>
-                        <input
-                          type="date"
-                          className="form-control w-full py-1 px-2 text-[11px] leading-tight h-8 min-h-0"
-                          value={startDate}
-                          onChange={(e) => setStartDate(e.target.value)}
-                        />
-                      </div>
-                      <div className="min-w-0">
-                        <label className="block text-[10px] font-semibold text-gray-600 mb-0.5 leading-tight">
-                          End Date
-                        </label>
-                        <input
-                          type="date"
-                          className="form-control w-full py-1 px-2 text-[11px] leading-tight h-8 min-h-0"
-                          value={endDate}
-                          onChange={(e) => setEndDate(e.target.value)}
-                          min={startDate || undefined}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowActivityLogPanel(false)}
-                    className="shrink-0 inline-flex items-center justify-center rounded-md p-1.5 text-gray-800 hover:text-gray-950 hover:bg-gray-100 transition-colors"
-                    aria-label="Close panel"
-                  >
-                    <i className="ri-close-line text-xl leading-none" />
-                  </button>
-                </div>
-                {(startDate || endDate) && (
-                  <div className="mt-3 space-y-2 pt-3 border-t border-gray-100">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setStartDate("");
-                        setEndDate("");
-                      }}
-                      className="ti-btn ti-btn-outline w-full text-xs py-1.5"
-                    >
-                      <i className="ri-close-line me-1"></i>
-                      Clear Filters
-                    </button>
-                    {yarnTransactions.length > 0 && (
-                      <p className="text-xs text-gray-500 text-center">
-                        Showing {yarnTransactions.length} transaction{yarnTransactions.length !== 1 ? "s" : ""} for selected date range
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div className="box-body flex-1 min-h-0 overflow-auto px-4 pb-4">
-                {transactionsLoading ? (
-                  <div className="text-center py-12 text-sm text-gray-500">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-                    <p>Loading transactions...</p>
-                  </div>
-                ) : yarnTransactions.length === 0 ? (
-                  <div className="text-center py-12 text-sm text-gray-500">
-                    <i className="ri-timeline-line text-4xl text-gray-300 mb-2"></i>
-                    <p>
-                      {startDate || endDate
-                        ? "No transactions found for the selected date range."
-                        : "No yarn issued transactions found."}
-                    </p>
-                    {(startDate || endDate) && (
-                      <button
-                        onClick={() => {
-                          setStartDate("");
-                          setEndDate("");
-                        }}
-                        className="ti-btn ti-btn-outline mt-3 text-xs"
-                      >
-                        Clear Filters
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto border border-gray-300 bg-white">
-                    <table className="w-full min-w-[1200px] border-collapse text-[11px]">
-                      <thead className="sticky top-0 z-10 shadow-sm">
-                        <tr className="bg-[#f2f2f2] border-b border-gray-300">
-                          <th className="border border-gray-300 px-2 py-2 text-left font-bold text-gray-800 whitespace-nowrap bg-[#f2f2f2]">#</th>
-                          <th className="border border-gray-300 px-2 py-2 text-left font-bold text-gray-800 bg-[#f2f2f2] min-w-[280px]">Yarn</th>
-                          <th className="border border-gray-300 px-2 py-2 text-left font-bold text-gray-800 whitespace-nowrap bg-[#f2f2f2]">Order</th>
-                          <th className="border border-gray-300 px-2 py-2 text-left font-bold text-gray-800 whitespace-nowrap bg-[#f2f2f2]">Type</th>
-                          <th className="border border-gray-300 px-2 py-2 text-left font-bold text-gray-800 whitespace-nowrap bg-[#f2f2f2]">Txn date</th>
-                          <th className="border border-gray-300 px-2 py-2 text-right font-bold text-gray-800 whitespace-nowrap bg-[#f2f2f2]">Cones</th>
-                          <th className="border border-gray-300 px-2 py-2 text-right font-bold text-gray-800 whitespace-nowrap bg-[#f2f2f2]">Net (kg)</th>
-                          <th className="border border-gray-300 px-2 py-2 text-right font-bold text-gray-800 whitespace-nowrap bg-[#f2f2f2]">Total (kg)</th>
-                          <th className="border border-gray-300 px-2 py-2 text-right font-bold text-gray-800 whitespace-nowrap bg-[#f2f2f2]">Tear (kg)</th>
-                          <th className="border border-gray-300 px-2 py-2 text-left font-bold text-gray-800 whitespace-nowrap bg-[#f2f2f2]">Created</th>
-                          <th className="border border-gray-300 px-2 py-2 text-left font-bold text-gray-800 whitespace-nowrap bg-[#f2f2f2]">Updated</th>
-                          <th className="border border-gray-300 px-2 py-2 text-left font-mono font-bold text-gray-800 min-w-[200px] bg-[#f2f2f2]">Transaction ID</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {yarnTransactionsNewestFirst.map((transaction, index) => (
-                          <tr
-                            key={transaction._id}
-                            className="hover:bg-[#f9f9f9] border-b border-gray-300 bg-white even:bg-[#fafafa]"
-                          >
-                            <td className="border border-gray-300 px-2 py-1.5 text-gray-600 tabular-nums">{index + 1}</td>
-                            <td className="border border-gray-300 px-2 py-1.5 align-top min-w-[280px]">
-                              <div className="font-semibold text-gray-900 whitespace-normal break-words">
-                                {transaction.yarnName}
-                              </div>
-                              <div className="text-[10px] text-gray-500 whitespace-normal break-words mt-0.5">
-                                {transaction.yarn?.yarnType?.name || "—"}
-                              </div>
-                            </td>
-                            <td className="border border-gray-300 px-2 py-1.5 text-gray-900 whitespace-nowrap">{transaction.orderno}</td>
-                            <td className="border border-gray-300 px-2 py-1.5 text-gray-800">{transaction.transactionType}</td>
-                            <td className="border border-gray-300 px-2 py-1.5 text-gray-800 whitespace-nowrap">
-                              {formatIsoDateOnly(transaction.transactionDate)}
-                            </td>
-                            <td className="border border-gray-300 px-2 py-1.5 text-right tabular-nums text-gray-900">{transaction.transactionConeCount}</td>
-                            <td className="border border-gray-300 px-2 py-1.5 text-right tabular-nums font-semibold text-blue-700">{transaction.transactionNetWeight}</td>
-                            <td className="border border-gray-300 px-2 py-1.5 text-right tabular-nums text-gray-900">{transaction.transactionTotalWeight}</td>
-                            <td className="border border-gray-300 px-2 py-1.5 text-right tabular-nums text-gray-900">{transaction.transactionTearWeight}</td>
-                            <td className="border border-gray-300 px-2 py-1.5 text-gray-700 whitespace-nowrap">
-                              {new Date(transaction.createdAt).toLocaleDateString()}
-                            </td>
-                            <td className="border border-gray-300 px-2 py-1.5 text-gray-700 whitespace-nowrap">
-                              {new Date(transaction.updatedAt).toLocaleDateString()}
-                            </td>
-                            <td className="border border-gray-300 px-2 py-1.5 font-mono text-[10px] text-gray-800 break-all align-top">
-                              {transaction._id}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </>
-      )}
+      <YarnIssueActivityLogDrawer
+        open={showActivityLogPanel}
+        onClose={() => setShowActivityLogPanel(false)}
+        refreshKey={activityLogRefreshKey}
+      />
 
       {/* Issue Modal */}
       {showIssueModal && (

@@ -76,6 +76,7 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
     { key: 'Purchase Order Recevied', label: 'PO Received' },
     { key: 'Draft POs', label: 'Draft POs' },
     { key: 'PO Return', label: 'PO Return' },
+    { key: 'PO Return Challan', label: 'PO Return Challan' },
     { key: 'GRN History', label: 'GRN History' },
     { key: 'Yarn QC', label: 'Yarn QC' },
     { key: 'Yarn Storage', label: 'Yarn Storage' }

@@ -13,6 +13,8 @@ import yarnPurchaseOrderService, {
   UpdatePurchaseOrderWithReceivedLotsPayload
 } from "@/shared/services/yarnPurchaseOrderService";
 import yarnBoxService, { CreateBulkYarnBoxPayload } from "@/shared/services/yarnBoxService";
+import { downloadGoodsReceivedOrderItemsExcel } from "./goodsReceivedOrderItemsExcelExport";
+import { GoodsReceivedPoItemSelectModal } from "./GoodsReceivedPoItemSelectModal";
 
 interface ReceiptProcessingDetails {
   processedBy: string;
@@ -2047,38 +2049,17 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
   /** After Add Lot: scroll to new block and focus first field */
   const scrollNewLotAfterAdd = useRef(false);
 
-  /** Packlist-style floating PO line picker (single-select per row) */
-  const [grPoDropdown, setGrPoDropdown] = useState<{
+  /** PO line picker modal target row (lot + line index) */
+  const [grPoItemPicker, setGrPoItemPicker] = useState<{
     lotIndex: number;
     poItemIndex: number;
-    top: number;
-    left: number;
-    width: number;
   } | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
-      setGrPoDropdown(null);
+      setGrPoItemPicker(null);
     }
   }, [isOpen]);
-
-  useEffect(() => {
-    if (!grPoDropdown) return;
-    const onDocMouseDown = (e: MouseEvent) => {
-      const t = e.target as HTMLElement;
-      if (t.closest("[data-gr-po-floating]") || t.closest("[data-gr-po-trigger]")) return;
-      setGrPoDropdown(null);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setGrPoDropdown(null);
-    };
-    document.addEventListener("mousedown", onDocMouseDown);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDocMouseDown);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [grPoDropdown]);
 
   useEffect(() => {
     if (!scrollNewLotAfterAdd.current) return;
@@ -2145,9 +2126,23 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
         setLots([newEmptyGoodsReceivedLotRow(1)]);
         setRawInputValues({});
       }
-      setGrPoDropdown(null);
+      setGrPoItemPicker(null);
     }
   }, [isOpen, order]);
+
+  /** Cumulative received qty per PO line from current lot rows (updates as user edits). */
+  const receivedQtyByPoItem = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const lot of lots) {
+      for (const poItem of lot.poItems || []) {
+        const id = String(poItem.poItem ?? "");
+        if (!id) continue;
+        const qty = Number(poItem.receivedQuantity) || 0;
+        map.set(id, (map.get(id) || 0) + qty);
+      }
+    }
+    return map;
+  }, [lots]);
 
   if (!isOpen) return null;
 
@@ -2534,6 +2529,34 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
     beginGoodsReceivedUpdate();
   };
 
+  /** Export order summary + line items (incl. live received qty) to Excel. */
+  const handleDownloadOrderItemsExcel = () => {
+    if (!order.items?.length) {
+      toast.error("No order items to export");
+      return;
+    }
+    try {
+      downloadGoodsReceivedOrderItemsExcel({
+        orderNumber: order.orderNumber,
+        supplier: order.supplier,
+        orderDate: order.orderDate,
+        totalAmount: order.totalAmount,
+        items: order.items.map((item) => ({
+          yarnName: item.yarnName,
+          sizeCount: item.sizeCount,
+          shadeCode: item.shadeCode,
+          quantity: item.quantity,
+          receivedQuantity: receivedQtyByPoItem.get(String(item.id)) || 0,
+          rate: item.rate,
+        })),
+      });
+      toast.success("Order items downloaded");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to download Excel");
+    }
+  };
+
   return (
     <>
     <div className={`fixed inset-0 z-50 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`}>
@@ -2575,7 +2598,20 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
 
             {/* Order Details */}
             <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-              <h4 className="text-xs font-semibold text-gray-700 mb-2">Order Details</h4>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <h4 className="text-xs font-semibold text-gray-700">Order Details</h4>
+                {order.items && order.items.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleDownloadOrderItemsExcel}
+                    className="inline-flex items-center gap-1.5 rounded border border-emerald-600/40 bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 shadow-sm transition-colors hover:bg-emerald-50"
+                    aria-label="Download order items as Excel"
+                  >
+                    <i className="ri-file-excel-2-line text-sm" aria-hidden />
+                    Download Excel
+                  </button>
+                )}
+              </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div>
                   <label className="text-[10px] font-medium text-gray-600">PO Number</label>
@@ -2605,6 +2641,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                           <th className={grExcelTh}>Size/Count</th>
                           <th className={grExcelTh}>Shade Code</th>
                           <th className={`${grExcelTh} text-right`}>Quantity</th>
+                          <th className={`${grExcelTh} text-right`}>Qty Received</th>
                           <th className={`${grExcelTh} text-right`}>Rate</th>
                         </tr>
                       </thead>
@@ -2615,6 +2652,9 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                             <td className="border border-gray-400 px-2 py-1.5 text-xs text-gray-900">{item.sizeCount}</td>
                             <td className="border border-gray-400 px-2 py-1.5 text-xs text-gray-900">{item.shadeCode}</td>
                             <td className="border border-gray-400 px-2 py-1.5 text-right text-xs text-gray-900">{item.quantity.toLocaleString()}</td>
+                            <td className="border border-gray-400 px-2 py-1.5 text-right text-xs text-gray-900">
+                              {(receivedQtyByPoItem.get(String(item.id)) || 0).toLocaleString()}
+                            </td>
                             <td className="border border-gray-400 px-2 py-1.5 text-right text-xs text-gray-900">₹{item.rate.toLocaleString()}</td>
                           </tr>
                         ))}
@@ -3107,33 +3147,18 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                                   <div className="min-h-[30px] min-w-[10.5rem] max-w-[28rem]">
                                     <button
                                       type="button"
-                                      data-gr-po-trigger
                                       disabled={!lotRowEditable}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        const rect = e.currentTarget.getBoundingClientRect();
-                                        setGrPoDropdown((prev) => {
-                                          if (
-                                            prev?.lotIndex === lotIndex &&
-                                            prev?.poItemIndex === poItemIndex
-                                          ) {
-                                            return null;
-                                          }
-                                          return {
-                                            lotIndex,
-                                            poItemIndex,
-                                            top: rect.bottom + 4,
-                                            left: rect.left,
-                                            width: Math.max(rect.width, 280),
-                                          };
-                                        });
+                                        setGrPoItemPicker({ lotIndex, poItemIndex });
                                       }}
                                       className={`${grExcelInput} flex w-full min-h-[30px] items-center justify-between gap-1 px-1.5 text-left`}
-                                      aria-expanded={
-                                        grPoDropdown?.lotIndex === lotIndex &&
-                                        grPoDropdown?.poItemIndex === poItemIndex
+                                      aria-haspopup="dialog"
+                                      aria-label={
+                                        poItem.poItem
+                                          ? "Change PO item"
+                                          : "Select PO item"
                                       }
-                                      aria-haspopup="listbox"
                                     >
                                       <span className="truncate">
                                         {!poItem.poItem ? (
@@ -3150,12 +3175,7 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
                                         )}
                                       </span>
                                       <i
-                                        className={`ri-arrow-down-s-line shrink-0 text-gray-500 transition-transform ${
-                                          grPoDropdown?.lotIndex === lotIndex &&
-                                          grPoDropdown?.poItemIndex === poItemIndex
-                                            ? "rotate-180"
-                                            : ""
-                                        }`}
+                                        className="ri-search-line shrink-0 text-gray-500"
                                         aria-hidden
                                       />
                                     </button>
@@ -3438,48 +3458,20 @@ const GoodsReceivedModal: React.FC<GoodsReceivedModalProps> = ({
         </form>
       </div>
     </div>
-    {grPoDropdown &&
-      typeof document !== "undefined" &&
-      createPortal(
-        <div
-          data-gr-po-floating
-          className="fixed max-h-[min(20rem,55vh)] overflow-y-auto overscroll-contain rounded border border-gray-400 bg-white pt-1 pb-4 shadow-xl"
-          style={{
-            top: grPoDropdown.top,
-            left: grPoDropdown.left,
-            width: grPoDropdown.width,
-            zIndex: 10000,
-          }}
-          role="listbox"
-          onMouseDown={(e) => e.stopPropagation()}
-          onWheel={(e) => e.stopPropagation()}
-        >
-          {getFilteredPoItems().map((item) => {
-            const d = grPoDropdown;
-            const rowPo = lots[d.lotIndex]?.poItems[d.poItemIndex];
-            const selected = rowPo && String(rowPo.poItem) === String(item.id);
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={`flex w-full cursor-pointer items-start gap-2 px-2 py-1.5 text-left text-[11px] hover:bg-gray-100 ${
-                  selected ? "bg-gray-100" : ""
-                }`}
-                onClick={() => {
-                  updatePoItem(d.lotIndex, d.poItemIndex, "poItem", item.id);
-                  setGrPoDropdown(null);
-                }}
-              >
-                <span className="leading-snug text-gray-800">
-                  {item.yarnName} · {item.sizeCount} · {item.shadeCode}{" "}
-                  <span className="text-gray-500">(Qty: {item.quantity})</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>,
-        document.body
-      )}
+    <GoodsReceivedPoItemSelectModal
+      isOpen={grPoItemPicker !== null}
+      items={getFilteredPoItems()}
+      selectedItemId={
+        grPoItemPicker
+          ? lots[grPoItemPicker.lotIndex]?.poItems[grPoItemPicker.poItemIndex]?.poItem
+          : undefined
+      }
+      onClose={() => setGrPoItemPicker(null)}
+      onSelect={(itemId) => {
+        if (!grPoItemPicker) return;
+        updatePoItem(grPoItemPicker.lotIndex, grPoItemPicker.poItemIndex, "poItem", itemId);
+      }}
+    />
     </>
   );
 };

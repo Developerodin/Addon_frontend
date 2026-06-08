@@ -44,6 +44,13 @@ const PurchaseManagementPage = () => {
       permission: "PO Return"
     },
     {
+      title: "PO Return Challan",
+      description: "Search, view, and reprint vendor return challans",
+      icon: "ri-file-list-3-line",
+      path: "/yarn-management/purchase-management/po-return-challan",
+      permission: "PO Return Challan"
+    },
+    {
       title: "GRN History",
       description: "Search and reprint yarn goods received notes",
       icon: "ri-file-text-line",

@@ -56,6 +56,7 @@ export interface NavigationPermissions {
       'Purchase Order Recevied': boolean;
       'Draft POs': boolean;
       'PO Return': boolean;
+      'PO Return Challan': boolean;
       'GRN History': boolean;
       'Yarn QC': boolean;
       'Yarn Storage': boolean;

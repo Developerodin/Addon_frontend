@@ -493,6 +493,14 @@ const BaseMenuItems: any = [
             title: "PO Return",
           },
           {
+            icon: ReturnIcon,
+            path: "/yarn-management/purchase-management/po-return-challan",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "PO Return Challan",
+          },
+          {
             icon: PurchaseReceivedIcon,
             path: "/yarn-management/grn",
             type: "link",

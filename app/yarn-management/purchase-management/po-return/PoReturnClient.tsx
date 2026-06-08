@@ -1,9 +1,13 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { toast } from "react-hot-toast";
 import yarnPurchaseOrderService from "@/shared/services/yarnPurchaseOrderService";
+import poReturnChallanService, { PoReturnChallan } from "@/shared/services/poReturnChallanService";
+import { printChallanDocument } from "@/shared/utils/poReturnChallanPrint";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
+import ChallanDetailDrawer from "@/shared/components/po-return-challan/ChallanDetailDrawer";
 import { PoReturnHistoryPanel } from "./PoReturnHistoryPanel";
 import { PoReturnWorkflowPanel } from "./PoReturnWorkflowPanel";
 import {
@@ -11,7 +15,6 @@ import {
   getErrorMessage,
   mapToPoOptions,
   sumPendingNetKg,
-  type HistoryRow,
   type PendingRow,
   type PoOption,
 } from "./poReturnHelpers";
@@ -22,6 +25,10 @@ import {
 export function PoReturnClient() {
   const { hasSubPermission, isLoading } = useNavigation();
   const canAccess = hasSubPermission("/yarn-management/purchase-management", "PO Return");
+  const canAccessChallanHistory = hasSubPermission(
+    "/yarn-management/purchase-management",
+    "PO Return Challan"
+  );
 
   const [poOptions, setPoOptions] = useState<PoOption[]>([]);
   const [poLoading, setPoLoading] = useState(true);
@@ -35,10 +42,11 @@ export function PoReturnClient() {
   const [pendingRows, setPendingRows] = useState<PendingRow[]>([]);
   const [barcodeInput, setBarcodeInput] = useState("");
 
-  const [historyRows, setHistoryRows] = useState<HistoryRow[]>([]);
+  const [challanRows, setChallanRows] = useState<PoReturnChallan[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"return" | "history">("return");
   const [workflowError, setWorkflowError] = useState<string | null>(null);
+  const [activeChallan, setActiveChallan] = useState<PoReturnChallan | null>(null);
 
   const fetchPos = useCallback(async () => {
     setPoLoading(true);
@@ -56,19 +64,28 @@ export function PoReturnClient() {
     }
   }, []);
 
-  const fetchHistory = useCallback(async (poNumber?: string) => {
+  const fetchChallanPreview = useCallback(async (poNumber?: string) => {
+    if (!canAccessChallanHistory) {
+      setChallanRows([]);
+      return;
+    }
     setHistoryLoading(true);
     try {
-      const rows = await yarnPurchaseOrderService.getVendorReturnHistory(poNumber, 100);
-      setHistoryRows(Array.isArray(rows) ? rows : []);
+      const res = await poReturnChallanService.listChallans({
+        poNumber: poNumber?.trim() || undefined,
+        page: 1,
+        limit: 5,
+        sortBy: "createdAt:desc",
+      });
+      setChallanRows(res.results || []);
     } catch (e) {
       console.error(e);
-      toast.error(e instanceof Error ? e.message : "Could not load history");
-      setHistoryRows([]);
+      toast.error(e instanceof Error ? e.message : "Could not load challan history");
+      setChallanRows([]);
     } finally {
       setHistoryLoading(false);
     }
-  }, []);
+  }, [canAccessChallanHistory]);
 
   useEffect(() => {
     if (!canAccess || isLoading) return;
@@ -78,8 +95,8 @@ export function PoReturnClient() {
   useEffect(() => {
     if (!canAccess || isLoading || activeTab !== "history") return;
     const po = selectedPo?.poNumber?.trim() || undefined;
-    void fetchHistory(po);
-  }, [canAccess, isLoading, activeTab, fetchHistory, selectedPo?.poNumber]);
+    void fetchChallanPreview(po);
+  }, [canAccess, isLoading, activeTab, fetchChallanPreview, selectedPo?.poNumber]);
 
   const filteredPoOptions = useMemo(() => {
     const q = poSearch.trim().toLowerCase();
@@ -192,11 +209,17 @@ export function PoReturnClient() {
     if (!ok) return;
     setSessionBusy(true);
     try {
-      await yarnPurchaseOrderService.finalizeVendorReturnSession(sessionId);
+      const result = await yarnPurchaseOrderService.finalizeVendorReturnSession(sessionId);
       setWorkflowError(null);
-      toast.success("Vendor return completed — inventory updated");
+      const challan = result.challan as PoReturnChallan | undefined;
+      const challanNo = challan?.challanNumber;
+      if (challanNo) {
+        toast.success(`Vendor return completed — Challan ${challanNo} issued`);
+      } else {
+        toast.success("Vendor return completed — inventory updated");
+      }
       resetSessionUi();
-      void fetchHistory(selectedPo?.poNumber?.trim());
+      void fetchChallanPreview(selectedPo?.poNumber?.trim());
       void fetchPos();
     } catch (e) {
       const msg = getErrorMessage(e, "Finalize failed");
@@ -229,8 +252,36 @@ export function PoReturnClient() {
     );
   }
 
+  const handleViewChallan = async (row: PoReturnChallan) => {
+    try {
+      const full = await poReturnChallanService.getChallanById(row.id);
+      setActiveChallan(full);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not load challan");
+    }
+  };
+
+  const handlePrintChallan = async (row: PoReturnChallan) => {
+    try {
+      const full = await poReturnChallanService.getChallanById(row.id);
+      await printChallanDocument(full);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Print failed");
+    }
+  };
+
   return (
     <div className="space-y-4">
+      {canAccessChallanHistory && (
+        <div className="flex justify-end">
+          <Link
+            href="/yarn-management/purchase-management/po-return-challan"
+            className="text-[11px] font-bold text-purple-700 hover:underline"
+          >
+            Return Challan History
+          </Link>
+        </div>
+      )}
       <div className="flex gap-2 border-b border-gray-200 pb-2" role="tablist" aria-label="PO Return sections">
         <button
           type="button"
@@ -301,13 +352,24 @@ export function PoReturnClient() {
               Clear the PO selection on the Return tab to load all returns (select another PO or use search).
             </p>
           )}
-          <PoReturnHistoryPanel
-            historyLoading={historyLoading}
-            historyRows={historyRows}
-            onRefresh={() => void fetchHistory(selectedPo?.poNumber?.trim())}
-          />
+          {!canAccessChallanHistory ? (
+            <p className="text-xs text-gray-500">
+              You need the &quot;PO Return Challan&quot; permission to view return challan history here.
+            </p>
+          ) : (
+            <PoReturnHistoryPanel
+              historyLoading={historyLoading}
+              challanRows={challanRows}
+              onRefresh={() => void fetchChallanPreview(selectedPo?.poNumber?.trim())}
+              onView={handleViewChallan}
+              onPrint={handlePrintChallan}
+              canAccessChallanHistory={canAccessChallanHistory}
+            />
+          )}
         </>
       )}
+
+      <ChallanDetailDrawer challan={activeChallan} onClose={() => setActiveChallan(null)} />
     </div>
   );
 }

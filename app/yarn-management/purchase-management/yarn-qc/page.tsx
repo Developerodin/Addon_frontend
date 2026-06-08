@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast } from "react-hot-toast";
 import yarnPurchaseOrderService, { PurchaseOrderStatus } from "@/shared/services/yarnPurchaseOrderService";
+import { YarnQcHistoryDrawer } from "./YarnQcHistoryDrawer";
 
 interface PurchaseOrder {
   id: string;
@@ -152,6 +153,7 @@ const YarnQCPage = () => {
   const [sortField, setSortField] = useState<OrderSortField>("orderDate");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [processingOrderId, setProcessingOrderId] = useState<string | null>(null);
+  const [showQcHistory, setShowQcHistory] = useState(false);
   
   // Set default dates: one month ago to today
   const getDefaultStartDate = () => {
@@ -365,9 +367,9 @@ const YarnQCPage = () => {
               </span>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-1 flex-wrap items-center justify-end gap-2 min-w-0">
               {/* Search Bar */}
-              <div className="relative w-3/4 min-w-[200px]">
+              <div className="relative w-full min-w-[200px] max-w-md sm:w-auto sm:flex-1 sm:max-w-xs">
                 <style dangerouslySetInnerHTML={{ __html: `
                   input.yarn-qc-search:focus {
                     border-width: 2px !important;
@@ -406,6 +408,16 @@ const YarnQCPage = () => {
                 </select>
                 <i className="ri-arrow-down-s-line absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none group-hover:text-gray-600 transition-colors"></i>
               </div>
+
+              <button
+                type="button"
+                onClick={() => setShowQcHistory(true)}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded border border-gray-300 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
+                aria-label="Open QC history"
+              >
+                <i className="ri-history-line text-sm text-purple-600" aria-hidden />
+                QC History
+              </button>
             </div>
           </div>
 
@@ -622,6 +634,11 @@ const YarnQCPage = () => {
           </div>
         </div>
       </div>
+
+      <YarnQcHistoryDrawer
+        isOpen={showQcHistory}
+        onClose={() => setShowQcHistory(false)}
+      />
     </div>
   );
 };

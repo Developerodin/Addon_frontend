@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PO Return Challan</title>
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 11px; margin: 10px; color: #000; }
+    .container { width: 100%; border: 1px solid #000; }
+    .header-title { text-align: center; font-weight: bold; font-size: 14px; text-transform: uppercase; padding: 6px 0; border-bottom: 1px solid #000; }
+    table { width: 100%; border-collapse: collapse; }
+    td, th { border: 1px solid #000; padding: 3px 5px; vertical-align: top; }
+    .text-right { text-align: right; }
+    .text-center { text-align: center; }
+    .meta-grid td { width: 25%; }
+    .sign-row td { height: 48px; vertical-align: bottom; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header-title" id="page-title">Purchase Order Return Challan</div>
+    <table class="meta-grid">
+      <tr>
+        <td><strong>Challan No</strong><br /><span id="challan-no"></span></td>
+        <td><strong>Challan Date</strong><br /><span id="challan-date"></span></td>
+        <td><strong>PO No</strong><br /><span id="po-no"></span></td>
+        <td><strong>PO Date</strong><br /><span id="po-date"></span></td>
+      </tr>
+      <tr>
+        <td colspan="2"><strong>Supplier</strong><br /><span id="supplier-name"></span><br /><span id="supplier-address"></span></td>
+        <td colspan="2"><strong>Supplier GST</strong><br /><span id="supplier-gst"></span><br /><strong>Contact</strong> <span id="supplier-mob"></span></td>
+      </tr>
+      <tr>
+        <td colspan="2"><strong>Consignee</strong><br /><span id="consignee-name"></span></td>
+        <td colspan="2"><strong>Consignee GST</strong><br /><span id="consignee-gst"></span></td>
+      </tr>
+      <tr>
+        <td><strong>Intent</strong><br /><span id="cancellation-intent"></span></td>
+        <td><strong>Cones</strong><br /><span id="total-cones"></span></td>
+        <td><strong>Net (kg)</strong><br /><span id="total-net"></span></td>
+        <td><strong>Gross (kg)</strong><br /><span id="total-gross"></span></td>
+      </tr>
+      <tr>
+        <td colspan="4"><strong>Remark</strong><br /><span id="remark"></span></td>
+      </tr>
+      <tr>
+        <td><strong>Vehicle No</strong><br /><span id="vehicle-no"></span></td>
+        <td><strong>Driver</strong><br /><span id="driver-name"></span></td>
+        <td><strong>Dispatch Date</strong><br /><span id="dispatch-date"></span></td>
+        <td><strong>Transport Notes</strong><br /><span id="transport-notes"></span></td>
+      </tr>
+    </table>
+    <table>
+      <thead>
+        <tr>
+          <th class="text-center" style="width:30px;">#</th>
+          <th>Barcode</th>
+          <th>Lot</th>
+          <th>Yarn</th>
+          <th>Box</th>
+          <th class="text-right">Gross</th>
+          <th class="text-right">Tear</th>
+          <th class="text-right">Net</th>
+        </tr>
+      </thead>
+      <tbody id="lines-body"></tbody>
+    </table>
+    <table class="sign-row">
+      <tr>
+        <td><strong>Prepared by</strong><br /><span id="prepared-by"></span></td>
+        <td><strong>Checked by</strong></td>
+        <td><strong>Authorised signatory</strong></td>
+        <td><strong>Receiver (Vendor)</strong></td>
+      </tr>
+    </table>
+  </div>
+</body>
+</html>

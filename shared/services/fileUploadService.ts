@@ -20,6 +20,21 @@ export interface DeleteResponse {
   message: string;
 }
 
+/**
+ * Resolves JWT for authenticated upload/delete (matches other yarn services).
+ */
+function getAccessToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const fromCookie = Cookies.get('accessToken') || Cookies.get('token');
+    if (fromCookie) return fromCookie;
+    return localStorage.getItem('accessToken') || localStorage.getItem('token') || null;
+  } catch (error) {
+    console.error('Error getting access token:', error);
+    return null;
+  }
+}
+
 export class FileUploadService {
   static async uploadFile(file: File): Promise<UploadedFile> {
     // Validate file size (5MB limit)
@@ -31,15 +46,13 @@ export class FileUploadService {
     const formData = new FormData();
     formData.append('file', file);
 
-    // Get authentication token
-    const token = Cookies.get('token');
+    const token = getAccessToken();
 
     try {
-      // Call API with authentication
       const response = await fetch(`${API_BASE_URL}/common/upload`, {
         method: 'POST',
         headers: {
-          ...(token && { Authorization: `Bearer ${token}` })
+          ...(token && { Authorization: `Bearer ${token}` }),
         },
         body: formData
       });
@@ -68,16 +81,14 @@ export class FileUploadService {
       throw new Error('File key is required');
     }
 
-    // Get authentication token
-    const token = Cookies.get('token');
+    const token = getAccessToken();
 
     try {
-      // Call API with authentication
       const response = await fetch(`${API_BASE_URL}/common/files/${encodeURIComponent(fileKey)}`, {
         method: 'DELETE',
         headers: {
-          ...(token && { Authorization: `Bearer ${token}` })
-        }
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
       });
 
       const result: DeleteResponse = await response.json();

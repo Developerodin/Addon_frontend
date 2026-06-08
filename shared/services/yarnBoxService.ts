@@ -7,6 +7,7 @@ export interface QCData {
   status: 'qc_approved' | 'qc_rejected';
   user: string;
   username: string;
+  mediaUrl?: Record<string, string>;
 }
 
 export interface YarnBox {
@@ -245,7 +246,17 @@ class YarnBoxService {
     const query = searchParams.toString();
     const endpoint = query ? `?${query}` : '';
 
-    return this.makeRequest<YarnBoxListResponse>(endpoint);
+    const data = await this.makeRequest<YarnBoxListResponse | YarnBox[]>(endpoint);
+    if (Array.isArray(data)) {
+      return { results: data, totalResults: data.length };
+    }
+    return {
+      results: data.results ?? [],
+      page: data.page,
+      limit: data.limit,
+      totalPages: data.totalPages,
+      totalResults: data.totalResults ?? data.results?.length ?? 0,
+    };
   }
 
   async createYarnBox(payload: CreateYarnBoxPayload): Promise<YarnBox> {
