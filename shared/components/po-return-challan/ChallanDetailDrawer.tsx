@@ -2,7 +2,11 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from 'react-hot-toast';
 import poReturnChallanService, { PoReturnChallan } from '@/shared/services/poReturnChallanService';
-import { printChallanDocument, downloadChallanHtml } from '@/shared/utils/poReturnChallanPrint';
+import {
+  printChallanDocument,
+  downloadChallanHtml,
+  normalizeChallanParties,
+} from '@/shared/utils/poReturnChallanPrint';
 
 interface ChallanDetailDrawerProps {
   challan: PoReturnChallan | null;
@@ -57,6 +61,11 @@ const ChallanDetailDrawer: React.FC<ChallanDetailDrawerProps> = ({
   }, [challan?.id, challan]);
 
   if (!challan || !current) return null;
+
+  const { supplier, consignee } = normalizeChallanParties(current);
+  const vendorAddress = [consignee.address, consignee.city, consignee.state, consignee.pincode]
+    .filter(Boolean)
+    .join(', ');
 
   const handlePrint = async () => {
     try {
@@ -159,8 +168,12 @@ const ChallanDetailDrawer: React.FC<ChallanDetailDrawerProps> = ({
       <div className="flex-1 overflow-auto p-5 text-[11px]">
         {tab === 'overview' && (
           <dl className="grid grid-cols-2 gap-3">
-            <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Supplier</dt><dd>{current.supplier?.name || '—'}</dd></div>
-            <div><dt className="text-gray-500 font-bold uppercase text-[10px]">GST</dt><dd>{current.supplier?.gstNo || '—'}</dd></div>
+            <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Supplier (Addon)</dt><dd>{supplier.name || '—'}</dd></div>
+            <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Supplier GST</dt><dd>{supplier.gstNo || '—'}</dd></div>
+            <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Consignee (Vendor)</dt><dd>{consignee.name || '—'}</dd></div>
+            <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Vendor GST</dt><dd>{consignee.gstNo || '—'}</dd></div>
+            <div className="col-span-2"><dt className="text-gray-500 font-bold uppercase text-[10px]">Vendor Address</dt><dd>{vendorAddress || '—'}</dd></div>
+            <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Vendor Contact</dt><dd>{consignee.contactNumber || '—'}</dd></div>
             <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Cones</dt><dd>{current.totals?.coneCount ?? current.lines?.length ?? '—'}</dd></div>
             <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Net (kg)</dt><dd>{current.totals?.totalNetWeight ?? '—'}</dd></div>
             <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Gross (kg)</dt><dd>{current.totals?.totalGrossWeight ?? '—'}</dd></div>
@@ -180,6 +193,7 @@ const ChallanDetailDrawer: React.FC<ChallanDetailDrawerProps> = ({
                   <th className="px-2 py-1.5 text-left">Barcode</th>
                   <th className="px-2 py-1.5 text-left">Lot</th>
                   <th className="px-2 py-1.5 text-left">Yarn</th>
+                  <th className="px-2 py-1.5 text-left">HSN</th>
                   <th className="px-2 py-1.5 text-right">Net</th>
                 </tr>
               </thead>
@@ -190,6 +204,7 @@ const ChallanDetailDrawer: React.FC<ChallanDetailDrawerProps> = ({
                     <td className="px-2 py-1.5 font-mono">{line.barcode}</td>
                     <td className="px-2 py-1.5">{line.lotNumber || '—'}</td>
                     <td className="px-2 py-1.5">{line.yarnName || '—'}</td>
+                    <td className="px-2 py-1.5">{line.hsnCode || '—'}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums">{line.netWeight ?? '—'}</td>
                   </tr>
                 ))}

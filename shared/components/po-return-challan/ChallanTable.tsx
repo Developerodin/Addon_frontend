@@ -65,7 +65,7 @@ const ChallanTable: React.FC<ChallanTableProps> = ({
                 <th className="text-left px-3 py-2 font-bold">Challan No</th>
                 <th className="text-left px-3 py-2 font-bold">Date</th>
                 <th className="text-left px-3 py-2 font-bold">PO No</th>
-                <th className="text-left px-3 py-2 font-bold">Supplier</th>
+                <th className="text-left px-3 py-2 font-bold">Vendor</th>
                 <th className="text-right px-3 py-2 font-bold">Cones</th>
                 <th className="text-right px-3 py-2 font-bold">Net (kg)</th>
                 <th className="text-left px-3 py-2 font-bold">Intent</th>
@@ -78,8 +78,11 @@ const ChallanTable: React.FC<ChallanTableProps> = ({
                   <td className="px-3 py-2 font-mono font-semibold text-gray-900">{row.challanNumber}</td>
                   <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{fmtDate(row.challanDate)}</td>
                   <td className="px-3 py-2 font-mono text-gray-800">{row.poNumber}</td>
-                  <td className="px-3 py-2 text-gray-800 max-w-[180px] truncate" title={row.supplier?.name}>
-                    {row.supplier?.name || '—'}
+                  <td
+                    className="px-3 py-2 text-gray-800 max-w-[180px] truncate"
+                    title={row.consignee?.name ?? row.supplier?.name}
+                  >
+                    {row.consignee?.name ?? row.supplier?.name ?? '—'}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{row.totals?.coneCount ?? row.lines?.length ?? '—'}</td>
                   <td className="px-3 py-2 text-right tabular-nums font-semibold text-blue-700">

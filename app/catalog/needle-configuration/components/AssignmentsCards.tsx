@@ -142,6 +142,8 @@ export interface AssignmentsCardsProps {
   nameOnly?: boolean;
   /** When false, card area does not trigger onCardClick; only icon buttons do. Default true. */
   cardClickable?: boolean;
+  /** Highlight the card whose assignment is currently selected (e.g. yarn-issue sidebar). */
+  selectedAssignmentId?: string | null;
 }
 
 export default function AssignmentsCards({
@@ -165,6 +167,7 @@ export default function AssignmentsCards({
   compact = false,
   nameOnly = false,
   cardClickable = true,
+  selectedAssignmentId = null,
 }: AssignmentsCardsProps) {
   if (isLoading) {
     return (
@@ -203,12 +206,21 @@ export default function AssignmentsCards({
             const { poCount, articleCount } = getItemCounts(row);
             const needleCount = needleOptionsCount(row as MachineOrderAssignment);
             const isToggling = !readOnly && togglingActiveId === row.id;
+            const isSelected =
+              selectedAssignmentId != null && row.id === selectedAssignmentId;
+            const label = machineLabel(row);
 
             return (
               <div
                 key={row.id}
                 role={readOnly && onCardClick && cardClickable ? "button" : undefined}
                 tabIndex={readOnly && onCardClick && cardClickable ? 0 : undefined}
+                aria-current={isSelected ? "true" : undefined}
+                aria-label={
+                  readOnly && compact
+                    ? `${label}, ${isSelected ? "selected" : "machine"}`
+                    : undefined
+                }
                 onClick={readOnly && onCardClick && cardClickable ? () => onCardClick(row) : undefined}
                 onKeyDown={
                   readOnly && onCardClick && cardClickable
@@ -217,7 +229,11 @@ export default function AssignmentsCards({
                       }
                     : undefined
                 }
-                className={`rounded-lg shadow-md overflow-hidden border border-white/10 min-w-0 ${
+                className={`rounded-lg shadow-md overflow-hidden min-w-0 ${
+                  isSelected
+                    ? "border-2 border-green-400 ring-2 ring-green-400/30"
+                    : "border border-white/10"
+                } ${
                   compact ? "rounded-lg transition-[filter] hover:brightness-110" : "rounded-xl transition-transform hover:scale-[1.02]"
                 } ${readOnly && onCardClick && cardClickable ? "cursor-pointer" : ""}`}
                 style={{ background: getCardBackground(row, compact, nameOnly) }}
@@ -225,7 +241,7 @@ export default function AssignmentsCards({
                 <div className={`text-white flex flex-col ${compact ? "p-2.5 min-h-0" : `p-3 ${columnsPerRow === 5 ? "min-h-[140px]" : "min-h-[200px]"}`}`}>
                   <div className={`flex items-start justify-between gap-2 ${compact ? "" : "mb-2"}`}>
                     <h3 className={`font-bold truncate drop-shadow-sm text-white flex-1 min-w-0 ${compact ? "text-sm" : columnsPerRow === 5 ? "text-sm" : "text-lg"}`}>
-                      {machineLabel(row)}
+                      {label}
                     </h3>
                     {readOnly && onCardClick && !compact && (
                       <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>

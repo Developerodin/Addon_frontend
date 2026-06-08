@@ -41,7 +41,7 @@ function rowsToExportRecords(rows: PoReturnChallan[]): Record<string, string | n
     'Challan No': row.challanNumber ?? '',
     Date: row.challanDate ? new Date(row.challanDate).toLocaleDateString() : '',
     'PO No': row.poNumber ?? '',
-    Supplier: row.supplier?.name ?? '',
+    Vendor: row.consignee?.name ?? row.supplier?.name ?? '',
     Cones: row.totals?.coneCount ?? row.lines?.length ?? '',
     'Net (kg)': row.totals?.totalNetWeight ?? '',
     'Gross (kg)': row.totals?.totalGrossWeight ?? '',

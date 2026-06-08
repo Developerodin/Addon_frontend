@@ -3513,6 +3513,7 @@ const YarnReturnPage = () => {
                   readOnly
                   compact
                   nameOnly
+                  selectedAssignmentId={selectedMachineAssignmentId}
                   onCardClick={(a) => loadOrdersForMachine(a as MachineOrderAssignmentTopItems)}
                 />
               )}

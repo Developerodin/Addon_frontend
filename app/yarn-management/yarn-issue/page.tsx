@@ -1508,6 +1508,7 @@ const YarnIssuePage = () => {
                   readOnly
                   compact
                   nameOnly
+                  selectedAssignmentId={selectedMachineAssignmentId}
                   onCardClick={(a) => loadOrdersForMachine(a as MachineOrderAssignmentTopItems)}
                 />
               )}

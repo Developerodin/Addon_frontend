@@ -91,12 +91,12 @@ const ChallanFilters: React.FC<ChallanFiltersProps> = ({ value, onChange, result
           />
         </div>
         <div>
-          <label htmlFor="challan-filter-supplier" className={labelClass}>Supplier</label>
+          <label htmlFor="challan-filter-supplier" className={labelClass}>Vendor</label>
           <input
             id="challan-filter-supplier"
             type="text"
             className={inputClass}
-            placeholder="Supplier name"
+            placeholder="Vendor name"
             value={draft.supplierName || ''}
             onChange={(e) => update('supplierName', e.target.value)}
           />

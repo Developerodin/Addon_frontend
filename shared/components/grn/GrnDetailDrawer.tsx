@@ -293,30 +293,34 @@ const GrnDetailDrawer: React.FC<GrnDetailDrawerProps> = ({ grn, onClose, onUpdat
           )}
 
           {tab === 'items' && (
-            <table className="w-full text-[11px] border border-gray-200">
-              <thead>
-                <tr className="bg-gray-50">
-                  <th className="px-2 py-2 text-left font-bold text-gray-600 border-b border-gray-200">Yarn</th>
-                  <th className="px-2 py-2 text-left font-bold text-gray-600 border-b border-gray-200">Size</th>
-                  <th className="px-2 py-2 text-left font-bold text-gray-600 border-b border-gray-200">Shade</th>
-                  <th className="px-2 py-2 text-right font-bold text-gray-600 border-b border-gray-200">Qty</th>
-                  <th className="px-2 py-2 text-right font-bold text-gray-600 border-b border-gray-200">Rate</th>
-                  <th className="px-2 py-2 text-right font-bold text-gray-600 border-b border-gray-200">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(current.items || []).map((it, i) => (
-                  <tr key={i}>
-                    <td className="px-2 py-2 font-bold border-b border-gray-100">{it.yarnName || '—'}</td>
-                    <td className="px-2 py-2 border-b border-gray-100">{it.sizeCount || '—'}</td>
-                    <td className="px-2 py-2 border-b border-gray-100">{it.shadeCode || '—'}</td>
-                    <td className="px-2 py-2 text-right border-b border-gray-100">{fmtINR(it.quantity)}</td>
-                    <td className="px-2 py-2 text-right border-b border-gray-100">{fmtINR(it.rate)}</td>
-                    <td className="px-2 py-2 text-right border-b border-gray-100 font-bold">{fmtINR(it.amount)}</td>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-[11px] border border-gray-200">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="px-2 py-2 text-left font-bold text-gray-600 border-b border-gray-200">Yarn</th>
+                    <th className="px-2 py-2 text-left font-bold text-gray-600 border-b border-gray-200">Size</th>
+                    <th className="px-2 py-2 text-left font-bold text-gray-600 border-b border-gray-200">Shade</th>
+                    <th className="px-2 py-2 text-left font-bold text-gray-600 border-b border-gray-200">HSN</th>
+                    <th className="px-2 py-2 text-right font-bold text-gray-600 border-b border-gray-200">Qty</th>
+                    <th className="px-2 py-2 text-right font-bold text-gray-600 border-b border-gray-200">Rate</th>
+                    <th className="px-2 py-2 text-right font-bold text-gray-600 border-b border-gray-200">Amount</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {(current.items || []).map((it, i) => (
+                    <tr key={i}>
+                      <td className="px-2 py-2 font-bold border-b border-gray-100">{it.yarnName || '—'}</td>
+                      <td className="px-2 py-2 border-b border-gray-100">{it.sizeCount || '—'}</td>
+                      <td className="px-2 py-2 border-b border-gray-100">{it.shadeCode || '—'}</td>
+                      <td className="px-2 py-2 border-b border-gray-100">{it.hsnCode || '—'}</td>
+                      <td className="px-2 py-2 text-right border-b border-gray-100">{fmtINR(it.quantity)}</td>
+                      <td className="px-2 py-2 text-right border-b border-gray-100">{fmtINR(it.rate)}</td>
+                      <td className="px-2 py-2 text-right border-b border-gray-100 font-bold">{fmtINR(it.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
 
           {tab === 'revisions' && (

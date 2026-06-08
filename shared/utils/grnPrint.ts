@@ -13,8 +13,10 @@
 
 export interface GrnSnapshotItem {
   yarnName?: string;
+  yarnCatalogId?: string;
   sizeCount?: string;
   shadeCode?: string;
+  hsnCode?: string;
   quantity: number;
   rate: number;
   amount: number;
@@ -134,11 +136,13 @@ const buildItemsHtml = (items: GrnSnapshotItem[]): string =>
       const size = item.sizeCount || '';
       const shade = item.shadeCode || 'N/A';
       const desc = size ? `${yarn} - ${size}` : yarn;
+      const hsn = item.hsnCode || '—';
       return `
           <tr>
             <td class="text-center" style="border: 1px solid #000; padding: 4px;">${index + 1}</td>
             <td class="text-center" style="border: 1px solid #000; padding: 4px;">${shade}</td>
             <td style="border: 1px solid #000; padding: 4px;">${desc}</td>
+            <td class="text-center" style="border: 1px solid #000; padding: 4px;">${hsn}</td>
             <td class="text-right" style="border: 1px solid #000; padding: 4px;">${formatINR(item.quantity, 2)}</td>
             <td class="text-right" style="border: 1px solid #000; padding: 4px;">${formatINR(item.rate, 2)}</td>
             <td class="text-center" style="border: 1px solid #000; padding: 4px;">${item.unit || 'KGS'}</td>
