@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { toast } from "react-hot-toast";
 import {
   productionService,
   type ArticleProcess,
@@ -184,6 +185,10 @@ const OrderViewArticlesTab: React.FC<OrderViewArticlesTabProps> = ({
   const allExpanded = articles.length > 0 && expandedArticleIds.size === articles.length;
 
   const handleExportExcel = () => {
+    if (loadingProcesses) {
+      toast.error("Process routes are still loading. Please wait a moment.");
+      return;
+    }
     downloadOrderArticlesExcel(order, articles, processesByArticleId);
   };
 
@@ -215,7 +220,7 @@ const OrderViewArticlesTab: React.FC<OrderViewArticlesTabProps> = ({
         <button
           type="button"
           onClick={handleExportExcel}
-          disabled={!articles.length}
+          disabled={!articles.length || loadingProcesses}
           className="ml-auto flex items-center gap-1.5 px-2.5 py-1 bg-white border border-gray-300 text-[#495057] text-[10px] font-bold rounded hover:bg-gray-50 disabled:opacity-50"
           aria-label="Download order articles Excel workbook"
         >

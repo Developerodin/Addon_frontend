@@ -2,6 +2,8 @@
 import React, { useState } from "react";
 import { toast } from "react-hot-toast";
 import { productionService } from "@/shared/services/productionService";
+import NumericInput from "@/shared/utils/numericInput";
+import { getHalfStepQuantityError } from "@/shared/utils/halfStepQuantity";
 
 interface TransferModalProps {
   isOpen: boolean;
@@ -47,6 +49,12 @@ const TransferModal: React.FC<TransferModalProps> = ({
   const handleSubmit = async () => {
     if (!transferData.quantity || transferData.quantity <= 0) {
       toast.error('Please enter a valid quantity');
+      return;
+    }
+
+    const halfStepError = getHalfStepQuantityError(transferData.quantity, 'Transfer quantity');
+    if (halfStepError) {
+      toast.error(halfStepError);
       return;
     }
 
@@ -122,14 +130,13 @@ const TransferModal: React.FC<TransferModalProps> = ({
           {/* Transfer Quantity */}
           <div>
             <label className="form-label">Transfer Quantity *</label>
-            <input
-              type="number"
+            <NumericInput
               className="form-control"
               value={transferData.quantity}
-              onChange={(e) => handleInputChange('quantity', Number(e.target.value))}
-              min="1"
-              max={maxQuantity}
+              onChange={(value) => handleInputChange('quantity', value)}
+              allowDecimals
               disabled={isLoading}
+              aria-label="Transfer quantity"
             />
             <div className="text-xs text-gray-500 mt-1">
               Maximum: {maxQuantity} pieces

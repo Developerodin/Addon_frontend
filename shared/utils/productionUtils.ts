@@ -338,3 +338,16 @@ export function getFloorKeyDisplayName(floorKey: string): string {
   const entry = Object.entries(CANONICAL_FLOOR_TO_KEY).find(([, key]) => key === floorKey);
   return entry?.[0] ?? floorKey.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase());
 }
+
+/**
+ * Builds a process route label using the same canonical floor order as the order view drawer.
+ */
+export function getArticleProcessRouteLabel(
+  floorQuantities: Record<string, unknown> | undefined,
+  processes: ArticleProcess[] | null | undefined,
+  linkingType?: LinkingType
+): string {
+  return resolveArticleDisplayFloorKeys(floorQuantities, processes, linkingType)
+    .map(getFloorKeyDisplayName)
+    .join(" → ");
+}

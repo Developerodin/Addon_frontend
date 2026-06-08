@@ -7,6 +7,7 @@ import HelpIcon from "@/shared/components/HelpIcon";
 import { productionService, ProductionOrder, FloorOrderFilters, Article } from "@/shared/services/productionService";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import NumericInput from "@/shared/utils/numericInput";
+import { getFirstHalfStepError, HALF_STEP_QTY_ERROR } from "@/shared/utils/halfStepQuantity";
 import RepairTransferModal from "@/shared/components/production/RepairTransferModal";
 import { getPreviousFloor, getArticleMongoId, resolveNextFloorFromProcesses } from "@/shared/utils/productionUtils";
 import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuantityDisplay";
@@ -648,6 +649,38 @@ const FinalCheckingFloorSupervisorPage = () => {
 
   const handleUpdateSubmit = async () => {
     if (!selectedOrder) return;
+
+    for (const article of selectedOrder.articles) {
+      const articleId = article.id || article._id;
+      if (!articleId) continue;
+      const update = updateData[articleId];
+      if (!update) continue;
+      const transfer = transferM2M3M4[articleId];
+      const shifts = shiftInputs[articleId];
+      const halfStepError = getFirstHalfStepError([
+        { value: update.m1Quantity, label: 'M1' },
+        { value: update.m2Quantity, label: 'M2' },
+        { value: update.m3Quantity, label: 'M3' },
+        { value: update.m4Quantity, label: 'M4' },
+        { value: transfer?.m2 ?? 0, label: 'M2 transfer', skipZero: true },
+        { value: transfer?.m3 ?? 0, label: 'M3 transfer', skipZero: true },
+        { value: transfer?.m4 ?? 0, label: 'M4 transfer', skipZero: true },
+        { value: shifts?.m2ToM1 ?? 0, label: 'M2 to M1 shift', skipZero: true },
+        { value: shifts?.m2ToM3 ?? 0, label: 'M2 to M3 shift', skipZero: true },
+        { value: shifts?.m2ToM4 ?? 0, label: 'M2 to M4 shift', skipZero: true },
+        { value: shifts?.m3ToM2 ?? 0, label: 'M3 to M2 shift', skipZero: true },
+        { value: shifts?.m4ToM3 ?? 0, label: 'M4 to M3 shift', skipZero: true },
+        ...(update.transferItems ?? []).map((item, idx) => ({
+          value: item.transferred ?? 0,
+          label: `Transfer line ${idx + 1}`,
+          skipZero: true as const,
+        })),
+      ]);
+      if (halfStepError) {
+        toast.error(`${article.articleNumber ?? articleId}: ${HALF_STEP_QTY_ERROR}`);
+        return;
+      }
+    }
 
     // Fetch fresh article data to avoid stale remaining (transferable) validation
     const articlesWithTransfer = selectedOrder.articles.filter((a) => {

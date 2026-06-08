@@ -10,6 +10,7 @@ import { getNextFloor, FloorType, getArticleMongoId, resolveNextFloorFromProcess
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import { fetchWeightLatest } from "@/shared/data/utilities/weightApi";
 import NumericInput from "@/shared/utils/numericInput";
+import { getHalfStepQuantityError, HALF_STEP_QTY_ERROR } from "@/shared/utils/halfStepQuantity";
 import MachineViewTab from "./components/MachineViewTab";
 import ArticleViewTab from "./components/ArticleViewTab";
 import MachineArticlePlanningTab from "./components/MachineArticlePlanningTab";
@@ -190,7 +191,7 @@ const KnittingFloorSupervisorPage = () => {
   const [showContainerModal, setShowContainerModal] = useState(false);
   const [containerBarcode, setContainerBarcode] = useState('');
   const [containerArticleId, setContainerArticleId] = useState('');
-  const [containerQuantity, setContainerQuantity] = useState<string>('');
+  const [containerQuantity, setContainerQuantity] = useState<number>(0);
   const [containerNextFloor, setContainerNextFloor] = useState('');
   const [pendingWeightForContainer, setPendingWeightForContainer] = useState<number | undefined>(undefined);
   const [containerSubmitting, setContainerSubmitting] = useState(false);
@@ -415,7 +416,7 @@ const KnittingFloorSupervisorPage = () => {
   // When article changes in container modal, pre-fill quantity and next floor from article processes
   useEffect(() => {
     if (!showContainerModal || !containerArticleId || !selectedOrder) return;
-    setContainerQuantity(String(updateData[containerArticleId]?.completedQuantity ?? 0));
+    setContainerQuantity(updateData[containerArticleId]?.completedQuantity ?? 0);
     const article = selectedOrder.articles.find((a) => a._id === containerArticleId || a.id === containerArticleId);
     const linkingType = /auto/i.test(String(article?.linkingType ?? ""))
       ? ("Auto Linking" as const)
@@ -535,7 +536,7 @@ const KnittingFloorSupervisorPage = () => {
     setWeightInput('');
     setShowContainerModal(false);
     setContainerBarcode('');
-    setContainerQuantity('');
+    setContainerQuantity(0);
     setContainerArticleId('');
     setContainerNextFloor('');
     setPendingWeightForContainer(undefined);
@@ -1088,6 +1089,23 @@ const KnittingFloorSupervisorPage = () => {
         `${first.articleNumber}: transfer/knit done exceeds planned + 15% buffer (max ${Math.round(first.check.maxAllowed).toLocaleString()}).`
       );
       return;
+    }
+
+    for (const article of selectedOrder.articles) {
+      const articleId = article.id || article._id;
+      if (!articleId) continue;
+      const update = updateData[articleId];
+      if (!update) continue;
+      const completedError = getHalfStepQuantityError(update.completedQuantity, 'Knit done');
+      if (completedError) {
+        toast.error(`${article.articleNumber ?? articleId}: ${HALF_STEP_QTY_ERROR}`);
+        return;
+      }
+      const m4Error = getHalfStepQuantityError(update.m4Quantity ?? 0, 'M4 quantity');
+      if (m4Error && (update.m4Quantity ?? 0) > 0) {
+        toast.error(`${article.articleNumber ?? articleId}: ${HALF_STEP_QTY_ERROR}`);
+        return;
+      }
     }
 
     try {
@@ -2380,7 +2398,7 @@ const KnittingFloorSupervisorPage = () => {
                           const first = selectedOrder.articles[0];
                           const firstId = first.id || first._id || '';
                           setContainerArticleId(firstId);
-                          setContainerQuantity(String(updateData[firstId]?.completedQuantity ?? 0));
+                          setContainerQuantity(updateData[firstId]?.completedQuantity ?? 0);
                           const rawLinking = first?.linkingType ?? '';
                           const linkingType: LinkingType =
                             /auto/i.test(String(rawLinking)) ? 'Auto Linking' :
@@ -2404,7 +2422,7 @@ const KnittingFloorSupervisorPage = () => {
 
             {/* Container modal – after weight: barcode, article, next floor; then PATCH container and submit order update */}
             {showContainerModal && selectedOrder && (
-              <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40" onClick={() => { setShowContainerModal(false); setPendingWeightForContainer(undefined); setContainerCheckStatus('idle'); setContainerFetched(null); setContainerQuantity(''); }} aria-hidden>
+              <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/40" onClick={() => { setShowContainerModal(false); setPendingWeightForContainer(undefined); setContainerCheckStatus('idle'); setContainerFetched(null); setContainerQuantity(0); }} aria-hidden>
                 <div className="bg-white rounded-lg shadow-xl border border-gray-300 w-full max-w-sm p-4 flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
                   <h4 className="text-[13px] font-bold text-gray-800 border-b border-gray-200 pb-2">Container & transfer floor</h4>
                   <KnitDoneQuantityReminder entries={pendingKnitDoneEntries} />
@@ -2452,13 +2470,13 @@ const KnittingFloorSupervisorPage = () => {
                   </div>
                   <div className={containerCheckStatus !== 'ok' ? 'opacity-60 pointer-events-none' : ''}>
                     <label className="block text-[11px] font-semibold text-gray-600 mb-1">Quantity</label>
-                    <input
-                      type="number"
-                      min={0}
+                    <NumericInput
+                      className="w-full border border-gray-300 rounded px-3 py-2 text-[12px] focus:ring-1 focus:ring-purple-300 focus:border-purple-500"
                       placeholder="From knitting done"
                       value={containerQuantity}
-                      onChange={(e) => setContainerQuantity(e.target.value)}
-                      className="w-full border border-gray-300 rounded px-3 py-2 text-[12px] focus:ring-1 focus:ring-purple-300 focus:border-purple-500"
+                      onChange={setContainerQuantity}
+                      allowDecimals
+                      aria-label="Container transfer quantity"
                     />
                     <p className="text-[10px] text-gray-500 mt-0.5">Pre-filled from knitting done (editable)</p>
                   </div>
@@ -2525,7 +2543,7 @@ const KnittingFloorSupervisorPage = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={() => { setShowContainerModal(false); setPendingWeightForContainer(undefined); setContainerCheckStatus('idle'); setContainerFetched(null); setContainerQuantity(''); }}
+                      onClick={() => { setShowContainerModal(false); setPendingWeightForContainer(undefined); setContainerCheckStatus('idle'); setContainerFetched(null); setContainerQuantity(0); }}
                       className="px-3 py-1.5 text-[11px] font-bold text-gray-600 border border-gray-300 rounded hover:bg-gray-50"
                     >
                       Cancel
@@ -2540,10 +2558,16 @@ const KnittingFloorSupervisorPage = () => {
                         if (!barcode || !articleId || !floor) return;
                         const article = selectedOrder?.articles?.find((a) => a._id === articleId || a.id === articleId);
                         const activeArticleMongoId = article?._id ?? articleId;
-                        const qtyNum = containerQuantity.trim() ? parseInt(containerQuantity.trim(), 10) : NaN;
-                        const qty = containerQuantity.trim() === '' ? (updateData[articleId]?.completedQuantity ?? 0) : (Number.isFinite(qtyNum) && qtyNum >= 0 ? qtyNum : NaN);
+                        const qty = containerQuantity > 0
+                          ? containerQuantity
+                          : (updateData[articleId]?.completedQuantity ?? 0);
                         if (!Number.isFinite(qty) || qty < 0) {
                           toast.error('Please enter a valid quantity (0 or greater)');
+                          return;
+                        }
+                        const halfStepError = getHalfStepQuantityError(qty, 'Container quantity');
+                        if (halfStepError) {
+                          toast.error(halfStepError);
                           return;
                         }
                         const bufferCheck = checkKnittingQuantityBuffer(
@@ -2574,7 +2598,7 @@ const KnittingFloorSupervisorPage = () => {
                           toast.success('Container updated');
                           setShowContainerModal(false);
                           setContainerBarcode('');
-                          setContainerQuantity('');
+                          setContainerQuantity(0);
                           setContainerArticleId('');
                           setContainerNextFloor('');
                           setContainerCheckStatus('idle');

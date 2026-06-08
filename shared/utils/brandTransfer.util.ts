@@ -1,4 +1,5 @@
 import type { TransferItem } from "@/shared/services/productionService";
+import { isValidHalfStepValue } from "@/shared/utils/halfStepQuantity";
 
 export type BrandTransferLine = { transferred?: number; styleCode?: string; brand?: string };
 
@@ -189,9 +190,21 @@ export function validateBrandTransferItems(
   items: TransferItem[],
   maxTotal: number,
   brandMaxQuantities?: Record<string, number>
-): { valid: boolean; totalValid: boolean; brandValid: boolean; total: number } {
+): {
+  valid: boolean;
+  totalValid: boolean;
+  brandValid: boolean;
+  halfStepValid: boolean;
+  total: number;
+} {
   const total = items.reduce((s, i) => s + (i.transferred ?? 0), 0);
   const totalValid = total <= maxTotal;
+
+  const halfStepValid = items.every((item) => {
+    const qty = item.transferred ?? 0;
+    if (qty <= 0) return true;
+    return isValidHalfStepValue(qty);
+  });
 
   const byBrand: Record<string, number> = {};
   for (const item of items) {
@@ -204,7 +217,13 @@ export function validateBrandTransferItems(
     !brandMaxQuantities ||
     Object.entries(byBrand).every(([brand, sum]) => sum <= (brandMaxQuantities[brand] ?? Infinity));
 
-  return { valid: totalValid && brandValid, totalValid, brandValid, total };
+  return {
+    valid: totalValid && brandValid && halfStepValid,
+    totalValid,
+    brandValid,
+    halfStepValid,
+    total,
+  };
 }
 
 /**

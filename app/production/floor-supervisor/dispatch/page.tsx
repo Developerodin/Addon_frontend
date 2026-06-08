@@ -27,6 +27,7 @@ import {
   toBrandOnlyTransferItems,
   validateBrandTransferItems,
 } from "@/shared/utils/brandTransfer.util";
+import { HALF_STEP_QTY_ERROR } from "@/shared/utils/halfStepQuantity";
 import { containersMasterService, hasActiveItems, getContainerArticles } from "@/shared/services/containersMasterService";
 import { useProductionArticleQrScan } from "@/shared/hooks/useProductionArticleQrScan";
 import ArticleQrScanDrawer from "@/shared/components/production/ArticleQrScanDrawer";
@@ -558,6 +559,27 @@ const DispatchFloorSupervisorPage = () => {
 
     if (invalidArticles.length > 0) {
       toast.error('Cannot submit: Some articles have transfer quantity exceeding remaining or received per brand');
+      return;
+    }
+
+    const invalidHalfStep = selectedOrder.articles.find((article) => {
+      const fresh = getArticleForValidation(article);
+      const articleId = article.id || article._id;
+      if (!articleId) return false;
+      const update = updateData[articleId];
+      if (!update) return false;
+      const actualRemaining = getActualRemainingForArticle(fresh);
+      const { brandMaxQuantities } = getDispatchBrandTransferOptions(fresh);
+      const { halfStepValid } = validateBrandTransferItems(
+        update.transferItems ?? [],
+        actualRemaining,
+        brandMaxQuantities
+      );
+      return !halfStepValid;
+    });
+
+    if (invalidHalfStep) {
+      toast.error(`${invalidHalfStep.articleNumber ?? invalidHalfStep.id}: ${HALF_STEP_QTY_ERROR}`);
       return;
     }
 

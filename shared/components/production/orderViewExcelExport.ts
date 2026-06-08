@@ -2,6 +2,7 @@ import * as XLSX from "xlsx";
 import type { ArticleProcess } from "@/shared/services/productionService";
 import {
   floorKeyHasQualityMetrics,
+  getArticleProcessRouteLabel,
   getFloorKeyDisplayName,
   resolveArticleDisplayFloorKeys,
   type LinkingType,
@@ -24,23 +25,6 @@ function formatExportDate(value?: string): string {
   if (!value) return "";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
-}
-
-/**
- * Builds process route label for an article.
- */
-function getProcessRouteLabel(
-  article: OrderViewArticle,
-  processesByArticleId: Record<string, ArticleProcess[]>
-): string {
-  const articleId = article._id || article.id;
-  const processes = processesByArticleId[articleId] ?? [];
-  if (!processes.length) return "";
-  return processes
-    .slice()
-    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-    .map((p) => p.name)
-    .join(" → ");
 }
 
 /**
@@ -105,7 +89,11 @@ export function downloadOrderArticlesExcel(
         ? "Confirmed"
         : "Pending",
     "Knitting code": article.knittingCode || "",
-    "Process route": getProcessRouteLabel(article, processesByArticleId),
+    "Process route": getArticleProcessRouteLabel(
+      article.floorQuantities,
+      processesByArticleId[article._id || article.id],
+      article.linkingType as LinkingType
+    ),
     Remarks: article.remarks || "",
     "Created at": formatExportDate(article.createdAt),
     "Updated at": formatExportDate(article.updatedAt),

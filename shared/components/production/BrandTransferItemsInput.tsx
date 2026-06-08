@@ -32,7 +32,7 @@ export default function BrandTransferItemsInput({
   placeholder = "Add transfer lines",
   brandMaxQuantities,
 }: BrandTransferItemsInputProps) {
-  const { valid: isValid, totalValid, brandValid, total } = validateBrandTransferItems(
+  const { valid: isValid, totalValid, brandValid, halfStepValid, total } = validateBrandTransferItems(
     value,
     maxTotal,
     brandMaxQuantities
@@ -148,8 +148,9 @@ export default function BrandTransferItemsInput({
           <div className="flex items-center justify-between">
             <span className={`text-[10px] font-medium ${!isValid ? "text-red-600" : "text-gray-500"}`}>
               Total: {total.toLocaleString()} {maxTotal > 0 && `/ ${maxTotal} max`}
-              {!totalValid && " — exceeds remaining"}
-              {totalValid && !brandValid && " — exceeds received for brand(s)"}
+              {!halfStepValid && " — use whole numbers or .5 only"}
+              {halfStepValid && !totalValid && " — exceeds remaining"}
+              {halfStepValid && totalValid && !brandValid && " — exceeds received for brand(s)"}
             </span>
             {!disabled && (
               <button

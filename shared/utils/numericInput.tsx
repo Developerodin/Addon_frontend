@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import { isValidHalfStepInput, isValidHalfStepValue } from './halfStepQuantity';
 
 /**
- * Numeric input component that only allows numbers
- * Replaces type="number" inputs to avoid default 0 value issue
+ * Numeric input component that only allows numbers.
+ * Replaces type="number" inputs to avoid default 0 value issue.
  */
 interface NumericInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type' | 'onChange'> {
   value: number | undefined;
   onChange: (value: number) => void;
+  /** When true, only whole numbers and .5 increments are allowed (pair-based qty). */
   allowDecimals?: boolean;
   allowNegative?: boolean;
 }
@@ -30,6 +32,18 @@ export const NumericInput: React.FC<NumericInputProps> = ({
     }
   }, [value]);
 
+  const isAllowedInput = (inputValue: string): boolean => {
+    if (allowDecimals) {
+      return isValidHalfStepInput(inputValue);
+    }
+
+    let pattern = '^[0-9]+';
+    if (allowNegative) {
+      pattern = '^-?' + pattern.substring(1);
+    }
+    return new RegExp(pattern).test(inputValue);
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const inputValue = e.target.value;
 
@@ -39,16 +53,7 @@ export const NumericInput: React.FC<NumericInputProps> = ({
       return;
     }
 
-    let pattern = '^[0-9]+';
-    if (allowDecimals) {
-      pattern = '^[0-9]*\\.?[0-9]*';
-    }
-    if (allowNegative) {
-      pattern = '^-?' + pattern.substring(1);
-    }
-    const regex = new RegExp(pattern);
-
-    if (!regex.test(inputValue)) return;
+    if (!isAllowedInput(inputValue)) return;
 
     if (allowDecimals && (inputValue.endsWith('.') || inputValue === '.')) {
       setIncomplete(inputValue);
@@ -59,19 +64,26 @@ export const NumericInput: React.FC<NumericInputProps> = ({
 
     setIncomplete(null);
     const numericValue = parseFloat(inputValue);
-    if (!isNaN(numericValue)) onChange(numericValue);
+    if (!isNaN(numericValue)) {
+      if (allowDecimals && !isValidHalfStepValue(numericValue)) return;
+      onChange(numericValue);
+    }
   };
 
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     if (incomplete !== null) {
       const n = parseFloat(incomplete);
-      if (!isNaN(n)) onChange(n);
+      if (!isNaN(n) && (!allowDecimals || isValidHalfStepValue(n))) {
+        onChange(n);
+      }
       setIncomplete(null);
     }
     props.onBlur?.(e);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const target = e.currentTarget;
+
     // Allow: backspace, delete, tab, escape, enter, home, end, left, right, up, down
     if ([8, 9, 27, 13, 46, 35, 36, 37, 38, 39, 40].indexOf(e.keyCode) !== -1 ||
         // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
@@ -81,19 +93,32 @@ export const NumericInput: React.FC<NumericInputProps> = ({
         (e.keyCode === 88 && e.ctrlKey === true)) {
       return;
     }
-    
-    // Ensure that it is a number and stop the keypress
-    if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
-      // Allow decimal point if decimals are allowed (190 = period, 110 = numpad decimal)
-      if (allowDecimals && (e.keyCode === 190 || e.keyCode === 110) && !e.target.value.includes('.')) {
+
+    const isDigit =
+      (!e.shiftKey && e.keyCode >= 48 && e.keyCode <= 57) ||
+      (e.keyCode >= 96 && e.keyCode <= 105);
+
+    if (allowDecimals && target.value.includes('.')) {
+      const afterDot = target.value.split('.')[1] ?? '';
+      if (isDigit) {
+        // Only "5" allowed as the single digit after the decimal point
+        if (afterDot.length === 0 && e.key === '5') return;
+        e.preventDefault();
         return;
       }
-      // Allow negative sign if negative numbers are allowed
-      if (allowNegative && e.keyCode === 189 && !e.target.value.includes('-')) {
-        return;
-      }
-      e.preventDefault();
     }
+
+    if (isDigit) return;
+
+    // Allow decimal point if decimals are allowed (190 = period, 110 = numpad decimal)
+    if (allowDecimals && (e.keyCode === 190 || e.keyCode === 110) && !target.value.includes('.')) {
+      return;
+    }
+    // Allow negative sign if negative numbers are allowed
+    if (allowNegative && e.keyCode === 189 && !target.value.includes('-')) {
+      return;
+    }
+    e.preventDefault();
   };
 
   const displayValue = incomplete !== null

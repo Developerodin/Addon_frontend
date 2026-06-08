@@ -277,6 +277,7 @@ const RepairTransferModal: React.FC<RepairTransferModalProps> = ({
               max={m2Remaining}
               disabled={isLoading}
               placeholder={`Max: ${m2Remaining}`}
+              allowDecimals
             />
             <div className="text-xs text-gray-500 mt-1">
               Maximum: {m2Remaining} items (leave empty to send all remaining)
