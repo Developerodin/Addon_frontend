@@ -2,28 +2,15 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "react-hot-toast";
 import * as XLSX from "xlsx";
-import storageSlotService, {
-  BoxInSlot,
-  ConeInSlot,
-} from "@/shared/services/storageSlotService";
+import storageSlotService from "@/shared/services/storageSlotService";
+import ZoneReportFullView from "./ZoneReportFullView";
+import { BoxWithRack, ConeWithRack } from "./zoneReportSearch";
 
 interface ZoneReportDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   zoneType: "LT" | "ST";
   zoneLabel: string;
-}
-
-/** Box with rack info for report */
-interface BoxWithRack extends BoxInSlot {
-  rackCode?: string;
-  rackBarcode?: string;
-}
-
-/** Cone with rack info for report */
-interface ConeWithRack extends ConeInSlot {
-  rackCode?: string;
-  rackBarcode?: string;
 }
 
 interface ZoneSummary {
@@ -194,21 +181,31 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
         onClick={onClose}
         aria-hidden
       />
-      <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl z-50 flex flex-col overflow-hidden animate-slide-in-right">
-        <div className="p-4 border-b border-gray-200 flex items-center justify-between shrink-0">
-          <h3 className="text-base font-bold text-gray-800">
+      <div
+        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-2xl flex-col overflow-hidden bg-white shadow-2xl animate-slide-in-right"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="zone-report-drawer-title"
+      >
+        <div className="flex shrink-0 items-center justify-between border-b border-gray-200 p-4">
+          <h3 id="zone-report-drawer-title" className="text-base font-bold text-gray-800">
             Report — {zoneLabel}
           </h3>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100"
+            className="rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            aria-label="Close report drawer"
           >
-            <i className="ri-close-line text-xl" />
+            <i className="ri-close-line text-xl" aria-hidden />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div
+          className={`flex min-h-0 flex-1 flex-col p-4 ${
+            viewMode === "full" ? "overflow-hidden" : "overflow-y-auto"
+          }`}
+        >
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-12">
               <div className="animate-spin rounded-full h-10 w-10 border-2 border-purple-600 border-t-transparent mb-4" />
@@ -363,122 +360,12 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
               </div>
             </div>
           ) : (
-            <div className="space-y-4">
-              <button
-                type="button"
-                onClick={() => setViewMode("menu")}
-                className="text-sm text-purple-600 hover:text-purple-700 flex items-center gap-1"
-              >
-                <i className="ri-arrow-left-line" /> Back
-              </button>
-              <div className="overflow-x-auto border border-gray-200 rounded-lg max-h-[60vh] overflow-y-auto">
-                {isLongTerm && boxes.length === 0 && (
-                  <p className="p-4 text-sm text-gray-500">No boxes in this zone.</p>
-                )}
-                {boxes.length > 0 && (
-                  <table className="w-full text-xs">
-                    <thead className="bg-gray-50 sticky top-0">
-                      <tr>
-                        <th className="px-3 py-2 text-left font-bold text-gray-600">
-                          Box ID
-                        </th>
-                        <th className="px-3 py-2 text-left font-bold text-gray-600">
-                          PO
-                        </th>
-                        <th className="px-3 py-2 text-left font-bold text-gray-600">
-                          Yarn
-                        </th>
-                        <th className="px-3 py-2 text-right font-bold text-gray-600">
-                          {isLongTerm ? "Gross (kg)" : "Weight"}
-                        </th>
-                        {isLongTerm && (
-                          <th className="px-3 py-2 text-right font-bold text-gray-600">
-                            Net (kg)
-                          </th>
-                        )}
-                        <th className="px-3 py-2 text-left font-bold text-gray-600">
-                          Rack
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {boxes.map((b) => {
-                        const gross = b.boxWeight ?? 0;
-                        const net = gross - (b.tearweight ?? 0);
-                        return (
-                          <tr
-                            key={b._id ?? b.boxId ?? b.barcode}
-                            className="border-b border-gray-100 hover:bg-gray-50"
-                          >
-                            <td className="px-3 py-2 font-mono">{b.boxId}</td>
-                            <td className="px-3 py-2 text-primary font-medium">{b.poNumber}</td>
-                            <td className="px-3 py-2 truncate max-w-[120px]" title={b.yarnName}>
-                              {b.yarnName ?? "-"}
-                            </td>
-                            <td className="px-3 py-2 text-right font-bold">{gross}</td>
-                            {isLongTerm && (
-                              <td className="px-3 py-2 text-right font-bold">{net}</td>
-                            )}
-                            <td className="px-3 py-2 font-mono">{b.rackCode ?? b.storageLocation ?? "-"}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
-                {!isLongTerm && cones.length > 0 && (
-                  <table className="w-full text-xs">
-                    <thead className="bg-gray-50 sticky top-0">
-                      <tr>
-                        <th className="px-3 py-2 text-left font-bold text-gray-600">
-                          Cone Barcode
-                        </th>
-                        <th className="px-3 py-2 text-left font-bold text-gray-600">
-                          PO
-                        </th>
-                        <th className="px-3 py-2 text-left font-bold text-gray-600">
-                          Yarn
-                        </th>
-                        <th className="px-3 py-2 text-right font-bold text-gray-600" title="Stored as coneWeight">
-                          Gross (kg)
-                        </th>
-                        <th className="px-3 py-2 text-right font-bold text-gray-600">
-                          Tear (kg)
-                        </th>
-                        <th className="px-3 py-2 text-right font-bold text-gray-600" title="coneWeight minus tearWeight">
-                          Net (kg)
-                        </th>
-                        <th className="px-3 py-2 text-left font-bold text-gray-600">
-                          Rack
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {cones.map((c) => {
-                        const gross = c.coneWeight ?? 0;
-                        const tear = c.tearWeight ?? 0;
-                        return (
-                          <tr
-                            key={c._id ?? c.barcode}
-                            className="border-b border-gray-100 hover:bg-gray-50"
-                          >
-                            <td className="px-3 py-2 font-mono">{c.barcode}</td>
-                            <td className="px-3 py-2 text-primary font-medium">{c.poNumber}</td>
-                            <td className="px-3 py-2 truncate max-w-[120px]" title={c.yarnName}>
-                              {c.yarnName ?? "-"}
-                            </td>
-                            <td className="px-3 py-2 text-right font-bold">{gross}</td>
-                            <td className="px-3 py-2 text-right font-bold">{tear}</td>
-                            <td className="px-3 py-2 text-right font-bold">{gross - tear}</td>
-                            <td className="px-3 py-2 font-mono">{c.rackCode ?? c.coneStorageId ?? "-"}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
+            <ZoneReportFullView
+              isLongTerm={isLongTerm}
+              boxes={boxes}
+              cones={cones}
+              onBack={() => setViewMode("menu")}
+            />
           )}
         </div>
       </div>
