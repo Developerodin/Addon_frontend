@@ -2,6 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import yarnGrnService, { YarnGrn } from '@/shared/services/yarnGrnService';
+import GrnFinancialAdjustments, {
+  GrnFinancialAdjustmentsValue,
+} from './GrnFinancialAdjustments';
 
 interface GrnHeaderEditorProps {
   /** GRN currently being edited. Drives the initial form state. */
@@ -24,6 +27,22 @@ const toDateInput = (value?: string | Date | null): string => {
 };
 
 /**
+ * Build initial financial adjustment form state from a GRN snapshot.
+ * @param grn - source GRN document
+ */
+const buildFinancialInitial = (grn: YarnGrn): GrnFinancialAdjustmentsValue => ({
+  discountPercent: grn.adjustments?.discountPercent ?? 0,
+  freightAmount: grn.adjustments?.freightAmount ?? 0,
+  freightGstPercent: grn.adjustments?.freightGstPercent ?? 0,
+  roundOff: grn.adjustments?.roundOff ?? grn.totals?.roundOff ?? 0,
+  roundOffOverridden: Boolean(
+    grn.adjustments?.roundOff !== undefined &&
+      grn.totals?.roundOffSuggested !== undefined &&
+      grn.adjustments.roundOff !== grn.totals.roundOffSuggested
+  ),
+});
+
+/**
  * In-place editor for a GRN's *header-only* metadata: vendor invoice
  * number/date, discrepancy notes. These fields are post-issuance metadata
  * and editing them does NOT mint a revision (PATCH /yarn-grns/:id/header).
@@ -37,6 +56,7 @@ const GrnHeaderEditor: React.FC<GrnHeaderEditorProps> = ({ grn, onSaved, onCance
     toDateInput(grn.vendorInvoiceDate as string | Date | null | undefined)
   );
   const [discrepancyDetails, setDiscrepancyDetails] = useState(grn.discrepancyDetails || '');
+  const [financial, setFinancial] = useState<GrnFinancialAdjustmentsValue>(() => buildFinancialInitial(grn));
   const [saving, setSaving] = useState(false);
 
   // Reset form whenever a different GRN is opened in the drawer.
@@ -44,7 +64,8 @@ const GrnHeaderEditor: React.FC<GrnHeaderEditorProps> = ({ grn, onSaved, onCance
     setVendorInvoiceNo(grn.vendorInvoiceNo || '');
     setVendorInvoiceDate(toDateInput(grn.vendorInvoiceDate as string | Date | null | undefined));
     setDiscrepancyDetails(grn.discrepancyDetails || '');
-  }, [grn.id, grn.vendorInvoiceNo, grn.vendorInvoiceDate, grn.discrepancyDetails]);
+    setFinancial(buildFinancialInitial(grn));
+  }, [grn.id, grn.vendorInvoiceNo, grn.vendorInvoiceDate, grn.discrepancyDetails, grn.adjustments, grn.totals]);
 
   const handleSubmit = async (e?: React.FormEvent | React.MouseEvent) => {
     if (e) {
@@ -65,6 +86,10 @@ const GrnHeaderEditor: React.FC<GrnHeaderEditorProps> = ({ grn, onSaved, onCance
         vendorInvoiceNo: vendorInvoiceNo.trim(),
         vendorInvoiceDate: vendorInvoiceDate || undefined,
         discrepancyDetails,
+        discountPercent: financial.discountPercent,
+        freightAmount: financial.freightAmount,
+        freightGstPercent: financial.freightGstPercent,
+        roundOff: financial.roundOff,
       });
       // eslint-disable-next-line no-console
       console.info('[GRN] header save ok', { grnId: updated.id, vendorInvoiceNo: updated.vendorInvoiceNo });
@@ -154,6 +179,14 @@ const GrnHeaderEditor: React.FC<GrnHeaderEditorProps> = ({ grn, onSaved, onCance
           {discrepancyDetails.length} / 2000
         </p>
       </div>
+
+      <GrnFinancialAdjustments
+        items={grn.items || []}
+        supplierState={grn.supplier?.state}
+        initial={financial}
+        onChange={setFinancial}
+        disabled={saving}
+      />
 
       <div className="flex items-center justify-end gap-2 pt-1">
         <button

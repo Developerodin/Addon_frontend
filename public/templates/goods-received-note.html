@@ -257,7 +257,7 @@
                 <tr>
                     <td colspan="4" class="text-right text-bold">TOTAL RECEIVED QTY :</td>
                     <td class="text-right text-bold" id="total-qty">0.0000</td>
-                    <td colspan="2" class="text-right text-bold">TOTAL AMOUNT</td>
+                    <td colspan="2" class="text-right text-bold">BASIC VALUE</td>
                     <td class="text-right text-bold" id="total-amount">0.00</td>
                 </tr>
             </tfoot>
@@ -271,8 +271,8 @@
                     <th style="width: 14%;">Rate</th>
                     <th style="width: 16%;">Taxable Value</th>
                     <th style="width: 18%;">SGST</th>
-                    <th style="width: 18%;">CGST / IGST</th>
-                    <th style="width: 16%;"></th>
+                    <th style="width: 18%;">CGST</th>
+                    <th style="width: 18%;">IGST</th>
                 </tr>
                 <tr>
                     <th></th>
@@ -280,7 +280,7 @@
                     <th></th>
                     <th>Amount</th>
                     <th>Amount</th>
-                    <th></th>
+                    <th>Amount</th>
                 </tr>
             </thead>
             <tbody id="tax-body">
@@ -289,8 +289,47 @@
                     <td class="text-center" id="tax-rate-label">IGST 5.0%</td>
                     <td class="text-right" id="taxable-value">0.00</td>
                     <td class="text-right" id="sgst-amount">0.00</td>
+                    <td class="text-right" id="cgst-amount">0.00</td>
                     <td class="text-right" id="igst-amount">0.00</td>
-                    <td></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Summary of Charges -->
+        <table class="tax-table" id="summary-table">
+            <tbody>
+                <tr id="row-basic-value">
+                    <td style="width: 70%;" class="text-bold">Basic Value</td>
+                    <td class="text-right" id="basic-value">0.00</td>
+                </tr>
+                <tr id="row-discount">
+                    <td class="text-bold">Discount (−)</td>
+                    <td class="text-right" id="discount-amount">0.00</td>
+                </tr>
+                <tr id="row-taxable-value">
+                    <td class="text-bold">Taxable Value</td>
+                    <td class="text-right" id="taxable-value-after-discount">0.00</td>
+                </tr>
+                <tr id="row-freight">
+                    <td class="text-bold">Freight / Shipping</td>
+                    <td class="text-right" id="freight-amount">0.00</td>
+                </tr>
+                <tr id="row-freight-gst">
+                    <td class="text-bold">Freight GST</td>
+                    <td class="text-right" id="freight-gst-amount">0.00</td>
+                </tr>
+                <tr id="row-round-off">
+                    <td class="text-bold">Round Off</td>
+                    <td class="text-right" id="round-off-amount">0.00</td>
+                </tr>
+                <tr>
+                    <td class="text-bold" style="font-size: 11px;">FINAL TOTAL</td>
+                    <td class="text-right text-bold" id="grand-total" style="font-size: 11px;">0.00</td>
+                </tr>
+                <tr>
+                    <td colspan="2" style="font-size: 9px; font-style: italic; padding-top: 4px;">
+                        <span id="amount-in-words"></span>
+                    </td>
                 </tr>
             </tbody>
         </table>

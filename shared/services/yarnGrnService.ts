@@ -1,6 +1,6 @@
 import { API_BASE_URL } from '@/shared/data/utilities/api';
 import Cookies from 'js-cookie';
-import type { GrnSnapshot, GrnSnapshotItem, GrnSnapshotLot } from '@/shared/utils/grnPrint';
+import type { GrnSnapshot, GrnSnapshotItem, GrnSnapshotLot, GrnAdjustments } from '@/shared/utils/grnPrint';
 
 /**
  * Domain types matching the backend YarnGrn model. Re-exporting GrnSnapshot
@@ -29,6 +29,7 @@ export interface YarnGrn extends GrnSnapshot {
   createdBy?: { user?: string | null; username?: string; email?: string };
   createdAt?: string;
   updatedAt?: string;
+  adjustments?: GrnAdjustments;
   lots: GrnSnapshotLot[];
   items: GrnSnapshotItem[];
   parent?: { id?: string; grnNumber?: string; revisionNo?: number; status?: GrnStatus } | null;
@@ -183,6 +184,10 @@ class YarnGrnService {
       vendorInvoiceDate?: string;
       discrepancyDetails?: string;
       notes?: string;
+      discountPercent?: number;
+      freightAmount?: number;
+      freightGstPercent?: number;
+      roundOff?: number;
     }
   ): Promise<YarnGrn> {
     if (!grnId) throw new Error('GRN id is required');
@@ -215,6 +220,10 @@ class YarnGrnService {
       vendorInvoiceDate?: string;
       discrepancyDetails?: string;
       notes?: string;
+      discountPercent?: number;
+      freightAmount?: number;
+      freightGstPercent?: number;
+      roundOff?: number;
     } = {}
   ): Promise<{
     createdGrn: YarnGrn | null;

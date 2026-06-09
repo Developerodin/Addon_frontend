@@ -4,6 +4,7 @@ import { toast } from 'react-hot-toast';
 import yarnGrnService, { YarnGrn } from '@/shared/services/yarnGrnService';
 import { printGrnDocument } from '@/shared/utils/grnPrint';
 import GrnHeaderEditor from './GrnHeaderEditor';
+import GrnFinancialSummary from './GrnFinancialSummary';
 
 interface GrnDetailDrawerProps {
   grn: YarnGrn | null;
@@ -225,6 +226,8 @@ const GrnDetailDrawer: React.FC<GrnDetailDrawerProps> = ({ grn, onClose, onUpdat
                   <p className="text-base font-bold text-gray-800">{fmtINR(totalNetWeight)} kg</p>
                 </div>
               </div>
+
+              <GrnFinancialSummary totals={current.totals} />
 
               {current.discrepancyDetails ? (
                 <div className="bg-amber-50 border border-amber-100 rounded p-3">

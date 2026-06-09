@@ -55,6 +55,14 @@ export interface GrnSnapshotConsignee {
 
 export interface GrnSnapshotTotals {
   subTotal: number;
+  discountAmount?: number;
+  taxableValue?: number;
+  freightAmount?: number;
+  freightGst?: number;
+  itemGst?: number;
+  preRoundTotal?: number;
+  roundOff?: number;
+  roundOffSuggested?: number;
   sgst: number;
   cgst?: number;
   igst: number;
@@ -63,6 +71,13 @@ export interface GrnSnapshotTotals {
   totalQty: number;
   taxLabel: string;
   amountInWords: string;
+}
+
+export interface GrnAdjustments {
+  discountPercent?: number;
+  freightAmount?: number;
+  freightGstPercent?: number;
+  roundOff?: number;
 }
 
 export interface GrnSnapshot {
@@ -74,6 +89,7 @@ export interface GrnSnapshot {
   vendorInvoiceDate?: string | Date | null;
   discrepancyDetails?: string;
   notes?: string;
+  adjustments?: GrnAdjustments;
   supplier?: GrnSnapshotSupplier;
   consignee?: GrnSnapshotConsignee;
   lots: GrnSnapshotLot[];
@@ -186,6 +202,17 @@ const buildLotsBlock = (lots: GrnSnapshotLot[]): string => {
       </table>`;
 };
 
+/** Hide a summary row when its amount is zero. */
+const hideRowIfZero = (html: string, rowId: string, value: number): string => {
+  if (Math.abs(value) < 0.0001) {
+    return html.replace(
+      new RegExp(`<tr id="${rowId}"[^>]*>[\\s\\S]*?<\\/tr>`, 'i'),
+      `<tr id="${rowId}" style="display:none;"><td></td><td></td></tr>`
+    );
+  }
+  return html;
+};
+
 /**
  * Pour a snapshot into the GRN HTML template. Pure string transform — no DOM,
  * no I/O. Caller decides whether to open a print window or save the string.
@@ -235,10 +262,30 @@ const renderGrnHtml = async (grn: GrnSnapshot): Promise<string> => {
   html = setById(html, 'total-qty', formatINR(grn.totals?.totalQty ?? 0, 4));
   html = setById(html, 'total-amount', formatINR(grn.totals?.subTotal ?? 0, 2));
 
+  const taxableForTax = grn.totals?.taxableValue ?? grn.totals?.subTotal ?? 0;
   html = setById(html, 'tax-rate-label', grn.totals?.taxLabel || '');
-  html = setById(html, 'taxable-value', formatINR(grn.totals?.subTotal ?? 0, 2));
+  html = setById(html, 'taxable-value', formatINR(taxableForTax, 2));
   html = setById(html, 'sgst-amount', formatINR(grn.totals?.sgst ?? 0, 2));
+  html = setById(html, 'cgst-amount', formatINR(grn.totals?.cgst ?? 0, 2));
   html = setById(html, 'igst-amount', formatINR(grn.totals?.igst ?? 0, 2));
+
+  html = setById(html, 'basic-value', formatINR(grn.totals?.subTotal ?? 0, 2));
+  html = setById(html, 'discount-amount', formatINR(grn.totals?.discountAmount ?? 0, 2));
+  html = setById(
+    html,
+    'taxable-value-after-discount',
+    formatINR(grn.totals?.taxableValue ?? grn.totals?.subTotal ?? 0, 2)
+  );
+  html = setById(html, 'freight-amount', formatINR(grn.totals?.freightAmount ?? 0, 2));
+  html = setById(html, 'freight-gst-amount', formatINR(grn.totals?.freightGst ?? 0, 2));
+  html = setById(html, 'round-off-amount', formatINR(grn.totals?.roundOff ?? 0, 2));
+  html = setById(html, 'grand-total', formatINR(grn.totals?.grandTotal ?? 0, 2));
+  html = setById(html, 'amount-in-words', grn.totals?.amountInWords || '');
+
+  html = hideRowIfZero(html, 'row-discount', grn.totals?.discountAmount ?? 0);
+  html = hideRowIfZero(html, 'row-freight', grn.totals?.freightAmount ?? 0);
+  html = hideRowIfZero(html, 'row-freight-gst', grn.totals?.freightGst ?? 0);
+  html = hideRowIfZero(html, 'row-round-off', grn.totals?.roundOff ?? 0);
 
   html = setById(html, 'narration', grn.notes || 'N/A');
 
