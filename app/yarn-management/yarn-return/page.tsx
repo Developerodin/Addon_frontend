@@ -34,6 +34,11 @@ import {
   type ArticleReturnSliceCone,
   type ArticleReturnSliceResponse,
 } from "@/shared/services/yarnTransactionsArticleReturnSliceService";
+import { downloadYarnReturnHistoryCsv } from "@/app/yarn-management/yarn-return/yarnReturnHistoryCsvExport";
+import {
+  getDefaultReturnHistoryEndDate,
+  getDefaultReturnHistoryStartDate,
+} from "@/app/yarn-management/yarn-return/yarnReturnHistoryService";
 
 type ConeStatus = "Awaiting" | "Returned" | "Consumed" | "Closed";
 type OrderStatus = "Awaiting Return" | "In Progress" | "Partial" | "Returned" | "Short Close";
@@ -1208,7 +1213,9 @@ const YarnReturnPage = () => {
   const [historyDrawerTotalResults, setHistoryDrawerTotalResults] = useState(0);
   const [historyDrawerTotalPages, setHistoryDrawerTotalPages] = useState(0);
   const [historySearchDebounced, setHistorySearchDebounced] = useState("");
+  const [exportingHistoryCsv, setExportingHistoryCsv] = useState(false);
   const historyLastFiltersRef = useRef<string>("__init__");
+  const historyDatesInitializedRef = useRef(false);
   /** Return by scanning cone only: order/article resolved from cone API (not from machine list). */
   const [showQuickReturnDrawer, setShowQuickReturnDrawer] = useState(false);
   const [quickReturnOrder, setQuickReturnOrder] = useState<ProductionOrder | null>(null);
@@ -1639,6 +1646,16 @@ const YarnReturnPage = () => {
   useEffect(() => {
     if (!showHistoryDrawer) {
       historyLastFiltersRef.current = "__init__";
+      historyDatesInitializedRef.current = false;
+      return;
+    }
+    if (!historyDatesInitializedRef.current) {
+      setHistoryDateRange({
+        from: getDefaultReturnHistoryStartDate(),
+        to: getDefaultReturnHistoryEndDate(),
+      });
+      setHistoryPage(1);
+      historyDatesInitializedRef.current = true;
     }
   }, [showHistoryDrawer]);
 
@@ -1663,13 +1680,16 @@ const YarnReturnPage = () => {
 
     let cancelled = false;
     setHistoryDrawerLoading(true);
+    const startDate = historyDateRange.from || getDefaultReturnHistoryStartDate();
+    const endDate = historyDateRange.to || getDefaultReturnHistoryEndDate();
+
     const loadHistory = async () => {
       const token = getAccessToken();
       try {
         const r = await fetchYarnReturnedHistoryPage(token, pageToFetch, {
           yarnName: historySearchDebounced.trim() || undefined,
-          startDate: historyDateRange.from || undefined,
-          endDate: historyDateRange.to || undefined,
+          startDate,
+          endDate,
         });
         if (!cancelled) {
           setHistoryDrawerRows(r.rows);
@@ -1695,6 +1715,36 @@ const YarnReturnPage = () => {
     historyDateRange.from,
     historyDateRange.to,
   ]);
+
+  /**
+   * Exports all yarn_returned rows matching the history drawer filters as CSV.
+   */
+  const handleDownloadHistoryCsv = async () => {
+    const startDate = historyDateRange.from || getDefaultReturnHistoryStartDate();
+    const endDate = historyDateRange.to || getDefaultReturnHistoryEndDate();
+    setExportingHistoryCsv(true);
+    try {
+      const stub = `yarn-return-history_${startDate}_${endDate}`;
+      const n = await downloadYarnReturnHistoryCsv(
+        {
+          yarnName: historySearchDebounced.trim() || undefined,
+          startDate,
+          endDate,
+        },
+        stub
+      );
+      if (n === 0) {
+        toast.error("No rows to export for the selected filters.");
+      } else {
+        toast.success(`Downloaded ${n} row(s) to CSV.`);
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error(e instanceof Error ? e.message : "CSV export failed.");
+    } finally {
+      setExportingHistoryCsv(false);
+    }
+  };
 
   const selectedOrder = useMemo(
     () => orders.find((order) => order.id === selectedOrderId) ?? null,
@@ -4689,13 +4739,30 @@ const YarnReturnPage = () => {
                   className="bg-white border border-gray-200 text-[11px] font-medium rounded px-2 py-1.5 focus:ring-0 focus:border-purple-300 w-32"
                   value={historyDateRange.from}
                   onChange={(event) => setHistoryDateRange((prev) => ({ ...prev, from: event.target.value }))}
+                  aria-label="Return history start date"
                 />
                 <input
                   type="date"
                   className="bg-white border border-gray-200 text-[11px] font-medium rounded px-2 py-1.5 focus:ring-0 focus:border-purple-300 w-32"
                   value={historyDateRange.to}
                   onChange={(event) => setHistoryDateRange((prev) => ({ ...prev, to: event.target.value }))}
+                  min={historyDateRange.from || undefined}
+                  aria-label="Return history end date"
                 />
+                <button
+                  type="button"
+                  onClick={() => void handleDownloadHistoryCsv()}
+                  disabled={historyDrawerLoading || exportingHistoryCsv || historyDrawerTotalResults === 0}
+                  className="inline-flex items-center gap-1 px-2 py-1.5 border border-gray-200 text-[11px] font-bold text-gray-700 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="Download return history as CSV for selected filters"
+                  title="Exports all rows matching search and dates (not only this page)"
+                >
+                  <i
+                    className={`ri-download-2-line text-emerald-600 ${exportingHistoryCsv ? "animate-pulse" : ""}`}
+                    aria-hidden
+                  />
+                  {exportingHistoryCsv ? "Exporting…" : "Download CSV"}
+                </button>
               </div>
               <div className="overflow-x-auto">
                 {historyDrawerLoading ? (
