@@ -474,6 +474,34 @@ function machineLabel(a: MachineOrderAssignmentTopItems): string {
   return typeof m === "string" ? m : "—";
 }
 
+/**
+ * Article numbers assigned to this machine (from completed-items productionOrderItems).
+ * @param a - Machine assignment from GET /completed-items
+ */
+function getAssignmentArticleNumbers(a: MachineOrderAssignmentTopItems): string[] {
+  return (a.productionOrderItems ?? [])
+    .map((item) => {
+      const art = item.article;
+      if (typeof art === "object" && art) {
+        return (art as PopulatedArticleRef).articleNumber ?? item.articleNumber ?? "";
+      }
+      return item.articleNumber ?? "";
+    })
+    .filter(Boolean);
+}
+
+/**
+ * Match machine code/name or any assigned article number (case-insensitive substring).
+ * @param a - Machine assignment to test
+ * @param query - User search string
+ */
+function assignmentMatchesSearch(a: MachineOrderAssignmentTopItems, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  if (machineLabel(a).toLowerCase().includes(q)) return true;
+  return getAssignmentArticleNumbers(a).some((n) => n.toLowerCase().includes(q));
+}
+
 /** Extract order ID from tx - handles populated object { _id, orderNumber } or string. */
 const txOrderId = (tx: any): string | undefined => {
   const o = tx.orderId ?? tx.order;
@@ -1590,6 +1618,23 @@ const YarnReturnPage = () => {
       loadOrdersForMachine(machineAssignments[0]);
     }
   }, [machineAssignmentsLoading, machineAssignments, selectedMachineAssignmentId, loadOrdersForMachine]);
+
+  const machineAssignmentsForCards = useMemo(() => {
+    const q = machineSearchTerm.trim();
+    if (!q) return machineAssignments;
+    return machineAssignments.filter((a) => assignmentMatchesSearch(a, q));
+  }, [machineAssignments, machineSearchTerm]);
+
+  // When search narrows machines, keep selection on a visible machine
+  useEffect(() => {
+    if (!machineSearchTerm.trim() || machineAssignmentsLoading || !selectedMachineAssignmentId) return;
+    const stillVisible = machineAssignmentsForCards.some(
+      (a) => (a.id ?? a._id) === selectedMachineAssignmentId
+    );
+    if (!stillVisible && machineAssignmentsForCards.length > 0) {
+      loadOrdersForMachine(machineAssignmentsForCards[0]);
+    }
+  }, [machineSearchTerm, machineAssignmentsForCards, selectedMachineAssignmentId, machineAssignmentsLoading, loadOrdersForMachine]);
 
   useEffect(() => {
     if (!showHistoryDrawer) {
@@ -3478,7 +3523,7 @@ const YarnReturnPage = () => {
                 <input
                   type="text"
                   className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-full placeholder:text-gray-400 font-medium"
-                  placeholder="Search machine..."
+                  placeholder="Search machine or article..."
                   value={machineSearchTerm}
                   onChange={(e) => setMachineSearchTerm(e.target.value)}
                 />
@@ -3491,22 +3536,10 @@ const YarnReturnPage = () => {
                 </div>
               ) : (
                 <AssignmentsCards
-                  rows={
-                    machineSearchTerm.trim()
-                      ? machineAssignments.filter((a) =>
-                          machineLabel(a).toLowerCase().includes(machineSearchTerm.trim().toLowerCase())
-                        )
-                      : machineAssignments
-                  }
+                  rows={machineAssignmentsForCards}
                   page={1}
                   limit={machineAssignments.length || 20}
-                  totalResults={
-                    machineSearchTerm.trim()
-                      ? machineAssignments.filter((a) =>
-                          machineLabel(a).toLowerCase().includes(machineSearchTerm.trim().toLowerCase())
-                        ).length
-                      : machineAssignments.length
-                  }
+                  totalResults={machineAssignmentsForCards.length}
                   totalPages={1}
                   isLoading={false}
                   onPageChange={() => {}}

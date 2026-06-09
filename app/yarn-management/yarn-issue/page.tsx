@@ -370,6 +370,34 @@ function machineLabel(a: MachineOrderAssignmentTopItems): string {
   return typeof m === "string" ? m : "—";
 }
 
+/**
+ * Article numbers assigned to this machine (from top-items productionOrderItems).
+ * @param a - Machine assignment from GET /top-items
+ */
+function getAssignmentArticleNumbers(a: MachineOrderAssignmentTopItems): string[] {
+  return (a.productionOrderItems ?? [])
+    .map((item) => {
+      const art = item.article;
+      if (typeof art === "object" && art) {
+        return (art as PopulatedArticleRef).articleNumber ?? item.articleNumber ?? "";
+      }
+      return item.articleNumber ?? "";
+    })
+    .filter(Boolean);
+}
+
+/**
+ * Match machine code/name or any assigned article number (case-insensitive substring).
+ * @param a - Machine assignment to test
+ * @param query - User search string
+ */
+function assignmentMatchesSearch(a: MachineOrderAssignmentTopItems, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  if (machineLabel(a).toLowerCase().includes(q)) return true;
+  return getAssignmentArticleNumbers(a).some((n) => n.toLowerCase().includes(q));
+}
+
 const YarnIssuePage = () => {
   const { hasSubPermission, isLoading } = useNavigation();
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
@@ -377,7 +405,7 @@ const YarnIssuePage = () => {
   const [ordersPage, setOrdersPage] = useState(1);
   const [ordersTotalPages, setOrdersTotalPages] = useState(1);
   const [ordersTotalResults, setOrdersTotalResults] = useState(0);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [machineSearchTerm, setMachineSearchTerm] = useState("");
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [machineAssignments, setMachineAssignments] = useState<MachineOrderAssignmentTopItems[]>([]);
   const [machineAssignmentsLoading, setMachineAssignmentsLoading] = useState(true);
@@ -507,8 +535,6 @@ const YarnIssuePage = () => {
       setSelectedMachineAssignment(null);
       return;
     }
-    // Clear order search so new machine's orders aren't filtered out (avoids empty filteredOrders and cleared selection)
-    setSearchTerm("");
     setSelectedMachineAssignmentId(assignment.id);
     setSelectedMachineAssignment(assignment);
 
@@ -575,10 +601,10 @@ const YarnIssuePage = () => {
   );
 
   const machineAssignmentsForCards = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
+    const q = machineSearchTerm.trim();
     if (!q) return sortedMachineAssignmentsAll;
-    return sortedMachineAssignmentsAll.filter((a) => machineLabel(a).toLowerCase().includes(q));
-  }, [sortedMachineAssignmentsAll, searchTerm]);
+    return sortedMachineAssignmentsAll.filter((a) => assignmentMatchesSearch(a, q));
+  }, [sortedMachineAssignmentsAll, machineSearchTerm]);
 
   // Default: select first machine and its first order when machines have loaded
   useEffect(() => {
@@ -586,6 +612,15 @@ const YarnIssuePage = () => {
       loadOrdersForMachine(sortedMachineAssignmentsAll[0]);
     }
   }, [machineAssignmentsLoading, sortedMachineAssignmentsAll, selectedMachineAssignmentId, loadOrdersForMachine]);
+
+  // When search narrows machines, keep selection on a visible machine
+  useEffect(() => {
+    if (!machineSearchTerm.trim() || machineAssignmentsLoading || !selectedMachineAssignmentId) return;
+    const stillVisible = machineAssignmentsForCards.some((a) => a.id === selectedMachineAssignmentId);
+    if (!stillVisible && machineAssignmentsForCards.length > 0) {
+      loadOrdersForMachine(machineAssignmentsForCards[0]);
+    }
+  }, [machineSearchTerm, machineAssignmentsForCards, selectedMachineAssignmentId, machineAssignmentsLoading, loadOrdersForMachine]);
 
   // Fetch product details for a single article
   const fetchArticleBOM = async (
@@ -876,23 +911,7 @@ const YarnIssuePage = () => {
   //   }
   // }, [orders, selectedOrderId]);
 
-  const filteredOrders = useMemo(() => {
-    const query = searchTerm.trim().toLowerCase();
-
-    return orders.filter((order) => {
-      // Show all orders regardless of status
-      if (!query) {
-        return true;
-      }
-
-      return (
-        order.orderNumber.toLowerCase().includes(query) ||
-        (order.buyer && order.buyer.toLowerCase().includes(query)) ||
-        (order.floor && order.floor.toLowerCase().includes(query)) ||
-        (order.styleCode && order.styleCode.toLowerCase().includes(query))
-      );
-    });
-  }, [orders, searchTerm]);
+  const filteredOrders = useMemo(() => orders, [orders]);
 
   // Sync selection to filtered orders. Don't clear selection when orders are empty (initial load race);
   // only clear when we had orders but they're all filtered out (e.g. by search).
@@ -1485,9 +1504,9 @@ const YarnIssuePage = () => {
                 <input
                   type="text"
                   className="bg-white border border-gray-600 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-full placeholder:text-gray-700 font-medium"
-                  placeholder="Search machine..."
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Search machine or article..."
+                  value={machineSearchTerm}
+                  onChange={(event) => setMachineSearchTerm(event.target.value)}
                 />
                 <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
               </div>
