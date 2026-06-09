@@ -42,6 +42,8 @@ function rowsToExportRecords(rows: PoReturnChallan[]): Record<string, string | n
     Date: row.challanDate ? new Date(row.challanDate).toLocaleDateString() : '',
     'PO No': row.poNumber ?? '',
     Vendor: row.consignee?.name ?? row.supplier?.name ?? '',
+    'Vendor GST': row.consignee?.gstNo ?? '',
+    'Brand ID': row.consignee?.supplierId ?? '',
     Cones: row.totals?.coneCount ?? row.lines?.length ?? '',
     'Net (kg)': row.totals?.totalNetWeight ?? '',
     'Gross (kg)': row.totals?.totalGrossWeight ?? '',

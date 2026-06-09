@@ -49,6 +49,11 @@ export interface ConeTrackerResponse {
     parentBoxId?: string;
     parentBoxBarcode?: string;
     parentPoNumber?: string;
+    productionOrderLabel?: string;
+    articleLabel?: string;
+    machineLabel?: string;
+    machineFloor?: string;
+    issueStatus?: string;
   };
   parentBox: {
     boxId?: string;

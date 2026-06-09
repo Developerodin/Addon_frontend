@@ -26,6 +26,8 @@ const DETAIL_LABELS: Record<string, string> = {
   fromStorageLocation: "From location",
   toStorageLocation: "To location",
   issuedByEmail: "Issued by",
+  machine: "Machine",
+  machineFloor: "Machine floor",
   coneStorageId: "Storage rack",
 };
 

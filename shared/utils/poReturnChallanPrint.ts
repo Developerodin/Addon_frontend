@@ -16,22 +16,33 @@ export interface ChallanSnapshotLine {
 }
 
 export interface ChallanSnapshotSupplier {
-  name?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  gstNo?: string;
-  contactNumber?: string;
-}
-
-export interface ChallanSnapshotConsignee {
+  supplierId?: string;
   name?: string;
   address?: string;
   city?: string;
   state?: string;
   pincode?: string;
+  country?: string;
   gstNo?: string;
   contactNumber?: string;
+  contactPersonName?: string;
+  email?: string;
+  stateCode?: string;
+}
+
+export interface ChallanSnapshotConsignee {
+  supplierId?: string;
+  name?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  country?: string;
+  gstNo?: string;
+  contactNumber?: string;
+  contactPersonName?: string;
+  email?: string;
+  stateCode?: string;
 }
 
 const ADDON_HOLDINGS = 'ADDON HOLDINGS';
@@ -70,14 +81,21 @@ export const normalizeChallanParties = (
         name: consignee.name,
         address: consignee.address,
         gstNo: consignee.gstNo,
+        contactNumber: consignee.contactNumber,
       },
       consignee: {
+        supplierId: supplier.supplierId,
         name: supplier.name,
         address: supplier.address,
         city: supplier.city,
         state: supplier.state,
+        pincode: supplier.pincode,
+        country: supplier.country,
         gstNo: supplier.gstNo,
         contactNumber: supplier.contactNumber,
+        contactPersonName: supplier.contactPersonName,
+        email: supplier.email,
+        stateCode: supplier.stateCode,
       },
     };
   }

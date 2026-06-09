@@ -26,6 +26,14 @@ const fmtDate = (value?: string | Date | null): string => {
 };
 
 /**
+ * Formats challan net/gross weight (kg) to four decimal places.
+ */
+const fmtKg = (value?: number | null): string => {
+  if (value == null || !Number.isFinite(value)) return '—';
+  return value.toFixed(4);
+};
+
+/**
  * Tabular results for PO return challan history.
  */
 const ChallanTable: React.FC<ChallanTableProps> = ({
@@ -86,7 +94,7 @@ const ChallanTable: React.FC<ChallanTableProps> = ({
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{row.totals?.coneCount ?? row.lines?.length ?? '—'}</td>
                   <td className="px-3 py-2 text-right tabular-nums font-semibold text-blue-700">
-                    {row.totals?.totalNetWeight ?? '—'}
+                    {fmtKg(row.totals?.totalNetWeight)}
                   </td>
                   <td className="px-3 py-2 text-gray-700">{row.cancellationIntent || '—'}</td>
                   <td className="px-3 py-2">

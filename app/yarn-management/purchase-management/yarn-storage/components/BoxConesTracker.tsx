@@ -52,7 +52,17 @@ const BoxConesTracker: React.FC = () => {
         includeInactive: true,
       });
       setConeData(data);
-      toast.success(`Cone ${String(data.cone.barcode)} loaded`);
+      const issueStatus = String(data.cone.issueStatus ?? "").toLowerCase();
+      const machineLabel = String(data.cone.machineLabel ?? "").trim();
+      if (issueStatus === "issued") {
+        if (machineLabel) {
+          toast.success(`Cone ${String(data.cone.barcode)} — issued on ${machineLabel}`);
+        } else {
+          toast.success(`Cone ${String(data.cone.barcode)} loaded (issued, machine unknown)`);
+        }
+      } else {
+        toast.success(`Cone ${String(data.cone.barcode)} loaded`);
+      }
       return true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Cone not found";

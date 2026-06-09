@@ -125,9 +125,34 @@ interface ConeTrackerDetailsProps {
  */
 export const ConeTrackerDetails: React.FC<ConeTrackerDetailsProps> = ({ data }) => {
   const cone = data.cone;
+  const issueStatus = String(cone.issueStatus ?? "").toLowerCase();
+  const isIssued = issueStatus === "issued";
+  const machineLabel = String(cone.machineLabel ?? "").trim();
+  const machineFloor = String(cone.machineFloor ?? "").trim();
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+      {isIssued ? (
+        <div
+          className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2"
+          role="status"
+          aria-label="Cone issued to production"
+        >
+          <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">
+            Issued to production
+          </p>
+          {machineLabel ? (
+            <p className="text-sm font-bold text-blue-950 mt-0.5">
+              Machine: {machineLabel}
+              {machineFloor ? (
+                <span className="font-normal text-blue-800"> · {machineFloor} floor</span>
+              ) : null}
+            </p>
+          ) : (
+            <p className="text-xs text-blue-800 mt-0.5">Machine not recorded on issue transaction</p>
+          )}
+        </div>
+      ) : null}
       <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
         <i className="ri-contrast-drop-line text-purple-600" aria-hidden />
         Cone {String(cone.barcode ?? "")}
@@ -155,6 +180,12 @@ export const ConeTrackerDetails: React.FC<ConeTrackerDetailsProps> = ({ data }) 
         <DetailRow label="Shade" value={String(cone.shadeCode ?? "")} />
         <DetailRow label="Storage" value={String(cone.coneStorageId ?? "")} />
         <DetailRow label="Issue status" value={String(cone.issueStatus ?? "")} />
+        {isIssued && machineLabel ? (
+          <DetailRow label="Issued machine" value={machineLabel} />
+        ) : null}
+        {isIssued && machineFloor ? (
+          <DetailRow label="Machine floor" value={machineFloor} />
+        ) : null}
         <DetailRow
           label="Production order"
           value={String(cone.productionOrderLabel ?? "—")}

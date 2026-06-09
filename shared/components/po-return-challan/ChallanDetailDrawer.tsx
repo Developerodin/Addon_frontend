@@ -29,6 +29,14 @@ const fmtDate = (value?: string | Date | null): string => {
 };
 
 /**
+ * Formats challan net/gross weight (kg) to four decimal places.
+ */
+const fmtKg = (value?: number | null): string => {
+  if (value == null || !Number.isFinite(value)) return '—';
+  return value.toFixed(4);
+};
+
+/**
  * Detail drawer for a single PO return challan snapshot.
  */
 const ChallanDetailDrawer: React.FC<ChallanDetailDrawerProps> = ({
@@ -171,12 +179,13 @@ const ChallanDetailDrawer: React.FC<ChallanDetailDrawerProps> = ({
             <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Supplier (Addon)</dt><dd>{supplier.name || '—'}</dd></div>
             <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Supplier GST</dt><dd>{supplier.gstNo || '—'}</dd></div>
             <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Consignee (Vendor)</dt><dd>{consignee.name || '—'}</dd></div>
+            <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Brand ID</dt><dd className="font-mono text-[10px] break-all">{consignee.supplierId || '—'}</dd></div>
             <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Vendor GST</dt><dd>{consignee.gstNo || '—'}</dd></div>
             <div className="col-span-2"><dt className="text-gray-500 font-bold uppercase text-[10px]">Vendor Address</dt><dd>{vendorAddress || '—'}</dd></div>
             <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Vendor Contact</dt><dd>{consignee.contactNumber || '—'}</dd></div>
             <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Cones</dt><dd>{current.totals?.coneCount ?? current.lines?.length ?? '—'}</dd></div>
-            <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Net (kg)</dt><dd>{current.totals?.totalNetWeight ?? '—'}</dd></div>
-            <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Gross (kg)</dt><dd>{current.totals?.totalGrossWeight ?? '—'}</dd></div>
+            <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Net (kg)</dt><dd className="tabular-nums">{fmtKg(current.totals?.totalNetWeight)}</dd></div>
+            <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Gross (kg)</dt><dd className="tabular-nums">{fmtKg(current.totals?.totalGrossWeight)}</dd></div>
             <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Intent</dt><dd>{current.cancellationIntent || '—'}</dd></div>
             <div className="col-span-2"><dt className="text-gray-500 font-bold uppercase text-[10px]">Remark</dt><dd>{current.remark || '—'}</dd></div>
             <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Prepared by</dt><dd>{current.createdBy?.username || current.createdBy?.email || '—'}</dd></div>
