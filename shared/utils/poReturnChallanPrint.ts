@@ -46,7 +46,32 @@ export interface ChallanSnapshotConsignee {
   stateCode?: string;
 }
 
-const ADDON_HOLDINGS = 'ADDON HOLDINGS';
+/** Canonical Addon legal name on return challans (supplier / sender). */
+export const ADDON_SUPPLIER_LEGAL_NAME = 'ADDON HOLDINGS PRIVATE LIMITED';
+
+const ADDON_HOLDINGS_SHORT = 'ADDON HOLDINGS';
+
+/**
+ * Maps legacy short Addon name to full legal name for display and print.
+ *
+ * @param {string | undefined} name
+ * @returns {string}
+ */
+export const displayAddonSupplierName = (name?: string): string => {
+  const trimmed = (name || '').trim();
+  if (!trimmed) return ADDON_SUPPLIER_LEGAL_NAME;
+  if (trimmed.toUpperCase() === ADDON_HOLDINGS_SHORT) return ADDON_SUPPLIER_LEGAL_NAME;
+  return trimmed;
+};
+
+/**
+ * @param {string | undefined} name
+ * @returns {boolean}
+ */
+const isAddonPartyName = (name?: string): boolean => {
+  const u = (name || '').trim().toUpperCase();
+  return u === ADDON_HOLDINGS_SHORT || u === ADDON_SUPPLIER_LEGAL_NAME;
+};
 
 /**
  * Builds a multi-line address string from party fields.
@@ -71,15 +96,13 @@ export const normalizeChallanParties = (
 ): { supplier: ChallanSnapshotSupplier; consignee: ChallanSnapshotConsignee } => {
   const supplier = challan.supplier || {};
   const consignee = challan.consignee || {};
-  const consigneeIsAddon =
-    (consignee.name || '').trim().toUpperCase() === ADDON_HOLDINGS;
-  const supplierIsNotAddon =
-    (supplier.name || '').trim().toUpperCase() !== ADDON_HOLDINGS;
+  const consigneeIsAddon = isAddonPartyName(consignee.name);
+  const supplierIsNotAddon = !isAddonPartyName(supplier.name);
 
   if (consigneeIsAddon && supplierIsNotAddon) {
     return {
       supplier: {
-        name: consignee.name,
+        name: displayAddonSupplierName(consignee.name),
         address: consignee.address,
         gstNo: consignee.gstNo,
         contactNumber: consignee.contactNumber,
@@ -101,7 +124,10 @@ export const normalizeChallanParties = (
     };
   }
 
-  return { supplier, consignee };
+  return {
+    supplier: { ...supplier, name: displayAddonSupplierName(supplier.name) },
+    consignee,
+  };
 };
 
 export interface ChallanSnapshotTransport {
