@@ -183,7 +183,8 @@ const ChallanDetailDrawer: React.FC<ChallanDetailDrawerProps> = ({
             <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Vendor GST</dt><dd>{consignee.gstNo || '—'}</dd></div>
             <div className="col-span-2"><dt className="text-gray-500 font-bold uppercase text-[10px]">Vendor Address</dt><dd>{vendorAddress || '—'}</dd></div>
             <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Vendor Contact</dt><dd>{consignee.contactNumber || '—'}</dd></div>
-            <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Cones</dt><dd>{current.totals?.coneCount ?? current.lines?.length ?? '—'}</dd></div>
+            <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Boxes</dt><dd>{current.totals?.boxCount ?? current.lines?.filter((l) => l.lineType === 'box').length ?? '—'}</dd></div>
+            <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Cones</dt><dd>{current.totals?.coneCount ?? current.lines?.filter((l) => l.lineType !== 'box').length ?? current.lines?.length ?? '—'}</dd></div>
             <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Net (kg)</dt><dd className="tabular-nums">{fmtKg(current.totals?.totalNetWeight)}</dd></div>
             <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Gross (kg)</dt><dd className="tabular-nums">{fmtKg(current.totals?.totalGrossWeight)}</dd></div>
             <div><dt className="text-gray-500 font-bold uppercase text-[10px]">Intent</dt><dd>{current.cancellationIntent || '—'}</dd></div>
@@ -199,7 +200,8 @@ const ChallanDetailDrawer: React.FC<ChallanDetailDrawerProps> = ({
               <thead>
                 <tr className="bg-gray-50 text-[10px] uppercase text-gray-600">
                   <th className="px-2 py-1.5 text-left">#</th>
-                  <th className="px-2 py-1.5 text-left">Barcode</th>
+                  <th className="px-2 py-1.5 text-left">Type</th>
+                  <th className="px-2 py-1.5 text-left">Barcode / Box</th>
                   <th className="px-2 py-1.5 text-left">Lot</th>
                   <th className="px-2 py-1.5 text-left">Yarn</th>
                   <th className="px-2 py-1.5 text-left">HSN</th>
@@ -210,7 +212,10 @@ const ChallanDetailDrawer: React.FC<ChallanDetailDrawerProps> = ({
                 {(current.lines || []).map((line, i) => (
                   <tr key={`${line.barcode}-${i}`} className="border-t border-gray-100">
                     <td className="px-2 py-1.5">{i + 1}</td>
-                    <td className="px-2 py-1.5 font-mono">{line.barcode}</td>
+                    <td className="px-2 py-1.5 uppercase text-[10px] font-bold text-gray-600">
+                      {line.lineType === 'box' ? 'Box' : 'Cone'}
+                    </td>
+                    <td className="px-2 py-1.5 font-mono">{line.barcode || line.boxId || '—'}</td>
                     <td className="px-2 py-1.5">{line.lotNumber || '—'}</td>
                     <td className="px-2 py-1.5">{line.yarnName || '—'}</td>
                     <td className="px-2 py-1.5">{line.hsnCode || '—'}</td>

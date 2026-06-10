@@ -74,6 +74,7 @@ const ChallanTable: React.FC<ChallanTableProps> = ({
                 <th className="text-left px-3 py-2 font-bold">Date</th>
                 <th className="text-left px-3 py-2 font-bold">PO No</th>
                 <th className="text-left px-3 py-2 font-bold">Vendor</th>
+                <th className="text-right px-3 py-2 font-bold">Boxes</th>
                 <th className="text-right px-3 py-2 font-bold">Cones</th>
                 <th className="text-right px-3 py-2 font-bold">Net (kg)</th>
                 <th className="text-left px-3 py-2 font-bold">Intent</th>
@@ -92,7 +93,17 @@ const ChallanTable: React.FC<ChallanTableProps> = ({
                   >
                     {row.consignee?.name ?? row.supplier?.name ?? '—'}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">{row.totals?.coneCount ?? row.lines?.length ?? '—'}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {row.totals?.boxCount ??
+                      row.lines?.filter((l) => l.lineType === 'box').length ??
+                      '—'}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {row.totals?.coneCount ??
+                      row.lines?.filter((l) => l.lineType !== 'box').length ??
+                      row.lines?.length ??
+                      '—'}
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums font-semibold text-blue-700">
                     {fmtKg(row.totals?.totalNetWeight)}
                   </td>

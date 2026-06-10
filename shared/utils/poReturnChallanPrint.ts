@@ -4,6 +4,7 @@
  */
 
 export interface ChallanSnapshotLine {
+  lineType?: 'cone' | 'box';
   barcode?: string;
   lotNumber?: string;
   yarnCatalogId?: string;
@@ -111,6 +112,7 @@ export interface ChallanSnapshotTransport {
 }
 
 export interface ChallanSnapshotTotals {
+  boxCount?: number;
   coneCount?: number;
   totalNetWeight?: number;
   totalGrossWeight?: number;
@@ -175,7 +177,7 @@ const buildLinesHtml = (lines: ChallanSnapshotLine[]): string =>
       (line, i) => `
       <tr>
         <td class="text-center">${i + 1}</td>
-        <td>${line.barcode || ''}</td>
+        <td>${line.lineType === 'box' ? `BOX ${line.barcode || line.boxId || ''}` : line.barcode || ''}</td>
         <td>${line.lotNumber || ''}</td>
         <td>${line.yarnName || ''}</td>
         <td class="text-center">${line.hsnCode || '—'}</td>
@@ -215,7 +217,12 @@ export const renderChallanHtml = async (challan: ChallanSnapshot): Promise<strin
   html = setById(html, 'consignee-gst', consignee.gstNo || '—');
   html = setById(html, 'consignee-mob', consignee.contactNumber || '—');
   html = setById(html, 'cancellation-intent', challan.cancellationIntent || 'partial');
-  html = setById(html, 'total-cones', String(totals.coneCount ?? challan.lines?.length ?? 0));
+  html = setById(html, 'total-cones', String(totals.coneCount ?? challan.lines?.filter((l) => l.lineType !== 'box').length ?? 0));
+  html = setById(
+    html,
+    'total-boxes',
+    String(totals.boxCount ?? challan.lines?.filter((l) => l.lineType === 'box').length ?? 0)
+  );
   html = setById(html, 'total-net', formatKg(totals.totalNetWeight));
   html = setById(html, 'total-gross', formatKg(totals.totalGrossWeight));
   html = setById(html, 'remark', challan.remark || '—');

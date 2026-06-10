@@ -657,7 +657,92 @@ class YarnPurchaseOrderService {
     const suffix = q.toString() ? `?${q}` : '';
     return this.makeRequest<Record<string, unknown>[]>(`/vendor-return/history${suffix}`);
   }
+
+  /**
+   * POST QC lot return — hybrid auto-finalize + ST pending session.
+   */
+  async finalizeQcLotReturn(body: {
+    poNumber: string;
+    lotNumber: string;
+    remark: string;
+  }): Promise<QcVendorReturnResult> {
+    return this.makeRequest<QcVendorReturnResult>('/vendor-return/qc/lot', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  /**
+   * POST QC full PO return — hybrid auto-finalize + ST pending session.
+   */
+  async finalizeQcPoReturn(body: {
+    poNumber: string;
+    remark: string;
+  }): Promise<QcVendorReturnResult> {
+    return this.makeRequest<QcVendorReturnResult>('/vendor-return/qc/po', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  /**
+   * GET QC pending ST cones for a PO (PO Return banner / deep link).
+   */
+  async getQcPendingVendorReturns(poNumber: string): Promise<QcPendingVendorReturnInfo> {
+    const q = new URLSearchParams({ poNumber: poNumber.trim() });
+    return this.makeRequest<QcPendingVendorReturnInfo>(`/vendor-return/qc/pending?${q}`);
+  }
+
+  /**
+   * GET pending vendor-return session with staged cone previews.
+   */
+  async getVendorReturnSession(sessionId: string): Promise<{
+    session: Record<string, unknown>;
+    pendingRows: Array<{
+      barcode: string;
+      yarnName: string;
+      lotNumber: string;
+      boxId: string;
+      coneWeight: number;
+      tearWeight: number;
+    }>;
+  }> {
+    return this.makeRequest(`/vendor-return/sessions/${encodeURIComponent(sessionId)}`);
+  }
 }
+
+/** API response from QC hybrid vendor return endpoints. */
+export type QcVendorReturnResult = {
+  autoReturnedBoxCount: number;
+  autoReturnedCount: number;
+  excludedConeCount: number;
+  pendingStCount: number;
+  pendingStBarcodes: string[];
+  sessionId: string | null;
+  challanId: string | null;
+  challanNumber: string | null;
+  challan?: Record<string, unknown> | null;
+  boxChallan?: Record<string, unknown> | null;
+  coneChallan?: Record<string, unknown> | null;
+  boxVendorReturn?: Record<string, unknown> | null;
+  coneVendorReturn?: Record<string, unknown> | null;
+  vendorReturn?: Record<string, unknown> | null;
+  purchaseOrder?: Record<string, unknown> | null;
+};
+
+/** QC lots with ST cones still pending PO Return finalize. */
+export type QcPendingVendorReturnInfo = {
+  poNumber: string;
+  lots: Array<{
+    lotNumber: string;
+    pendingStCount: number;
+    pendingStBarcodes: string[];
+    sessionId: string | null;
+  }>;
+  totalPendingStCount: number;
+  sessionId: string | null;
+  pendingStBarcodes: string[];
+};
 
 const yarnPurchaseOrderService = new YarnPurchaseOrderService();
 

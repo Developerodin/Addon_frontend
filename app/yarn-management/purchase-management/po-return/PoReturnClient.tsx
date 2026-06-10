@@ -1,9 +1,12 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { toast } from "react-hot-toast";
-import yarnPurchaseOrderService from "@/shared/services/yarnPurchaseOrderService";
+import yarnPurchaseOrderService, {
+  type QcPendingVendorReturnInfo,
+} from "@/shared/services/yarnPurchaseOrderService";
 import poReturnChallanService, { PoReturnChallan } from "@/shared/services/poReturnChallanService";
 import { printChallanDocument } from "@/shared/utils/poReturnChallanPrint";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
@@ -23,6 +26,11 @@ import {
  * PO Return scan workflow: session, barcode staging, finalize, history.
  */
 export function PoReturnClient() {
+  const searchParams = useSearchParams();
+  const urlPoNumber = searchParams.get("poNumber")?.trim() || "";
+  const urlLot = searchParams.get("lot")?.trim() || "";
+  const urlSessionId = searchParams.get("sessionId")?.trim() || "";
+
   const { hasSubPermission, isLoading } = useNavigation();
   const canAccess = hasSubPermission("/yarn-management/purchase-management", "PO Return");
   const canAccessChallanHistory = hasSubPermission(
@@ -47,6 +55,24 @@ export function PoReturnClient() {
   const [activeTab, setActiveTab] = useState<"return" | "history">("return");
   const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [activeChallan, setActiveChallan] = useState<PoReturnChallan | null>(null);
+  const [qcPending, setQcPending] = useState<QcPendingVendorReturnInfo | null>(null);
+  const urlPrefillDone = useRef(false);
+  const sessionResumeDone = useRef(false);
+
+  const fetchQcPending = useCallback(async (poNumber?: string) => {
+    const po = poNumber?.trim();
+    if (!po) {
+      setQcPending(null);
+      return;
+    }
+    try {
+      const info = await yarnPurchaseOrderService.getQcPendingVendorReturns(po);
+      setQcPending(info);
+    } catch (e) {
+      console.error(e);
+      setQcPending(null);
+    }
+  }, []);
 
   const fetchPos = useCallback(async () => {
     setPoLoading(true);
@@ -97,6 +123,39 @@ export function PoReturnClient() {
     const po = selectedPo?.poNumber?.trim() || undefined;
     void fetchChallanPreview(po);
   }, [canAccess, isLoading, activeTab, fetchChallanPreview, selectedPo?.poNumber]);
+
+  useEffect(() => {
+    if (!canAccess || isLoading || poLoading) return;
+    void fetchQcPending(selectedPo?.poNumber);
+  }, [canAccess, isLoading, poLoading, selectedPo?.poNumber, fetchQcPending]);
+
+  useEffect(() => {
+    if (!canAccess || poLoading || urlPrefillDone.current || !urlPoNumber || poOptions.length === 0) return;
+    const match = poOptions.find((p) => p.poNumber === urlPoNumber);
+    if (match) {
+      setSelectedPo(match);
+      if (urlLot) setPoSearch(urlLot);
+    }
+    urlPrefillDone.current = true;
+  }, [canAccess, poLoading, urlPoNumber, urlLot, poOptions]);
+
+  useEffect(() => {
+    if (!canAccess || sessionResumeDone.current || !urlSessionId) return;
+    sessionResumeDone.current = true;
+    void (async () => {
+      try {
+        const res = await yarnPurchaseOrderService.getVendorReturnSession(urlSessionId);
+        setSessionId(urlSessionId);
+        setPendingRows(res.pendingRows as PendingRow[]);
+        setWorkflowError(null);
+        toast.success(`Resumed QC return session (${res.pendingRows.length} cone(s) staged)`);
+      } catch (e) {
+        const msg = getErrorMessage(e, "Could not resume session");
+        setWorkflowError(msg);
+        toast.error(msg);
+      }
+    })();
+  }, [canAccess, urlSessionId]);
 
   const filteredPoOptions = useMemo(() => {
     const q = poSearch.trim().toLowerCase();
@@ -221,6 +280,7 @@ export function PoReturnClient() {
       resetSessionUi();
       void fetchChallanPreview(selectedPo?.poNumber?.trim());
       void fetchPos();
+      void fetchQcPending(selectedPo?.poNumber);
     } catch (e) {
       const msg = getErrorMessage(e, "Finalize failed");
       setWorkflowError(msg);
@@ -341,6 +401,8 @@ export function PoReturnClient() {
           pendingRows={pendingRows}
           onRemoveRow={handleRemoveRow}
           onFinalize={handleFinalize}
+          qcPending={qcPending}
+          deepLinkLot={urlLot || null}
         />
       )}
 

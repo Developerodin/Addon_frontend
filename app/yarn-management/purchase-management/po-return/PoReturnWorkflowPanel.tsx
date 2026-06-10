@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import React from "react";
+import type { QcPendingVendorReturnInfo } from "@/shared/services/yarnPurchaseOrderService";
 import type { PendingRow, PoOption } from "./poReturnHelpers";
 import { sumPendingNetKg } from "./poReturnHelpers";
 
@@ -27,6 +28,8 @@ type PoReturnWorkflowPanelProps = {
   pendingRows: PendingRow[];
   onRemoveRow: (barcode: string) => void;
   onFinalize: () => void;
+  qcPending?: QcPendingVendorReturnInfo | null;
+  deepLinkLot?: string | null;
 };
 
 /**
@@ -53,8 +56,16 @@ export function PoReturnWorkflowPanel({
   pendingRows,
   onRemoveRow,
   onFinalize,
+  qcPending,
+  deepLinkLot,
 }: PoReturnWorkflowPanelProps) {
   const totalNetKg = sumPendingNetKg(pendingRows);
+  const filteredLotPending =
+    deepLinkLot?.trim() && qcPending?.lots?.length
+      ? qcPending.lots.find((l) => l.lotNumber === deepLinkLot.trim())
+      : null;
+  const pendingStDisplay =
+    filteredLotPending?.pendingStCount ?? qcPending?.totalPendingStCount ?? 0;
 
   return (
     <div className="space-y-4">
@@ -86,6 +97,34 @@ export function PoReturnWorkflowPanel({
           </p>
         </div>
         <div className="box-body px-4 py-4 space-y-4">
+          {qcPending && pendingStDisplay > 0 && (
+            <div
+              role="status"
+              className="rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-2 text-[11px] text-amber-950"
+            >
+              <p className="font-bold">QC return — ST cones pending</p>
+              <p className="mt-0.5">
+                {deepLinkLot?.trim() ? (
+                  <>
+                    Lot <span className="font-mono font-semibold">{deepLinkLot}</span> has{" "}
+                    <span className="font-semibold">{pendingStDisplay}</span> cone(s) in short-term storage
+                    awaiting finalize.
+                  </>
+                ) : (
+                  <>
+                    <span className="font-semibold">{pendingStDisplay}</span> cone(s) from QC return still need
+                    vendor-return finalize on this PO.
+                  </>
+                )}
+                {sessionId ? (
+                  " Review staged cones below and click Finalize."
+                ) : (
+                  " Resume the QC session or start scanning ST cones."
+                )}
+              </p>
+            </div>
+          )}
+
           <div className="space-y-1 max-w-xl">
             <label htmlFor="po-return-search" className="text-[11px] font-semibold text-gray-700">
               Find PO
@@ -113,6 +152,7 @@ export function PoReturnWorkflowPanel({
               {filteredPoOptions.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.poNumber} — {p.supplierLabel} ({p.currentStatus})
+                  {p.hasQcReturnedLot ? " · QC return" : ""}
                 </option>
               ))}
             </select>

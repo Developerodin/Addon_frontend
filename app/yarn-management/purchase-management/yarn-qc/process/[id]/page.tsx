@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
@@ -9,6 +9,7 @@ import { toast } from "react-hot-toast";
 import yarnPurchaseOrderService, { PurchaseOrderStatus } from "@/shared/services/yarnPurchaseOrderService";
 import { QcVendorReturnSection } from "./QcVendorReturnSection";
 import { QcLotVendorReturn } from "./QcLotVendorReturn";
+import { QcReturnPendingAlerts } from "./QcReturnPendingAlerts";
 import { YarnQcLotHistorySection } from "./YarnQcLotHistorySection";
 import yarnBoxService, { YarnBox } from "@/shared/services/yarnBoxService";
 import { FileUploadService } from "@/shared/services/fileUploadService";
@@ -191,7 +192,20 @@ const ProcessQCOrderPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadedMedia, setUploadedMedia] = useState<UploadedMediaItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
   // const [isApprovingAll, setIsApprovingAll] = useState(false);
+
+  /**
+   * Focuses the barcode scan input and scrolls it into view for the next scan.
+   */
+  const focusBarcodeScanInput = useCallback(() => {
+    requestAnimationFrame(() => {
+      const input = barcodeInputRef.current;
+      if (!input) return;
+      input.scrollIntoView({ behavior: "smooth", block: "center" });
+      input.focus();
+    });
+  }, []);
 
   // Check permission - allow if user has Purchase Management access
   const hasPurchaseManagement = hasSubPermission('/yarn-management', 'Purchase Management');
@@ -578,6 +592,7 @@ const ProcessQCOrderPage = () => {
           setQcNotes('');
           setQcBy('');
           setUploadedMedia([]);
+          setTimeout(focusBarcodeScanInput, 100);
         }
       } catch (refetchError) {
         console.error('Failed to refetch order:', refetchError);
@@ -589,6 +604,7 @@ const ProcessQCOrderPage = () => {
         setQcBy('');
         setUploadedMedia([]);
         toast.success('QC updated. Please continue scanning remaining boxes.');
+        setTimeout(focusBarcodeScanInput, 100);
       }
       
       setIsSubmitting(false);
@@ -762,6 +778,16 @@ const ProcessQCOrderPage = () => {
               </div>
             )}
           </div>
+          {!isHistoryView && user?.id && user?.email && order && (
+            <QcReturnPendingAlerts
+              poNumber={order.purchaseOrderNumber}
+              returnedLotNumbers={
+                order.receivedLotDetails
+                  ?.filter((l) => l.status === "lot_returned_to_vendor")
+                  .map((l) => l.lotNumber) ?? []
+              }
+            />
+          )}
           {!isHistoryView && user?.id && user?.email && (
             <QcVendorReturnSection
               orderId={orderId}
@@ -819,6 +845,23 @@ const ProcessQCOrderPage = () => {
                       />
                     )}
                   </div>
+
+                  {lot.status === "lot_returned_to_vendor" && (
+                    <div
+                      role="status"
+                      className="mb-3 rounded-md border border-orange-200 bg-orange-50/90 px-2.5 py-1.5 text-[10px] text-orange-950"
+                    >
+                      Returned to vendor. Pre-storage cones may already have a challan — finish any{" "}
+                      <strong>short-term storage</strong> cones on{" "}
+                      <Link
+                        href={`/yarn-management/purchase-management/po-return?poNumber=${encodeURIComponent(order.purchaseOrderNumber)}&lot=${encodeURIComponent(lot.lotNumber)}`}
+                        className="font-bold underline hover:text-orange-900"
+                      >
+                        PO Return
+                      </Link>
+                      .
+                    </div>
+                  )}
                   
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
                     <div>
@@ -892,6 +935,7 @@ const ProcessQCOrderPage = () => {
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="flex-1">
               <input
+                ref={barcodeInputRef}
                 type="text"
                 className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
                 placeholder="Scan or enter box barcode"
@@ -900,6 +944,7 @@ const ProcessQCOrderPage = () => {
                 onKeyDown={handleBarcodeScan}
                 disabled={isLoadingBox}
                 autoFocus
+                aria-label="Scan or enter box barcode"
               />
             </div>
             <button

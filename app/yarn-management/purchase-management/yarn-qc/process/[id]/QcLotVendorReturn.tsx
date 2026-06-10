@@ -2,7 +2,8 @@
 
 import React, { useState } from "react";
 import { toast } from "react-hot-toast";
-import yarnPurchaseOrderService from "@/shared/services/yarnPurchaseOrderService";
+import yarnPurchaseOrderService, { type QcVendorReturnResult } from "@/shared/services/yarnPurchaseOrderService";
+import { QcVendorReturnResultLinks } from "./QcVendorReturnResultLinks";
 
 type QcLotVendorReturnProps = {
   poNumber: string;
@@ -14,12 +15,13 @@ type QcLotVendorReturnProps = {
 };
 
 /**
- * Per-lot button + dialog: sets lot status to `lot_returned_to_vendor` and annotates box QC (rejected) with remark.
+ * Per-lot button + dialog: hybrid QC return (pre-ST auto-finalize + ST pending scan).
  */
 export function QcLotVendorReturn({ poNumber, lotNumber, lotStatus, userEmail, userId, onDone }: QcLotVendorReturnProps) {
   const [open, setOpen] = useState(false);
   const [remark, setRemark] = useState("");
   const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<QcVendorReturnResult | null>(null);
 
   const eligible = lotStatus === "lot_qc_pending" || lotStatus === "lot_pending";
   if (!eligible) return null;
@@ -36,23 +38,40 @@ export function QcLotVendorReturn({ poNumber, lotNumber, lotStatus, userEmail, u
     }
     setBusy(true);
     try {
-      await yarnPurchaseOrderService.updateLotStatusQCApprove({
+      const res = await yarnPurchaseOrderService.finalizeQcLotReturn({
         poNumber,
         lotNumber,
-        lotStatus: "lot_returned_to_vendor",
-        updated_by: { username: userEmail, user_id: userId },
-        notes: `Lot ${lotNumber} return to vendor (QC) — ${r} — by ${userEmail}`,
-        remarks: `Return to vendor: ${r}`,
+        remark: r,
       });
-      toast.success(`Lot ${lotNumber} marked return to vendor`);
-      setOpen(false);
-      setRemark("");
+      setResult(res);
+      const parts: string[] = [];
+      if (res.autoReturnedBoxCount > 0) {
+        const bn = (res.boxChallan as { challanNumber?: string } | null)?.challanNumber ?? res.challanNumber;
+        parts.push(`${res.autoReturnedBoxCount} box(es)${bn ? ` · ${bn}` : ''}`);
+      }
+      if (res.autoReturnedCount > 0) {
+        const cn = (res.coneChallan as { challanNumber?: string } | null)?.challanNumber;
+        parts.push(`${res.autoReturnedCount} cone(s)${cn ? ` · ${cn}` : ''}`);
+      }
+      if (res.pendingStCount > 0) parts.push(`${res.pendingStCount} ST cone(s) need PO Return`);
+      if (res.excludedConeCount > 0) parts.push(`${res.excludedConeCount} skipped`);
+      if (parts.length > 0) {
+        toast.success(`Lot ${lotNumber} — ${parts.join(' · ')}`);
+      } else {
+        toast.success(`Lot ${lotNumber} marked return to vendor`);
+      }
       await onDone();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to update lot");
+      toast.error(e instanceof Error ? e.message : "Failed to return lot");
     } finally {
       setBusy(false);
     }
+  };
+
+  const closeModal = () => {
+    setOpen(false);
+    setRemark("");
+    setResult(null);
   };
 
   return (
@@ -61,6 +80,7 @@ export function QcLotVendorReturn({ poNumber, lotNumber, lotStatus, userEmail, u
         type="button"
         onClick={() => {
           setRemark("");
+          setResult(null);
           setOpen(true);
         }}
         disabled={busy}
@@ -79,40 +99,51 @@ export function QcLotVendorReturn({ poNumber, lotNumber, lotStatus, userEmail, u
         >
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-4 border border-gray-200">
             <h2 id={`qc-lot-ret-${lotNumber}`} className="text-sm font-bold text-gray-900 mb-2">
-              Return lot {lotNumber} to vendor?
+              {result ? `Lot ${lotNumber} return processed` : `Return lot ${lotNumber} to vendor?`}
             </h2>
-            <p className="text-[11px] text-gray-600 mb-2">
-              Lot stays on the PO with status <strong>returned to vendor</strong>. Related boxes are marked QC rejected
-              with your remark so this stock is not treated as accepted.
-            </p>
-            <label htmlFor={`qc-lot-remark-${lotNumber}`} className="text-[11px] font-semibold text-gray-700 block mb-1">
-              Remark <span className="text-red-600">*</span>
-            </label>
-            <textarea
-              id={`qc-lot-remark-${lotNumber}`}
-              rows={3}
-              value={remark}
-              onChange={(e) => setRemark(e.target.value)}
-              className="w-full text-xs border border-gray-200 rounded px-2 py-1.5 mb-3"
-              placeholder="Reason for lot return…"
-            />
+            {!result ? (
+              <>
+                <p className="text-[11px] text-gray-600 mb-2">
+                  Pre-storage cones are returned immediately and a challan is issued. Cones already in short-term
+                  storage must be finalized on{" "}
+                  <strong>PO Return</strong>. Lot status becomes <strong>returned to vendor</strong>.
+                </p>
+                <label htmlFor={`qc-lot-remark-${lotNumber}`} className="text-[11px] font-semibold text-gray-700 block mb-1">
+                  Remark <span className="text-red-600">*</span>
+                </label>
+                <textarea
+                  id={`qc-lot-remark-${lotNumber}`}
+                  rows={3}
+                  value={remark}
+                  onChange={(e) => setRemark(e.target.value)}
+                  className="w-full text-xs border border-gray-200 rounded px-2 py-1.5 mb-3"
+                  placeholder="Reason for lot return…"
+                />
+              </>
+            ) : (
+              <div className="mb-3">
+                <QcVendorReturnResultLinks poNumber={poNumber} lotNumber={lotNumber} result={result} />
+              </div>
+            )}
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 className="px-3 py-1.5 text-[11px] font-semibold text-gray-700 border border-gray-200 rounded"
-                onClick={() => setOpen(false)}
+                onClick={closeModal}
                 disabled={busy}
               >
-                Cancel
+                {result ? "Close" : "Cancel"}
               </button>
-              <button
-                type="button"
-                className="px-3 py-1.5 text-[11px] font-bold text-white bg-amber-700 rounded hover:bg-amber-800 disabled:opacity-50"
-                onClick={() => void handleConfirm()}
-                disabled={busy}
-              >
-                {busy ? "Saving…" : "Confirm"}
-              </button>
+              {!result && (
+                <button
+                  type="button"
+                  className="px-3 py-1.5 text-[11px] font-bold text-white bg-amber-700 rounded hover:bg-amber-800 disabled:opacity-50"
+                  onClick={() => void handleConfirm()}
+                  disabled={busy}
+                >
+                  {busy ? "Saving…" : "Confirm"}
+                </button>
+              )}
             </div>
           </div>
         </div>

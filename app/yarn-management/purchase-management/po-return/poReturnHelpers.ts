@@ -14,6 +14,8 @@ export type PoOption = {
   supplierLabel: string;
   currentStatus: string;
   hasReceivedLots: boolean;
+  /** At least one lot marked `lot_returned_to_vendor` from QC. */
+  hasQcReturnedLot: boolean;
 };
 
 export type PendingRow = {
@@ -42,12 +44,16 @@ export function mapToPoOptions(raw: unknown[]): PoOption[] {
         String(
           o.supplierName ?? (o.supplier as { brandName?: string } | undefined)?.brandName ?? ""
         ) || "—";
+      const hasQcReturnedLot =
+        Array.isArray(lots) &&
+        lots.some((lot) => String((lot as { status?: string }).status ?? "") === "lot_returned_to_vendor");
       return {
         id,
         poNumber,
         supplierLabel: supplier,
         currentStatus: String(o.currentStatus ?? ""),
         hasReceivedLots: Array.isArray(lots) && lots.length > 0,
+        hasQcReturnedLot,
       };
     })
     .filter((p) => p.id && p.poNumber && p.hasReceivedLots);
