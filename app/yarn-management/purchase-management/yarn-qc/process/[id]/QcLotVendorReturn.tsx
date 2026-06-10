@@ -14,8 +14,16 @@ type QcLotVendorReturnProps = {
   onDone: () => Promise<void>;
 };
 
+/** Lot statuses eligible for per-lot vendor return from QC. */
+const QC_LOT_RETURN_ELIGIBLE_STATUSES = new Set([
+  "lot_pending",
+  "lot_qc_pending",
+  "lot_rejected",
+]);
+
 /**
  * Per-lot button + dialog: hybrid QC return (pre-ST auto-finalize + ST pending scan).
+ * Shown for pending and rejected lots; hidden for accepted or already-returned lots.
  */
 export function QcLotVendorReturn({ poNumber, lotNumber, lotStatus, userEmail, userId, onDone }: QcLotVendorReturnProps) {
   const [open, setOpen] = useState(false);
@@ -23,7 +31,7 @@ export function QcLotVendorReturn({ poNumber, lotNumber, lotStatus, userEmail, u
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<QcVendorReturnResult | null>(null);
 
-  const eligible = lotStatus === "lot_qc_pending" || lotStatus === "lot_pending";
+  const eligible = QC_LOT_RETURN_ELIGIBLE_STATUSES.has(lotStatus);
   if (!eligible) return null;
 
   const handleConfirm = async () => {
@@ -103,6 +111,12 @@ export function QcLotVendorReturn({ poNumber, lotNumber, lotStatus, userEmail, u
             </h2>
             {!result ? (
               <>
+                {lotStatus === "lot_rejected" && (
+                  <p className="text-[11px] text-red-800 bg-red-50 border border-red-200 rounded px-2 py-1.5 mb-2">
+                    This lot was QC rejected. Confirming will process vendor return and issue challan(s) where
+                    applicable.
+                  </p>
+                )}
                 <p className="text-[11px] text-gray-600 mb-2">
                   Pre-storage cones are returned immediately and a challan is issued. Cones already in short-term
                   storage must be finalized on{" "}
