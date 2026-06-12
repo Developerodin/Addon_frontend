@@ -344,6 +344,7 @@ interface ReturnTransaction {
   transactionTotalWeight: number;
   transactionTearWeight: number;
   transactionConeCount: number;
+  conesIdsArray?: Array<string | { _id: string; barcode?: string; boxId?: string; yarnName?: string }>;
   createdAt: string;
   updatedAt: string;
   yarn?: {
@@ -610,6 +611,19 @@ function txnConeRefStrings(tx: any): string[] {
     }
   }
   return Array.from(out).filter(Boolean);
+}
+
+/**
+ * Comma-separated cone barcodes for return history table / display.
+ */
+function formatHistoryConeBarcodes(tx: ReturnTransaction): string {
+  const cones = tx.conesIdsArray;
+  if (!cones?.length) return "—";
+  const parts = cones.map((c) => {
+    if (typeof c === "string") return c;
+    return c?.barcode || c?._id || "—";
+  });
+  return parts.filter((p) => p !== "—").join(", ") || "—";
 }
 
 /** Every cone identity returned for an order (flattened yarn_returned tx list). */
@@ -881,6 +895,9 @@ function normalizeReturnTransactionForHistory(raw: Record<string, unknown>): Ret
     transactionTotalWeight: Number.isFinite(total) ? total : 0,
     transactionTearWeight: Number.isFinite(tear) ? tear : 0,
     transactionConeCount: coneCt,
+    conesIdsArray: Array.isArray(raw.conesIdsArray)
+      ? (raw.conesIdsArray as ReturnTransaction["conesIdsArray"])
+      : undefined,
     createdAt,
     updatedAt,
     yarn,
@@ -4713,7 +4730,7 @@ const YarnReturnPage = () => {
             onClick={() => setShowHistoryDrawer(false)}
             aria-hidden="true"
           />
-          <div className="fixed top-0 right-0 h-full w-full max-w-2xl bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col">
+          <div className="fixed top-0 right-0 h-full w-full max-w-[54.6rem] bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out overflow-hidden flex flex-col">
             <div className="flex-shrink-0 p-[10px] border-b border-gray-200 flex justify-between items-center">
               <h3 className="text-base font-bold text-gray-800">Return History &amp; Tracking</h3>
               <button
@@ -4788,7 +4805,7 @@ const YarnReturnPage = () => {
                         </>
                       )}
                     </p>
-                    <table className="w-full border-collapse border border-gray-200">
+                    <table className="w-full min-w-[920px] border-collapse border border-gray-200">
                       <thead>
                         <tr className="bg-gray-50/30">
                           <th className="pl-[10px] pr-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Production Order</th>
@@ -4798,6 +4815,7 @@ const YarnReturnPage = () => {
                           <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Total (kg)</th>
                           <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Tear (kg)</th>
                           <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Cones</th>
+                          <th className="px-1.5 py-2.5 text-left text-[11px] font-mono font-bold text-[#495057] uppercase tracking-wider border border-gray-200 min-w-[140px]">Cone Barcode</th>
                           <th className="px-1.5 py-2.5 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Created At</th>
                         </tr>
                       </thead>
@@ -4811,6 +4829,7 @@ const YarnReturnPage = () => {
                             <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionTotalWeight?.toFixed(2) || "0.00"}</td>
                             <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionTearWeight?.toFixed(2) || "0.00"}</td>
                             <td className="px-1.5 py-2 text-[12px] text-gray-900 border border-gray-200">{transaction.transactionConeCount || 1}</td>
+                            <td className="px-1.5 py-2 font-mono text-[11px] text-gray-800 break-all border border-gray-200 align-top">{formatHistoryConeBarcodes(transaction)}</td>
                             <td className="px-1.5 py-2 text-right pr-[10px] text-[12px] text-gray-600 border border-gray-200">{new Date(transaction.createdAt).toLocaleString()}</td>
                           </tr>
                         ))}

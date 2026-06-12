@@ -8,9 +8,16 @@ import { productionService, ProductionOrder, FloorOrderFilters, Article } from "
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import NumericInput from "@/shared/utils/numericInput";
 import { formatProductionQty, getFirstHalfStepError, HALF_STEP_QTY_ERROR } from "@/shared/utils/halfStepQuantity";
-import RepairTransferModal from "@/shared/components/production/RepairTransferModal";
-import { getPreviousFloor, getArticleMongoId, resolveNextFloorFromProcesses } from "@/shared/utils/productionUtils";
+import {
+  getAvailableRemaining,
+  getCumulativeQty,
+  getMaxM1ForSave,
+  getRemainingAfterSave,
+} from "@/shared/utils/qcFloorQuantities";
+import ConfirmQualitySubmitModal, { type QualityConfirmLine } from "@/shared/components/production/ConfirmQualitySubmitModal";
+import { getArticleMongoId, resolveNextFloorFromProcesses } from "@/shared/utils/productionUtils";
 import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuantityDisplay";
+import QcM2MergeHistoryPanel, { MERGE_CASCADE_ACTION } from "@/shared/components/production/QcM2MergeHistoryPanel";
 import ArticleViewTab from "./components/ArticleViewTab";
 import MyTeamTab from "./components/MyTeamTab";
 import UpcomingTab from "../components/UpcomingTab";
@@ -63,6 +70,7 @@ interface FloorQuantities {
 const FinalCheckingFloorSupervisorPage = () => {
   const user = useSelector((state: any) => state.auth?.user);
   const [floorCatalog, setFloorCatalog] = useState<ProductionOrder[]>([]);
+  const [updateDrawerLoading, setUpdateDrawerLoading] = useState(false);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -88,15 +96,11 @@ const FinalCheckingFloorSupervisorPage = () => {
     repairRemarks: string,
     transferItems: Array<{ transferred: number; styleCode?: string; brand?: string }>;
   }}>({});
-  const [shiftInputs, setShiftInputs] = useState<{[key: string]: {
-    m2ToM1: number,
-    m2ToM3: number,
-    m2ToM4: number,
-    m3ToM2: number,
-    m4ToM3: number
-  }}>({});
-  /** Additional quantity to add to M2/M3/M4 (empty inputs). API receives previous + this. */
+  /** Additional quantity to add to M2/M3/M4 (empty inputs). API receives additive deltas. */
   const [transferM2M3M4, setTransferM2M3M4] = useState<{[key: string]: { m2: number; m3: number; m4: number }}>({});
+  const [showQualityConfirm, setShowQualityConfirm] = useState(false);
+  const [qualityConfirmLines, setQualityConfirmLines] = useState<QualityConfirmLine[]>([]);
+  const [pendingQualitySubmit, setPendingQualitySubmit] = useState<(() => void) | null>(null);
   const [showLogs, setShowLogs] = useState(false);
   const [showLogsSection, setShowLogsSection] = useState(false);
   const [selectedLogArticleId, setSelectedLogArticleId] = useState<string>('');
@@ -121,13 +125,6 @@ const FinalCheckingFloorSupervisorPage = () => {
   const [confirmAssignModal, setConfirmAssignModal] = useState<{ teamMemberName: string; teamMemberId: string; articleId: string } | null>(null);
   const [assigningInProgress, setAssigningInProgress] = useState(false);
   const [removingArticleMemberId, setRemovingArticleMemberId] = useState<string | null>(null);
-  const [showRepairModal, setShowRepairModal] = useState(false);
-  const [selectedRepairArticle, setSelectedRepairArticle] = useState<{
-    articleId: string;
-    articleNumber: string;
-    orderId: string;
-    linkingType: 'Auto Linking' | 'Rosso Linking' | 'Hand Linking';
-  } | null>(null);
   // Scan bag/container before submit (Update Order click opens this modal)
   const [showUpdateContainerModal, setShowUpdateContainerModal] = useState(false);
   const [updateContainerBarcode, setUpdateContainerBarcode] = useState("");
@@ -142,7 +139,7 @@ const FinalCheckingFloorSupervisorPage = () => {
   const [showAllArticles, setShowAllArticles] = useState(false);
 
   /** Loads final checking floor orders for both tabs; filter + paginate client-side. */
-  const loadFloorOrdersCatalog = useCallback(async () => {
+  const loadFloorOrdersCatalog = useCallback(async (): Promise<ProductionOrder[] | null> => {
     setCatalogLoading(true);
     try {
       const apiFilters: FloorOrderFilters = {
@@ -157,14 +154,16 @@ const FinalCheckingFloorSupervisorPage = () => {
 
       if (response.success) {
         setFloorCatalog(response.data.results);
-      } else {
-        console.error("Failed to load final checking orders:", response.error);
-        toast.error("Failed to load final checking orders");
+        return response.data.results;
       }
+      console.error("Failed to load final checking orders:", response.error);
+      toast.error("Failed to load final checking orders");
+      return null;
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : "Failed to load final checking orders";
       console.error("Error loading final checking orders:", error);
       toast.error(msg);
+      return null;
     } finally {
       setCatalogLoading(false);
     }
@@ -264,12 +263,109 @@ const FinalCheckingFloorSupervisorPage = () => {
     }).filter((order) => order.articles.length > 0);
   };
 
-  /** Max M1 user can transfer = remaining (from backend). */
-  const getActualRemainingForArticle = (article: Article): number => {
-    const fc = article.floorQuantities?.finalChecking;
-    const received = fc?.received || 0;
-    const transferred = fc?.transferred || 0;
-    return Math.max(0, fc?.remaining ?? (received - transferred));
+  /** Build update drawer state from order articles (cumulative totals + zero deltas). */
+  const buildUpdateStateFromOrder = (order: ProductionOrder) => {
+    const initialData: {[key: string]: {
+      remarks: string,
+      m1Quantity: number,
+      m2Quantity: number,
+      m3Quantity: number,
+      m4Quantity: number,
+      repairStatus: 'Not Required' | 'In Review' | 'Repaired' | 'Rejected',
+      repairRemarks: string,
+      transferItems: Array<{ transferred: number; styleCode?: string; brand?: string }>;
+    }} = {};
+    const transferInit: {[key: string]: { m2: number; m3: number; m4: number }} = {};
+    order.articles.forEach((article) => {
+      const articleId = article.id || article._id;
+      if (!articleId) return;
+      const cumulative = getCumulativeQty(article, 'finalChecking');
+      const fc = article.floorQuantities?.finalChecking;
+      initialData[articleId] = {
+        remarks: article.remarks || '',
+        m1Quantity: 0,
+        m2Quantity: cumulative.m2,
+        m3Quantity: cumulative.m3,
+        m4Quantity: cumulative.m4,
+        repairStatus: (fc?.repairStatus || (article as Article & { repairStatus?: string }).repairStatus || 'Not Required') as 'Not Required' | 'In Review' | 'Repaired' | 'Rejected',
+        repairRemarks: fc?.repairRemarks || (article as Article & { repairRemarks?: string }).repairRemarks || '',
+        transferItems: [{ transferred: 0 }],
+      };
+      transferInit[articleId] = { m2: 0, m3: 0, m4: 0 };
+    });
+    return { initialData, transferInit };
+  };
+
+  /** Apply fresh order data to update drawer inputs (keeps drawer open after save). */
+  const refreshUpdateDrawerFromOrder = (order: ProductionOrder) => {
+    const { initialData, transferInit } = buildUpdateStateFromOrder(order);
+    setSelectedOrder(order);
+    setUpdateData(initialData);
+    setTransferM2M3M4(transferInit);
+  };
+
+  const getOrderRefId = (order: Pick<ProductionOrder, 'id'> & { _id?: string }) =>
+    String(order.id ?? order._id ?? '');
+
+  const orderIdsMatch = (left: string, right: string) =>
+    left.length > 0 && right.length > 0 && left === right;
+
+  /**
+   * Fetch latest order from API and patch it into the floor catalog.
+   * @param orderId - Order id to reload
+   * @param fallbackOrder - Used when API fetch fails
+   */
+  const fetchFreshOrderForDrawer = async (
+    orderId: string,
+    fallbackOrder?: ProductionOrder
+  ): Promise<ProductionOrder | null> => {
+    try {
+      const response = await productionService.getOrder(orderId);
+      if (response.success && response.data) {
+        const freshOrder = response.data;
+        setFloorCatalog((prev) =>
+          prev.some((o) => orderIdsMatch(getOrderRefId(o), orderId))
+            ? prev.map((o) => (orderIdsMatch(getOrderRefId(o), orderId) ? freshOrder : o))
+            : prev
+        );
+        return freshOrder;
+      }
+    } catch (error) {
+      console.error('Failed to fetch fresh order for update drawer:', error);
+    }
+    return fallbackOrder ?? null;
+  };
+
+  const openUpdateDrawerWithOrder = (order: ProductionOrder, article?: Article) => {
+    setSelectedArticleId(article ? (article.id ?? article._id ?? null) : null);
+    setActiveUpdateTabIndex(0);
+    refreshUpdateDrawerFromOrder(order);
+    setShowUpdateModal(true);
+  };
+
+  /** Max qty assignable on this save (remaining minus pending transfer + M2/M3/M4 deltas). */
+  const getActualRemainingForArticle = (article: Article, articleId?: string) => {
+    const cumulative = getCumulativeQty(article, 'finalChecking');
+    if (!articleId) return cumulative.remaining;
+    const transfer = transferM2M3M4[articleId];
+    const m1FromItems = getTransferTotal(updateData[articleId]?.transferItems ?? []);
+    return getAvailableRemaining(cumulative, {
+      m1: m1FromItems,
+      m2: transfer?.m2 ?? 0,
+      m3: transfer?.m3 ?? 0,
+      m4: transfer?.m4 ?? 0,
+    });
+  };
+
+  /** Max M1 transfer (transferItems) for this save after M2/M3/M4 deltas. */
+  const getMaxTransferForArticle = (article: Article, articleId: string) => {
+    const cumulative = getCumulativeQty(article, 'finalChecking');
+    const transfer = transferM2M3M4[articleId];
+    return getMaxM1ForSave(cumulative, {
+      m2: transfer?.m2 ?? 0,
+      m3: transfer?.m3 ?? 0,
+      m4: transfer?.m4 ?? 0,
+    });
   };
 
   /** Build brand options and max qty per brand from receivedData. */
@@ -343,44 +439,19 @@ const FinalCheckingFloorSupervisorPage = () => {
     setShowViewModal(true);
   };
 
-  const handleUpdateOrder = (order: ProductionOrder, article?: Article) => {
-    setSelectedOrder(order);
-    setSelectedArticleId(article ? (article.id ?? article._id ?? null) : null);
-    setActiveUpdateTabIndex(0);
-    // Initialize update data: transferItems = empty (user enters NEW transfer only). Previously transferred shown separately.
-    const initialData: {[key: string]: {
-      remarks: string,
-      m1Quantity: number,
-      m2Quantity: number,
-      m3Quantity: number,
-      m4Quantity: number,
-      repairStatus: 'Not Required' | 'In Review' | 'Repaired' | 'Rejected',
-      repairRemarks: string,
-      transferItems: Array<{ transferred: number; styleCode?: string; brand?: string }>;
-    }} = {};
-    order.articles.forEach(article => {
-      const articleId = article.id || article._id;
-      if (articleId) {
-        initialData[articleId] = {
-          remarks: article.remarks || '',
-          m1Quantity: 0,
-          m2Quantity: article.floorQuantities?.finalChecking?.m2Quantity || article.m2Quantity || 0,
-          m3Quantity: article.floorQuantities?.finalChecking?.m3Quantity || article.m3Quantity || 0,
-          m4Quantity: article.floorQuantities?.finalChecking?.m4Quantity || article.m4Quantity || 0,
-          repairStatus: (article as any).floorQuantities?.finalChecking?.repairStatus || (article as any).repairStatus || 'Not Required',
-          repairRemarks: (article as any).floorQuantities?.finalChecking?.repairRemarks || (article as any).repairRemarks || '',
-          transferItems: [{ transferred: 0 }],
-        };
+  const handleUpdateOrder = async (order: ProductionOrder, article?: Article) => {
+    const orderId = getOrderRefId(order);
+    if (!orderId) return;
+    openUpdateDrawerWithOrder(order, article);
+    setUpdateDrawerLoading(true);
+    try {
+      const freshOrder = await fetchFreshOrderForDrawer(orderId, order);
+      if (freshOrder) {
+        refreshUpdateDrawerFromOrder(freshOrder);
       }
-    });
-    setUpdateData(initialData);
-    const transferInit: {[key: string]: { m2: number; m3: number; m4: number }} = {};
-    order.articles.forEach(article => {
-      const articleId = article.id || article._id;
-      if (articleId) transferInit[articleId] = { m2: 0, m3: 0, m4: 0 };
-    });
-    setTransferM2M3M4(transferInit);
-    setShowUpdateModal(true);
+    } finally {
+      setUpdateDrawerLoading(false);
+    }
   };
 
   const closeViewModal = () => {
@@ -431,7 +502,6 @@ const FinalCheckingFloorSupervisorPage = () => {
     setSelectedOrder(null);
     setSelectedArticleId(null);
     setUpdateData({});
-    setShiftInputs({});
     setTransferM2M3M4({});
   };
 
@@ -518,118 +588,41 @@ const FinalCheckingFloorSupervisorPage = () => {
     }));
   };
 
-  const handleRepairStatusChange = (articleId: string, value: 'Not Required' | 'In Review' | 'Repaired' | 'Rejected') => {
-    setUpdateData(prev => ({
-      ...prev,
-      [articleId]: {
-        ...prev[articleId],
-        repairStatus: value
-      }
-    }));
+  /** Build confirm modal lines from current modal article deltas. */
+  const buildQualityConfirmLines = (articles: Article[]): QualityConfirmLine[] => {
+    return articles
+      .map((article) => {
+        const articleId = (article.id || article._id) as string;
+        if (!articleId) return null;
+        const update = updateData[articleId];
+        const transfer = transferM2M3M4[articleId];
+        const m1 = update?.m1Quantity ?? 0;
+        const m2 = transfer?.m2 ?? 0;
+        const m3 = transfer?.m3 ?? 0;
+        const m4 = transfer?.m4 ?? 0;
+        if (m1 + m2 + m3 + m4 <= 0) return null;
+        return {
+          articleId,
+          articleNumber: article.articleNumber,
+          m1,
+          m2,
+          m3,
+          m4,
+        };
+      })
+      .filter(Boolean) as QualityConfirmLine[];
   };
 
-  const handleRepairRemarksChange = (articleId: string, value: string) => {
-    setUpdateData(prev => ({
-      ...prev,
-      [articleId]: {
-        ...prev[articleId],
-        repairRemarks: value
-      }
-    }));
-  };
-
-  // Function to shift M2 items to M1, M3, or M4
-  const handleShiftM2Items = (articleId: string, targetCategory: 'M1' | 'M3' | 'M4', quantity: number) => {
-    const currentData = updateData[articleId];
-    if (!currentData || quantity > currentData.m2Quantity) return;
-
-    setUpdateData(prev => {
-      const updatedData = { ...prev[articleId] };
-      updatedData.m2Quantity = updatedData.m2Quantity - quantity;
-      
-      if (targetCategory === 'M1') {
-        updatedData.m1Quantity = updatedData.m1Quantity + quantity;
-      } else if (targetCategory === 'M3') {
-        updatedData.m3Quantity = updatedData.m3Quantity + quantity;
-      } else if (targetCategory === 'M4') {
-        updatedData.m4Quantity = updatedData.m4Quantity + quantity;
-      }
-
-      return {
-        ...prev,
-        [articleId]: updatedData
-      };
-    });
-  };
-
-  // Handle shift input changes
-  const handleShiftInputChange = (articleId: string, shiftType: 'm2ToM1' | 'm2ToM3' | 'm2ToM4' | 'm3ToM2' | 'm4ToM3', value: number) => {
-    setShiftInputs(prev => ({
-      ...prev,
-      [articleId]: {
-        ...prev[articleId],
-        [shiftType]: value
-      }
-    }));
-  };
-
-  // Apply shift from input
-  const applyShift = (articleId: string, shiftType: 'm2ToM1' | 'm2ToM3' | 'm2ToM4' | 'm3ToM2' | 'm4ToM3') => {
-    const currentData = updateData[articleId];
-    const shiftValue = shiftInputs[articleId]?.[shiftType] || 0;
-    
-    if (!currentData || shiftValue <= 0) return;
-
-    setUpdateData(prev => {
-      const updatedData = { ...prev[articleId] };
-      
-      switch (shiftType) {
-        case 'm2ToM1':
-          if (shiftValue <= updatedData.m2Quantity) {
-            updatedData.m2Quantity -= shiftValue;
-            updatedData.m1Quantity += shiftValue;
-          }
-          break;
-        case 'm2ToM3':
-          if (shiftValue <= updatedData.m2Quantity) {
-            updatedData.m2Quantity -= shiftValue;
-            updatedData.m3Quantity += shiftValue;
-          }
-          break;
-        case 'm2ToM4':
-          if (shiftValue <= updatedData.m2Quantity) {
-            updatedData.m2Quantity -= shiftValue;
-            updatedData.m4Quantity += shiftValue;
-          }
-          break;
-        case 'm3ToM2':
-          if (shiftValue <= updatedData.m3Quantity) {
-            updatedData.m3Quantity -= shiftValue;
-            updatedData.m2Quantity += shiftValue;
-          }
-          break;
-        case 'm4ToM3':
-          if (shiftValue <= updatedData.m4Quantity) {
-            updatedData.m4Quantity -= shiftValue;
-            updatedData.m3Quantity += shiftValue;
-          }
-          break;
-      }
-
-      return {
-        ...prev,
-        [articleId]: updatedData
-      };
-    });
-
-    // Clear the input after applying
-    setShiftInputs(prev => ({
-      ...prev,
-      [articleId]: {
-        ...prev[articleId],
-        [shiftType]: 0
-      }
-    }));
+  /** Show confirmation modal then run submit (optionally after container step). */
+  const requestQualityConfirm = (afterConfirm: () => void, articles: Article[]) => {
+    const lines = buildQualityConfirmLines(articles);
+    if (lines.length === 0) {
+      void handleUpdateSubmit();
+      return;
+    }
+    setQualityConfirmLines(lines);
+    setPendingQualitySubmit(() => afterConfirm);
+    setShowQualityConfirm(true);
   };
 
   // Mark final quality for an article in the open modal
@@ -656,20 +649,17 @@ const FinalCheckingFloorSupervisorPage = () => {
       const update = updateData[articleId];
       if (!update) continue;
       const transfer = transferM2M3M4[articleId];
-      const shifts = shiftInputs[articleId];
+      const m1Delta = update.m1Quantity ?? 0;
+      const m2Delta = transfer?.m2 ?? 0;
+      const m3Delta = transfer?.m3 ?? 0;
+      const m4Delta = transfer?.m4 ?? 0;
+      const transferTotal = getTransferTotal(update.transferItems ?? []);
+      const batchTotal = m1Delta + m2Delta + m3Delta + m4Delta + transferTotal;
       const halfStepError = getFirstHalfStepError([
-        { value: update.m1Quantity, label: 'M1' },
-        { value: update.m2Quantity, label: 'M2' },
-        { value: update.m3Quantity, label: 'M3' },
-        { value: update.m4Quantity, label: 'M4' },
-        { value: transfer?.m2 ?? 0, label: 'M2 transfer', skipZero: true },
-        { value: transfer?.m3 ?? 0, label: 'M3 transfer', skipZero: true },
-        { value: transfer?.m4 ?? 0, label: 'M4 transfer', skipZero: true },
-        { value: shifts?.m2ToM1 ?? 0, label: 'M2 to M1 shift', skipZero: true },
-        { value: shifts?.m2ToM3 ?? 0, label: 'M2 to M3 shift', skipZero: true },
-        { value: shifts?.m2ToM4 ?? 0, label: 'M2 to M4 shift', skipZero: true },
-        { value: shifts?.m3ToM2 ?? 0, label: 'M3 to M2 shift', skipZero: true },
-        { value: shifts?.m4ToM3 ?? 0, label: 'M4 to M3 shift', skipZero: true },
+        { value: m1Delta, label: 'M1', skipZero: true },
+        { value: m2Delta, label: 'M2', skipZero: true },
+        { value: m3Delta, label: 'M3', skipZero: true },
+        { value: m4Delta, label: 'M4', skipZero: true },
         ...(update.transferItems ?? []).map((item, idx) => ({
           value: item.transferred ?? 0,
           label: `Transfer line ${idx + 1}`,
@@ -679,6 +669,13 @@ const FinalCheckingFloorSupervisorPage = () => {
       if (halfStepError) {
         toast.error(`${article.articleNumber ?? articleId}: ${HALF_STEP_QTY_ERROR}`);
         return;
+      }
+      if (batchTotal > 0) {
+        const cumulative = getCumulativeQty(article, 'finalChecking');
+        if (batchTotal > cumulative.remaining) {
+          toast.error(`${article.articleNumber ?? articleId}: batch total (${batchTotal}) exceeds remaining (${cumulative.remaining})`);
+          return;
+        }
       }
     }
 
@@ -715,7 +712,7 @@ const FinalCheckingFloorSupervisorPage = () => {
       if (!articleId) return false;
       const update = updateData[articleId];
       if (!update) return false;
-      const actualRemaining = getActualRemainingForArticle(fresh);
+      const actualRemaining = getMaxTransferForArticle(fresh, articleId);
       const total = getTransferTotal(update.transferItems ?? []);
       if (total > actualRemaining) return true;
       return hasTransferItemsExceedingBrandMax(fresh, update.transferItems ?? []);
@@ -736,26 +733,19 @@ const FinalCheckingFloorSupervisorPage = () => {
         const fresh = getArticleForValidation(article);
 
         const update = updateData[articleId];
-        const addM2 = transferM2M3M4[articleId]?.m2 ?? 0;
-        const addM3 = transferM2M3M4[articleId]?.m3 ?? 0;
-        const addM4 = transferM2M3M4[articleId]?.m4 ?? 0;
-        const totalM2 = (update?.m2Quantity ?? 0) + addM2;
-        const totalM3 = (update?.m3Quantity ?? 0) + addM3;
-        const totalM4 = (update?.m4Quantity ?? 0) + addM4;
-        const fcM1 = fresh.floorQuantities?.finalChecking?.m1Quantity ?? fresh.m1Quantity ?? 0;
-        const fcM2 = fresh.floorQuantities?.finalChecking?.m2Quantity ?? fresh.m2Quantity ?? 0;
-        const fcM3 = fresh.floorQuantities?.finalChecking?.m3Quantity ?? fresh.m3Quantity ?? 0;
-        const fcM4 = fresh.floorQuantities?.finalChecking?.m4Quantity ?? fresh.m4Quantity ?? 0;
-        if (update && (
+        const m1Delta = update?.m1Quantity ?? 0;
+        const m2Delta = transferM2M3M4[articleId]?.m2 ?? 0;
+        const m3Delta = transferM2M3M4[articleId]?.m3 ?? 0;
+        const m4Delta = transferM2M3M4[articleId]?.m4 ?? 0;
+        const hasQtyChange = m1Delta > 0 || m2Delta > 0 || m3Delta > 0 || m4Delta > 0;
+        const validItems = toBrandOnlyTransferItems(update?.transferItems ?? []);
+        const hasProgressChange = update && (
           update.remarks !== (fresh.remarks || '') ||
-          update.m1Quantity !== fcM1 ||
-          totalM2 !== fcM2 ||
-          totalM3 !== fcM3 ||
-          totalM4 !== fcM4 ||
+          validItems.length > 0 ||
           update.repairStatus !== fresh.repairStatus ||
           update.repairRemarks !== (fresh.repairRemarks || '')
-        )) {
-          const validItems = toBrandOnlyTransferItems(update.transferItems ?? []);
+        );
+        if (update && (hasProgressChange || hasQtyChange)) {
           const userId = user?.id ?? user?._id;
           const floorSupervisorId = user?.id ?? user?._id;
           if (validItems.length > 0) {
@@ -772,49 +762,48 @@ const FinalCheckingFloorSupervisorPage = () => {
 
           // CRITICAL: Call updateArticleProgress (transfer) BEFORE quality-inspection.
           // Backend: quality-inspection updates m1/transferred; if we call it first, transferable becomes 0 and PATCH fails.
-          const progressData = {
-            remarks: update.remarks,
-            repairStatus: update.repairStatus,
-            repairRemarks: update.repairRemarks,
-            ...(validItems.length > 0 ? { transferredData: validItems } : {}),
-            ...(userId ? { userId } : {}),
-            ...(floorSupervisorId ? { floorSupervisorId } : {}),
-          };
-          try {
-            const response = await productionService.updateArticleProgress(
-              'FinalChecking',
-              selectedOrder.id,
-              article._id || article.id,
-              progressData
-            );
-            if (!response.success) {
-              throw new Error(response.error?.message || 'Failed to update article');
+          if (hasProgressChange) {
+            const progressData = {
+              remarks: update.remarks,
+              repairStatus: update.repairStatus,
+              repairRemarks: update.repairRemarks,
+              ...(validItems.length > 0 ? { transferredData: validItems } : {}),
+              ...(userId ? { userId } : {}),
+              ...(floorSupervisorId ? { floorSupervisorId } : {}),
+            };
+            try {
+              const response = await productionService.updateArticleProgress(
+                'FinalChecking',
+                selectedOrder.id,
+                article._id || article.id,
+                progressData
+              );
+              if (!response.success) {
+                throw new Error(response.error?.message || 'Failed to update article');
+              }
+            } catch (error: any) {
+              const msg = error?.message ?? String(error);
+              if (msg.includes("exceeds transferable") || msg.includes("transferable (0)")) {
+                toast.error("Transfer quantity exceeds remaining. Refresh and enter only the new amount to transfer (max: remaining).");
+              } else {
+                toast.error(msg);
+              }
+              throw error;
             }
-          } catch (error: any) {
-            const msg = error?.message ?? String(error);
-            if (msg.includes("exceeds transferable") || msg.includes("transferable (0)")) {
-              toast.error("Transfer quantity exceeds remaining. Refresh and enter only the new amount to transfer (max: remaining).");
-            } else {
-              toast.error(msg);
-            }
-            throw error;
           }
 
-          // Then update quality inspection (M1–M4)
-          if (update.m1Quantity !== fcM1 ||
-              totalM2 !== fcM2 ||
-              totalM3 !== fcM3 ||
-              totalM4 !== fcM4) {
-            const inspectedQuantity = update.m1Quantity + totalM2 + totalM3 + totalM4;
+          // Then update quality inspection (additive M1–M4 deltas)
+          if (hasQtyChange) {
+            const inspectedQuantity = m1Delta + m2Delta + m3Delta + m4Delta;
             try {
               const qualityResponse = await productionService.updateQualityInspection(
                 article._id || article.id,
                 {
                   inspectedQuantity,
-                  m1Quantity: update.m1Quantity,
-                  m2Quantity: totalM2,
-                  m3Quantity: totalM3,
-                  m4Quantity: totalM4,
+                  m1Quantity: m1Delta,
+                  m2Quantity: m2Delta,
+                  m3Quantity: m3Delta,
+                  m4Quantity: m4Delta,
                   remarks: update.remarks,
                   floor: "Final Checking"
                 }
@@ -847,12 +836,13 @@ const FinalCheckingFloorSupervisorPage = () => {
         }
       } else {
         toast.success('Order updated successfully');
+        const orderId = getOrderRefId(selectedOrder);
+        void loadFloorOrdersCatalog();
+        const freshOrder = await fetchFreshOrderForDrawer(orderId, selectedOrder);
+        if (freshOrder) {
+          refreshUpdateDrawerFromOrder(freshOrder);
+        }
       }
-      
-      closeUpdateModal();
-      
-      // Reload orders to get updated data
-      void loadFloorOrdersCatalog();
     } catch (error: any) {
       console.error('Error updating order:', error);
       const msg = error?.message ?? 'Failed to update order';
@@ -1669,7 +1659,10 @@ const FinalCheckingFloorSupervisorPage = () => {
           <div className="fixed inset-0 bg-black/50 z-40" onClick={closeUpdateModal} aria-hidden />
           <div className="fixed inset-y-0 right-0 w-full max-w-4xl bg-white shadow-xl z-50 flex flex-col overflow-hidden animate-slide-in-right border-l-2 border-gray-300">
             <div className="flex items-center justify-between gap-3 px-3 py-2 border-b-2 border-gray-300 bg-gray-50 flex-shrink-0">
-              <h3 className="text-sm font-bold text-gray-800 truncate min-w-0">Update Order — {selectedOrder.orderNumber}</h3>
+              <h3 className="text-sm font-bold text-gray-800 truncate min-w-0">
+                Update Order — {selectedOrder.orderNumber}
+                {updateDrawerLoading ? <span className="ml-2 text-[10px] font-normal text-gray-500">Refreshing…</span> : null}
+              </h3>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <button type="button" onClick={closeUpdateModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border-2 border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-100 shadow-sm">Cancel</button>
                 <button
@@ -1681,9 +1674,9 @@ const FinalCheckingFloorSupervisorPage = () => {
                       if (!articleId) return false;
                       const update = updateData[articleId];
                       if (!update) return false;
-                      const actualRemaining = getActualRemainingForArticle(article);
+                      const maxTransfer = getMaxTransferForArticle(article, articleId);
                       const total = getTransferTotal(update.transferItems ?? []);
-                      if (total > actualRemaining) return true;
+                      if (total > maxTransfer) return true;
                       return hasTransferItemsExceedingBrandMax(article, update.transferItems ?? []);
                     });
                     if (invalid) {
@@ -1706,7 +1699,7 @@ const FinalCheckingFloorSupervisorPage = () => {
                       return articleId && total > 0;
                     });
                     if (!hasAnyM1) {
-                      handleUpdateSubmit();
+                      requestQualityConfirm(() => { void handleUpdateSubmit(); }, modalArticles);
                       return;
                     }
                     setUpdateContainerBarcode("");
@@ -1728,9 +1721,9 @@ const FinalCheckingFloorSupervisorPage = () => {
                     if (!articleId) return false;
                     const update = updateData[articleId];
                     if (!update) return false;
-                    const actualRemaining = getActualRemainingForArticle(article);
+                    const maxTransfer = getMaxTransferForArticle(article, articleId);
                     const total = getTransferTotal(update.transferItems ?? []);
-                    if (total > actualRemaining) return true;
+                    if (total > maxTransfer) return true;
                     return hasTransferItemsExceedingBrandMax(article, update.transferItems ?? []);
                   })}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-[11px] font-bold rounded hover:bg-teal-700 shadow-sm disabled:opacity-50"
@@ -1745,7 +1738,7 @@ const FinalCheckingFloorSupervisorPage = () => {
             <div className="flex-1 overflow-y-auto px-3 pt-3 pb-24">
             {/* Short intro so user knows what to do */}
             <div className="mb-4 px-3 py-2 rounded-md bg-teal-50 border-2 border-teal-200 text-[11px] text-teal-900">
-              <strong>How to update:</strong> Select an article below, then (1) enter how many good pieces go to next floor (M1), (2) enter how many you checked in each quality category (M1–M4), (3) optionally move pieces between categories, then click Update Order.
+              <strong>How to update:</strong> Enter M1 (good → next floor), M2/M3/M4 for this save. M2 creates entries in <strong>M2 Management</strong>. Resolve repairs there (cascade merge to all floors).
             </div>
             {modalArticles.some((a) => (a.floorQuantities?.finalChecking?.received ?? 0) <= 0) && (
               <div className="mb-4 px-3 py-2 rounded-md bg-amber-50 border-2 border-amber-200 text-[11px] text-amber-900">
@@ -1789,73 +1782,94 @@ const FinalCheckingFloorSupervisorPage = () => {
                 const articleId = article.id || article._id;
                 if (!articleId) return null;
                 const fc = article.floorQuantities?.finalChecking;
+                const cumulative = getCumulativeQty(article, 'finalChecking');
                 const currentUpdateData = updateData[articleId] || {
                   remarks: article.remarks || "",
                   m1Quantity: 0,
-                  m2Quantity: fc?.m2Quantity ?? article.m2Quantity ?? 0,
-                  m3Quantity: fc?.m3Quantity ?? article.m3Quantity ?? 0,
-                  m4Quantity: fc?.m4Quantity ?? article.m4Quantity ?? 0,
-                  repairStatus: (fc?.repairStatus || (article as any).repairStatus || "Not Required") as "Not Required" | "In Review" | "Repaired" | "Rejected",
-                  repairRemarks: fc?.repairRemarks || (article as any).repairRemarks || "",
+                  m2Quantity: cumulative.m2,
+                  m3Quantity: cumulative.m3,
+                  m4Quantity: cumulative.m4,
+                  repairStatus: (fc?.repairStatus || (article as Article & { repairStatus?: string }).repairStatus || "Not Required") as "Not Required" | "In Review" | "Repaired" | "Rejected",
+                  repairRemarks: fc?.repairRemarks || (article as Article & { repairRemarks?: string }).repairRemarks || "",
                   transferItems: [{ transferred: 0 }],
                 };
-                const received = fc?.received || 0;
-                const transferred = fc?.transferred || 0;
-                const remaining = fc?.remaining ?? (received - transferred);
+                const saveDeltas = {
+                  m1: getTransferTotal(currentUpdateData.transferItems ?? []),
+                  m2: transferM2M3M4[articleId]?.m2 ?? 0,
+                  m3: transferM2M3M4[articleId]?.m3 ?? 0,
+                  m4: transferM2M3M4[articleId]?.m4 ?? 0,
+                };
+                const maxTransfer = getMaxM1ForSave(cumulative, saveDeltas);
+                const availableAfterSave = getRemainingAfterSave(cumulative, saveDeltas);
                 return (
                   <>
+            <QcM2MergeHistoryPanel
+              articleId={articleId}
+              floorLabel="Final Checking"
+              compact
+            />
             <section className="mb-4 rounded-md border-2 border-gray-300 overflow-hidden">
               <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800 uppercase">3. Current quantities for this article</div>
-              <p className="px-3 py-1 text-[10px] text-gray-500 bg-gray-50 border-b border-gray-200"><span className="font-semibold text-gray-700">Article: {article.articleNumber}</span> — Planned = order qty · Received = on final checking · Transferred = already sent to next floor · Remaining = still to transfer.</p>
+              <p className="px-3 py-1 text-[10px] text-gray-500 bg-gray-50 border-b border-gray-200"><span className="font-semibold text-gray-700">Article: {article.articleNumber}</span> — Remaining = qty still available to assign (M1 transfer or M2/M3/M4).</p>
               <div className="p-2">
                 <table className="w-full border-collapse text-[11px] border-2 border-gray-300">
                   <thead>
                     <tr className="bg-gray-100">
                       <th className="border-2 border-gray-300 px-2 py-1 text-left font-bold text-gray-700">Planned</th>
                       <th className="border-2 border-gray-300 px-2 py-1 text-left font-bold text-gray-700">Received</th>
-                      <th className="border-2 border-gray-300 px-2 py-1 text-left font-bold text-gray-700">Transferred</th>
+                      <th className="border-2 border-gray-300 px-2 py-1 text-left font-bold text-gray-700">M1 Trf</th>
+                      <th className="border-2 border-gray-300 px-2 py-1 text-left font-bold text-gray-700">M2</th>
+                      <th className="border-2 border-gray-300 px-2 py-1 text-left font-bold text-gray-700">M3</th>
+                      <th className="border-2 border-gray-300 px-2 py-1 text-left font-bold text-gray-700">M4</th>
                       <th className="border-2 border-gray-300 px-2 py-1 text-left font-bold text-gray-700">Remaining</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
                       <td className="border-2 border-gray-300 px-2 py-1">{(article.plannedQuantity || 0).toLocaleString()}</td>
-                      <td className="border-2 border-gray-300 px-2 py-1"><ReceivedQuantityDisplay received={received} repairReceived={fc?.repairReceived} repairFromFloor={fc?.repairFromFloor} className="text-[11px]" /></td>
-                      <td className="border-2 border-gray-300 px-2 py-1 text-green-700 font-medium">{transferred}</td>
-                      <td className="border-2 border-gray-300 px-2 py-1 text-orange-700 font-medium">{remaining}</td>
+                      <td className="border-2 border-gray-300 px-2 py-1"><ReceivedQuantityDisplay received={fc?.received || 0} repairReceived={fc?.repairReceived} repairFromFloor={fc?.repairFromFloor} className="text-[11px]" /></td>
+                      <td className="border-2 border-gray-300 px-2 py-1 text-green-700 font-medium">{formatProductionQty(cumulative.m1Transferred)}</td>
+                      <td className="border-2 border-gray-300 px-2 py-1 text-yellow-700 font-medium">{formatProductionQty(cumulative.m2)}</td>
+                      <td className="border-2 border-gray-300 px-2 py-1 text-orange-700 font-medium">{formatProductionQty(cumulative.m3)}</td>
+                      <td className="border-2 border-gray-300 px-2 py-1 text-red-700 font-medium">{formatProductionQty(cumulative.m4)}</td>
+                      <td className="border-2 border-gray-300 px-2 py-1 text-orange-700 font-medium">{formatProductionQty(cumulative.remaining)}</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
-              {(fc?.receivedData as any[])?.some((d: any) => (d.transferred ?? 0) > 0) && (
+              {(fc?.receivedData as Array<{ transferred?: number }>)?.some((d) => (d.transferred ?? 0) > 0) && (
                 <div className="px-3 py-2 border-t border-gray-200 bg-sky-50/50">
                   <label className="block text-[10px] font-bold text-sky-800 mb-1">Received breakdown (Qty · Brand)</label>
                   <div className="space-y-0.5 text-[11px] text-gray-700">
-                    {collapseLinesByBrand((fc?.receivedData as any[])?.filter((d: any) => (d.transferred ?? 0) > 0)).map((d, i) => (
+                    {collapseLinesByBrand((fc?.receivedData as Array<{ transferred?: number; brand?: string }>)?.filter((d) => (d.transferred ?? 0) > 0)).map((d, i) => (
                       <div key={i}>{formatBrandLine(d)}</div>
                     ))}
                   </div>
                 </div>
               )}
-              <p className="px-3 py-1 text-[10px] text-gray-600 bg-amber-50 border-t border-gray-200">Max M1 to transfer = <strong>{remaining}</strong></p>
+              <p className="px-3 py-1 text-[10px] text-gray-600 bg-amber-50 border-t border-gray-200">
+                Max M1 this save = <strong>{formatProductionQty(maxTransfer)}</strong>
+                {saveDeltas.m1 + saveDeltas.m2 + saveDeltas.m3 + saveDeltas.m4 > 0 ? (
+                  <> · Available after this save = <strong>{formatProductionQty(availableAfterSave)}</strong></>
+                ) : null}
+              </p>
             </section>
             <section className="mb-4 rounded-md border-2 border-green-300 overflow-hidden">
               <div className="px-3 py-1.5 bg-green-100 border-b-2 border-green-300 text-[11px] font-bold text-green-900">4. Good quality (M1) — transfer to next floor (Qty · Brand)</div>
-              {(fc?.transferredData as any[])?.length > 0 && (
+              {(fc?.transferredData as Array<{ transferred?: number; brand?: string }>)?.length > 0 && (
                 <div className="px-3 py-2 border-b border-gray-200 bg-gray-50/50">
                   <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wide mb-1">Previously transferred</label>
                   <div className="space-y-0.5 text-[11px] text-gray-700">
-                    {collapseLinesByBrand(fc?.transferredData as any[]).map((d, i) => (
+                    {collapseLinesByBrand(fc?.transferredData as Array<{ transferred?: number; brand?: string }>).map((d, i) => (
                       <div key={i}>{formatBrandLine(d)}</div>
                     ))}
                   </div>
                 </div>
               )}
-              <p className="px-3 py-1 text-[10px] text-gray-600 bg-green-50/50 border-b border-green-200">Enter <strong>new</strong> transfer below. Total must not exceed remaining.</p>
+              <p className="px-3 py-1 text-[10px] text-gray-600 bg-green-50/50 border-b border-green-200">Enter <strong>new</strong> transfer below. Max = remaining minus M2/M3/M4 entered below.</p>
               <div className="p-2 border-t-2 border-green-200 bg-green-50/30">
                 {(() => {
-                  const actualRemaining = getActualRemainingForArticle(article);
-                  const isFullyTransferred = actualRemaining <= 0;
+                  const isFullyTransferred = maxTransfer <= 0 && cumulative.remaining <= 0;
                   return (
                     <>
                       {(() => {
@@ -1865,7 +1879,7 @@ const FinalCheckingFloorSupervisorPage = () => {
                           <BrandTransferItemsInput
                             value={currentUpdateData.transferItems ?? [{ transferred: 0, styleCode: "", brand: "" }]}
                             onChange={(items) => handleTransferItemsChange(articleId, items)}
-                            maxTotal={actualRemaining}
+                            maxTotal={maxTransfer}
                             disabled={isFullyTransferred || noReceived}
                             brandOptions={options}
                             brandMaxQuantities={noReceived ? undefined : brandMaxQuantities}
@@ -1883,170 +1897,53 @@ const FinalCheckingFloorSupervisorPage = () => {
             </section>
             <section className="mb-4 rounded-md border-2 border-gray-400 overflow-hidden">
               <div className="px-3 py-1.5 bg-gray-300 border-b-2 border-gray-400 text-[11px] font-bold text-gray-900">5. Quality categories — how many in each?</div>
-              <p className="px-3 py-1.5 text-[10px] text-gray-600 bg-gray-50 border-b-2 border-gray-300">M1 = Good (goes to next floor). M2 = Needs repair · M3 = Minor defects · M4 = Major defects. Below, add quantity to transfer to M2/M3/M4; total sent to API = existing + your input.</p>
-              <div className="p-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="border-2 border-green-300 rounded p-2 bg-green-50/50">
-                  <label className="block text-[10px] font-bold text-green-800 mb-0.5">M1 Good</label>
-                  <p className="text-[9px] text-green-700 mb-1">Passes to next floor (max: {getActualRemainingForArticle(article)})</p>
-                  <NumericInput
-                    className="py-1.5 px-2 text-[12px] w-full border-2 border-green-200 rounded"
-                    value={currentUpdateData.m1Quantity}
-                    onChange={(v) => { const max = getActualRemainingForArticle(article); if (v <= max) handleM1QuantityChange(articleId, v); }}
-                    allowDecimals
-                  />
-                </div>
+              <p className="px-3 py-1.5 text-[10px] text-gray-600 bg-gray-50 border-b-2 border-gray-300">M2 = Repair (M2 Management). M3/M4 = defects. Enter quantities for this save only.</p>
+              <div className="p-2 grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="border-2 border-yellow-400 rounded p-2 bg-yellow-50/50">
                   <label className="block text-[10px] font-bold text-yellow-800 mb-0.5">M2 Repair</label>
-                  <p className="text-[9px] text-yellow-800 mb-1">Existing: {currentUpdateData.m2Quantity}</p>
-                  <div className="text-[11px] text-gray-500 mb-1.5">Add quantity below</div>
+                  <p className="text-[9px] text-yellow-800 mb-1">On floor: {formatProductionQty(cumulative.m2)} · saves to M2 Management</p>
+                  <p className="text-[9px] text-yellow-700 mb-1">This save:</p>
+                  <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-yellow-300 rounded" value={transferM2M3M4[articleId]?.m2 ?? 0} onChange={(v) => handleTransferM2M3M4Change(articleId, 'm2', v)} allowDecimals placeholder="0" />
+                  <p className="text-[9px] text-yellow-900 mt-1 font-medium">After save: {formatProductionQty(cumulative.m2 + (transferM2M3M4[articleId]?.m2 ?? 0))}</p>
                 </div>
                 <div className="border-2 border-orange-300 rounded p-2 bg-orange-50/50">
                   <label className="block text-[10px] font-bold text-orange-800 mb-0.5">M3 Minor</label>
-                  <p className="text-[9px] text-orange-800 mb-1">Existing: {currentUpdateData.m3Quantity}</p>
-                  <div className="text-[11px] text-gray-500 mb-1.5">Add quantity below</div>
+                  <p className="text-[9px] text-orange-800 mb-1">On floor: {formatProductionQty(cumulative.m3)}</p>
+                  <p className="text-[9px] text-orange-700 mb-1">This save:</p>
+                  <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-orange-200 rounded" value={transferM2M3M4[articleId]?.m3 ?? 0} onChange={(v) => handleTransferM2M3M4Change(articleId, 'm3', v)} allowDecimals placeholder="0" />
+                  <p className="text-[9px] text-orange-900 mt-1 font-medium">After save: {formatProductionQty(cumulative.m3 + (transferM2M3M4[articleId]?.m3 ?? 0))}</p>
                 </div>
                 <div className="border-2 border-red-300 rounded p-2 bg-red-50/50">
                   <label className="block text-[10px] font-bold text-red-800 mb-0.5">M4 Major</label>
-                  <p className="text-[9px] text-red-800 mb-1">Existing: {currentUpdateData.m4Quantity}</p>
-                  <div className="text-[11px] text-gray-500 mb-1.5">Add quantity below</div>
-                </div>
-              </div>
-              <div className="px-3 py-1.5 border-t border-gray-300 bg-gray-100 text-[10px] font-bold text-gray-700">M2 / M3 / M4 — add quantity to transfer (empty = 0). Total in API = existing + below.</div>
-              <div className="p-2 grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[10px] font-bold text-yellow-800 mb-0.5">M2 quantity</label>
-                  <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-yellow-300 rounded" value={transferM2M3M4[articleId]?.m2 ?? 0} onChange={(v) => handleTransferM2M3M4Change(articleId, 'm2', v)} allowDecimals placeholder="0" />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-orange-800 mb-0.5">M3 quantity</label>
-                  <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-orange-200 rounded" value={transferM2M3M4[articleId]?.m3 ?? 0} onChange={(v) => handleTransferM2M3M4Change(articleId, 'm3', v)} allowDecimals placeholder="0" />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-red-800 mb-0.5">M4 quantity</label>
+                  <p className="text-[9px] text-red-800 mb-1">On floor: {formatProductionQty(cumulative.m4)}</p>
+                  <p className="text-[9px] text-red-700 mb-1">This save:</p>
                   <NumericInput className="py-1.5 px-2 text-[12px] w-full border-2 border-red-200 rounded" value={transferM2M3M4[articleId]?.m4 ?? 0} onChange={(v) => handleTransferM2M3M4Change(articleId, 'm4', v)} allowDecimals placeholder="0" />
+                  <p className="text-[9px] text-red-900 mt-1 font-medium">After save: {formatProductionQty(cumulative.m4 + (transferM2M3M4[articleId]?.m4 ?? 0))}</p>
                 </div>
               </div>
             </section>
-            {(() => {
-              const m2Quantity = fc?.m2Quantity ?? article.m2Quantity ?? 0;
-              const m2Transferred = fc?.m2Transferred ?? 0;
-              const m2Remaining = fc?.m2Remaining ?? m2Quantity;
-              const previousFloor = getPreviousFloor("Final Checking", article.linkingType);
-              if (m2Quantity > 0 || m2Transferred > 0) {
-                return (
-                  <section className="mb-4 rounded-md border-2 border-yellow-400 overflow-hidden">
-                    <div className="px-3 py-1.5 bg-yellow-100 border-b-2 border-yellow-400 text-[11px] font-bold text-yellow-900">M2 — Repairable items (send back for repair)</div>
-                    <div className="p-2 flex flex-wrap items-center gap-3">
-                      <span className="text-[11px] text-gray-700">Current M2: <strong>{m2Quantity}</strong></span>
-                      {m2Transferred > 0 && <span className="text-[11px] text-yellow-800">Sent for repair: <strong>{m2Transferred}</strong></span>}
-                      {m2Remaining > 0 && previousFloor && (
-                        <button type="button" className="px-3 py-1.5 text-[11px] font-bold rounded bg-amber-500 text-white border-2 border-amber-600 hover:bg-amber-600" onClick={() => { setSelectedRepairArticle({ articleId: article._id || article.id, articleNumber: article.articleNumber, orderId: selectedOrder.id, linkingType: article.linkingType }); setShowRepairModal(true); }}>Send M2 for Repair</button>
-                      )}
-                    </div>
-                  </section>
-                );
-              }
-              return null;
-            })()}
-            <section className="mb-4 rounded-md border-2 border-teal-200 overflow-hidden">
-              <div className="px-3 py-1.5 bg-teal-100 border-b-2 border-teal-300 text-[11px] font-bold text-teal-900">6. Reclassify between categories (optional)</div>
-              <p className="px-3 py-1 text-[10px] text-gray-600 bg-teal-50/50 border-b-2 border-teal-200">e.g. After repair, move pieces from M2→M1. Enter quantity, click Apply. +1 adds one quickly.</p>
-              <div className="p-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {currentUpdateData.m2Quantity > 0 && (
-                  <div className="bg-white border-2 border-gray-300 rounded p-2">
-                    <label className="block text-[10px] font-bold text-yellow-800 mb-1">M2→M1</label>
-                    <div className="flex gap-1 mt-0.5 items-center">
-                      <NumericInput className="flex-1 min-w-0 py-0.5 text-[10px] h-6 border border-gray-200 rounded" placeholder="Qty" min={0} max={currentUpdateData.m2Quantity} value={shiftInputs[articleId]?.m2ToM1 || 0} onChange={(v) => handleShiftInputChange(articleId, "m2ToM1", v)} allowDecimals />
-                      <button type="button" className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-green-600 text-white hover:bg-green-700" onClick={() => applyShift(articleId, "m2ToM1")} disabled={!shiftInputs[articleId]?.m2ToM1 || shiftInputs[articleId].m2ToM1 <= 0}>Apply</button>
-                      <button type="button" className="px-1 py-0.5 text-[10px] font-bold rounded bg-teal-500 text-white" onClick={() => handleShiftM2Items(articleId, "M1", Math.min(currentUpdateData.m2Quantity, 1))} disabled={currentUpdateData.m2Quantity === 0}>+1</button>
-                    </div>
-                  </div>
-                )}
-                {currentUpdateData.m2Quantity > 0 && (
-                  <div className="bg-white border border-orange-200 rounded p-1.5">
-                    <label className="text-[10px] font-bold text-orange-700">M2→M3</label>
-                    <div className="flex gap-1 mt-0.5 items-center">
-                      <NumericInput className="flex-1 min-w-0 py-0.5 text-[10px] h-6 border border-gray-200 rounded" placeholder="Qty" min={0} max={currentUpdateData.m2Quantity} value={shiftInputs[articleId]?.m2ToM3 || 0} onChange={(v) => handleShiftInputChange(articleId, "m2ToM3", v)} allowDecimals />
-                      <button type="button" className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-500 text-white" onClick={() => applyShift(articleId, "m2ToM3")} disabled={!shiftInputs[articleId]?.m2ToM3 || shiftInputs[articleId].m2ToM3 <= 0}>Apply</button>
-                      <button type="button" className="px-1 py-0.5 text-[10px] font-bold rounded bg-teal-500 text-white" onClick={() => handleShiftM2Items(articleId, "M3", Math.min(currentUpdateData.m2Quantity, 1))} disabled={currentUpdateData.m2Quantity === 0}>+1</button>
-                    </div>
-                  </div>
-                )}
-                {currentUpdateData.m2Quantity > 0 && (
-                  <div className="bg-white border border-red-200 rounded p-1.5">
-                    <label className="text-[10px] font-bold text-red-700">M2→M4</label>
-                    <div className="flex gap-1 mt-0.5 items-center">
-                      <NumericInput className="flex-1 min-w-0 py-0.5 text-[10px] h-6 border border-gray-200 rounded" placeholder="Qty" min={0} max={currentUpdateData.m2Quantity} value={shiftInputs[articleId]?.m2ToM4 || 0} onChange={(v) => handleShiftInputChange(articleId, "m2ToM4", v)} allowDecimals />
-                      <button type="button" className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-red-600 text-white" onClick={() => applyShift(articleId, "m2ToM4")} disabled={!shiftInputs[articleId]?.m2ToM4 || shiftInputs[articleId].m2ToM4 <= 0}>Apply</button>
-                      <button type="button" className="px-1 py-0.5 text-[10px] font-bold rounded bg-teal-500 text-white" onClick={() => handleShiftM2Items(articleId, "M4", Math.min(currentUpdateData.m2Quantity, 1))} disabled={currentUpdateData.m2Quantity === 0}>+1</button>
-                    </div>
-                  </div>
-                )}
-                {currentUpdateData.m3Quantity > 0 && (
-                  <div className="bg-white border border-orange-200 rounded p-1.5">
-                    <label className="text-[10px] font-bold text-orange-700">M3→M2</label>
-                    <div className="flex gap-1 mt-0.5 items-center">
-                      <NumericInput className="flex-1 min-w-0 py-0.5 text-[10px] h-6 border border-gray-200 rounded" placeholder="Qty" min={0} max={currentUpdateData.m3Quantity} value={shiftInputs[articleId]?.m3ToM2 || 0} onChange={(v) => handleShiftInputChange(articleId, "m3ToM2", v)} allowDecimals />
-                      <button type="button" className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-500 text-white" onClick={() => applyShift(articleId, "m3ToM2")} disabled={!shiftInputs[articleId]?.m3ToM2 || shiftInputs[articleId].m3ToM2 <= 0}>Apply</button>
-                      <button type="button" className="px-1 py-0.5 text-[10px] font-bold rounded bg-teal-500 text-white" onClick={() => { const q = Math.min(currentUpdateData.m3Quantity, 1); setUpdateData(prev => { const u = { ...prev[articleId] }; u.m3Quantity = u.m3Quantity - q; u.m2Quantity = u.m2Quantity + q; return { ...prev, [articleId]: u }; }); }} disabled={currentUpdateData.m3Quantity === 0}>+1</button>
-                    </div>
-                  </div>
-                )}
-                {currentUpdateData.m4Quantity > 0 && (
-                  <div className="bg-white border border-red-200 rounded p-1.5">
-                    <label className="text-[10px] font-bold text-red-700">M4→M3</label>
-                    <div className="flex gap-1 mt-0.5 items-center">
-                      <NumericInput className="flex-1 min-w-0 py-0.5 text-[10px] h-6 border border-gray-200 rounded" placeholder="Qty" min={0} max={currentUpdateData.m4Quantity} value={shiftInputs[articleId]?.m4ToM3 || 0} onChange={(v) => handleShiftInputChange(articleId, "m4ToM3", v)} allowDecimals />
-                      <button type="button" className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-red-600 text-white" onClick={() => applyShift(articleId, "m4ToM3")} disabled={!shiftInputs[articleId]?.m4ToM3 || shiftInputs[articleId].m4ToM3 <= 0}>Apply</button>
-                      <button type="button" className="px-1 py-0.5 text-[10px] font-bold rounded bg-teal-500 text-white" onClick={() => { const q = Math.min(currentUpdateData.m4Quantity, 1); setUpdateData(prev => { const u = { ...prev[articleId] }; u.m4Quantity = u.m4Quantity - q; u.m3Quantity = u.m3Quantity + q; return { ...prev, [articleId]: u }; }); }} disabled={currentUpdateData.m4Quantity === 0}>+1</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </section>
-            {currentUpdateData.m2Quantity > 0 && (
-              <section className="mb-4 rounded-md border-2 border-yellow-300 overflow-hidden">
-                <div className="px-3 py-1.5 bg-yellow-100 border-b-2 border-yellow-300 text-[11px] font-bold text-yellow-900">M2 Repair review</div>
-                <div className="p-2 space-y-2">
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-700 mb-0.5">Repair status</label>
-                    <select className="w-full py-1.5 px-2 text-[11px] border-2 border-gray-300 rounded" value={currentUpdateData.repairStatus} onChange={(e) => handleRepairStatusChange(articleId, e.target.value as "Not Required" | "In Review" | "Repaired" | "Rejected")}>
-                      <option value="Not Required">Not Required</option>
-                      <option value="In Review">In Review</option>
-                      <option value="Repaired">Repaired</option>
-                      <option value="Rejected">Rejected</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-700 mb-0.5">Repair remarks</label>
-                    <textarea className="w-full py-1.5 px-2 text-[11px] border-2 border-gray-300 rounded resize-none" rows={2} placeholder="Remarks..." value={currentUpdateData.repairRemarks} onChange={(e) => handleRepairRemarksChange(articleId, e.target.value)} />
-                  </div>
-                </div>
-              </section>
-            )}
+
             <section className="mb-4 rounded-md border-2 border-gray-300 overflow-hidden">
-              <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800">7. Summary — then click Update Order</div>
-              <p className="px-3 py-1 text-[10px] text-gray-500 bg-gray-50 border-b border-gray-200">Totals below will be saved (M2/M3/M4 = existing + added). Add remarks if needed.</p>
+              <div className="px-3 py-1.5 bg-gray-200 border-b-2 border-gray-300 text-[11px] font-bold text-gray-800">6. Summary — then click Update Order</div>
+              <p className="px-3 py-1 text-[10px] text-gray-500 bg-gray-50 border-b border-gray-200">Totals on floor vs this save. M2 → M2 Management ledger.</p>
               <div className="p-2">
-                {(() => {
-                  const sumAddM2 = transferM2M3M4[articleId]?.m2 ?? 0;
-                  const sumAddM3 = transferM2M3M4[articleId]?.m3 ?? 0;
-                  const sumAddM4 = transferM2M3M4[articleId]?.m4 ?? 0;
-                  const sumTotalM2 = currentUpdateData.m2Quantity + sumAddM2;
-                  const sumTotalM3 = currentUpdateData.m3Quantity + sumAddM3;
-                  const sumTotalM4 = currentUpdateData.m4Quantity + sumAddM4;
-                  return (
-                <>
-                <div className="grid grid-cols-4 gap-2 text-center mb-2">
-                  <div className="border-2 border-green-300 rounded py-1.5 bg-green-50 text-[11px] font-bold text-green-800">M1: {currentUpdateData.m1Quantity}</div>
-                  <div className="border-2 border-yellow-300 rounded py-1.5 bg-yellow-50 text-[11px] font-bold text-yellow-800">M2: {sumTotalM2}</div>
-                  <div className="border-2 border-orange-300 rounded py-1.5 bg-orange-50 text-[11px] font-bold text-orange-800">M3: {sumTotalM3}</div>
-                  <div className="border-2 border-red-300 rounded py-1.5 bg-red-50 text-[11px] font-bold text-red-800">M4: {sumTotalM4}</div>
+                <p className="text-[10px] font-bold text-gray-700 mb-1">Totals on floor</p>
+                <div className="grid grid-cols-4 gap-2 text-center mb-3">
+                  <div className="border-2 border-green-300 rounded py-1.5 bg-green-50 text-[10px] font-bold text-green-800">M1 trf: {formatProductionQty(cumulative.m1Transferred)}</div>
+                  <div className="border-2 border-yellow-300 rounded py-1.5 bg-yellow-50 text-[10px] font-bold text-yellow-800">M2: {formatProductionQty(cumulative.m2)}</div>
+                  <div className="border-2 border-orange-300 rounded py-1.5 bg-orange-50 text-[10px] font-bold text-orange-800">M3: {formatProductionQty(cumulative.m3)}</div>
+                  <div className="border-2 border-red-300 rounded py-1.5 bg-red-50 text-[10px] font-bold text-red-800">M4: {formatProductionQty(cumulative.m4)}</div>
                 </div>
-                <div className="text-center text-[11px] text-gray-600 border-t-2 border-gray-200 pt-1.5">Total checked: {currentUpdateData.m1Quantity + sumTotalM2 + sumTotalM3 + sumTotalM4} / {article.plannedQuantity}</div>
-                </>
-                  );
-                })()}
+                <p className="text-[10px] font-bold text-gray-700 mb-1">This save</p>
+                <div className="grid grid-cols-4 gap-2 text-center mb-2">
+                  <div className="border-2 border-green-200 rounded py-1.5 bg-green-50/50 text-[10px] font-bold text-green-800">M1: {formatProductionQty(saveDeltas.m1)}</div>
+                  <div className="border-2 border-yellow-200 rounded py-1.5 bg-yellow-50/50 text-[10px] font-bold text-yellow-800">M2: {formatProductionQty(saveDeltas.m2)}</div>
+                  <div className="border-2 border-orange-200 rounded py-1.5 bg-orange-50/50 text-[10px] font-bold text-orange-800">M3: {formatProductionQty(saveDeltas.m3)}</div>
+                  <div className="border-2 border-red-200 rounded py-1.5 bg-red-50/50 text-[10px] font-bold text-red-800">M4: {formatProductionQty(saveDeltas.m4)}</div>
+                </div>
+                <div className="text-center text-[11px] text-gray-700 border-t-2 border-gray-200 pt-1.5 font-medium">
+                  Available for M1 after save: {formatProductionQty(availableAfterSave)}
+                </div>
                 <div className="mt-2">
                   <label className="block text-[10px] font-bold text-gray-700 mb-0.5">Remarks</label>
                   <textarea className="w-full py-1.5 px-2 text-[11px] border-2 border-gray-300 rounded resize-none" rows={2} placeholder="Remarks for this article..." value={currentUpdateData.remarks} onChange={(e) => handleRemarksChange(articleId, e.target.value)} />
@@ -2199,6 +2096,38 @@ const FinalCheckingFloorSupervisorPage = () => {
                       </div>
                     )}
 
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <label className="form-label">M1 Transferred</label>
+                        <div className="text-lg font-semibold text-purple-600">
+                          {formatProductionQty(
+                            article.floorQuantities?.finalChecking?.m1Transferred ??
+                              article.floorQuantities?.finalChecking?.transferred ??
+                              0
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="form-label">M1 Remaining</label>
+                        <div className="text-lg font-semibold text-blue-600">
+                          {formatProductionQty(
+                            Math.max(
+                              0,
+                              (article.floorQuantities?.finalChecking?.m1Quantity ?? article.m1Quantity ?? 0) -
+                                (article.floorQuantities?.finalChecking?.m1Transferred ??
+                                  article.floorQuantities?.finalChecking?.transferred ??
+                                  0)
+                            )
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <QcM2MergeHistoryPanel
+                      articleId={article.id || article._id}
+                      floorLabel="Final Checking"
+                    />
+
                     {/* Quality Check Results */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                       <div>
@@ -2322,6 +2251,7 @@ const FinalCheckingFloorSupervisorPage = () => {
                                 log.action === 'M2 Quantity Updated' ? 'bg-orange-100 text-orange-800' :
                                 log.action === 'M3 Quantity Updated' ? 'bg-red-100 text-red-800' :
                                 log.action === 'M4 Quantity Updated' ? 'bg-red-100 text-red-800' :
+                                log.action === MERGE_CASCADE_ACTION ? 'bg-yellow-100 text-yellow-900' :
                                 'bg-gray-100 text-gray-800'
                               }`}>
                                 {log.action || 'ACTION'}
@@ -2419,38 +2349,24 @@ const FinalCheckingFloorSupervisorPage = () => {
         );
       })()}
 
-      {/* Repair Transfer Modal */}
-      {showRepairModal && selectedRepairArticle && (
-        <RepairTransferModal
-          isOpen={showRepairModal}
-          onClose={() => {
-            setShowRepairModal(false);
-            setSelectedRepairArticle(null);
-          }}
-          articleId={selectedRepairArticle.articleId}
-          articleNumber={selectedRepairArticle.articleNumber}
-          orderId={selectedRepairArticle.orderId}
-          floor="FinalChecking"
-          m2Remaining={(() => {
-            const article = selectedOrder?.articles.find(a => (a._id || a.id) === selectedRepairArticle.articleId);
-            if (!article) return 0;
-            const m2Quantity = article.floorQuantities?.finalChecking?.m2Quantity || article.m2Quantity || 0;
-            // According to docs: m2Remaining = m2Quantity (since m2Quantity is already reduced when items are sent)
-            return article.floorQuantities?.finalChecking?.m2Remaining ?? m2Quantity;
-          })()}
-          previousFloor={(() => {
-            const article = selectedOrder?.articles.find(a => (a._id || a.id) === selectedRepairArticle.articleId);
-            if (!article) return 'Branding';
-            const prevFloor = getPreviousFloor('Final Checking', article.linkingType);
-            // Convert to API format (no spaces)
-            if (prevFloor === 'Final Checking') return 'FinalChecking';
-            return prevFloor || 'Branding';
-          })()}
-          onSuccess={() => {
-            void loadFloorOrdersCatalog();
-          }}
-        />
-      )}
+      {/* Quality confirm modal */}
+      <ConfirmQualitySubmitModal
+        orderNumber={selectedOrder?.orderNumber ?? ""}
+        lines={qualityConfirmLines}
+        isOpen={showQualityConfirm}
+        isSubmitting={isLoading}
+        onCancel={() => {
+          setShowQualityConfirm(false);
+          setPendingQualitySubmit(null);
+        }}
+        onConfirm={() => {
+          setShowQualityConfirm(false);
+          const next = pendingQualitySubmit;
+          setPendingQualitySubmit(null);
+          if (next) next();
+          else void handleUpdateSubmit();
+        }}
+      />
 
       <ArticleQrScanDrawer
         open={qrScan.showDrawer}

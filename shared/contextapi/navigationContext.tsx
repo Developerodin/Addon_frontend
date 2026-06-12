@@ -42,6 +42,7 @@ interface NavigationPermissions {
     'Final Checking Floor': boolean;
     'Dispatch Floor': boolean;
     'M4 Management': boolean;
+    'M2 Management': boolean;
     'M3 Management': boolean;
     'Machine Floor': boolean;
     'Warehouse Floor': boolean;
@@ -229,6 +230,7 @@ const defaultPermissions: NavigationPermissions = {
     'Final Checking Floor': false,
     'Dispatch Floor': false,
     'M4 Management': false,
+    'M2 Management': false,
     'M3 Management': false,
     'Machine Floor': false,
     'Warehouse Floor': false,

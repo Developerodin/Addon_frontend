@@ -52,6 +52,7 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
     { key: 'Final Checking Floor', label: 'Final Checking Floor' },
     { key: 'Dispatch Floor', label: 'Dispatch Floor' },
     { key: 'M4 Management', label: 'M4 Management' },
+    { key: 'M2 Management', label: 'M2 Management' },
     { key: 'M3 Management', label: 'M3 Management' },
     { key: 'Machine Floor', label: 'Machine Floor' },
     { key: 'Warehouse Floor', label: 'Warehouse Floor' }

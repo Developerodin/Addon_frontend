@@ -348,6 +348,58 @@ export interface M3ArticleSummary extends M3ArticleRow {
   recentLogs: M3LogEntry[];
 }
 
+/** M2 Management — open repair entries from QC floors */
+export type M2EntryStatus = 'OPEN' | 'PARTIAL' | 'RESOLVED';
+export type M2LogType = 'ENTRY' | 'MERGE_TO_M1' | 'TRANSFER_TO_M3' | 'TRANSFER_TO_M4';
+
+export interface M2EntryRow {
+  id: string;
+  entryId: string;
+  type: M2LogType;
+  status?: M2EntryStatus | null;
+  originalQuantity?: number;
+  remainingQuantity?: number;
+  articleId: string;
+  orderId: string;
+  orderNumber: string;
+  articleNumber: string;
+  sourceFloor?: string | null;
+  quantity: number;
+  cascadeFloors?: string[];
+  remarks?: string;
+  userId: string;
+  userName?: string;
+  userEmail?: string;
+  floorSupervisorId?: string;
+  timestamp: string;
+}
+
+export interface M2EntriesResponse {
+  results: M2EntryRow[];
+  page: number;
+  limit: number;
+  totalPages: number;
+  totalResults: number;
+}
+
+export interface M2Statistics {
+  openEntryCount: number;
+  partialEntryCount: number;
+  resolvedEntryCount: number;
+  totalOpenQuantity: number;
+}
+
+export interface M2ArticleSummary {
+  id: string;
+  _id?: string;
+  articleNumber: string;
+  orderId: string;
+  orderNumber: string;
+  openM2Quantity: number;
+  entries: M2EntryRow[];
+  recentLogs: M2EntryRow[];
+}
+
 /** Body for PATCH /articles/:articleId/floor-received-data – append one receivedData entry. */
 export type ProductionFloorName =
   | 'Knitting' | 'Linking' | 'Checking' | 'Washing' | 'Boarding' | 'Silicon'
@@ -1244,6 +1296,81 @@ class ProductionService {
 
   async markM4Outward(articleId: string, body: { quantity: number; remarks: string }): Promise<ApiResponse<{ article: M4ArticleRow; log: M4LogEntry }>> {
     return this.request(`/m4/articles/${articleId}/outward`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  // M2 Management APIs
+  async getM2Entries(filters: {
+    orderId?: string;
+    articleId?: string;
+    sourceFloor?: string;
+    status?: M2EntryStatus;
+    includeResolved?: boolean;
+    search?: string;
+    limit?: number;
+    page?: number;
+    sortBy?: string;
+  } = {}): Promise<ApiResponse<M2EntriesResponse>> {
+    const queryParams = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') {
+        queryParams.append(key, key === 'includeResolved' ? String(value) : String(value));
+      }
+    });
+    const qs = queryParams.toString();
+    return this.request<M2EntriesResponse>(qs ? `/m2/entries?${qs}` : '/m2/entries');
+  }
+
+  async getM2Logs(filters: {
+    articleId?: string;
+    orderId?: string;
+    entryId?: string;
+    type?: M2LogType;
+    sourceFloor?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    search?: string;
+    limit?: number;
+    page?: number;
+    sortBy?: string;
+  } = {}): Promise<ApiResponse<PaginatedResponse<M2EntryRow>>> {
+    const queryParams = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') queryParams.append(key, String(value));
+    });
+    const qs = queryParams.toString();
+    return this.request<PaginatedResponse<M2EntryRow>>(qs ? `/m2/logs?${qs}` : '/m2/logs');
+  }
+
+  async getM2Statistics(): Promise<ApiResponse<M2Statistics>> {
+    return this.request<M2Statistics>('/m2/statistics');
+  }
+
+  async getM2ArticleSummary(articleId: string, logLimit = 30): Promise<ApiResponse<M2ArticleSummary>> {
+    return this.request<M2ArticleSummary>(`/m2/articles/${articleId}/summary?logLimit=${logLimit}`);
+  }
+
+  async mergeM2ToM1(
+    entryId: string,
+    body: { quantity: number; remarks: string; transferItems?: TransferItem[] }
+  ): Promise<ApiResponse<unknown>> {
+    return this.request(`/m2/entries/${entryId}/merge-to-m1`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async transferM2ToM3(entryId: string, body: { quantity: number; remarks: string }): Promise<ApiResponse<unknown>> {
+    return this.request(`/m2/entries/${entryId}/transfer-to-m3`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async transferM2ToM4(entryId: string, body: { quantity: number; remarks: string }): Promise<ApiResponse<unknown>> {
+    return this.request(`/m2/entries/${entryId}/transfer-to-m4`, {
       method: 'POST',
       body: JSON.stringify(body),
     });

@@ -402,6 +402,14 @@ const BaseMenuItems: any = [
       },
       {
         icon: FloorIcon,
+        path: "/production/m2-management",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "M2 Management",
+      },
+      {
+        icon: FloorIcon,
         path: "/production/m4-management",
         type: "link",
         active: false,

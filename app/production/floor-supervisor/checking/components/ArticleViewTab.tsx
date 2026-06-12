@@ -16,6 +16,7 @@ import {
   normalizeProductionQty,
   productionQtyCsvValue,
 } from "@/shared/utils/halfStepQuantity";
+import { getQcRemaining, getQcTrfQty } from "@/shared/utils/qcFloorQuantities";
 
 export interface ArticleRow {
   article: Article;
@@ -41,15 +42,10 @@ export interface ArticleViewTabProps {
 }
 
 /**
- * Checking remaining qty (prefers API remaining, else received − transferred).
+ * Checking remaining qty (prefers API remaining, else M2/M3/M4-aware formula).
  */
 function checkingRemaining(article: Article): number {
-  const checking = article.floorQuantities?.checking;
-  if (checking == null) return 0;
-  if (typeof checking.remaining === "number") return normalizeProductionQty(checking.remaining);
-  const received = checking.received ?? 0;
-  const transferred = checking.transferred ?? 0;
-  return normalizeProductionQty(Math.max(0, received - transferred));
+  return getQcRemaining(article.floorQuantities?.checking, article);
 }
 
 /** Flattens orders into rows with checking received > 0. */
@@ -168,8 +164,8 @@ export default function ArticleViewTab({
       const check = article.floorQuantities?.checking;
       const received = normalizeProductionQty(check?.received ?? 0);
       const done = normalizeProductionQty(check?.m1Quantity ?? article.m1Quantity ?? 0);
-      const transferred = normalizeProductionQty(check?.transferred ?? 0);
-      const remaining = normalizeProductionQty(check?.remaining ?? Math.max(0, received - transferred));
+      const transferred = getQcTrfQty(check);
+      const remaining = getQcRemaining(check, article);
       const { m2, m3, m4 } = checkingDefectQuantities(article);
 
       return [
@@ -308,12 +304,12 @@ export default function ArticleViewTab({
           <tbody>
             {pagedRows.map(({ article, order }) => {
               const planned = normalizeProductionQty(article.plannedQuantity ?? 0);
-              const check = (article as { floorQuantities?: { checking?: { received?: number; m1Quantity?: number; transferred?: number; remaining?: number } }; m1Quantity?: number }).floorQuantities?.checking;
+              const check = (article as { floorQuantities?: { checking?: { received?: number; m1Quantity?: number; transferred?: number; m1Transferred?: number; remaining?: number } }; m1Quantity?: number }).floorQuantities?.checking;
               const received = normalizeProductionQty(check?.received ?? 0);
               const completed = normalizeProductionQty(check?.m1Quantity ?? (article as { m1Quantity?: number }).m1Quantity ?? 0);
               const { m2, m3, m4 } = checkingDefectQuantities(article);
-              const transferred = normalizeProductionQty(check?.transferred ?? 0);
-              const remaining = normalizeProductionQty(check?.remaining ?? Math.max(0, received - transferred));
+              const transferred = getQcTrfQty(check);
+              const remaining = getQcRemaining(check, article as Article);
               const key = (article.id ?? article._id) + "-" + order.id;
               const articleId = article.id ?? article._id;
               const isActiveRow = Boolean(

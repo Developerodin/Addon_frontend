@@ -34,6 +34,13 @@ export function getDefaultActivityLogEndDate(): string {
   return toDateInputValue(new Date());
 }
 
+export interface YarnIssueActivityLogConeRef {
+  _id: string;
+  barcode?: string;
+  boxId?: string;
+  yarnName?: string;
+}
+
 export interface YarnIssueActivityLogRow {
   _id: string;
   yarn?: {
@@ -63,6 +70,7 @@ export interface YarnIssueActivityLogRow {
   transactionTotalWeight: number;
   transactionTearWeight: number;
   transactionConeCount: number;
+  conesIdsArray?: Array<string | YarnIssueActivityLogConeRef>;
   orderId?: string;
   orderno: string;
   articleId?: string;

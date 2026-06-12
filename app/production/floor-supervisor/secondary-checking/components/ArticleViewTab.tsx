@@ -16,6 +16,7 @@ import {
   normalizeProductionQty,
   productionQtyCsvValue,
 } from "@/shared/utils/halfStepQuantity";
+import { getQcRemaining, getQcTrfQty } from "@/shared/utils/qcFloorQuantities";
 
 export interface ArticleRow {
   article: Article;
@@ -40,14 +41,9 @@ export interface ArticleViewTabProps {
   onClearQrScanFilter?: () => void;
 }
 
-/** Secondary checking remaining qty (prefers API remaining, else received − transferred). */
+/** Secondary checking remaining qty (M2/M3/M4-aware formula). */
 function secondaryCheckingRemaining(article: Article): number {
-  const sc = article.floorQuantities?.secondaryChecking;
-  if (sc == null) return 0;
-  if (typeof sc.remaining === "number") return normalizeProductionQty(sc.remaining);
-  const received = sc.received ?? 0;
-  const transferred = sc.transferred ?? 0;
-  return normalizeProductionQty(Math.max(0, received - transferred));
+  return getQcRemaining(article.floorQuantities?.secondaryChecking, article);
 }
 
 /** Flattens orders into rows with secondary checking received > 0. */
@@ -165,8 +161,8 @@ export default function ArticleViewTab({
       const sc = article.floorQuantities?.secondaryChecking;
       const received = normalizeProductionQty(sc?.received ?? 0);
       const completed = normalizeProductionQty(sc?.m1Quantity ?? article.m1Quantity ?? 0);
-      const transferred = normalizeProductionQty(sc?.transferred ?? 0);
-      const remaining = normalizeProductionQty(sc?.remaining ?? Math.max(0, received - transferred));
+      const transferred = getQcTrfQty(sc);
+      const remaining = getQcRemaining(sc, article);
       const { m2, m3, m4 } = secondaryCheckingDefectQuantities(article);
 
       return [
@@ -303,8 +299,8 @@ export default function ArticleViewTab({
               const received = normalizeProductionQty(sc?.received ?? 0);
               const completed = normalizeProductionQty(sc?.m1Quantity ?? (article as { m1Quantity?: number }).m1Quantity ?? 0);
               const { m2, m3, m4 } = secondaryCheckingDefectQuantities(article);
-              const transferred = normalizeProductionQty(sc?.transferred ?? 0);
-              const remaining = normalizeProductionQty(sc?.remaining ?? Math.max(0, received - transferred));
+              const transferred = getQcTrfQty(sc);
+              const remaining = getQcRemaining(sc, article as Article);
               const key = (article.id ?? article._id) + "-" + order.id;
               const articleId = article.id ?? article._id;
               const isActiveRow = Boolean(

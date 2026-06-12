@@ -49,6 +49,7 @@ export const getFirstAvailableRoute = (permissions: NavigationPermissions | null
     { path: '/production/floor-supervisor/re-boarding', permission: permissions['Production Planning']?.['Re-Boarding Floor'] },
     { path: '/production/floor-supervisor/final-checking', permission: permissions['Production Planning']?.['Final Checking Floor'] },
     { path: '/production/floor-supervisor/dispatch', permission: permissions['Production Planning']?.['Dispatch Floor'] },
+    { path: '/production/m2-management', permission: permissions['Production Planning']?.['M2 Management'] },
     { path: '/production/m4-management', permission: permissions['Production Planning']?.['M4 Management'] },
     { path: '/production/m3-management', permission: permissions['Production Planning']?.['M3 Management'] },
     { path: '/production/floor-supervisor/machine-floor', permission: permissions['Production Planning']?.['Machine Floor'] },

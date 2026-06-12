@@ -29,6 +29,19 @@ function yarnTypeLabel(row: YarnIssueActivityLogRow): string {
   return row.yarn?.yarnType?.name || row.yarnCatalogId?.yarnType?.name || "—";
 }
 
+/**
+ * Formats populated cone refs (or raw ids) for table display.
+ */
+function formatConeBarcodes(row: YarnIssueActivityLogRow): string {
+  const cones = row.conesIdsArray;
+  if (!cones?.length) return "—";
+  const parts = cones.map((c) => {
+    if (typeof c === "string") return c;
+    return c?.barcode || c?._id || "—";
+  });
+  return parts.filter((p) => p !== "—").join(", ") || "—";
+}
+
 export interface YarnIssueActivityLogDrawerProps {
   open: boolean;
   onClose: () => void;
@@ -303,7 +316,7 @@ export function YarnIssueActivityLogDrawer({
               <>
                 <div className="overflow-x-auto border border-gray-300 bg-white">
                   <table
-                    className="w-full min-w-[1200px] border-collapse text-[11px]"
+                    className="w-full min-w-[1380px] border-collapse text-[11px]"
                     aria-label="Yarn issue activity log"
                   >
                     <thead className="sticky top-0 z-10 shadow-sm">
@@ -325,6 +338,9 @@ export function YarnIssueActivityLogDrawer({
                         </th>
                         <th className="border border-gray-300 px-2 py-2 text-right font-bold text-gray-800 whitespace-nowrap bg-[#f2f2f2]">
                           Cones
+                        </th>
+                        <th className="border border-gray-300 px-2 py-2 text-left font-mono font-bold text-gray-800 min-w-[180px] bg-[#f2f2f2]">
+                          Cone barcode
                         </th>
                         <th className="border border-gray-300 px-2 py-2 text-right font-bold text-gray-800 whitespace-nowrap bg-[#f2f2f2]">
                           Net (kg)
@@ -374,6 +390,9 @@ export function YarnIssueActivityLogDrawer({
                           </td>
                           <td className="border border-gray-300 px-2 py-1.5 text-right tabular-nums text-gray-900">
                             {transaction.transactionConeCount}
+                          </td>
+                          <td className="border border-gray-300 px-2 py-1.5 font-mono text-[10px] text-gray-800 break-all align-top">
+                            {formatConeBarcodes(transaction)}
                           </td>
                           <td className="border border-gray-300 px-2 py-1.5 text-right tabular-nums font-semibold text-blue-700">
                             {transaction.transactionNetWeight}

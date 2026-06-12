@@ -27,6 +27,21 @@ function yarnTypeLabel(row: YarnReturnHistoryRow): string {
 }
 
 /**
+ * Comma-separated cone barcodes for CSV export.
+ */
+function formatConeBarcodes(row: YarnReturnHistoryRow): string {
+  const cones = row.conesIdsArray;
+  if (!cones?.length) return '';
+  return cones
+    .map((c) => {
+      if (typeof c === 'string') return c;
+      return c?.barcode || c?._id || '';
+    })
+    .filter(Boolean)
+    .join(', ');
+}
+
+/**
  * Maps API rows to plain objects for CSV export.
  */
 function rowsToExportRecords(rows: YarnReturnHistoryRow[]): Record<string, string | number>[] {
@@ -39,6 +54,7 @@ function rowsToExportRecords(rows: YarnReturnHistoryRow[]): Record<string, strin
     'Total (kg)': row.transactionTotalWeight ?? '',
     'Tear (kg)': row.transactionTearWeight ?? '',
     Cones: row.transactionConeCount ?? '',
+    'Cone Barcode': formatConeBarcodes(row),
     'Created At': row.createdAt ? new Date(row.createdAt).toLocaleString() : '',
     'Updated At': row.updatedAt ? new Date(row.updatedAt).toLocaleString() : '',
     'Transaction ID': row._id,

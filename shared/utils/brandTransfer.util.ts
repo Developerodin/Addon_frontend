@@ -238,3 +238,39 @@ export function toBrandOnlyTransferItems(items: TransferItem[]): TransferItem[] 
       styleCode: "",
     }));
 }
+
+const FINAL_CHECKING_LABEL = "Final Checking";
+
+/**
+ * Whether Final Checking receivedData has brand breakdown rows.
+ */
+export function finalCheckingHasBrandReceivedData(
+  article: { floorQuantities?: { finalChecking?: { receivedData?: BrandTransferLine[] } } } | null | undefined
+): boolean {
+  const receivedData = article?.floorQuantities?.finalChecking?.receivedData;
+  if (!Array.isArray(receivedData)) return false;
+  return receivedData.some((r) => (Number(r?.transferred ?? 0) > 0) && brandDisplayKey(r?.brand));
+}
+
+/**
+ * Whether process list includes Branding or Re-Boarding.
+ */
+export function articleHasBrandingInProcessNames(processNames: string[]): boolean {
+  return processNames.some((name) => {
+    const n = String(name ?? "").trim().toLowerCase();
+    return n.includes("brand") || n.includes("re-board") || n.includes("reboard");
+  });
+}
+
+/**
+ * Whether M2→M1 merge requires brand allocation for this article and cascade path.
+ */
+export function articleRequiresM2MergeBrand(
+  article: { floorQuantities?: { finalChecking?: { receivedData?: BrandTransferLine[] } } } | null | undefined,
+  cascadeFloors: string[],
+  processNames: string[]
+): boolean {
+  if (!cascadeFloors.includes(FINAL_CHECKING_LABEL)) return false;
+  if (!articleHasBrandingInProcessNames(processNames)) return false;
+  return finalCheckingHasBrandReceivedData(article);
+}

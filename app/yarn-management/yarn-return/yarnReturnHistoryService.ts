@@ -43,6 +43,13 @@ function getToken(): string | null {
   }
 }
 
+export interface YarnReturnHistoryConeRef {
+  _id: string;
+  barcode?: string;
+  boxId?: string;
+  yarnName?: string;
+}
+
 export interface YarnReturnHistoryRow {
   _id: string;
   orderno?: string;
@@ -54,6 +61,7 @@ export interface YarnReturnHistoryRow {
   transactionTotalWeight: number;
   transactionTearWeight: number;
   transactionConeCount: number;
+  conesIdsArray?: Array<string | YarnReturnHistoryConeRef>;
   createdAt: string;
   updatedAt: string;
   yarn?: {
@@ -160,6 +168,9 @@ function normalizeReturnTransactionForHistory(
     transactionTotalWeight: Number.isFinite(total) ? total : 0,
     transactionTearWeight: Number.isFinite(tear) ? tear : 0,
     transactionConeCount: coneCt,
+    conesIdsArray: Array.isArray(raw.conesIdsArray)
+      ? (raw.conesIdsArray as YarnReturnHistoryRow['conesIdsArray'])
+      : undefined,
     createdAt,
     updatedAt,
     yarn,
