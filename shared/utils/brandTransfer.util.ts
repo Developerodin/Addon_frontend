@@ -241,6 +241,37 @@ export function toBrandOnlyTransferItems(items: TransferItem[]): TransferItem[] 
 
 const FINAL_CHECKING_LABEL = "Final Checking";
 
+export type M2MergeBrandBudgetMode = "none" | "floor" | "product";
+
+export interface M2MergeBrandContext {
+  required: boolean;
+  budgetMode: M2MergeBrandBudgetMode;
+  multiBrand: boolean;
+  autoAssignBrand: string | null;
+  productBrands: string[];
+  receivedData: BrandTransferLine[];
+  transferredData: BrandTransferLine[];
+}
+
+/**
+ * Unique display brand names from product styleCodes entries.
+ */
+export function extractBrandsFromProductStyleCodes(
+  styleCodes: Array<{ brand?: string }> | undefined | null
+): string[] {
+  const seen = new Set<string>();
+  const brands: string[] = [];
+  for (const sc of styleCodes ?? []) {
+    const brand = brandDisplayKey(sc?.brand);
+    if (!brand) continue;
+    const key = normalizeBrand(brand);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    brands.push(brand);
+  }
+  return brands;
+}
+
 /**
  * Whether Final Checking receivedData has brand breakdown rows.
  */
@@ -263,14 +294,84 @@ export function articleHasBrandingInProcessNames(processNames: string[]): boolea
 }
 
 /**
+ * Resolve M2→M1 merge brand requirements (floor budget vs product catalog fallback).
+ */
+export function resolveM2MergeBrandContext(
+  article: { floorQuantities?: { finalChecking?: { receivedData?: BrandTransferLine[]; transferredData?: BrandTransferLine[] } } } | null | undefined,
+  cascadeFloors: string[],
+  processNames: string[],
+  productStyleCodes: Array<{ brand?: string }> | undefined | null
+): M2MergeBrandContext {
+  const empty: M2MergeBrandContext = {
+    required: false,
+    budgetMode: "none",
+    multiBrand: false,
+    autoAssignBrand: null,
+    productBrands: [],
+    receivedData: [],
+    transferredData: [],
+  };
+
+  if (!cascadeFloors.includes(FINAL_CHECKING_LABEL)) return empty;
+  if (!articleHasBrandingInProcessNames(processNames)) return empty;
+
+  const productBrands = extractBrandsFromProductStyleCodes(productStyleCodes);
+  if (productBrands.length === 0) return empty;
+
+  const fc = article?.floorQuantities?.finalChecking;
+  const receivedData = (fc?.receivedData as BrandTransferLine[]) ?? [];
+  const transferredData = (fc?.transferredData as BrandTransferLine[]) ?? [];
+  const hasFloorBrandData = finalCheckingHasBrandReceivedData(article);
+
+  return {
+    required: true,
+    budgetMode: hasFloorBrandData ? "floor" : "product",
+    multiBrand: productBrands.length > 1,
+    autoAssignBrand: productBrands.length === 1 ? productBrands[0] : null,
+    productBrands,
+    receivedData,
+    transferredData,
+  };
+}
+
+/**
+ * Build brand options and per-brand caps for M2 merge drawer.
+ */
+export function buildM2MergeBrandOptions(
+  brandContext: M2MergeBrandContext,
+  mergeQuantity: number
+): BrandOptionsResult {
+  if (brandContext.budgetMode === "floor") {
+    return buildBrandOptionsFromRows(brandContext.receivedData, brandContext.transferredData);
+  }
+
+  if (brandContext.budgetMode === "product") {
+    const brandMaxQuantities: Record<string, number> = {};
+    const options: BrandOption[] = brandContext.productBrands.map((brand) => {
+      brandMaxQuantities[brand] = mergeQuantity;
+      return { brand };
+    });
+    return { options, brandMaxQuantities };
+  }
+
+  return { options: [], brandMaxQuantities: {} };
+}
+
+/**
  * Whether M2→M1 merge requires brand allocation for this article and cascade path.
  */
 export function articleRequiresM2MergeBrand(
   article: { floorQuantities?: { finalChecking?: { receivedData?: BrandTransferLine[] } } } | null | undefined,
   cascadeFloors: string[],
-  processNames: string[]
+  processNames: string[],
+  productStyleCodes?: Array<{ brand?: string }> | null
 ): boolean {
-  if (!cascadeFloors.includes(FINAL_CHECKING_LABEL)) return false;
-  if (!articleHasBrandingInProcessNames(processNames)) return false;
-  return finalCheckingHasBrandReceivedData(article);
+  return resolveM2MergeBrandContext(article, cascadeFloors, processNames, productStyleCodes).required;
+}
+
+/**
+ * Whether operator must manually split merge qty across multiple brands.
+ */
+export function m2MergeRequiresManualBrandSplit(brandContext: M2MergeBrandContext): boolean {
+  return brandContext.required && brandContext.multiBrand;
 }

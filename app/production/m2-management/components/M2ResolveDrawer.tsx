@@ -10,14 +10,16 @@ import {
   type TransferItem,
 } from "@/shared/services/productionService";
 import {
-  articleRequiresM2MergeBrand,
-  buildBrandOptionsFromRows,
+  buildM2MergeBrandOptions,
   collapseLinesByBrand,
   formatBrandLine,
+  formatProductBrandsList,
+  m2MergeRequiresManualBrandSplit,
+  resolveM2MergeBrandContext,
   toBrandOnlyTransferItems,
   validateBrandTransferItems,
-  type BrandTransferLine,
 } from "@/shared/utils/brandTransfer.util";
+import { productService } from "@/shared/services/productService";
 import {
   CANONICAL_FLOOR_TO_KEY,
   getApplicableFloorKeysFromProcesses,
@@ -89,6 +91,7 @@ export default function M2ResolveDrawer({
   const [transferItems, setTransferItems] = useState<TransferItem[]>([]);
   const [article, setArticle] = useState<ProductionArticleDetail | null>(null);
   const [processNames, setProcessNames] = useState<string[]>([]);
+  const [productStyleCodes, setProductStyleCodes] = useState<Array<{ brand?: string }>>([]);
   const [linkingType, setLinkingType] = useState<LinkingType | undefined>();
   const [isLoadingBrandContext, setIsLoadingBrandContext] = useState(false);
   const labels = ACTION_LABELS[action];
@@ -113,6 +116,15 @@ export default function M2ResolveDrawer({
         if (processesRes.success && processesRes.data?.processes) {
           setProcessNames(processesRes.data.processes.map((p) => p.name));
         }
+        const factoryCode = entry.articleNumber?.trim();
+        if (factoryCode) {
+          const product = await productService.getByCode(factoryCode);
+          if (!cancelled) {
+            setProductStyleCodes(
+              (product?.styleCodes as Array<{ brand?: string }> | undefined) ?? []
+            );
+          }
+        }
       } catch (err) {
         console.error("Failed to load brand context for M2 merge", err);
       } finally {
@@ -124,32 +136,47 @@ export default function M2ResolveDrawer({
     return () => {
       cancelled = true;
     };
-  }, [action, entry.articleId]);
+  }, [action, entry.articleId, entry.articleNumber]);
 
   const cascadeFloors = useMemo(
     () => buildM2MergeCascadeFloors(processNames.map((n) => ({ name: n })), linkingType, entry.sourceFloor ?? ""),
     [processNames, linkingType, entry.sourceFloor]
   );
 
-  const brandRequired = useMemo(
-    () => action === "merge" && articleRequiresM2MergeBrand(article, cascadeFloors, processNames),
-    [action, article, cascadeFloors, processNames]
+  const brandContext = useMemo(
+    () =>
+      action === "merge"
+        ? resolveM2MergeBrandContext(article, cascadeFloors, processNames, productStyleCodes)
+        : {
+            required: false,
+            budgetMode: "none" as const,
+            multiBrand: false,
+            autoAssignBrand: null,
+            productBrands: [],
+            receivedData: [],
+            transferredData: [],
+          },
+    [action, article, cascadeFloors, processNames, productStyleCodes]
   );
 
-  const { options: brandOptions, brandMaxQuantities } = useMemo(() => {
-    const fc = article?.floorQuantities?.finalChecking;
-    const receivedData = (fc?.receivedData as BrandTransferLine[]) ?? [];
-    const transferredData = (fc?.transferredData as BrandTransferLine[]) ?? [];
-    return buildBrandOptionsFromRows(receivedData, transferredData);
-  }, [article]);
+  const manualBrandSplit = m2MergeRequiresManualBrandSplit(brandContext);
 
-  const receivedBrandText = useMemo(() => {
-    const fc = article?.floorQuantities?.finalChecking;
-    const receivedData = (fc?.receivedData as BrandTransferLine[]) ?? [];
-    const collapsed = collapseLinesByBrand(receivedData);
-    if (collapsed.length === 0) return "—";
-    return collapsed.map(formatBrandLine).join("; ");
-  }, [article]);
+  const { options: brandOptions, brandMaxQuantities } = useMemo(
+    () => buildM2MergeBrandOptions(brandContext, quantity),
+    [brandContext, quantity]
+  );
+
+  const brandBreakdownText = useMemo(() => {
+    if (brandContext.budgetMode === "floor") {
+      const collapsed = collapseLinesByBrand(brandContext.receivedData);
+      if (collapsed.length === 0) return "—";
+      return collapsed.map(formatBrandLine).join("; ");
+    }
+    if (brandContext.productBrands.length > 0) {
+      return formatProductBrandsList(brandContext.productBrands);
+    }
+    return "—";
+  }, [brandContext]);
 
   const brandValidation = useMemo(
     () => validateBrandTransferItems(transferItems, quantity, brandMaxQuantities),
@@ -157,14 +184,29 @@ export default function M2ResolveDrawer({
   );
 
   const brandSplitValid =
-    !brandRequired ||
-    (brandValidation.valid && brandValidation.total === quantity && quantity > 0);
+    !brandContext.required ||
+    (!manualBrandSplit && Boolean(brandContext.autoAssignBrand)) ||
+    (manualBrandSplit &&
+      brandValidation.valid &&
+      brandValidation.total === quantity &&
+      quantity > 0);
 
   const handleSubmit = async () => {
     if (quantity <= 0 || quantity > maxQty) return;
     if (!remarks.trim()) return;
-    if (brandRequired && !brandSplitValid) return;
-    const items = brandRequired ? toBrandOnlyTransferItems(transferItems) : undefined;
+    if (!brandSplitValid) return;
+
+    let items: TransferItem[] | undefined;
+    if (brandContext.required) {
+      if (manualBrandSplit) {
+        items = toBrandOnlyTransferItems(transferItems);
+      } else if (brandContext.autoAssignBrand) {
+        items = toBrandOnlyTransferItems([
+          { transferred: quantity, brand: brandContext.autoAssignBrand, styleCode: "" },
+        ]);
+      }
+    }
+
     await onSubmit(quantity, remarks.trim(), items);
   };
 
@@ -228,30 +270,41 @@ export default function M2ResolveDrawer({
             />
           </div>
 
-          {action === "merge" && brandRequired && (
+          {action === "merge" && brandContext.required && (
             <div className="rounded border-2 border-green-200 bg-green-50/40 p-3 space-y-2">
               <p className="text-[11px] font-bold text-green-900">Allocate merged qty by brand</p>
               <p className="text-[10px] text-green-800">
-                Merged M2 becomes M1 already transferred — assign which brand this repaired qty belongs to.
+                Merge skips Branding — assign which brand this repaired qty belongs to on Final Checking
+                (source: {entry.sourceFloor}).
               </p>
               <p className="text-[10px] text-gray-600">
-                <span className="font-semibold">Received breakdown:</span> {receivedBrandText}
+                <span className="font-semibold">
+                  {brandContext.budgetMode === "floor" ? "Final Checking received:" : "Product brands:"}
+                </span>{" "}
+                {brandBreakdownText}
               </p>
               {isLoadingBrandContext ? (
                 <p className="text-[10px] text-gray-500">Loading brand options…</p>
+              ) : manualBrandSplit ? (
+                <>
+                  <BrandTransferItemsInput
+                    value={transferItems}
+                    onChange={setTransferItems}
+                    maxTotal={quantity}
+                    brandOptions={brandOptions}
+                    brandMaxQuantities={brandMaxQuantities}
+                    placeholder="Enter brand split for merge qty"
+                  />
+                  {transferItems.length > 0 && brandValidation.total !== quantity && (
+                    <p className="text-[10px] text-red-600 font-medium">
+                      Brand total ({brandValidation.total}) must equal merge quantity ({quantity})
+                    </p>
+                  )}
+                </>
               ) : (
-                <BrandTransferItemsInput
-                  value={transferItems}
-                  onChange={setTransferItems}
-                  maxTotal={quantity}
-                  brandOptions={brandOptions}
-                  brandMaxQuantities={brandMaxQuantities}
-                  placeholder="Enter brand split for merge qty"
-                />
-              )}
-              {transferItems.length > 0 && brandValidation.total !== quantity && (
-                <p className="text-[10px] text-red-600 font-medium">
-                  Brand total ({brandValidation.total}) must equal merge quantity ({quantity})
+                <p className="text-[10px] text-green-900 font-medium">
+                  Single brand — full merge qty will be assigned to{" "}
+                  <span className="font-bold">{brandContext.autoAssignBrand}</span>.
                 </p>
               )}
             </div>
