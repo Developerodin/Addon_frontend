@@ -274,12 +274,12 @@ export default function M2ResolveDrawer({
             <div className="rounded border-2 border-green-200 bg-green-50/40 p-3 space-y-2">
               <p className="text-[11px] font-bold text-green-900">Allocate merged qty by brand</p>
               <p className="text-[10px] text-green-800">
-                Merge skips Branding — assign which brand this repaired qty belongs to on Final Checking
-                (source: {entry.sourceFloor}).
+                Cascade adds M1 from {entry.sourceFloor} through Dispatch. Brand tags which catalog line
+                this repaired qty belongs to (not limited by current Final Checking received).
               </p>
               <p className="text-[10px] text-gray-600">
                 <span className="font-semibold">
-                  {brandContext.budgetMode === "floor" ? "Final Checking received:" : "Product brands:"}
+                  {brandContext.budgetMode === "floor" ? "Known brands (from FC received):" : "Product brands:"}
                 </span>{" "}
                 {brandBreakdownText}
               </p>

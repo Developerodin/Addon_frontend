@@ -239,6 +239,114 @@ export function toBrandOnlyTransferItems(items: TransferItem[]): TransferItem[] 
     }));
 }
 
+/**
+ * Per-brand budget from receivedData minus already-transferred amounts.
+ */
+export function buildBrandBudgetFromReceived(
+  receivedData: BrandTransferLine[] | undefined,
+  transferredData: BrandTransferLine[] | undefined
+): Map<string, { brand: string; remaining: number }> {
+  const received = aggregateQtyByBrand(receivedData);
+  const transferred = aggregateQtyByBrand(transferredData);
+  const budget = new Map<string, { brand: string; remaining: number }>();
+
+  for (const [key, qty] of received.entries()) {
+    const displayBrand = (receivedData ?? []).find((r) => normalizeBrand(r?.brand) === key)?.brand;
+    const brand = brandDisplayKey(displayBrand ?? key);
+    const remaining = Math.max(0, qty - (transferred.get(key) ?? 0));
+    budget.set(key, { brand, remaining });
+  }
+
+  return budget;
+}
+
+/**
+ * Fill missing brand on transfer lines from receivedData (deducts prior transfers).
+ */
+export function enrichTransferItemsFromReceived(
+  transferItems: TransferItem[],
+  receivedData: BrandTransferLine[] | undefined,
+  transferredData: BrandTransferLine[] | undefined
+): TransferItem[] {
+  const hasReceivedBrands = (receivedData ?? []).some(
+    (r) => (r.transferred ?? 0) > 0 && brandDisplayKey(r?.brand)
+  );
+  if (!hasReceivedBrands) return transferItems;
+
+  const budgetMap = buildBrandBudgetFromReceived(receivedData, transferredData);
+  const budget = Array.from(budgetMap.values()).map((b) => ({
+    remaining: b.remaining,
+    styleCode: "",
+    brand: b.brand,
+  }));
+
+  return transferItems.flatMap((item) => {
+    if (normalizeBrand(item?.brand)) {
+      return [{ ...item, styleCode: item.styleCode || "" }];
+    }
+    let qty = item.transferred ?? 0;
+    const pieces: TransferItem[] = [];
+    for (const b of budget) {
+      if (qty <= 0) break;
+      if (b.remaining <= 0) continue;
+      const take = Math.min(b.remaining, qty);
+      b.remaining -= take;
+      qty -= take;
+      pieces.push({ transferred: take, styleCode: "", brand: b.brand });
+    }
+    if (pieces.length >= 1) return pieces;
+    return [item];
+  });
+}
+
+/**
+ * Prepare brand transfer payload for submit (auto-fills brand from received when omitted).
+ */
+export function prepareBrandTransferItemsForSubmit(
+  items: TransferItem[] | undefined,
+  transferTotal: number,
+  receivedData: BrandTransferLine[] | undefined,
+  transferredData: BrandTransferLine[] | undefined
+): TransferItem[] {
+  const withQty = (items ?? []).filter((i) => (i.transferred ?? 0) > 0);
+  const base: TransferItem[] =
+    withQty.length > 0
+      ? withQty
+      : transferTotal > 0
+        ? [{ transferred: transferTotal, styleCode: "", brand: "" }]
+        : [];
+  const enriched = enrichTransferItemsFromReceived(base, receivedData, transferredData);
+  return toBrandOnlyTransferItems(enriched);
+}
+
+/**
+ * Display transferredData, inferring from received when DB rows are missing brand breakdown.
+ */
+export function resolveTransferredDataForDisplay(
+  floorData:
+    | {
+        transferredData?: BrandTransferLine[];
+        receivedData?: BrandTransferLine[];
+        m1Transferred?: number;
+        transferred?: number;
+      }
+    | null
+    | undefined
+): BrandTransferLine[] {
+  const stored = collapseLinesByBrand(floorData?.transferredData);
+  if (stored.length > 0) return stored;
+
+  const trfQty = Math.max(0, Number(floorData?.m1Transferred ?? floorData?.transferred ?? 0));
+  if (trfQty <= 0) return [];
+
+  const inferred = enrichTransferItemsFromReceived(
+    [{ transferred: trfQty, styleCode: "", brand: "" }],
+    floorData?.receivedData,
+    []
+  );
+  return collapseLinesByBrand(inferred);
+}
+
 const FINAL_CHECKING_LABEL = "Final Checking";
 
 export type M2MergeBrandBudgetMode = "none" | "floor" | "product";
@@ -342,7 +450,13 @@ export function buildM2MergeBrandOptions(
   mergeQuantity: number
 ): BrandOptionsResult {
   if (brandContext.budgetMode === "floor") {
-    return buildBrandOptionsFromRows(brandContext.receivedData, brandContext.transferredData);
+    const fromRows = buildBrandOptionsFromRows(brandContext.receivedData, brandContext.transferredData);
+    // Cascade merge increments downstream floors — cap per brand at merge qty, not FC receive remaining.
+    const brandMaxQuantities: Record<string, number> = {};
+    for (const opt of fromRows.options) {
+      brandMaxQuantities[opt.brand] = mergeQuantity;
+    }
+    return { options: fromRows.options, brandMaxQuantities };
   }
 
   if (brandContext.budgetMode === "product") {

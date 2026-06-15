@@ -26,10 +26,24 @@ import {
   buildBrandOptionsFromRows,
   collapseLinesByBrand,
   formatBrandLine,
-  toBrandOnlyTransferItems,
+  prepareBrandTransferItemsForSubmit,
   validateBrandTransferItems,
+  type BrandTransferLine,
 } from "@/shared/utils/brandTransfer.util";
-import { containersMasterService, hasActiveItems, getContainerArticles } from "@/shared/services/containersMasterService";
+import {
+  getPendingContainerHandoffQty,
+  hasPendingContainerHandoff,
+  resolveArticlesForContainerStaging,
+} from "@/shared/utils/containerHandoff.util";
+import {
+  containersMasterService,
+  hasActiveItems,
+  buildStagedActiveItemsPayload,
+  groupContainerArticlesForDisplay,
+  hasDuplicateArticlesInContainer,
+  isContainerAlreadyStagedForArticles,
+  type ContainerActiveItem,
+} from "@/shared/services/containersMasterService";
 import { useProductionArticleQrScan } from "@/shared/hooks/useProductionArticleQrScan";
 import ArticleQrScanDrawer from "@/shared/components/production/ArticleQrScanDrawer";
 import { teamMasterService, type TeamMaster, PRODUCTION_FLOORS } from "@/shared/services/teamMasterService";
@@ -128,12 +142,13 @@ const FinalCheckingFloorSupervisorPage = () => {
   // Scan bag/container before submit (Update Order click opens this modal)
   const [showUpdateContainerModal, setShowUpdateContainerModal] = useState(false);
   const [updateContainerBarcode, setUpdateContainerBarcode] = useState("");
-  const [updateContainerCheckStatus, setUpdateContainerCheckStatus] = useState<"idle" | "loading" | "not-found" | "already-filled" | "ok">("idle");
+  const [updateContainerCheckStatus, setUpdateContainerCheckStatus] = useState<"idle" | "loading" | "not-found" | "already-filled" | "duplicate-article" | "ok">("idle");
   const [updateContainerFetched, setUpdateContainerFetched] = useState<{ activeItems?: Array<{ article: string | { articleNumber?: string }; quantity: number }>; activeFloor?: string } | null>(null);
   const [updateContainerArticleId, setUpdateContainerArticleId] = useState("");
   const [updateContainerQuantity, setUpdateContainerQuantity] = useState("");
   const [updateContainerNextFloor, setUpdateContainerNextFloor] = useState("Warehouse");
   const [updateContainerSubmitting, setUpdateContainerSubmitting] = useState(false);
+  const [updateContainerRestageOnly, setUpdateContainerRestageOnly] = useState(false);
 
   /** When false (default): article view lists only articles with final checking remaining > 0. When true: all with received > 0. */
   const [showAllArticles, setShowAllArticles] = useState(false);
@@ -204,6 +219,9 @@ const FinalCheckingFloorSupervisorPage = () => {
             if (nextFloor && activeFloorNorm && activeFloorNorm === nextFloor) {
               setUpdateContainerCheckStatus("ok");
               setUpdateContainerFetched({ activeItems: container.activeItems, activeFloor: container.activeFloor });
+            } else if (updateContainerRestageOnly) {
+              setUpdateContainerCheckStatus("ok");
+              setUpdateContainerFetched({ activeItems: container.activeItems, activeFloor: container.activeFloor });
             } else {
               setUpdateContainerCheckStatus("already-filled");
               setUpdateContainerFetched({ activeItems: container.activeItems, activeFloor: container.activeFloor });
@@ -225,7 +243,30 @@ const FinalCheckingFloorSupervisorPage = () => {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [showUpdateContainerModal, updateContainerBarcode, updateContainerNextFloor]);
+  }, [showUpdateContainerModal, updateContainerBarcode, updateContainerNextFloor, updateContainerRestageOnly]);
+
+  // Flag when articles being transferred are already staged on the scanned container
+  useEffect(() => {
+    if (!showUpdateContainerModal || updateContainerCheckStatus !== "ok" || !updateContainerFetched || !selectedOrder) return;
+    const modalArticles = selectedArticleId
+      ? selectedOrder.articles.filter((a) => (a.id ?? a._id) === selectedArticleId)
+      : selectedOrder.articles;
+    const stagingRows = resolveArticlesForContainerStaging(modalArticles, updateData, getTransferTotal);
+    const newRows = stagingRows
+      .map(({ article, quantity }) => ({
+        article: article._id ?? article.id ?? "",
+        quantity,
+      }))
+      .filter((r): r is { article: string; quantity: number } => !!r.article && r.quantity > 0);
+    const existingItems = updateContainerFetched.activeItems as ContainerActiveItem[] | undefined;
+    if (
+      newRows.length > 0 &&
+      hasDuplicateArticlesInContainer(existingItems, newRows.map((r) => r.article)) &&
+      !isContainerAlreadyStagedForArticles(existingItems, newRows)
+    ) {
+      setUpdateContainerCheckStatus("duplicate-article");
+    }
+  }, [showUpdateContainerModal, updateContainerCheckStatus, updateContainerFetched, selectedOrder, selectedArticleId, updateData]);
 
   // When article changes in modal, sync quantity (from transferItems) and next floor from article processes
   useEffect(() => {
@@ -505,6 +546,17 @@ const FinalCheckingFloorSupervisorPage = () => {
     setTransferM2M3M4({});
   };
 
+  /** Reset and hide the scan-bag modal shown before M1 transfer. */
+  const closeContainerStagingModal = () => {
+    setShowUpdateContainerModal(false);
+    setUpdateContainerBarcode("");
+    setUpdateContainerArticleId("");
+    setUpdateContainerQuantity("");
+    setUpdateContainerNextFloor("Warehouse");
+    setUpdateContainerCheckStatus("idle");
+    setUpdateContainerFetched(null);
+    setUpdateContainerRestageOnly(false);
+  };
 
   const handleRemarksChange = (articleId: string, value: string) => {
     setUpdateData(prev => ({
@@ -640,7 +692,11 @@ const FinalCheckingFloorSupervisorPage = () => {
     } : prev);
   };
 
-  const handleUpdateSubmit = async () => {
+  /**
+   * Persist QC / transfer changes for the open update drawer.
+   * @param options.closeDrawer - Close drawer after success (M1 transfer + container flow)
+   */
+  const handleUpdateSubmit = async (options?: { closeDrawer?: boolean }): Promise<void> => {
     if (!selectedOrder) return;
 
     for (const article of selectedOrder.articles) {
@@ -649,32 +705,37 @@ const FinalCheckingFloorSupervisorPage = () => {
       const update = updateData[articleId];
       if (!update) continue;
       const transfer = transferM2M3M4[articleId];
-      const m1Delta = update.m1Quantity ?? 0;
+      const transferTotal = getTransferTotal(update.transferItems ?? []);
+      // transferItems are the M1 good qty; m1Quantity is synced from them — do not add both
+      const m1QcDelta = transferTotal > 0 ? transferTotal : (update.m1Quantity ?? 0);
       const m2Delta = transfer?.m2 ?? 0;
       const m3Delta = transfer?.m3 ?? 0;
       const m4Delta = transfer?.m4 ?? 0;
-      const transferTotal = getTransferTotal(update.transferItems ?? []);
-      const batchTotal = m1Delta + m2Delta + m3Delta + m4Delta + transferTotal;
+      const batchTotal = m1QcDelta + m2Delta + m3Delta + m4Delta;
       const halfStepError = getFirstHalfStepError([
-        { value: m1Delta, label: 'M1', skipZero: true },
+        { value: m1QcDelta, label: 'M1', skipZero: true },
         { value: m2Delta, label: 'M2', skipZero: true },
         { value: m3Delta, label: 'M3', skipZero: true },
         { value: m4Delta, label: 'M4', skipZero: true },
-        ...(update.transferItems ?? []).map((item, idx) => ({
-          value: item.transferred ?? 0,
-          label: `Transfer line ${idx + 1}`,
-          skipZero: true as const,
-        })),
       ]);
       if (halfStepError) {
         toast.error(`${article.articleNumber ?? articleId}: ${HALF_STEP_QTY_ERROR}`);
-        return;
+        throw new Error(halfStepError);
       }
       if (batchTotal > 0) {
         const cumulative = getCumulativeQty(article, 'finalChecking');
         if (batchTotal > cumulative.remaining) {
-          toast.error(`${article.articleNumber ?? articleId}: batch total (${batchTotal}) exceeds remaining (${cumulative.remaining})`);
-          return;
+          const msg = `${article.articleNumber ?? articleId}: batch total (${batchTotal}) exceeds remaining (${cumulative.remaining})`;
+          toast.error(msg);
+          throw new Error(msg);
+        }
+      }
+      if (transferTotal > 0) {
+        const cumulative = getCumulativeQty(article, 'finalChecking');
+        if (cumulative.completed + transferTotal > cumulative.received) {
+          const msg = `${article.articleNumber ?? articleId}: M1 transfer (${transferTotal}) exceeds inspectable received (${cumulative.received - cumulative.completed} left)`;
+          toast.error(msg);
+          throw new Error(msg);
         }
       }
     }
@@ -720,87 +781,65 @@ const FinalCheckingFloorSupervisorPage = () => {
 
     if (invalidArticles.length > 0) {
       toast.error('Cannot submit: Some articles have transfer quantity exceeding remaining or received per brand');
-      return;
+      throw new Error('Transfer validation failed');
     }
 
     try {
       setIsLoading(true);
       
-      // Update each article that has changes
       const updatePromises = selectedOrder.articles.map(async (article) => {
         const articleId = article.id || article._id;
         if (!articleId) return null;
         const fresh = getArticleForValidation(article);
 
         const update = updateData[articleId];
-        const m1Delta = update?.m1Quantity ?? 0;
+        const transferTotal = getTransferTotal(update?.transferItems ?? []);
+        const m1QcDelta = transferTotal > 0 ? transferTotal : (update?.m1Quantity ?? 0);
         const m2Delta = transferM2M3M4[articleId]?.m2 ?? 0;
         const m3Delta = transferM2M3M4[articleId]?.m3 ?? 0;
         const m4Delta = transferM2M3M4[articleId]?.m4 ?? 0;
-        const hasQtyChange = m1Delta > 0 || m2Delta > 0 || m3Delta > 0 || m4Delta > 0;
-        const validItems = toBrandOnlyTransferItems(update?.transferItems ?? []);
+        const hasQtyChange = m1QcDelta > 0 || m2Delta > 0 || m3Delta > 0 || m4Delta > 0;
+        const validItems = prepareBrandTransferItemsForSubmit(
+          update?.transferItems ?? [],
+          transferTotal,
+          fresh.floorQuantities?.finalChecking?.receivedData as BrandTransferLine[],
+          fresh.floorQuantities?.finalChecking?.transferredData as BrandTransferLine[]
+        );
+        if (transferTotal > 0 && validItems.length === 0) {
+          toast.error("Transfer requires a brand. Select brand or ensure received brand breakdown exists.");
+          throw new Error("Missing brand for transfer");
+        }
+        const hasTransfer = validItems.length > 0;
         const hasProgressChange = update && (
           update.remarks !== (fresh.remarks || '') ||
-          validItems.length > 0 ||
+          hasTransfer ||
           update.repairStatus !== fresh.repairStatus ||
           update.repairRemarks !== (fresh.repairRemarks || '')
         );
         if (update && (hasProgressChange || hasQtyChange)) {
           const userId = user?.id ?? user?._id;
           const floorSupervisorId = user?.id ?? user?._id;
-          if (validItems.length > 0) {
+          if (hasTransfer) {
             const received = fresh.floorQuantities?.finalChecking?.received ?? 0;
             if (received <= 0) {
               toast.error("Transfer requires received work. Accept the container first (scan container → Accept Article Quantity).");
-              return;
+              throw new Error('No received work for transfer');
             }
             if (!userId || !floorSupervisorId) {
               toast.error("User session required for transfer. Please log in again.");
-              return;
+              throw new Error('User session required');
             }
           }
 
-          // CRITICAL: Call updateArticleProgress (transfer) BEFORE quality-inspection.
-          // Backend: quality-inspection updates m1/transferred; if we call it first, transferable becomes 0 and PATCH fails.
-          if (hasProgressChange) {
-            const progressData = {
-              remarks: update.remarks,
-              repairStatus: update.repairStatus,
-              repairRemarks: update.repairRemarks,
-              ...(validItems.length > 0 ? { transferredData: validItems } : {}),
-              ...(userId ? { userId } : {}),
-              ...(floorSupervisorId ? { floorSupervisorId } : {}),
-            };
-            try {
-              const response = await productionService.updateArticleProgress(
-                'FinalChecking',
-                selectedOrder.id,
-                article._id || article.id,
-                progressData
-              );
-              if (!response.success) {
-                throw new Error(response.error?.message || 'Failed to update article');
-              }
-            } catch (error: any) {
-              const msg = error?.message ?? String(error);
-              if (msg.includes("exceeds transferable") || msg.includes("transferable (0)")) {
-                toast.error("Transfer quantity exceeds remaining. Refresh and enter only the new amount to transfer (max: remaining).");
-              } else {
-                toast.error(msg);
-              }
-              throw error;
-            }
-          }
-
-          // Then update quality inspection (additive M1–M4 deltas)
+          // QC first when M1 transfer or M2/M3/M4 deltas — sets completed before transfer
           if (hasQtyChange) {
-            const inspectedQuantity = m1Delta + m2Delta + m3Delta + m4Delta;
+            const inspectedQuantity = m1QcDelta + m2Delta + m3Delta + m4Delta;
             try {
               const qualityResponse = await productionService.updateQualityInspection(
                 article._id || article.id,
                 {
                   inspectedQuantity,
-                  m1Quantity: m1Delta,
+                  m1Quantity: m1QcDelta,
                   m2Quantity: m2Delta,
                   m3Quantity: m3Delta,
                   m4Quantity: m4Delta,
@@ -817,40 +856,92 @@ const FinalCheckingFloorSupervisorPage = () => {
             }
           }
 
-          return (await productionService.getArticle(article._id || article.id))?.data ?? null;
+          if (hasProgressChange) {
+            const progressData = {
+              remarks: update.remarks,
+              repairStatus: update.repairStatus,
+              repairRemarks: update.repairRemarks,
+              ...(hasTransfer ? { transferredData: validItems } : {}),
+              ...(userId ? { userId } : {}),
+              ...(floorSupervisorId ? { floorSupervisorId } : {}),
+            };
+            try {
+              const response = await productionService.updateArticleProgress(
+                'FinalChecking',
+                getOrderRefId(selectedOrder),
+                article._id || article.id,
+                progressData
+              );
+              if (!response.success) {
+                throw new Error(response.error?.message || 'Failed to update article');
+              }
+            } catch (error: unknown) {
+              const msg = error instanceof Error ? error.message : String(error);
+              if (msg.includes("exceeds transferable") || msg.includes("transferable (0)")) {
+                toast.error("Transfer quantity exceeds remaining. Refresh and enter only the new amount to transfer (max: remaining).");
+              } else {
+                toast.error(msg);
+              }
+              throw error;
+            }
+          }
+
+          try {
+            return (await productionService.getArticle(article._id || article.id))?.data ?? null;
+          } catch {
+            return null;
+          }
         }
         return null;
       }).filter(Boolean);
 
       const results = await Promise.allSettled(updatePromises);
       
-      // Check if any updates failed
       const failedUpdates = results.filter(result => result.status === 'rejected');
       if (failedUpdates.length > 0) {
         console.error('Some updates failed:', failedUpdates);
-        const firstReason = (failedUpdates[0] as PromiseRejectedResult)?.reason?.message ?? "";
-        if (firstReason.includes("exceeds transferable") || firstReason.includes("transferable (0)")) {
+        const firstReason = (failedUpdates[0] as PromiseRejectedResult)?.reason;
+        const firstMsg = firstReason instanceof Error ? firstReason.message : String(firstReason ?? '');
+        if (firstMsg.includes("exceeds transferable") || firstMsg.includes("transferable (0)")) {
           toast.error("Transfer requires received work. Accept the container first (scan container → Accept Article Quantity).");
-        } else {
+        } else if (!firstMsg.includes('No received work') && !firstMsg.includes('User session')) {
           toast.error(`${failedUpdates.length} article(s) failed to update`);
         }
-      } else {
+        throw firstReason instanceof Error ? firstReason : new Error(firstMsg || 'Update failed');
+      }
+
+      if (!options?.closeDrawer) {
         toast.success('Order updated successfully');
-        const orderId = getOrderRefId(selectedOrder);
-        void loadFloorOrdersCatalog();
-        const freshOrder = await fetchFreshOrderForDrawer(orderId, selectedOrder);
-        if (freshOrder) {
-          refreshUpdateDrawerFromOrder(freshOrder);
+      }
+      const orderId = getOrderRefId(selectedOrder);
+      void loadFloorOrdersCatalog();
+      if (options?.closeDrawer) {
+        closeUpdateModal();
+      } else {
+        try {
+          const freshOrder = await fetchFreshOrderForDrawer(orderId, selectedOrder);
+          if (freshOrder) {
+            refreshUpdateDrawerFromOrder(freshOrder);
+          }
+        } catch (refreshErr) {
+          console.error('Failed to refresh update drawer after save:', refreshErr);
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error updating order:', error);
-      const msg = error?.message ?? 'Failed to update order';
+      const msg = error instanceof Error ? error.message : 'Failed to update order';
       if (msg.includes("exceeds transferable") || msg.includes("transferable (0)")) {
         toast.error("Transfer requires received work. Accept the container first (scan container → Accept Article Quantity).");
-      } else {
+      } else if (
+        !msg.includes('Transfer validation failed') &&
+        !msg.includes('No received work') &&
+        !msg.includes('User session') &&
+        !msg.includes('exceeds remaining') &&
+        !msg.includes('inspectable received')
+      ) {
         toast.error(msg);
       }
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -941,12 +1032,12 @@ const FinalCheckingFloorSupervisorPage = () => {
     setContainerScanned(null);
     try {
       const container = await containersMasterService.getByBarcode(barcode);
-      const articlesRaw = getContainerArticles(container);
-      const articlePromises = articlesRaw.map((a) => {
-        const art = findArticleInOrders(a.articleId);
-        if (art) return Promise.resolve({ article: art, quantity: a.quantity });
-        return productionService.getArticle(a.articleId).then((r) =>
-          r.success && r.data ? { article: r.data as Article, quantity: a.quantity } : { article: null, quantity: a.quantity }
+      const grouped = groupContainerArticlesForDisplay(container);
+      const articlePromises = grouped.map((g) => {
+        const art = findArticleInOrders(g.articleId);
+        if (art) return Promise.resolve({ article: art, quantity: g.quantity });
+        return productionService.getArticle(g.articleId).then((r) =>
+          r.success && r.data ? { article: r.data as Article, quantity: g.quantity } : { article: null, quantity: g.quantity }
         );
       });
       const resolved = await Promise.all(articlePromises);
@@ -969,11 +1060,12 @@ const FinalCheckingFloorSupervisorPage = () => {
     setAcceptArticleLoading(true);
     try {
       const barcode = containerScanned.container.barcode;
-      await containersMasterService.acceptByBarcode(barcode);
-      try {
-        await containersMasterService.clearActiveByBarcode(barcode);
-      } catch {
-        // accept succeeded; clear is best-effort
+      const acceptResult = await containersMasterService.acceptByBarcode(barcode);
+      const updatedCount = Array.isArray((acceptResult as { articles?: unknown[] })?.articles)
+        ? (acceptResult as { articles: unknown[] }).articles.length
+        : 0;
+      if (updatedCount === 0) {
+        throw new Error('Container accept did not update any articles');
       }
       const first = containerScanned.articles.find((a) => a.article);
       if (first?.article) setActiveArticleId(String((first.article as any)._id ?? (first.article as any).id ?? ""));
@@ -1446,12 +1538,16 @@ const FinalCheckingFloorSupervisorPage = () => {
                   </div>
                   <h4 className="text-[11px] font-bold text-gray-800 uppercase tracking-wider">Items</h4>
                   <div className="p-2 bg-gray-50 rounded border border-gray-200 text-[12px] text-gray-900 space-y-1">
-                    {containerScanned.articles.map((item, i) => (
-                      <div key={i}>
-                        <span className="font-bold text-[#495057]">{(item.article as any)?.articleNumber ?? "—"}</span>
+                    {containerScanned.articles.map((item, i) => {
+                      const art = item.article as Article | null;
+                      const rowKey = art ? String(art._id ?? art.id ?? i) : String(i);
+                      return (
+                      <div key={rowKey}>
+                        <span className="font-bold text-[#495057]">{art?.articleNumber ?? "—"}</span>
                         <span className="text-gray-600"> × {item.quantity}</span>
                       </div>
-                    ))}
+                      );
+                    })}
                     <div className="pt-1 border-t border-gray-200 mt-1">
                       <span className="font-bold text-[#495057]">Total:</span> {containerScanned.container.quantity ?? "—"}
                     </div>
@@ -1555,20 +1651,24 @@ const FinalCheckingFloorSupervisorPage = () => {
       {/* Scan bag/container before update order – modal (opened when user clicks Update Order) */}
       {showUpdateContainerModal && selectedOrder && (() => {
         const modalArticles = selectedArticleId ? selectedOrder.articles.filter((a) => (a.id ?? a._id) === selectedArticleId) : selectedOrder.articles;
-        const articlesWithQty = modalArticles
-          .map((a) => {
-            const id = a.id ?? a._id;
-            if (!id) return null;
-            const qty = getTransferTotal(updateData[id]?.transferItems ?? []);
-            return qty > 0 ? { article: a, quantity: qty } : null;
-          })
-          .filter((x): x is { article: Article; quantity: number } => x != null);
+        const stagingArticles = resolveArticlesForContainerStaging(modalArticles, updateData, getTransferTotal);
+        const articlesWithQty = stagingArticles.map(({ article, quantity }) => ({ article, quantity }));
+        const isRestageOnly = stagingArticles.length > 0 && stagingArticles.every((s) => s.fromPendingHandoff);
         const floor = updateContainerNextFloor.trim() || resolveNextFloorFromProcesses(modalArticles[0]?.processes ?? [], "Final Checking", "Warehouse");
         return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); setUpdateContainerQuantity(""); }} aria-hidden>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50" onClick={closeContainerStagingModal} aria-hidden>
           <div className="bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-sm p-[10px] flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
             <h4 className="text-sm font-bold text-gray-800 border-b border-gray-200 pb-2">Scan bag / container</h4>
-            <p className="text-[11px] text-[#495057]">Scan or enter the container/bag code for final checking articles (M1 good) for transfer to next floor. Quantity comes from M1 quantity.</p>
+            <p className="text-[11px] text-[#495057]">
+              {isRestageOnly
+                ? "Transfer is already recorded but the bag is empty. Scan a container to re-stage for Dispatch accept."
+                : "Scan or enter the container/bag code for final checking articles (M1 good) for transfer to next floor. Quantity comes from M1 quantity."}
+            </p>
+            {isRestageOnly && (
+              <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                Recovery mode: staging pending handoff only (no new transfer).
+              </p>
+            )}
             <div>
               <label className="block text-[11px] font-semibold text-gray-600 mb-1">Container barcode</label>
               <input type="text" placeholder="Scan or enter barcode" value={updateContainerBarcode} onChange={(e) => setUpdateContainerBarcode(e.target.value)} className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px] focus:ring-0 focus:border-teal-300" />
@@ -1583,8 +1683,27 @@ const FinalCheckingFloorSupervisorPage = () => {
               {updateContainerCheckStatus === "ok" && (
                 <p className="text-[11px] text-green-600 mt-1">
                   {updateContainerFetched?.activeItems?.length
-                    ? `Container has items for ${updateContainerFetched.activeFloor ?? "this floor"}. You can add another article.`
+                    ? (() => {
+                        const retryRows = stagingArticles
+                          .map(({ article, quantity }) => ({
+                            article: article._id ?? article.id ?? "",
+                            quantity,
+                          }))
+                          .filter((r): r is { article: string; quantity: number } => !!r.article);
+                        const retryReady = isContainerAlreadyStagedForArticles(
+                          updateContainerFetched.activeItems as ContainerActiveItem[] | undefined,
+                          retryRows,
+                        );
+                        return retryReady
+                          ? "Container already staged. Click to complete."
+                          : `Container has items for ${updateContainerFetched.activeFloor ?? "this floor"}. You can add a different article.`;
+                      })()
                     : "Container available."}
+                </p>
+              )}
+              {updateContainerCheckStatus === "duplicate-article" && (
+                <p className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1.5 mt-1">
+                  One or more articles in this transfer are already in the container. Use another container or clear it first.
                 </p>
               )}
             </div>
@@ -1604,46 +1723,90 @@ const FinalCheckingFloorSupervisorPage = () => {
               <p className="text-[10px] text-gray-500 mt-0.5">Set automatically from article process flow</p>
             </div>
             <div className="flex justify-end gap-2 pt-1">
-              <button type="button" onClick={() => { setShowUpdateContainerModal(false); setUpdateContainerCheckStatus("idle"); setUpdateContainerFetched(null); setUpdateContainerQuantity(""); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Cancel</button>
+              <button type="button" onClick={closeContainerStagingModal} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">Cancel</button>
               <button
                 type="button"
                 disabled={updateContainerCheckStatus !== "ok" || !updateContainerBarcode.trim() || articlesWithQty.length === 0 || !floor || updateContainerSubmitting}
                 onClick={async () => {
                   const barcode = updateContainerBarcode.trim();
                   if (!barcode || !floor) return;
-                  let activeItems = articlesWithQty.map(({ article, quantity }) => ({ article: article._id ?? article.id ?? "", quantity })).filter((i) => i.article);
-                  if (activeItems.some((i) => !i.article)) { toast.error("Invalid article id"); return; }
-                  if (updateContainerFetched?.activeItems?.length) {
-                    const existing = (updateContainerFetched.activeItems ?? []).map((item) => ({
-                      article: typeof item.article === "string" ? item.article : (item.article as { _id?: string; id?: string })._id ?? (item.article as { _id?: string; id?: string }).id ?? "",
-                      quantity: item.quantity ?? 0,
-                    })).filter((x) => x.article);
-                    activeItems = [...existing, ...activeItems];
-                  }
+                  const newRows = articlesWithQty
+                    .map(({ article, quantity }) => ({ article: article._id ?? article.id ?? "", quantity }))
+                    .filter((i) => i.article);
+                  if (newRows.some((i) => !i.article)) { toast.error("Invalid article id"); return; }
                   setUpdateContainerSubmitting(true);
                   try {
-                    await containersMasterService.updateByBarcode(barcode, { activeFloor: floor, activeItems });
-                    toast.success("Container updated");
-                    setShowUpdateContainerModal(false);
-                    setUpdateContainerBarcode("");
-                    setUpdateContainerArticleId("");
-                    setUpdateContainerQuantity("");
-                    setUpdateContainerNextFloor("Warehouse");
-                    setUpdateContainerCheckStatus("idle");
-                    setUpdateContainerFetched(null);
-                    setUpdateContainerSubmitting(false);
-                    handleUpdateSubmit();
+                    const containerNow = await containersMasterService.getByBarcode(barcode);
+                    const existingItems = containerNow.activeItems as ContainerActiveItem[] | undefined;
+                    setUpdateContainerFetched({
+                      activeItems: containerNow.activeItems,
+                      activeFloor: containerNow.activeFloor,
+                    });
+                    const containerReplace =
+                      isRestageOnly || !(existingItems?.length);
+                    const staged = buildStagedActiveItemsPayload(existingItems, newRows, {
+                      replace: containerReplace,
+                    });
+                    const alreadyStaged = isContainerAlreadyStagedForArticles(existingItems, newRows);
+                    if (!staged.ok && !alreadyStaged) {
+                      if (staged.reason === 'duplicate-article') {
+                        toast.error("Article already in this container with different qty. Clear the container or use another.");
+                      } else {
+                        toast.error("Invalid container items");
+                      }
+                      return;
+                    }
+                    const activeFloorNorm = (containerNow.activeFloor ?? "").trim().toLowerCase();
+                    const skipContainerPatch =
+                      alreadyStaged && activeFloorNorm === floor.trim().toLowerCase();
+
+                    if (!isRestageOnly) {
+                      await handleUpdateSubmit({ closeDrawer: true });
+                    }
+
+                    if (!skipContainerPatch) {
+                      if (!staged.ok || !staged.activeItems) {
+                        toast.error("Invalid container items");
+                        return;
+                      }
+                      await containersMasterService.updateByBarcode(barcode, {
+                        activeFloor: floor,
+                        activeItems: staged.activeItems,
+                      });
+                    }
+
+                    closeContainerStagingModal();
+                    if (isRestageOnly) {
+                      closeUpdateModal();
+                    }
+                    toast.success(
+                      isRestageOnly
+                        ? "Container staged for Dispatch — scan same barcode on Dispatch and accept"
+                        : "Order updated and container staged"
+                    );
                   } catch (err) {
-                    setUpdateContainerSubmitting(false);
                     const msg = err instanceof Error ? err.message : String(err);
-                    if (msg.includes("404")) toast.error("Container not found");
-                    else toast.error(msg);
+                    if (msg.includes("404")) {
+                      toast.error("Container not found");
+                    } else if (msg.includes("batch total") || msg.includes("exceeds remaining")) {
+                      toast.error(msg);
+                    } else if (msg.includes("Transfer validation failed")) {
+                      toast.error("Cannot submit: transfer quantity exceeds remaining or received per brand");
+                    } else if (msg.includes("inspectable received")) {
+                      toast.error(msg);
+                    } else if (msg.includes("exceeds transferable") || msg.includes("transferable (0)")) {
+                      toast.error("Transfer quantity exceeds remaining. Complete QC (M1) before transfer.");
+                    } else {
+                      toast.error(msg || "Failed to update order and container");
+                    }
+                  } finally {
+                    setUpdateContainerSubmitting(false);
                   }
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-[11px] font-bold rounded hover:bg-teal-700 disabled:opacity-50"
               >
                 {updateContainerSubmitting ? <span className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" /> : <i className="ri-save-line text-xs" />}
-                Update & submit order
+                {isRestageOnly ? "Stage container" : "Update & submit order"}
               </button>
             </div>
           </div>
@@ -1698,21 +1861,36 @@ const FinalCheckingFloorSupervisorPage = () => {
                       const total = getTransferTotal(updateData[articleId]?.transferItems ?? []);
                       return articleId && total > 0;
                     });
-                    if (!hasAnyM1) {
+                    const hasPendingHandoff = hasPendingContainerHandoff(modalArticles);
+                    if (!hasAnyM1 && !hasPendingHandoff) {
                       requestQualityConfirm(() => { void handleUpdateSubmit(); }, modalArticles);
                       return;
                     }
+                    const stagingForModal = resolveArticlesForContainerStaging(
+                      modalArticles,
+                      updateData,
+                      getTransferTotal
+                    );
+                    setUpdateContainerRestageOnly(
+                      stagingForModal.length > 0 && stagingForModal.every((s) => s.fromPendingHandoff)
+                    );
                     setUpdateContainerBarcode("");
                     setUpdateContainerCheckStatus("idle");
                     setUpdateContainerFetched(null);
-                    const firstWithQty = modalArticles.find((a) => {
+                    const firstWithQty = stagingForModal[0]?.article ?? modalArticles.find((a) => {
                       const id = a.id ?? a._id;
                       return id && getTransferTotal(updateData[id]?.transferItems ?? []) > 0;
                     });
                     if (firstWithQty) {
-                      const firstId = firstWithQty.id ?? firstWithQty._id ?? "";
+                      const firstId = (firstWithQty as Article).id ?? (firstWithQty as Article)._id ?? "";
                       setUpdateContainerArticleId(firstId);
-                      setUpdateContainerNextFloor(resolveNextFloorFromProcesses(firstWithQty.processes ?? [], "Final Checking", "Warehouse"));
+                      setUpdateContainerNextFloor(
+                        resolveNextFloorFromProcesses(
+                          (firstWithQty as Article).processes ?? [],
+                          "Final Checking",
+                          "Warehouse"
+                        )
+                      );
                     }
                     setShowUpdateContainerModal(true);
                   }}
@@ -1740,6 +1918,19 @@ const FinalCheckingFloorSupervisorPage = () => {
             <div className="mb-4 px-3 py-2 rounded-md bg-teal-50 border-2 border-teal-200 text-[11px] text-teal-900">
               <strong>How to update:</strong> Enter M1 (good → next floor), M2/M3/M4 for this save. M2 creates entries in <strong>M2 Management</strong>. Resolve repairs there (cascade merge to all floors).
             </div>
+            {hasPendingContainerHandoff(modalArticles) && (
+              <div className="mb-4 px-3 py-2 rounded-md bg-orange-50 border-2 border-orange-200 text-[11px] text-orange-900">
+                <strong>Container missing:</strong> Transfer is recorded but the bag is empty for Dispatch.
+                Click <strong>Update Order</strong> to re-stage the container (recovery mode — no new transfer).
+                {modalArticles
+                  .map((a) => {
+                    const pending = getPendingContainerHandoffQty(a);
+                    return pending > 0 ? `${a.articleNumber ?? "Article"}: ${pending} pending` : null;
+                  })
+                  .filter(Boolean)
+                  .join(" · ")}
+              </div>
+            )}
             {modalArticles.some((a) => (a.floorQuantities?.finalChecking?.received ?? 0) <= 0) && (
               <div className="mb-4 px-3 py-2 rounded-md bg-amber-50 border-2 border-amber-200 text-[11px] text-amber-900">
                 <strong>Accept before transfer:</strong> To transfer M1 to Warehouse, you must first accept the container (Scan Container → Accept Article Quantity). Transfer is disabled until <code>received</code> &gt; 0.

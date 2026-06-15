@@ -28,7 +28,13 @@ import {
   validateBrandTransferItems,
 } from "@/shared/utils/brandTransfer.util";
 import { HALF_STEP_QTY_ERROR } from "@/shared/utils/halfStepQuantity";
-import { containersMasterService, hasActiveItems, getContainerArticles } from "@/shared/services/containersMasterService";
+import {
+  containersMasterService,
+  hasActiveItems,
+  buildStagedActiveItemsPayload,
+  groupContainerArticlesForDisplay,
+  type ContainerActiveItem,
+} from "@/shared/services/containersMasterService";
 import { useProductionArticleQrScan } from "@/shared/hooks/useProductionArticleQrScan";
 import ArticleQrScanDrawer from "@/shared/components/production/ArticleQrScanDrawer";
 import { teamMasterService, type TeamMaster, PRODUCTION_FLOORS } from "@/shared/services/teamMasterService";
@@ -98,7 +104,7 @@ const DispatchFloorSupervisorPage = () => {
   // Scan bag/container before submit (Update Order click opens this modal)
   const [showUpdateContainerModal, setShowUpdateContainerModal] = useState(false);
   const [updateContainerBarcode, setUpdateContainerBarcode] = useState("");
-  const [updateContainerCheckStatus, setUpdateContainerCheckStatus] = useState<"idle" | "loading" | "not-found" | "already-filled" | "ok">("idle");
+  const [updateContainerCheckStatus, setUpdateContainerCheckStatus] = useState<"idle" | "loading" | "not-found" | "already-filled" | "duplicate-article" | "ok">("idle");
   const [updateContainerFetched, setUpdateContainerFetched] = useState<{ activeItems?: Array<{ article: string | { articleNumber?: string }; quantity: number }>; activeFloor?: string } | null>(null);
   const [updateContainerArticleId, setUpdateContainerArticleId] = useState("");
   const [updateContainerQuantity, setUpdateContainerQuantity] = useState("");
@@ -652,28 +658,28 @@ const DispatchFloorSupervisorPage = () => {
       const failedUpdates = results.filter(result => result.status === 'rejected');
       if (failedUpdates.length > 0) {
         console.error('Some updates failed:', failedUpdates);
-        const firstReason = (failedUpdates[0] as PromiseRejectedResult)?.reason?.message ?? "";
-        if (firstReason.includes("exceeds transferable") || firstReason.includes("transferable (0)")) {
+        const firstReason = (failedUpdates[0] as PromiseRejectedResult)?.reason;
+        const firstMsg = firstReason instanceof Error ? firstReason.message : String(firstReason ?? '');
+        if (firstMsg.includes("exceeds transferable") || firstMsg.includes("transferable (0)")) {
           toast.error("Transfer requires received work. Accept the container first (scan container → Accept Article Quantity).");
         } else {
           toast.error(`${failedUpdates.length} article(s) failed to update`);
         }
-      } else {
-        toast.success('Order updated successfully');
+        throw firstReason instanceof Error ? firstReason : new Error(firstMsg || 'Update failed');
       }
-      
+
+      toast.success('Order updated successfully');
       closeUpdateModal();
-      
-      // Reload orders to get updated data
       void loadFloorOrdersCatalog();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error updating order:', error);
-      const msg = error?.message ?? 'Failed to update order';
+      const msg = error instanceof Error ? error.message : 'Failed to update order';
       if (msg.includes("exceeds transferable") || msg.includes("transferable (0)")) {
         toast.error("Transfer requires received work. Accept the container first (scan container → Accept Article Quantity).");
-      } else {
+      } else if (!msg.includes('Update failed')) {
         toast.error(msg);
       }
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -750,12 +756,12 @@ const DispatchFloorSupervisorPage = () => {
     setContainerScanned(null);
     try {
       const container = await containersMasterService.getByBarcode(barcode);
-      const articlesRaw = getContainerArticles(container);
-      const articlePromises = articlesRaw.map((a) => {
-        const art = findArticleInOrders(a.articleId);
-        if (art) return Promise.resolve({ article: art, quantity: a.quantity });
-        return productionService.getArticle(a.articleId).then((r) =>
-          r.success && r.data ? { article: r.data as Article, quantity: a.quantity } : { article: null, quantity: a.quantity }
+      const grouped = groupContainerArticlesForDisplay(container);
+      const articlePromises = grouped.map((g) => {
+        const art = findArticleInOrders(g.articleId);
+        if (art) return Promise.resolve({ article: art, quantity: g.quantity });
+        return productionService.getArticle(g.articleId).then((r) =>
+          r.success && r.data ? { article: r.data as Article, quantity: g.quantity } : { article: null, quantity: g.quantity }
         );
       });
       const resolved = await Promise.all(articlePromises);
@@ -778,11 +784,12 @@ const DispatchFloorSupervisorPage = () => {
     setAcceptArticleLoading(true);
     try {
       const barcode = containerScanned.container.barcode;
-      await containersMasterService.acceptByBarcode(barcode);
-      try {
-        await containersMasterService.clearActiveByBarcode(barcode);
-      } catch {
-        // accept succeeded; clear is best-effort
+      const acceptResult = await containersMasterService.acceptByBarcode(barcode);
+      const updatedCount = Array.isArray((acceptResult as { articles?: unknown[] })?.articles)
+        ? (acceptResult as { articles: unknown[] }).articles.length
+        : 0;
+      if (updatedCount === 0) {
+        throw new Error('Container accept did not update any articles');
       }
       const first = containerScanned.articles.find((a) => a.article);
       if (first?.article) setActiveArticleId(String((first.article as any)._id ?? (first.article as any).id ?? ""));
@@ -1250,12 +1257,16 @@ const DispatchFloorSupervisorPage = () => {
                   </div>
                   <h4 className="text-[11px] font-bold text-gray-800 uppercase tracking-wider">Items</h4>
                   <div className="p-2 bg-gray-50 rounded border border-gray-200 text-[12px] text-gray-900 space-y-1">
-                    {containerScanned.articles.map((item, i) => (
-                      <div key={i}>
-                        <span className="font-bold text-[#495057]">{(item.article as any)?.articleNumber ?? "—"}</span>
+                    {containerScanned.articles.map((item, i) => {
+                      const art = item.article as Article | null;
+                      const rowKey = art ? String(art._id ?? art.id ?? i) : String(i);
+                      return (
+                      <div key={rowKey}>
+                        <span className="font-bold text-[#495057]">{art?.articleNumber ?? "—"}</span>
                         <span className="text-gray-600"> × {item.quantity}</span>
                       </div>
-                    ))}
+                      );
+                    })}
                     <div className="pt-1 border-t border-gray-200 mt-1">
                       <span className="font-bold text-[#495057]">Total:</span> {containerScanned.container.quantity ?? "—"}
                     </div>
@@ -1387,8 +1398,13 @@ const DispatchFloorSupervisorPage = () => {
               {updateContainerCheckStatus === "ok" && (
                 <p className="text-[11px] text-green-600 mt-1">
                   {updateContainerFetched?.activeItems?.length
-                    ? `Container has items for ${updateContainerFetched.activeFloor ?? "this floor"}. You can add another article.`
+                    ? `Container has items for ${updateContainerFetched.activeFloor ?? "this floor"}. You can add a different article.`
                     : "Container available."}
+                </p>
+              )}
+              {updateContainerCheckStatus === "duplicate-article" && (
+                <p className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1.5 mt-1">
+                  One or more articles in this transfer are already in the container. Use another container or clear it first.
                 </p>
               )}
             </div>
@@ -1415,19 +1431,31 @@ const DispatchFloorSupervisorPage = () => {
                 onClick={async () => {
                   const barcode = updateContainerBarcode.trim();
                   if (!barcode || !floor) return;
-                  let activeItems = articlesWithQty.map(({ article, quantity }) => ({ article: article._id ?? article.id ?? "", quantity })).filter((i) => i.article);
-                  if (activeItems.some((i) => !i.article)) { toast.error("Invalid article id"); return; }
-                  if (updateContainerFetched?.activeItems?.length) {
-                    const existing = (updateContainerFetched.activeItems ?? []).map((item) => ({
-                      article: typeof item.article === "string" ? item.article : (item.article as { _id?: string; id?: string })._id ?? (item.article as { _id?: string; id?: string }).id ?? "",
-                      quantity: item.quantity ?? 0,
-                    })).filter((x) => x.article);
-                    activeItems = [...existing, ...activeItems];
-                  }
+                  const newRows = articlesWithQty
+                    .map(({ article, quantity }) => ({ article: article._id ?? article.id ?? "", quantity }))
+                    .filter((i) => i.article);
+                  if (newRows.some((i) => !i.article)) { toast.error("Invalid article id"); return; }
                   setUpdateContainerSubmitting(true);
                   try {
-                    await containersMasterService.updateByBarcode(barcode, { activeFloor: floor, activeItems });
-                    toast.success("Container updated");
+                    const existingItems = updateContainerFetched?.activeItems as ContainerActiveItem[] | undefined;
+                    const containerReplace = !(existingItems?.length);
+                    const stagedPayload = buildStagedActiveItemsPayload(existingItems, newRows, {
+                      replace: containerReplace,
+                    });
+                    if (!stagedPayload.ok) {
+                      toast.error(
+                        stagedPayload.reason === "duplicate-article"
+                          ? "Article already in this container. Use another container or clear it first."
+                          : "Invalid container items",
+                      );
+                      return;
+                    }
+                    await handleUpdateSubmit();
+                    await containersMasterService.updateByBarcode(barcode, {
+                      activeFloor: floor,
+                      activeItems: stagedPayload.activeItems,
+                    });
+                    toast.success("Order updated and container staged");
                     setShowUpdateContainerModal(false);
                     setUpdateContainerBarcode("");
                     setUpdateContainerArticleId("");
@@ -1435,13 +1463,12 @@ const DispatchFloorSupervisorPage = () => {
                     setUpdateContainerNextFloor("Warehouse");
                     setUpdateContainerCheckStatus("idle");
                     setUpdateContainerFetched(null);
-                    setUpdateContainerSubmitting(false);
-                    handleUpdateSubmit();
                   } catch (err) {
-                    setUpdateContainerSubmitting(false);
                     const msg = err instanceof Error ? err.message : String(err);
                     if (msg.includes("404")) toast.error("Container not found");
                     else toast.error(msg);
+                  } finally {
+                    setUpdateContainerSubmitting(false);
                   }
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-[11px] font-bold rounded hover:bg-teal-700 disabled:opacity-50"

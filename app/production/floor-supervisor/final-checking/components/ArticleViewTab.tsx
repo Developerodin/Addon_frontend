@@ -11,7 +11,12 @@ import {
   ArticleViewOrderCell,
   formatArticleViewOrderLabel,
 } from "@/shared/components/production/ArticleViewOrderCell";
-import { collapseLinesByBrand, formatBrandLine, formatBrandLines } from "@/shared/utils/brandTransfer.util";
+import {
+  collapseLinesByBrand,
+  formatBrandLine,
+  formatBrandLines,
+  resolveTransferredDataForDisplay,
+} from "@/shared/utils/brandTransfer.util";
 import {
   formatProductionQty,
   normalizeProductionQty,
@@ -168,7 +173,7 @@ export default function ArticleViewTab({
       const remaining = getQcRemaining(fc, article);
       const { m2, m3, m4 } = finalCheckingDefectQuantities(article);
       const receivedData = formatBrandLines(fc?.receivedData as any);
-      const transferredData = formatBrandLines(fc?.transferredData as any);
+      const transferredData = formatBrandLines(resolveTransferredDataForDisplay(fc));
 
       return [
         article.articleNumber ?? "—",
@@ -320,6 +325,7 @@ export default function ArticleViewTab({
                   (articleIdsMatch(articleId, activeArticleId) ||
                     articleIdsMatch(article._id, activeArticleId))
               );
+              const transferredBrandLines = resolveTransferredDataForDisplay(fc);
               const orderLabel = formatArticleViewOrderLabel(order);
               return (
                 <tr
@@ -378,13 +384,13 @@ export default function ArticleViewTab({
                     )}
                   </td>
                   <td className="px-1.5 py-2.5 border border-gray-200 text-[10px] text-gray-600 max-w-[140px]">
-                    {collapseLinesByBrand(fc?.transferredData as any).length > 0 ? (
+                    {transferredBrandLines.length > 0 ? (
                       <div className="space-y-0.5">
-                        {collapseLinesByBrand(fc?.transferredData as any).slice(0, 3).map((d, i) => (
+                        {transferredBrandLines.slice(0, 3).map((d, i) => (
                           <div key={i} className="truncate">{formatBrandLine(d)}</div>
                         ))}
-                        {collapseLinesByBrand(fc?.transferredData as any).length > 3 && (
-                          <div className="text-gray-400">+{collapseLinesByBrand(fc?.transferredData as any).length - 3} more</div>
+                        {transferredBrandLines.length > 3 && (
+                          <div className="text-gray-400">+{transferredBrandLines.length - 3} more</div>
                         )}
                       </div>
                     ) : (

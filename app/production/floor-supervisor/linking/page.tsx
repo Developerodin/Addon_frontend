@@ -12,7 +12,14 @@ import { getRepairInfo } from "@/shared/utils/repairUtils";
 import ArticleViewTab from "./components/ArticleViewTab";
 import MyTeamTab from "./components/MyTeamTab";
 import UpcomingTab from "../components/UpcomingTab";
-import { containersMasterService, type ContainerMaster, hasActiveItems, getContainerArticles } from "@/shared/services/containersMasterService";
+import {
+  containersMasterService,
+  type ContainerMaster,
+  hasActiveItems,
+  getContainerArticles,
+  buildStagedActiveItemsPayload,
+  type ContainerActiveItem,
+} from "@/shared/services/containersMasterService";
 import { teamMasterService, type TeamMaster, PRODUCTION_FLOORS } from "@/shared/services/teamMasterService";
 import { parseProductionArticleQr } from "@/shared/utils/productionArticleQr";
 import {
@@ -84,7 +91,7 @@ const LinkingFloorSupervisorPage = () => {
   // Update order: scan container/bag before submit (like knitting)
   const [showUpdateContainerModal, setShowUpdateContainerModal] = useState(false);
   const [updateContainerBarcode, setUpdateContainerBarcode] = useState("");
-  const [updateContainerCheckStatus, setUpdateContainerCheckStatus] = useState<"idle" | "loading" | "not-found" | "already-filled" | "ok">("idle");
+  const [updateContainerCheckStatus, setUpdateContainerCheckStatus] = useState<"idle" | "loading" | "not-found" | "already-filled" | "duplicate-article" | "ok">("idle");
   const [updateContainerFetched, setUpdateContainerFetched] = useState<{ activeItems?: Array<{ article: string | { articleNumber?: string }; quantity: number }>; activeFloor?: string } | null>(null);
   const [updateContainerArticleId, setUpdateContainerArticleId] = useState("");
   const [updateContainerQuantity, setUpdateContainerQuantity] = useState<string>("");
@@ -1512,8 +1519,13 @@ const LinkingFloorSupervisorPage = () => {
               {updateContainerCheckStatus === "ok" && (
                 <p className="text-[11px] text-green-600 mt-1">
                   {updateContainerFetched?.activeItems?.length
-                    ? `Container has items for ${updateContainerFetched.activeFloor ?? "this floor"}. You can add another article.`
+                    ? `Container has items for ${updateContainerFetched.activeFloor ?? "this floor"}. You can add a different article.`
                     : "Container available."}
+                </p>
+              )}
+              {updateContainerCheckStatus === "duplicate-article" && (
+                <p className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1.5 mt-1">
+                  One or more articles in this transfer are already in the container. Use another container or clear it first.
                 </p>
               )}
             </div>
@@ -1537,18 +1549,23 @@ const LinkingFloorSupervisorPage = () => {
                 const barcode = updateContainerBarcode.trim();
                 const floor = nextFloor.trim();
                 if (!barcode || !floor || articlesWithQty.length === 0) return;
-                let activeItems = articlesWithQty.map(({ article, quantity }) => ({ article: article._id ?? article.id ?? "", quantity })).filter((i) => i.article);
-                if (activeItems.some((i) => !i.article)) { toast.error("Invalid article id"); return; }
-                if (updateContainerFetched?.activeItems?.length) {
-                  const existing = (updateContainerFetched.activeItems ?? []).map((item) => ({
-                    article: typeof item.article === "string" ? item.article : (item.article as { _id?: string; id?: string })._id ?? (item.article as { _id?: string; id?: string }).id ?? "",
-                    quantity: item.quantity ?? 0,
-                  })).filter((x) => x.article);
-                  activeItems = [...existing, ...activeItems];
+                const newRows = articlesWithQty.map(({ article, quantity }) => ({ article: article._id ?? article.id ?? "", quantity })).filter((i) => i.article);
+                if (newRows.some((i) => !i.article)) { toast.error("Invalid article id"); return; }
+                const staged = buildStagedActiveItemsPayload(
+                  updateContainerFetched?.activeItems as ContainerActiveItem[] | undefined,
+                  newRows,
+                );
+                if (!staged.ok) {
+                  toast.error(
+                    staged.reason === "duplicate-article"
+                      ? "Article already in this container. Use another container or clear it first."
+                      : "Invalid container items",
+                  );
+                  return;
                 }
                 setUpdateContainerSubmitting(true);
                 try {
-                  await containersMasterService.updateByBarcode(barcode, { activeFloor: floor, activeItems });
+                  await containersMasterService.updateByBarcode(barcode, { activeFloor: floor, activeItems: staged.activeItems });
                   toast.success("Container updated");
                   setShowUpdateContainerModal(false);
                   setUpdateContainerBarcode("");

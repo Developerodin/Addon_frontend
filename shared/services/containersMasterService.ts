@@ -22,7 +22,16 @@ export interface ContainerActiveItem {
   quantity: number;
   /** Set when container was staged from vendor pipeline — used for dispatch accept `vendorReceive`. */
   vendorProductionFlowId?: string;
+  vendorProductionFlow?: string | { _id?: string; id?: string };
 }
+
+/** Normalized row for PATCH / merge helpers */
+export type ActiveItemPatchRow = {
+  article?: string;
+  vendorProductionFlow?: string;
+  quantity: number;
+  transferItems?: Array<{ transferred: number; styleCode?: string; brand?: string }>;
+};
 
 export interface ContainerMaster {
   _id: string;
@@ -95,6 +104,183 @@ export function getContainerArticles(container: ContainerMaster | null | undefin
     return id ? [{ articleId: id, quantity: container.quantity ?? 0 }] : [];
   }
   return [];
+}
+
+/**
+ * Normalize article ref from an activeItems row to a Mongo id string.
+ * @param article - String id or populated article object
+ */
+export function getArticleIdFromActiveItem(
+  article: string | ContainerActiveArticlePopulated | undefined | null,
+): string {
+  if (!article) return '';
+  if (typeof article === 'string') return article.trim();
+  return String(article._id ?? article.id ?? '').trim();
+}
+
+/**
+ * Normalize vendor production flow ref from an activeItems row.
+ * @param vpf - String id or populated object
+ */
+export function getVendorFlowIdFromActiveItem(
+  vpf: string | { _id?: string; id?: string } | undefined | null,
+): string {
+  if (!vpf) return '';
+  if (typeof vpf === 'string') return vpf.trim();
+  return String(vpf._id ?? vpf.id ?? '').trim();
+}
+
+/**
+ * Map a container activeItems row to a PATCH-friendly shape.
+ * @param item - Row from container API
+ */
+export function toActiveItemPatchRow(item: ContainerActiveItem): ActiveItemPatchRow | null {
+  const article = getArticleIdFromActiveItem(item.article);
+  const vendorProductionFlow =
+    getVendorFlowIdFromActiveItem(item.vendorProductionFlow) ||
+    (item.vendorProductionFlowId?.trim() ?? '');
+  const quantity = Number(item.quantity ?? 0);
+  if (quantity < 0.0001) return null;
+  if (article) return { article, quantity };
+  if (vendorProductionFlow) return { vendorProductionFlow, quantity };
+  return null;
+}
+
+/**
+ * Merge activeItems rows by article or vendorProductionFlow id.
+ * @param items - Rows to merge
+ * @param mode - `sum` merges quantities; `reject-duplicate` returns null if duplicate keys found
+ */
+export function mergeActiveItemsByArticle(
+  items: ActiveItemPatchRow[],
+  mode: 'sum' | 'reject-duplicate' = 'sum',
+): ActiveItemPatchRow[] | null {
+  const byKey = new Map<string, ActiveItemPatchRow>();
+  for (const row of items) {
+    if (!row || row.quantity < 0.0001) continue;
+    const key = row.article
+      ? `article:${row.article}`
+      : row.vendorProductionFlow
+        ? `vpf:${row.vendorProductionFlow}`
+        : '';
+    if (!key) continue;
+    if (mode === 'reject-duplicate' && byKey.has(key)) return null;
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.quantity += row.quantity;
+      if (!existing.transferItems?.length && row.transferItems?.length) {
+        existing.transferItems = row.transferItems;
+      }
+    } else {
+      byKey.set(key, { ...row, quantity: row.quantity });
+    }
+  }
+  return Array.from(byKey.values());
+}
+
+/**
+ * Returns true if any new article ids already exist in the container's activeItems.
+ * @param existingItems - Current container rows
+ * @param newArticleIds - Article ids being staged
+ */
+export function hasDuplicateArticlesInContainer(
+  existingItems: ContainerActiveItem[] | undefined,
+  newArticleIds: string[],
+): boolean {
+  if (!existingItems?.length || !newArticleIds.length) return false;
+  const existing = new Set(
+    existingItems.map((i) => getArticleIdFromActiveItem(i.article)).filter(Boolean),
+  );
+  return newArticleIds.some((id) => id && existing.has(id));
+}
+
+/** Display row for scan container drawer (merged by article id). */
+export type GroupedContainerArticle = {
+  articleId: string;
+  quantity: number;
+  article?: ContainerActiveArticlePopulated | null;
+};
+
+/**
+ * Group container activeItems by article for display (sums duplicate rows).
+ * @param container - Container from API
+ */
+export function groupContainerArticlesForDisplay(
+  container: ContainerMaster | null | undefined,
+): GroupedContainerArticle[] {
+  if (!container) return [];
+  const raw = getContainerArticles(container);
+  const byId = new Map<string, GroupedContainerArticle>();
+  for (const { articleId, quantity } of raw) {
+    if (!articleId) continue;
+    const existing = byId.get(articleId);
+    if (existing) {
+      existing.quantity += quantity;
+    } else {
+      byId.set(articleId, { articleId, quantity });
+    }
+  }
+  if (container.activeItems?.length) {
+    for (const item of container.activeItems) {
+      const id = getArticleIdFromActiveItem(item.article);
+      if (!id || !byId.has(id)) continue;
+      const grouped = byId.get(id)!;
+      if (typeof item.article === 'object' && item.article) {
+        grouped.article = item.article as ContainerActiveArticlePopulated;
+      }
+    }
+  }
+  return Array.from(byId.values());
+}
+
+/**
+ * True when container already holds the same article ids and quantities being staged.
+ * @param existingItems - Current container activeItems
+ * @param newRows - Rows about to be staged
+ */
+export function isContainerAlreadyStagedForArticles(
+  existingItems: ContainerActiveItem[] | undefined,
+  newRows: ActiveItemPatchRow[],
+): boolean {
+  if (!existingItems?.length || !newRows.length) return false;
+  const existing = existingItems
+    .map((item) => toActiveItemPatchRow(item))
+    .filter((row): row is ActiveItemPatchRow => row != null && !!row.article);
+  if (existing.length !== newRows.length) return false;
+  const existingMap = new Map(existing.map((r) => [r.article!, r.quantity]));
+  return newRows.every((r) => r.article && existingMap.get(r.article) === r.quantity);
+}
+
+/**
+ * Build deduped activeItems for container PATCH; rejects staging an article already in the container.
+ * @param existingItems - Current container activeItems from API
+ * @param newRows - New rows to stage
+ * @param options.replace - Replace all rows (recovery / empty container) instead of merge-append
+ */
+export function buildStagedActiveItemsPayload(
+  existingItems: ContainerActiveItem[] | undefined,
+  newRows: ActiveItemPatchRow[],
+  options?: { replace?: boolean },
+): { ok: true; activeItems: ActiveItemPatchRow[] } | { ok: false; reason: 'duplicate-article' | 'invalid' } {
+  if (!newRows.length) return { ok: false, reason: 'invalid' };
+
+  const existing = (existingItems ?? [])
+    .map((item) => toActiveItemPatchRow(item))
+    .filter((row): row is ActiveItemPatchRow => row != null && !!row.article);
+
+  if (options?.replace || existing.length === 0) {
+    const merged = mergeActiveItemsByArticle(newRows, 'sum');
+    if (!merged?.length) return { ok: false, reason: 'invalid' };
+    return { ok: true, activeItems: merged };
+  }
+
+  const newArticleIds = newRows.map((r) => r.article).filter((id): id is string => !!id);
+  if (hasDuplicateArticlesInContainer(existingItems, newArticleIds)) {
+    return { ok: false, reason: 'duplicate-article' };
+  }
+  const merged = mergeActiveItemsByArticle([...existing, ...newRows], 'sum');
+  if (!merged?.length) return { ok: false, reason: 'invalid' };
+  return { ok: true, activeItems: merged };
 }
 
 const MONGO_OBJECT_ID_RE = /^[a-f0-9]{24}$/i;
