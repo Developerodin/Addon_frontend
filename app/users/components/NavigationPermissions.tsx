@@ -112,7 +112,9 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
     { key: 'Final Checking', label: 'Final Checking' },
     { key: 'Dispatch', label: 'Dispatch' },
     { key: 'Counting & Dispatch', label: 'Counting & Dispatch' },
-    { key: 'GRN', label: 'GRN' }
+    { key: 'GRN', label: 'GRN' },
+    { key: 'Vendor PO Return', label: 'Vendor PO Return' },
+    { key: 'Vendor PO Return Challan', label: 'Vendor PO Return Challan' }
   ]
 
   return (

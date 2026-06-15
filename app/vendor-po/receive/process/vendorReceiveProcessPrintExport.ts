@@ -8,9 +8,25 @@ import { defaultVendorLabelPrintSettings, getVendorBoxId } from "./vendorReceive
 export type VendorBoxFormRow = {
   productName: string;
   articleCode: string;
+  type: string;
+  color: string;
+  pattern: string;
   lotNumber: string;
   numberOfUnits: string;
 };
+
+/** Empty box form row defaults. */
+export function emptyVendorBoxFormRow(): VendorBoxFormRow {
+  return {
+    productName: "",
+    articleCode: "",
+    type: "",
+    color: "",
+    pattern: "",
+    lotNumber: "",
+    numberOfUnits: "",
+  };
+}
 
 function readVendorName(v: VendorPurchaseOrder["vendor"]): string {
   if (!v || typeof v === "string") return typeof v === "string" ? v : "";
@@ -83,6 +99,9 @@ export function exportVendorBoxesExcel(apiPo: VendorPurchaseOrder, boxes: Vendor
       Invoice: d?.lotNumber || b.lotNumber || "",
       Product: d?.productName || b.productName || "",
       Code: d?.articleCode || "",
+      Type: d?.type || "",
+      Color: d?.color || "",
+      Pattern: d?.pattern || "",
       Units: d?.numberOfUnits ?? b.numberOfUnits ?? "",
     };
   });

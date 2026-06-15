@@ -61,10 +61,26 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
   const hasVendorPOPurchaseManagementPermission = (): boolean =>
     hasSubPermission('/vendor-po', 'Vendor List') ||
     hasSubPermission('/vendor-po', 'Vendor PO Raise') ||
-    hasSubPermission('/vendor-po', 'Vendor PO Receive');
+    hasSubPermission('/vendor-po', 'Vendor PO Receive') ||
+    hasSubPermission('/vendor-po', 'GRN') ||
+    hasSubPermission('/vendor-po', 'Vendor PO Return') ||
+    hasSubPermission('/vendor-po', 'Vendor PO Return Challan');
+
+  const isVendorPOPurchaseManagementNestedPath = (path: string): boolean =>
+    path.startsWith('/vendor-po/purchase-management/') ||
+    path === '/vendor-po/vendor-list' ||
+    path === '/vendor-po/grn' ||
+    path === '/vendor-po/purchase-management/po-return';
 
   const hasVendorPOPurchaseManagementChildPermission = (path: string): boolean => {
     if (path === '/vendor-po/vendor-list') return hasSubPermission('/vendor-po', 'Vendor List');
+    if (path === '/vendor-po/grn') return hasSubPermission('/vendor-po', 'GRN');
+    if (path === '/vendor-po/purchase-management/po-return') {
+      return (
+        hasSubPermission('/vendor-po', 'Vendor PO Return') ||
+        hasSubPermission('/vendor-po', 'Vendor PO Return Challan')
+      );
+    }
     if (path.startsWith('/vendor-po/purchase-management/purchase-order-received')) {
       return hasSubPermission('/vendor-po', 'Vendor PO Receive');
     }
@@ -153,7 +169,7 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
             const hasVisibleChildren = child.children.some(nestedChild => {
               if (nestedChild.type === 'link' && nestedChild.path) {
                 const nestedPathBase = nestedChild.path.split('?')[0];
-                if (nestedChild.path.startsWith('/vendor-po/purchase-management/') || nestedChild.path === '/vendor-po/vendor-list') {
+                if (isVendorPOPurchaseManagementNestedPath(nestedChild.path)) {
                   return hasVendorPOPurchaseManagementChildPermission(nestedChild.path);
                 }
                 if (
@@ -257,7 +273,7 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               if (child.path === '/vendor-po/purchase-management') {
                 return hasVendorPOPurchaseManagementPermission();
               }
-              if (child.path.startsWith('/vendor-po/purchase-management/')) {
+              if (isVendorPOPurchaseManagementNestedPath(child.path)) {
                 return hasVendorPOPurchaseManagementChildPermission(child.path);
               }
               const childName = child.title;
@@ -277,7 +293,7 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               const nestedFilteredChildren = child.children.filter(nestedChild => {
                 if (nestedChild.type === 'link' && nestedChild.path) {
                   const nestedPathBase = nestedChild.path.split('?')[0];
-                  if (nestedChild.path.startsWith('/vendor-po/purchase-management/') || nestedChild.path === '/vendor-po/vendor-list') {
+                  if (isVendorPOPurchaseManagementNestedPath(nestedChild.path)) {
                     return hasVendorPOPurchaseManagementChildPermission(nestedChild.path);
                   }
                   if (
@@ -371,7 +387,7 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
             const hasVisibleChildren = child.children.some(nestedChild => {
               if (nestedChild.type === 'link' && nestedChild.path) {
                 const nestedPathBase = nestedChild.path.split('?')[0];
-                if (nestedChild.path.startsWith('/vendor-po/purchase-management/') || nestedChild.path === '/vendor-po/vendor-list') {
+                if (isVendorPOPurchaseManagementNestedPath(nestedChild.path)) {
                   return hasVendorPOPurchaseManagementChildPermission(nestedChild.path);
                 }
                 if (
@@ -482,7 +498,7 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               if (child.path === '/vendor-po/purchase-management') {
                 return hasVendorPOPurchaseManagementPermission();
               }
-              if (child.path.startsWith('/vendor-po/purchase-management/')) {
+              if (isVendorPOPurchaseManagementNestedPath(child.path)) {
                 return hasVendorPOPurchaseManagementChildPermission(child.path);
               }
               const childName = child.title;
@@ -500,7 +516,7 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               const nestedFilteredChildren = child.children.filter(nestedChild => {
                 if (nestedChild.type === 'link' && nestedChild.path) {
                   const nestedPathBase = nestedChild.path.split('?')[0];
-                  if (nestedChild.path.startsWith('/vendor-po/purchase-management/') || nestedChild.path === '/vendor-po/vendor-list') {
+                  if (isVendorPOPurchaseManagementNestedPath(nestedChild.path)) {
                     return hasVendorPOPurchaseManagementChildPermission(nestedChild.path);
                   }
                   if (

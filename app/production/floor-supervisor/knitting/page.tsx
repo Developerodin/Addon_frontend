@@ -160,7 +160,7 @@ function KnitDoneQuantityReminder({ entries }: { entries: KnitDoneEntry[] }) {
 
 const KnittingFloorSupervisorPage = () => {
   const user = useSelector((state: any) => state.auth?.user);
-  const isUserRole = user?.role === "user";
+  const isUserRole = user?.role === "user" || user?.role === "accounts";
   /** On Hold / Short Close status actions in update modal — admin and super_admin only */
   const canSetOnHold =
     user?.role === "admin" || user?.role === "super_admin";

@@ -220,6 +220,7 @@ const UsersPage = () => {
                                                     <li><strong>Super Admin:</strong> Full system access with all permissions</li>
                                                     <li><strong>Admin:</strong> Administrative access to most features</li>
                                                     <li><strong>User:</strong> Standard user access with limited permissions</li>
+                                                    <li><strong>Accounts:</strong> Same access as User (label-only role for accounts team)</li>
                                                 </ul>
                                             </div>
                                             
@@ -294,6 +295,7 @@ const UsersPage = () => {
                                     <option value="">Role</option>
                                     <option value="super_admin">Super Admin</option>
                                     <option value="admin">Admin</option>
+                                    <option value="accounts">Accounts</option>
                                     <option value="user">User</option>
                                 </select>
                                 <select className="bg-white border border-gray-200 text-[11px] rounded px-2 py-1.5 w-full" value={filters.gender} onChange={(e) => handleFilterChange('gender', e.target.value)}>

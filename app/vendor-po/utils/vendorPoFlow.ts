@@ -3,6 +3,8 @@ import type { VendorPO, VendorPOPriority, VendorPOStatus } from "../raise/types"
 /** Badge classes for `VendorPOStatus` (lists + modals). */
 export function vendorPoUiStatusClass(status: VendorPOStatus): string {
   switch (status) {
+    case "Draft":
+      return "bg-slate-100 text-slate-800";
     case "Submitted to vendor":
       return "bg-gray-100 text-gray-800";
     case "In transit":
@@ -32,6 +34,7 @@ import type {
 /** Map API status → UI label (aligned with yarn PO lifecycle). */
 export function vendorPoApiStatusToUi(code: VendorPoApiStatus): VendorPOStatus {
   const map: Record<VendorPoApiStatus, VendorPOStatus> = {
+    draft: "Draft",
     submitted_to_vendor: "Submitted to vendor",
     in_transit: "In transit",
     goods_partially_received: "Goods partially received",

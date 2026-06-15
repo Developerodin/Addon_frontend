@@ -1,6 +1,7 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useSelector } from "react-redux";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { toast } from "react-hot-toast";
@@ -13,6 +14,13 @@ import vendorPurchaseOrderService from "@/shared/services/vendorPurchaseOrderSer
 import { mapVendorPurchaseOrderToUi } from "../../../utils/vendorPoFlow";
 import { listProducts, getProductById } from "@/shared/services/productService";
 import { productRecordToVendorPOArticle } from "../../components/vendorPoArticleMapping";
+import {
+  canAccessVendorPoRaiseEdit,
+  getVendorPoRaiseFormMode,
+  hasFullVendorPoRaiseAccess,
+} from "../../components/vendorPoRaiseAccess";
+import { buildVendorPoUpdatePayload } from "../../components/vendorPoFormPayload";
+import type { VendorPoFormSubmitAction } from "../../components/VendorPOForm";
 
 function poToFormData(po: VendorPO): VendorPOFormData {
   return {
@@ -46,8 +54,10 @@ function poToFormData(po: VendorPO): VendorPOFormData {
 const VendorPOEditPage = () => {
   const router = useRouter();
   const params = useParams();
+  const authUser = useSelector((state: { auth?: { user?: { role?: string } } }) => state.auth?.user);
+  const formMode = getVendorPoRaiseFormMode(authUser?.role);
   const { hasSubPermission, isLoading: permLoading } = useNavigation();
-  const canAccess = hasSubPermission("/vendor-po", "Vendor PO Raise");
+  const canAccess = hasSubPermission("/vendor-po", "Vendor PO Raise") || hasFullVendorPoRaiseAccess(authUser?.role);
   const id = params?.id as string;
   const [po, setPo] = useState<VendorPO | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -192,56 +202,37 @@ const VendorPOEditPage = () => {
     }
   };
 
-  const handleSaveDraft = (data: VendorPOFormData) => {
+  const workflowLocked = useMemo(() => {
+    if (!po?.apiStatus) return false;
+    if (formMode === "full") {
+      return po.apiStatus !== "draft" && po.apiStatus !== "submitted_to_vendor";
+    }
+    return po.apiStatus !== "draft";
+  }, [po?.apiStatus, formMode]);
+
+  const roleCanEdit = useMemo(() => {
+    if (!po) return true;
+    return canAccessVendorPoRaiseEdit(authUser?.role, po.apiStatus);
+  }, [po, authUser?.role]);
+
+  const handleSave = (data: VendorPOFormData, action: VendorPoFormSubmitAction) => {
     if (!po) return;
     setIsSubmitting(true);
     void (async () => {
       try {
-        const subTotal = data.lineItems.reduce(
-          (sum, item) => sum + Number(item.orderedQty || 0) * Number(item.rate || 0),
-          0
-        );
-        const gst = data.lineItems.reduce(
-          (sum, item) =>
-            sum +
-            (Number(item.orderedQty || 0) * Number(item.rate || 0) * Number(item.gstRate || 0)) / 100,
-          0
-        );
-        const vendorRow = vendors.find((v) => v.id === data.vendorId);
-        const vendorName =
-          vendorRow?.vendorName?.trim() || po.vendorName?.trim() || "";
+        const payload = buildVendorPoUpdatePayload(data, vendors, action);
+        const vendorName = payload.vendorName?.trim() || po.vendorName?.trim() || "";
         if (!vendorName) {
           toast.error("Could not resolve vendor name. Reload the page and try again.");
           return;
         }
-        await vendorPurchaseOrderService.update(id, {
-          vendor: data.vendorId,
-          vendorName,
-          poItems: data.lineItems.map((item) => ({
-            _id: item.id.startsWith("li-") ? undefined : item.id,
-            productId: item.articleId,
-            productName: item.articleName,
-            quantity: Number(item.orderedQty || 0),
-            rate: Number(item.rate || 0),
-            gstRate: Number(item.gstRate || 0),
-            estimatedDeliveryDate: item.estimatedDeliveryDate || undefined,
-            type: item.type?.trim() || undefined,
-            color: item.color?.trim() || undefined,
-            pattern: item.pattern?.trim() || undefined,
-          })),
-          subTotal,
-          gst,
-          total: subTotal + gst,
-          creditDays: Number(data.creditDays || 0),
-          estimatedOrderDeliveryDate: data.estimatedOrderDeliveryDate
-            ? new Date(data.estimatedOrderDeliveryDate).toISOString()
-            : undefined,
-          notes: data.remarks || undefined,
-        });
-        toast.success("PO updated.");
+        await vendorPurchaseOrderService.update(id, { ...payload, vendorName });
+        toast.success(
+          action === "submit" ? "PO submitted to supplier." : "Draft PO updated."
+        );
         router.push("/vendor-po/raise");
-      } catch (e: any) {
-        toast.error(e?.message ?? "Failed to update PO");
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : "Failed to update PO");
       } finally {
         setIsSubmitting(false);
       }
@@ -307,7 +298,26 @@ const VendorPOEditPage = () => {
   }
 
   const initialData = poToFormData(po);
-  const isApproved = po.apiStatus != null && po.apiStatus !== "submitted_to_vendor";
+
+  if (!roleCanEdit) {
+    return (
+      <div className="main-content !p-[10px]">
+        <Seo title="Edit Vendor PO" />
+        <div className="text-center py-12">
+          <i className="ri-lock-line text-6xl text-gray-400 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Draft only</h3>
+          <p className="text-gray-500 mb-4">
+            {formMode === "accounts_draft"
+              ? "Accounts can only edit draft POs to enter rate & GST before submit."
+              : "User role can only edit draft POs. This PO has already moved forward."}
+          </p>
+          <Link href="/vendor-po/raise" className="ti-btn ti-btn-primary">
+            Back to list
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="main-content !p-[10px]">
@@ -335,9 +345,10 @@ const VendorPOEditPage = () => {
             vendors={vendors}
             articles={articles}
             onVendorChange={handleVendorChange}
-            isApproved={isApproved}
-            onSubmit={handleSaveDraft}
-            submitButtonText="Update PO"
+            formMode={formMode}
+            apiStatus={po.apiStatus}
+            workflowLocked={workflowLocked}
+            onSubmit={handleSave}
             onCancel={() => router.push("/vendor-po/raise")}
             isSubmitting={isSubmitting}
           />

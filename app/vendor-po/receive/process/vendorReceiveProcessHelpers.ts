@@ -3,6 +3,26 @@ import type {
   VendorReceivedLotDetail,
 } from "@/shared/services/vendorPurchaseOrderService";
 import type { VendorBox } from "@/shared/services/vendorBoxService";
+import { vendorCodeFromPoLineItem } from "../../components/vendorPacklistHelpers";
+
+/** PO line option resolved from a receipt lot for box assignment UI. */
+export type VendorPoLotLineOption = {
+  productName: string;
+  code: string;
+  type: string;
+  color: string;
+  pattern: string;
+};
+
+/** Received line row with article attributes for display tables. */
+export type VendorLotReceivedLineRow = {
+  productName: string;
+  quantity: number;
+  vendorCode: string;
+  type: string;
+  color: string;
+  pattern: string;
+};
 
 /** Sanitize numeric input for weight/qty fields. */
 export function validateVendorProcessNum(value: string, allowDec = true): string {
@@ -18,40 +38,97 @@ export function getVendorBoxId(box: VendorBox): string {
 export function getVendorPoItemOptionsForLot(
   po: VendorPurchaseOrder,
   lotNumber: string
-): { productName: string; code: string }[] {
+): VendorPoLotLineOption[] {
   const norm = lotNumber.trim().toUpperCase();
   const lot = (po.receivedLotDetails || []).find(
     (l) => (l.lotNumber || "").trim().toUpperCase() === norm
   );
   if (!lot?.poItems?.length) return [];
   const byId = new Map((po.poItems || []).map((it) => [String(it._id ?? it.id), it]));
-  const out: { productName: string; code: string }[] = [];
+  const out: VendorPoLotLineOption[] = [];
   for (const p of lot.poItems) {
     const line = byId.get(String(p.poItem));
     if (!line) continue;
     const pid = line.productId;
-    const code = typeof pid === "object" ? pid?.factoryCode || pid?.vendorCode || "" : "";
     const productName = line.productName || (typeof pid === "object" ? pid?.name || "" : "");
-    if (productName || code) out.push({ productName, code });
+    const code = vendorCodeFromPoLineItem(line);
+    if (productName || code) {
+      out.push({
+        productName,
+        code,
+        type: line.type?.trim() || "",
+        color: line.color?.trim() || "",
+        pattern: line.pattern?.trim() || "",
+      });
+    }
   }
-  const key = (x: { productName: string; code: string }) => `${x.productName}__${x.code}`;
+  const key = (x: VendorPoLotLineOption) =>
+    `${x.productName}__${x.code}__${x.type}__${x.color}__${x.pattern}`;
   return out.filter((x, i, a) => a.findIndex((y) => key(y) === key(x)) === i);
+}
+
+/**
+ * Resolve article attributes from PO lines by product name (and optional lot).
+ * @param po - Purchase order with populated lines
+ * @param productName - Product display name on the box
+ * @param lotNumber - Optional invoice lot for scoped lookup
+ */
+export function resolveVendorBoxLineAttrsFromPo(
+  po: VendorPurchaseOrder,
+  productName: string,
+  lotNumber?: string
+): Pick<VendorPoLotLineOption, "code" | "type" | "color" | "pattern"> {
+  const norm = productName.trim().toLowerCase();
+  if (!norm) {
+    return { code: "", type: "", color: "", pattern: "" };
+  }
+  if (lotNumber?.trim()) {
+    const opt = getVendorPoItemOptionsForLot(po, lotNumber).find(
+      (row) => row.productName.trim().toLowerCase() === norm
+    );
+    if (opt) {
+      return { code: opt.code, type: opt.type, color: opt.color, pattern: opt.pattern };
+    }
+  }
+  const line = (po.poItems || []).find((it) => {
+    const pid = it.productId;
+    const name =
+      it.productName?.trim().toLowerCase() ||
+      (typeof pid === "object" ? String(pid?.name || "").trim().toLowerCase() : "");
+    return name === norm;
+  });
+  if (!line) {
+    return { code: "", type: "", color: "", pattern: "" };
+  }
+  return {
+    code: vendorCodeFromPoLineItem(line),
+    type: line.type?.trim() || "",
+    color: line.color?.trim() || "",
+    pattern: line.pattern?.trim() || "",
+  };
 }
 
 /** Per-line product and received qty for a receipt lot (from `receivedLotDetails[].poItems`). */
 export function getVendorLotReceivedLines(
   po: VendorPurchaseOrder,
   lot: VendorReceivedLotDetail
-): { productName: string; quantity: number }[] {
+): VendorLotReceivedLineRow[] {
   const byId = new Map((po.poItems || []).map((it) => [String(it._id ?? it.id), it]));
-  const out: { productName: string; quantity: number }[] = [];
+  const out: VendorLotReceivedLineRow[] = [];
   for (const p of lot.poItems || []) {
     const line = byId.get(String(p.poItem));
     if (!line) continue;
     const pid = line.productId;
     const productName =
       line.productName || (typeof pid === "object" ? pid?.name || "" : "") || "";
-    out.push({ productName, quantity: Number(p.receivedQuantity ?? 0) });
+    out.push({
+      productName,
+      quantity: Number(p.receivedQuantity ?? 0),
+      vendorCode: vendorCodeFromPoLineItem(line),
+      type: line.type?.trim() || "",
+      color: line.color?.trim() || "",
+      pattern: line.pattern?.trim() || "",
+    });
   }
   return out;
 }

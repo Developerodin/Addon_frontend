@@ -120,11 +120,6 @@ export function VendorScanContainerDrawer({
     setAcceptLoading(true);
     try {
       await containersMasterService.acceptByBarcode(scanned.barcode);
-      try {
-        await containersMasterService.clearActiveByBarcode(scanned.barcode);
-      } catch {
-        /* best-effort */
-      }
       toast.success(`Accepted container on ${expectedFloorName}. Refreshing…`);
       await onAccepted?.();
       reset();

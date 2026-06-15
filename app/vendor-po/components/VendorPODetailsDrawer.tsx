@@ -11,7 +11,7 @@ import vendorPurchaseOrderService, {
 } from "@/shared/services/vendorPurchaseOrderService";
 import { vendorPoApiStatusToUi, vendorPoUiStatusClass } from "../utils/vendorPoFlow";
 import type { VendorPO } from "../raise/types";
-import { getPoLineItemId, packlistRowTotalUnits, productNameForPoLineId, receivedLotTotalUnits } from "./vendorPacklistHelpers";
+import { getPoLineItemId, packlistRowTotalUnits, productNameForPoLineId, receivedLotTotalUnits, vendorCodeFromPoLineItem, dashOr, findPoLineItemById } from "./vendorPacklistHelpers";
 
 function readVendorName(vendor: VendorPurchaseOrder["vendor"]): string {
   if (!vendor) return "—";
@@ -29,9 +29,7 @@ function formatMoney(n: number): string {
 }
 
 function readProductVendorCode(item: VendorPurchaseOrder["poItems"][number]): string {
-  const pid = item.productId;
-  if (typeof pid === "object" && pid?.vendorCode?.trim()) return pid.vendorCode.trim();
-  return "";
+  return vendorCodeFromPoLineItem(item);
 }
 
 function receivedQtyByLineFromLots(po: VendorPurchaseOrder | null | undefined): Record<string, number> {
@@ -316,6 +314,15 @@ export function VendorPODetailsDrawer({
                             <th className="border border-gray-300 px-2 py-1 text-left font-medium text-gray-500 uppercase">
                               Vendor code
                             </th>
+                            <th className="border border-gray-300 px-2 py-1 text-left font-medium text-gray-500 uppercase">
+                              Type
+                            </th>
+                            <th className="border border-gray-300 px-2 py-1 text-left font-medium text-gray-500 uppercase">
+                              Color
+                            </th>
+                            <th className="border border-gray-300 px-2 py-1 text-left font-medium text-gray-500 uppercase">
+                              Pattern
+                            </th>
                             <th className="border border-gray-300 px-2 py-1 text-right font-medium text-gray-500 uppercase">
                               Qty
                             </th>
@@ -357,6 +364,9 @@ export function VendorPODetailsDrawer({
                               <tr key={key} className="hover:bg-gray-50">
                                 <td className="border border-gray-300 px-2 py-1.5">{name}</td>
                                 <td className="border border-gray-300 px-2 py-1.5">{vendorCode || "no vendor code"}</td>
+                                <td className="border border-gray-300 px-2 py-1.5">{dashOr(item.type)}</td>
+                                <td className="border border-gray-300 px-2 py-1.5">{dashOr(item.color)}</td>
+                                <td className="border border-gray-300 px-2 py-1.5">{dashOr(item.pattern)}</td>
                                 <td className="border border-gray-300 px-2 py-1.5 text-right">{qty.toLocaleString()}</td>
                                 <td className="border border-gray-300 px-2 py-1.5 text-right">{received.toLocaleString()}</td>
                                 <td className="border border-gray-300 px-2 py-1.5 text-right">{pending.toLocaleString()}</td>
@@ -485,16 +495,40 @@ export function VendorPODetailsDrawer({
                                 )}
                               </div>
                               {lot.poItems && lot.poItems.length > 0 && (
-                                <div className="mt-2 pt-2 border-t border-blue-100">
+                                <div className="mt-2 pt-2 border-t border-blue-100 overflow-x-auto">
                                   <span className="text-[10px] text-gray-600 block mb-1">Received by line</span>
-                                  <ul className="list-disc list-inside space-y-0.5 text-[11px] text-gray-900">
-                                    {lot.poItems.map((p, i) => (
-                                      <li key={`${String(p.poItem)}-${i}`}>
-                                        {productNameForPoLineId(String(p.poItem), d?.poItems)} —{" "}
-                                        {Number(p.receivedQuantity || 0).toLocaleString()} pcs
-                                      </li>
-                                    ))}
-                                  </ul>
+                                  <table className="min-w-full border-collapse text-[10px]">
+                                    <thead>
+                                      <tr className="bg-blue-50/50">
+                                        <th className="border border-blue-100 px-1.5 py-1 text-left font-medium text-gray-600">Product</th>
+                                        <th className="border border-blue-100 px-1.5 py-1 text-left font-medium text-gray-600">Vendor code</th>
+                                        <th className="border border-blue-100 px-1.5 py-1 text-left font-medium text-gray-600">Type</th>
+                                        <th className="border border-blue-100 px-1.5 py-1 text-left font-medium text-gray-600">Color</th>
+                                        <th className="border border-blue-100 px-1.5 py-1 text-left font-medium text-gray-600">Pattern</th>
+                                        <th className="border border-blue-100 px-1.5 py-1 text-right font-medium text-gray-600">Qty</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {lot.poItems.map((p, i) => {
+                                        const line = findPoLineItemById(String(p.poItem), d?.poItems);
+                                        const name = productNameForPoLineId(String(p.poItem), d?.poItems);
+                                        return (
+                                          <tr key={`${String(p.poItem)}-${i}`}>
+                                            <td className="border border-blue-100 px-1.5 py-1">{name}</td>
+                                            <td className="border border-blue-100 px-1.5 py-1">
+                                              {line ? vendorCodeFromPoLineItem(line) || "no vendor code" : "—"}
+                                            </td>
+                                            <td className="border border-blue-100 px-1.5 py-1">{dashOr(line?.type)}</td>
+                                            <td className="border border-blue-100 px-1.5 py-1">{dashOr(line?.color)}</td>
+                                            <td className="border border-blue-100 px-1.5 py-1">{dashOr(line?.pattern)}</td>
+                                            <td className="border border-blue-100 px-1.5 py-1 text-right tabular-nums">
+                                              {Number(p.receivedQuantity || 0).toLocaleString()} pcs
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
                                 </div>
                               )}
                             </div>

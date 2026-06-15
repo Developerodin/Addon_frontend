@@ -96,6 +96,8 @@ export interface NavigationPermissions {
     'Dispatch': boolean;
     'Counting & Dispatch': boolean;
     'GRN': boolean;
+    'Vendor PO Return': boolean;
+    'Vendor PO Return Challan': boolean;
   };
 }
 
@@ -110,7 +112,7 @@ export interface User {
   gender: 'Male' | 'Female' | 'Other';
   country?: string;
   timezone: string;
-  role: 'admin' | 'user' | 'super_admin';
+  role: 'admin' | 'user' | 'accounts' | 'super_admin';
   navigation: NavigationPermissions;
   createdAt: string;
   updatedAt: string;
@@ -121,7 +123,7 @@ export interface CreateUserRequest {
   name: string;
   email: string;
   password: string;
-  role: 'admin' | 'user' | 'super_admin';
+  role: 'admin' | 'user' | 'accounts' | 'super_admin';
   phoneNumber?: string;
   profilePicture?: string;
   dateOfBirth?: string;
@@ -141,7 +143,7 @@ export interface UpdateUserRequest {
   gender?: 'Male' | 'Female' | 'Other';
   country?: string;
   timezone?: string;
-  role?: 'admin' | 'user' | 'super_admin';
+  role?: 'admin' | 'user' | 'accounts' | 'super_admin';
 }
 
 // Update navigation request interface
@@ -160,7 +162,7 @@ export interface PaginatedResponse<T> {
 
 // Users query parameters
 export interface UsersQueryParams {
-  role?: 'admin' | 'user' | 'super_admin';
+  role?: 'admin' | 'user' | 'accounts' | 'super_admin';
   limit?: number;
   page?: number;
   sortBy?: string;
@@ -326,6 +328,7 @@ class UserService {
       case 'admin':
         return 'text-blue-600 bg-blue-100';
       case 'user':
+      case 'accounts':
         return 'text-green-600 bg-green-100';
       default:
         return 'text-gray-600 bg-gray-100';

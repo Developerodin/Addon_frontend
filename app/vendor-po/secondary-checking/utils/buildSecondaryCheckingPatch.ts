@@ -5,13 +5,14 @@ import type {
 import type { VendorSecondaryCheckingProcessData } from "../components/VendorSecondaryCheckingProcessDrawer";
 
 /**
- * Backend PATCH .../floors/secondaryChecking: send **absolute** m1/m2/m4 for fields the user filled
- * in the drawer (blank = omit — server keeps existing). Optional: repairStatus / repairRemarks /
- * autoTransfer + existingContainerBarcode. Do not send mode, completed, remaining, m1Remaining, m2Remaining.
+ * Backend PATCH .../floors/secondaryChecking with `setSplitTotals: true`: send **absolute**
+ * m1/m2/m3/m4 totals. Blank fields in the drawer = keep current server value.
  */
 export type SecondaryCheckingFloorPatchBody = {
+  setSplitTotals?: boolean;
   m1Quantity?: number;
   m2Quantity?: number;
+  m3Quantity?: number;
   m4Quantity?: number;
   repairStatus?: string;
   repairRemarks?: string;
@@ -49,11 +50,12 @@ export function buildSecondaryCheckingFloorPatch(
   processingData: VendorSecondaryCheckingProcessData,
 ): {
   body: SecondaryCheckingFloorPatchBody;
-  displayTotals: { m1: number; m2: number; m4: number };
+  displayTotals: { m1: number; m2: number; m3: number; m4: number };
   noop: boolean;
 } {
   const currentM1 = Math.max(0, Math.round(numOr0(currentSc.m1Quantity)));
   const currentM2 = Math.max(0, Math.round(numOr0(currentSc.m2Quantity)));
+  const currentM3 = Math.max(0, Math.round(numOr0(currentSc.m3Quantity)));
   const currentM4 = Math.max(0, Math.round(numOr0(currentSc.m4Quantity)));
 
   const m1 =
@@ -64,6 +66,10 @@ export function buildSecondaryCheckingFloorPatch(
     processingData.m2Quantity !== undefined && processingData.m2Quantity !== null
       ? totalFromForm(processingData.m2Quantity, currentM2)
       : currentM2;
+  const m3 =
+    processingData.m3Quantity !== undefined && processingData.m3Quantity !== null
+      ? totalFromForm(processingData.m3Quantity, currentM3)
+      : currentM3;
   const m4 =
     processingData.m4Quantity !== undefined && processingData.m4Quantity !== null
       ? totalFromForm(processingData.m4Quantity, currentM4)
@@ -76,13 +82,17 @@ export function buildSecondaryCheckingFloorPatch(
   const remarks = processingData.repairRemarks ?? "";
 
   const body: SecondaryCheckingFloorPatchBody = {};
-  if (processingData.m1Quantity !== undefined && processingData.m1Quantity !== null) {
+  const qtyTouched =
+    (processingData.m1Quantity !== undefined && processingData.m1Quantity !== null) ||
+    (processingData.m2Quantity !== undefined && processingData.m2Quantity !== null) ||
+    (processingData.m3Quantity !== undefined && processingData.m3Quantity !== null) ||
+    (processingData.m4Quantity !== undefined && processingData.m4Quantity !== null);
+
+  if (qtyTouched) {
+    body.setSplitTotals = true;
     body.m1Quantity = m1;
-  }
-  if (processingData.m2Quantity !== undefined && processingData.m2Quantity !== null) {
     body.m2Quantity = m2;
-  }
-  if (processingData.m4Quantity !== undefined && processingData.m4Quantity !== null) {
+    body.m3Quantity = m3;
     body.m4Quantity = m4;
   }
 
@@ -99,7 +109,7 @@ export function buildSecondaryCheckingFloorPatch(
 
   return {
     body,
-    displayTotals: { m1, m2, m4 },
+    displayTotals: { m1, m2, m3, m4 },
     noop,
   };
 }

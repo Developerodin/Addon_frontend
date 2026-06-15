@@ -99,6 +99,8 @@ interface NavigationPermissions {
     'Dispatch': boolean;
     'Counting & Dispatch': boolean;
     'GRN': boolean;
+    'Vendor PO Return': boolean;
+    'Vendor PO Return Challan': boolean;
   };
 }
 
@@ -287,6 +289,8 @@ const defaultPermissions: NavigationPermissions = {
     'Dispatch': false,
     'Counting & Dispatch': false,
     'GRN': false,
+    'Vendor PO Return': false,
+    'Vendor PO Return Challan': false,
   },
 };
 
@@ -418,7 +422,7 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
     if (path === '/vendor-po/purchase-management') {
       const vendorPO = (permissions as any)['Vendor PO'];
       if (vendorPO && typeof vendorPO === 'object') {
-        return ['Vendor List', 'Vendor PO Raise', 'Vendor PO Receive'].some(
+        return ['Vendor List', 'Vendor PO Raise', 'Vendor PO Receive', 'GRN', 'Vendor PO Return', 'Vendor PO Return Challan'].some(
           (key) => vendorPO[key] === true
         );
       }

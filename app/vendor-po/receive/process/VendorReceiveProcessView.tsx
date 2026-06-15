@@ -9,7 +9,13 @@ import { QZTrayLoader, QZTrayStatus, QZTrayUntrustedWarning, QZTrayRequestBlocke
 import vendorPurchaseOrderService, { VendorPurchaseOrder } from "@/shared/services/vendorPurchaseOrderService";
 import vendorBoxService, { VendorBox } from "@/shared/services/vendorBoxService";
 import { lotDetailsForBulkBoxes } from "../../utils/vendorPoFlow";
-import { getVendorBoxId, getVendorLotReceivedLines, getVendorPoItemOptionsForLot } from "./vendorReceiveProcessHelpers";
+import { dashOr, vendorCodeFromPoLineItem } from "../../components/vendorPacklistHelpers";
+import {
+  getVendorBoxId,
+  getVendorLotReceivedLines,
+  getVendorPoItemOptionsForLot,
+  resolveVendorBoxLineAttrsFromPo,
+} from "./vendorReceiveProcessHelpers";
 import {
   exportVendorBoxesExcel,
   printAllVendorBoxLabels,
@@ -63,9 +69,15 @@ export function VendorReceiveProcessView({ orderId }: Props) {
           const lot = b.lotNumber || "";
           const opts = lot ? getVendorPoItemOptionsForLot(po, lot) : [];
           const def = opts[0];
+          const attrs = def
+            ? { code: def.code, type: def.type, color: def.color, pattern: def.pattern }
+            : resolveVendorBoxLineAttrsFromPo(po, b.productName || "", lot);
           next[id] = {
             productName: ex?.productName || b.productName || def?.productName || "",
-            articleCode: ex?.articleCode || def?.code || "",
+            articleCode: ex?.articleCode || attrs.code || "",
+            type: ex?.type || attrs.type || "",
+            color: ex?.color || attrs.color || "",
+            pattern: ex?.pattern || attrs.pattern || "",
             lotNumber: ex?.lotNumber || lot,
             numberOfUnits: ex?.numberOfUnits || (b.numberOfUnits != null ? String(b.numberOfUnits) : ""),
           };
@@ -122,13 +134,19 @@ export function VendorReceiveProcessView({ orderId }: Props) {
     const lot = found.lotNumber?.trim() || "";
     const opts = lot ? getVendorPoItemOptionsForLot(apiPo, lot) : [];
     const first = opts[0];
+    const attrs = first
+      ? { code: first.code, type: first.type, color: first.color, pattern: first.pattern }
+      : resolveVendorBoxLineAttrsFromPo(apiPo, found.productName || "", lot);
     setBoxData((prev) => ({
       ...prev,
       [bid]: {
         ...prev[bid],
         lotNumber: prev[bid]?.lotNumber || lot,
         productName: prev[bid]?.productName || first?.productName || found.productName || "",
-        articleCode: prev[bid]?.articleCode || first?.code || "",
+        articleCode: prev[bid]?.articleCode || attrs.code || "",
+        type: prev[bid]?.type || attrs.type || "",
+        color: prev[bid]?.color || attrs.color || "",
+        pattern: prev[bid]?.pattern || attrs.pattern || "",
       },
     }));
     setActiveBoxId(bid);
@@ -342,6 +360,18 @@ export function VendorReceiveProcessView({ orderId }: Props) {
                         <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
                           Product
                         </th>
+                        <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                          Vendor code
+                        </th>
+                        <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                          Type
+                        </th>
+                        <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                          Color
+                        </th>
+                        <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                          Pattern
+                        </th>
                         <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
                           Qty
                         </th>
@@ -351,6 +381,12 @@ export function VendorReceiveProcessView({ orderId }: Props) {
                       {poItems.map((it, i) => (
                         <tr key={i} className="hover:bg-gray-50/50">
                           <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200">{it.productName || "—"}</td>
+                          <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200">
+                            {vendorCodeFromPoLineItem(it) || "no vendor code"}
+                          </td>
+                          <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200">{dashOr(it.type)}</td>
+                          <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200">{dashOr(it.color)}</td>
+                          <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200">{dashOr(it.pattern)}</td>
                           <td className="px-1.5 py-2 text-[11px] text-right text-gray-700 border border-gray-200">
                             {Number(it.quantity || 0)}
                           </td>
@@ -370,6 +406,10 @@ export function VendorReceiveProcessView({ orderId }: Props) {
                   <tr className="bg-gray-50/30">
                     <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Invoice</th>
                     <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Product</th>
+                    <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Vendor code</th>
+                    <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Type</th>
+                    <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Color</th>
+                    <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Pattern</th>
                     <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Received qty</th>
                     <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Boxes (expected)</th>
                   </tr>
@@ -379,8 +419,8 @@ export function VendorReceiveProcessView({ orderId }: Props) {
                     const lines = getVendorLotReceivedLines(apiPo, l);
                     return (
                     <tr key={l.lotNumber} className="hover:bg-gray-50/50">
-                      <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200">{l.lotNumber}</td>
-                      <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200">
+                      <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200 align-top">{l.lotNumber}</td>
+                      <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200 align-top">
                         {lines.length === 0 ? (
                           "—"
                         ) : (
@@ -391,7 +431,51 @@ export function VendorReceiveProcessView({ orderId }: Props) {
                           </div>
                         )}
                       </td>
-                      <td className="px-1.5 py-2 text-[11px] text-right text-gray-700 border border-gray-200 tabular-nums">
+                      <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200 align-top">
+                        {lines.length === 0 ? (
+                          "—"
+                        ) : (
+                          <div className="flex flex-col gap-0.5">
+                            {lines.map((row, i) => (
+                              <span key={i}>{row.vendorCode || "no vendor code"}</span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200 align-top">
+                        {lines.length === 0 ? (
+                          "—"
+                        ) : (
+                          <div className="flex flex-col gap-0.5">
+                            {lines.map((row, i) => (
+                              <span key={i}>{dashOr(row.type)}</span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200 align-top">
+                        {lines.length === 0 ? (
+                          "—"
+                        ) : (
+                          <div className="flex flex-col gap-0.5">
+                            {lines.map((row, i) => (
+                              <span key={i}>{dashOr(row.color)}</span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200 align-top">
+                        {lines.length === 0 ? (
+                          "—"
+                        ) : (
+                          <div className="flex flex-col gap-0.5">
+                            {lines.map((row, i) => (
+                              <span key={i}>{dashOr(row.pattern)}</span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-1.5 py-2 text-[11px] text-right text-gray-700 border border-gray-200 tabular-nums align-top">
                         {lines.length === 0 ? (
                           "—"
                         ) : (

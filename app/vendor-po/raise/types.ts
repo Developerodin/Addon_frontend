@@ -2,6 +2,7 @@ import type { VendorPoApiStatus, VendorPurchaseOrder } from "@/shared/services/v
 
 /** UI labels aligned with yarn purchase lifecycle + vendor API enums. */
 export type VendorPOStatus =
+  | "Draft"
   | "Submitted to vendor"
   | "In transit"
   | "Goods partially received"

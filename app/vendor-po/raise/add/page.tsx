@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useSelector } from "react-redux";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
@@ -12,11 +13,21 @@ import { mapVendorDocToVendor } from "../../vendor-list/vendorMappers";
 import vendorPurchaseOrderService from "@/shared/services/vendorPurchaseOrderService";
 import { listProducts, getProductById } from "@/shared/services/productService";
 import { productRecordToVendorPOArticle } from "../components/vendorPoArticleMapping";
+import {
+  canAccessVendorPoRaiseAdd,
+  getVendorPoRaiseFormMode,
+  hasFullVendorPoRaiseAccess,
+} from "../components/vendorPoRaiseAccess";
+import { buildVendorPoApiPayload } from "../components/vendorPoFormPayload";
+import type { VendorPoFormSubmitAction } from "../components/VendorPOForm";
 
 const VendorPOCreatePage = () => {
   const router = useRouter();
+  const authUser = useSelector((state: { auth?: { user?: { role?: string } } }) => state.auth?.user);
+  const formMode = getVendorPoRaiseFormMode(authUser?.role);
   const { hasSubPermission, isLoading: permLoading } = useNavigation();
-  const canAccess = hasSubPermission("/vendor-po", "Vendor PO Raise");
+  const canAccess = hasSubPermission("/vendor-po", "Vendor PO Raise") || hasFullVendorPoRaiseAccess(authUser?.role);
+  const canAdd = canAccess && canAccessVendorPoRaiseAdd(authUser?.role);
 
   const [vendors, setVendors] = useState<{ id: string; vendorCode: string; vendorName: string }[]>([]);
   const [allCatalogArticles, setAllCatalogArticles] = useState<
@@ -96,50 +107,16 @@ const VendorPOCreatePage = () => {
     }
   };
 
-  const handleCreate = async (data: VendorPOFormData) => {
+  const handleCreate = async (data: VendorPOFormData, action: VendorPoFormSubmitAction) => {
     setIsSubmitting(true);
     try {
-      const subTotal = data.lineItems.reduce(
-        (sum, item) => sum + Number(item.orderedQty || 0) * Number(item.rate || 0),
-        0
-      );
-      const gst = data.lineItems.reduce(
-        (sum, item) =>
-          sum +
-          (Number(item.orderedQty || 0) * Number(item.rate || 0) * Number(item.gstRate || 0)) / 100,
-        0
-      );
-      const total = subTotal + gst;
-      const vendorRow = vendors.find((v) => v.id === data.vendorId);
-      const vendorName = vendorRow?.vendorName?.trim() ?? "";
-      if (!vendorName) {
+      const payload = buildVendorPoApiPayload(data, vendors, action);
+      if (!payload.vendorName) {
         toast.error("Could not resolve vendor name. Reload the page and try again.");
         return;
       }
-      await vendorPurchaseOrderService.create({
-        vendor: data.vendorId,
-        vendorName,
-        poItems: data.lineItems.map((item) => ({
-          productId: item.articleId,
-          productName: item.articleName,
-          quantity: Number(item.orderedQty || 0),
-          rate: Number(item.rate || 0),
-          gstRate: Number(item.gstRate || 0),
-          estimatedDeliveryDate: item.estimatedDeliveryDate || undefined,
-          type: item.type?.trim() || undefined,
-          color: item.color?.trim() || undefined,
-          pattern: item.pattern?.trim() || undefined,
-        })),
-        subTotal,
-        gst,
-        total,
-        creditDays: Number(data.creditDays || 0),
-        estimatedOrderDeliveryDate: data.estimatedOrderDeliveryDate
-          ? new Date(data.estimatedOrderDeliveryDate).toISOString()
-          : undefined,
-        notes: data.remarks || undefined,
-      });
-      toast.success("PO created.");
+      await vendorPurchaseOrderService.create(payload);
+      toast.success(action === "submit" ? "PO submitted to supplier." : "Draft PO saved.");
       router.push("/vendor-po/raise");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to create PO");
@@ -161,14 +138,18 @@ const VendorPOCreatePage = () => {
     );
   }
 
-  if (!canAccess) {
+  if (!canAccess || !canAdd) {
     return (
       <div className="main-content !p-[10px]">
         <Seo title="Create Vendor PO" />
         <div className="text-center py-12">
           <i className="ri-lock-line text-6xl text-gray-400 mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">Access Restricted</h3>
-          <p className="text-gray-500 mb-4">You don&apos;t have permission to create vendor POs.</p>
+          <p className="text-gray-500 mb-4">
+            {formMode === "accounts_draft"
+              ? "Accounts users cannot create new POs. Open a draft PO from the list to enter rate & GST."
+              : "You don't have permission to create vendor POs."}
+          </p>
           <Link href="/vendor-po/raise" className="ti-btn ti-btn-primary">
             <i className="ri-arrow-left-line me-2" />
             Back to Purchase Order
@@ -205,8 +186,8 @@ const VendorPOCreatePage = () => {
             vendors={vendors}
             articles={articles}
             onVendorChange={handleVendorChange}
+            formMode={formMode}
             onSubmit={handleCreate}
-            submitButtonText="Submit to Supplier"
             onCancel={() => router.push("/vendor-po/raise")}
             isSubmitting={isSubmitting}
           />

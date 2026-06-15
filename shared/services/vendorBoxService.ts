@@ -6,14 +6,15 @@ export interface VendorBox {
   id?: string;
   _id?: string;
   vpoNumber?: string;
-  vendorPurchaseOrderId?: string;
+  vendorPurchaseOrderId?:
+    | string
+    | { vpoNumber?: string; vendorName?: string; currentStatus?: string };
   boxId?: string;
   barcode?: string;
   lotNumber?: string;
-  productId?: string;
+  productId?: string | { name?: string; softwareCode?: string; internalCode?: string; vendorCode?: string };
   productName?: string;
   vendorPoItemId?: string;
-  /** Net/box weight (kg). */
   boxWeight?: number;
   grossWeight?: number;
   numberOfUnits?: number;
@@ -22,6 +23,9 @@ export interface VendorBox {
   orderDate?: string;
   createdAt?: string;
   updatedAt?: string;
+  secondaryCheckingAccepted?: boolean;
+  secondaryCheckingAcceptedAt?: string;
+  vendor?: string | { header?: { vendorName?: string; vendorCode?: string } };
 }
 
 export interface VendorBoxListResponse {
@@ -38,6 +42,8 @@ export interface VendorBoxListParams {
   vendor?: string;
   lotNumber?: string;
   storedStatus?: boolean | string;
+  secondaryCheckingAccepted?: boolean | string;
+  numberOfUnitsMin?: number;
   search?: string;
   sortBy?: string;
   page?: number;
@@ -149,8 +155,31 @@ export async function updateVendorBox(
 
 export interface ScanAcceptResponse {
   box: VendorBox;
-  flow: Record<string, any> | null;
+  flow: Record<string, unknown> | null;
   acceptedUnits: number;
+  vpoNumber?: string;
+  productName?: string;
+  isNewOrder?: boolean;
+  isNewArticle?: boolean;
+}
+
+export interface BoxLookupResponse {
+  box: VendorBox;
+  alreadyAccepted: boolean;
+  canAccept: boolean;
+}
+
+/**
+ * Look up a vendor box by barcode (preview only — does not accept).
+ * @param barcode - The box barcode or boxId
+ */
+export async function lookupVendorBoxForSecondaryChecking(
+  barcode: string
+): Promise<BoxLookupResponse> {
+  const sp = new URLSearchParams({ barcode: barcode.trim() });
+  return requestJson<BoxLookupResponse>(`${baseUrl}/lookup?${sp.toString()}`, {
+    method: "GET",
+  });
 }
 
 /**
@@ -170,6 +199,7 @@ const vendorBoxService = {
   list: listVendorBoxes,
   bulkCreate: bulkCreateVendorBoxes,
   update: updateVendorBox,
+  lookupForSecondaryChecking: lookupVendorBoxForSecondaryChecking,
   scanAccept: scanAcceptVendorBox,
 };
 

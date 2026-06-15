@@ -5,10 +5,12 @@ type Totals = { subTotal: number; gst: number; total: number };
 
 type Props = {
   totals: Totals;
+  show?: boolean;
 };
 
 /** Order-level subtotal / GST / total (read-only, auto-calculated). */
-export default function VendorPOOrderTotalsSection({ totals }: Props) {
+export default function VendorPOOrderTotalsSection({ totals, show = true }: Props) {
+  if (!show) return null;
   const fmt = (n: number) =>
     `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 

@@ -21,7 +21,7 @@ interface UsersState {
     totalResults: number;
   } | null;
   filters: {
-    role: 'admin' | 'user' | 'super_admin' | '';
+    role: 'admin' | 'user' | 'accounts' | 'super_admin' | '';
     search: string;
     sortBy: string;
   };
@@ -236,7 +236,7 @@ export const useUsers = () => {
   }, [updateFilters]);
 
   // Filter by role
-  const filterByRole = useCallback((role: 'admin' | 'user' | 'super_admin' | '') => {
+  const filterByRole = useCallback((role: 'admin' | 'user' | 'accounts' | 'super_admin' | '') => {
     updateFilters({ role });
   }, [updateFilters]);
 

@@ -1,9 +1,15 @@
 "use client";
 import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { useSelector } from "react-redux";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { toast } from "react-hot-toast";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
+import {
+  canAccessVendorPoRaiseAdd,
+  canShowVendorPoRaiseEditLink,
+  hasFullVendorPoRaiseAccess,
+} from "./components/vendorPoRaiseAccess";
 import VendorPOPurchaseListLayout from "../purchase-management/components/VendorPOPurchaseListLayout";
 import { VendorPacklistModal } from "../components/VendorPacklistModal";
 import { VendorPODetailsDrawer } from "../components/VendorPODetailsDrawer";
@@ -35,8 +41,10 @@ const getPriorityColor = (priority: VendorPOPriority) => {
 };
 
 const VendorPORaisePage = () => {
+  const authUser = useSelector((state: { auth?: { user?: { role?: string } } }) => state.auth?.user);
+  const canCreatePo = canAccessVendorPoRaiseAdd(authUser?.role);
   const { hasSubPermission, isLoading: permLoading } = useNavigation();
-  const canAccess = hasSubPermission("/vendor-po", "Vendor PO Raise");
+  const canAccess = hasSubPermission("/vendor-po", "Vendor PO Raise") || hasFullVendorPoRaiseAccess(authUser?.role);
   const [orders, setOrders] = useState<VendorPO[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -183,13 +191,15 @@ const VendorPORaisePage = () => {
           setEndDate(getDefaultEndDate());
         }}
         headerActions={
-          <Link
-            href="/vendor-po/purchase-management/purchase/add"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
-          >
-            <i className="ri-add-line text-xs" />
-            New Order
-          </Link>
+          canCreatePo ? (
+            <Link
+              href="/vendor-po/raise/add"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+            >
+              <i className="ri-add-line text-xs" />
+              New Order
+            </Link>
+          ) : null
         }
         filterSlot={
           <>
@@ -199,6 +209,7 @@ const VendorPORaisePage = () => {
               onChange={(e) => setStatusFilter(e.target.value)}
             >
               <option value="">Status</option>
+              <option value="Draft">Draft</option>
               <option value="Submitted to vendor">Submitted to vendor</option>
               <option value="In transit">In transit</option>
               <option value="Goods partially received">Goods partially received</option>
@@ -252,13 +263,15 @@ const VendorPORaisePage = () => {
                 ? "No orders match your filters."
                 : "No vendor purchase orders for this range."}
             </p>
-            <Link
-              href="/vendor-po/purchase-management/purchase/add"
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700"
-            >
-              <i className="ri-add-line text-xs" />
-              New Order
-            </Link>
+            {canCreatePo ? (
+              <Link
+                href="/vendor-po/raise/add"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700"
+              >
+                <i className="ri-add-line text-xs" />
+                New Order
+              </Link>
+            ) : null}
           </div>
         ) : (
           <table className="w-full border-collapse border border-gray-200">
@@ -325,15 +338,15 @@ const VendorPORaisePage = () => {
                       >
                         <i className="ri-eye-line text-xs" />
                       </button>
-                      {order.status === "Submitted to vendor" && (
+                      {canShowVendorPoRaiseEditLink(authUser?.role, order.apiStatus) ? (
                         <Link
-                          href={`/vendor-po/purchase-management/purchase/edit/${order.id}`}
+                          href={`/vendor-po/raise/edit/${order.id}`}
                           className="p-1 text-green-600 hover:bg-green-50 rounded"
-                          title="Edit"
+                          title={order.status === "Draft" ? "Edit draft" : "Edit PO"}
                         >
                           <i className="ri-edit-line text-base" />
                         </Link>
-                      )}
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => void handleDeleteOrder(order)}

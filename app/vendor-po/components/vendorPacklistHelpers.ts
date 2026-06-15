@@ -35,6 +35,25 @@ export function vendorCodeFromPoLineItem(item: VendorPurchaseOrderItem): string 
   return "";
 }
 
+/** Display placeholder for optional PO line text fields. */
+export function dashOr(value?: string | null): string {
+  const t = String(value ?? "").trim();
+  return t || "—";
+}
+
+/** Find a PO line by embedded `_id` / `id`. */
+export function findPoLineItemById(
+  lineId: string,
+  poItems: VendorPurchaseOrderItem[] | undefined
+): VendorPurchaseOrderItem | undefined {
+  if (!poItems?.length) return undefined;
+  const id = String(lineId);
+  return poItems.find((item) => {
+    const lid = getPoLineItemId(item);
+    return lid != null && String(lid) === id;
+  });
+}
+
 /** Resolve a PO line `_id` from packlist `poItems[]` to a product display name using hydrated `po.poItems`. */
 export function productNameForPoLineId(
   lineId: string,

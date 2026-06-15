@@ -171,6 +171,7 @@ const AddUserPage = () => {
                                             onChange={e => handleFormChange('role', e.target.value)}
                                         >
                                             <option value="user">User</option>
+                                            <option value="accounts">Accounts</option>
                                             <option value="admin">Admin</option>
                                             <option value="super_admin">Super Admin</option>
                                         </select>

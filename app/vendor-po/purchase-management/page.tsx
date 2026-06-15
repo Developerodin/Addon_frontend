@@ -27,6 +27,20 @@ const purchaseManagementModules = [
     path: "/vendor-po/purchase-management/purchase-order-received",
     permission: "Vendor PO Receive",
   },
+  {
+    title: "GRN",
+    description: "Goods received notes from secondary checking verification",
+    icon: "ri-file-text-line",
+    path: "/vendor-po/grn",
+    permission: "GRN",
+  },
+  {
+    title: "PO Return",
+    description: "Return boxes or M4 quantity to vendor with return challan",
+    icon: "ri-arrow-go-back-line",
+    path: "/vendor-po/purchase-management/po-return",
+    permission: "Vendor PO Return",
+  },
 ];
 
 export default function VendorPOPurchaseManagementPage() {
@@ -62,7 +76,11 @@ export default function VendorPOPurchaseManagementPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {purchaseManagementModules.map((module) => {
-              const hasPermission = hasSubPermission("/vendor-po", module.permission);
+              const hasPermission =
+                module.path === "/vendor-po/purchase-management/po-return"
+                  ? hasSubPermission("/vendor-po", "Vendor PO Return") ||
+                    hasSubPermission("/vendor-po", "Vendor PO Return Challan")
+                  : hasSubPermission("/vendor-po", module.permission);
 
               return (
                 <div

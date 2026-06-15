@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vendor PO Return Challan</title>
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 11px; margin: 10px; color: #000; }
+    .container { width: 100%; border: 1px solid #000; }
+    .header-title { text-align: center; font-weight: bold; font-size: 14px; text-transform: uppercase; padding: 6px 0; border-bottom: 1px solid #000; }
+    table { width: 100%; border-collapse: collapse; }
+    td, th { border: 1px solid #000; padding: 3px 5px; vertical-align: top; }
+    .text-right { text-align: right; }
+    .text-center { text-align: center; }
+    .meta-grid td { width: 25%; }
+    .sign-row td { height: 48px; vertical-align: bottom; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header-title" id="page-title">Vendor Purchase Order Return Challan</div>
+    <table class="meta-grid">
+      <tr>
+        <td><strong>Challan No</strong><br /><span id="challan-no"></span></td>
+        <td><strong>Challan Date</strong><br /><span id="challan-date"></span></td>
+        <td><strong>VPO No</strong><br /><span id="vpo-no"></span></td>
+        <td><strong>VPO Date</strong><br /><span id="vpo-date"></span></td>
+      </tr>
+      <tr>
+        <td colspan="2"><strong>Consignor (Addon)</strong><br /><span id="consignor-name"></span><br /><span id="consignor-address"></span></td>
+        <td colspan="2"><strong>Consignor GST</strong><br /><span id="consignor-gst"></span><br /><strong>Contact</strong> <span id="consignor-mob"></span></td>
+      </tr>
+      <tr>
+        <td colspan="2"><strong>Vendor (Receiver)</strong><br /><span id="vendor-name"></span><br /><span id="vendor-address"></span></td>
+        <td colspan="2"><strong>Vendor GST</strong><br /><span id="vendor-gst"></span><br /><strong>Contact</strong> <span id="vendor-mob"></span></td>
+      </tr>
+      <tr>
+        <td><strong>Intent</strong><br /><span id="cancellation-intent"></span></td>
+        <td><strong>Boxes</strong><br /><span id="total-boxes"></span></td>
+        <td><strong>Total Units</strong><br /><span id="total-units"></span></td>
+        <td><strong>Article Qty</strong><br /><span id="total-article-qty"></span></td>
+      </tr>
+      <tr>
+        <td colspan="2"><strong>M4 Units (legacy)</strong><br /><span id="total-m4"></span></td>
+        <td colspan="2">&nbsp;</td>
+      </tr>
+      <tr>
+        <td colspan="4"><strong>Remark</strong><br /><span id="remark"></span></td>
+      </tr>
+      <tr>
+        <td><strong>Vehicle No</strong><br /><span id="vehicle-no"></span></td>
+        <td><strong>Driver</strong><br /><span id="driver-name"></span></td>
+        <td><strong>Dispatch Date</strong><br /><span id="dispatch-date"></span></td>
+        <td><strong>Transport Notes</strong><br /><span id="transport-notes"></span></td>
+      </tr>
+    </table>
+    <table>
+      <thead>
+        <tr>
+          <th class="text-center" style="width:30px;">#</th>
+          <th style="width:45px;">Type</th>
+          <th>Barcode / Ref</th>
+          <th>Lot</th>
+          <th>Product</th>
+          <th style="width:70px;">Vendor Code</th>
+          <th class="text-right" style="width:55px;">Qty</th>
+        </tr>
+      </thead>
+      <tbody id="lines-body"></tbody>
+    </table>
+    <table class="sign-row">
+      <tr>
+        <td><strong>Prepared By</strong><br /><span id="prepared-by"></span></td>
+        <td><strong>Checked By</strong><br />&nbsp;</td>
+        <td><strong>Authorised Signatory</strong><br />&nbsp;</td>
+        <td><strong>Vendor Acknowledgement</strong><br />&nbsp;</td>
+      </tr>
+    </table>
+  </div>
+</body>
+</html>

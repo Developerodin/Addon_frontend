@@ -2,6 +2,7 @@ import { API_BASE_URL } from "@/shared/data/utilities/api";
 import Cookies from "js-cookie";
 
 export type VendorPoApiStatus =
+  | "draft"
   | "submitted_to_vendor"
   | "in_transit"
   | "goods_partially_received"

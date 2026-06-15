@@ -4,7 +4,7 @@ import React from "react";
 export type VendorOption = { id: string; vendorCode: string; vendorName: string };
 
 type Props = {
-  locked: boolean;
+  canEditHeader: boolean;
   vendorId: string;
   creditDays: number;
   estimatedOrderDeliveryDate: string;
@@ -21,7 +21,7 @@ type Props = {
  * Header block: vendor, credit days, estimated delivery, notes (yarn PO field order).
  */
 export default function VendorPOFormHeaderSection({
-  locked,
+  canEditHeader,
   vendorId,
   creditDays,
   estimatedOrderDeliveryDate,
@@ -50,7 +50,7 @@ export default function VendorPOFormHeaderSection({
               onVendorChange?.(nextVendorId);
               if (errors.vendor) clearError("vendor");
             }}
-            disabled={locked}
+            disabled={!canEditHeader}
           >
             <option value="">Select vendor</option>
             {vendors.map((v) => (
@@ -73,7 +73,7 @@ export default function VendorPOFormHeaderSection({
             }`}
             value={creditDays}
             onChange={(e) => setCreditDays(Math.max(0, Number(e.target.value || 0)))}
-            disabled={locked}
+            disabled={!canEditHeader}
             placeholder="0"
           />
           {errors.creditDays && <p className="text-red-600 text-xs mt-1">{errors.creditDays}</p>}
@@ -92,7 +92,7 @@ export default function VendorPOFormHeaderSection({
               setEstimatedOrderDeliveryDate(e.target.value);
               if (errors.estimatedOrderDeliveryDate) clearError("estimatedOrderDeliveryDate");
             }}
-            disabled={locked}
+            disabled={!canEditHeader}
           />
           {errors.estimatedOrderDeliveryDate && (
             <p className="text-red-600 text-xs mt-1">{errors.estimatedOrderDeliveryDate}</p>

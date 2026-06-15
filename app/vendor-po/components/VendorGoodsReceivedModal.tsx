@@ -10,6 +10,8 @@ import {
   productNameForPoLineId,
   readVendorName,
   vendorCodeFromPoLineItem,
+  dashOr,
+  findPoLineItemById,
 } from "./vendorPacklistHelpers";
 import {
   type VendorLotDraft,
@@ -229,6 +231,9 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                           <tr>
                             <th className="px-2 py-1.5 text-left font-bold text-gray-600 border-b">Article</th>
                             <th className="px-2 py-1.5 text-left font-bold text-gray-600 border-b">Vendor code</th>
+                            <th className="px-2 py-1.5 text-left font-bold text-gray-600 border-b">Type</th>
+                            <th className="px-2 py-1.5 text-left font-bold text-gray-600 border-b">Color</th>
+                            <th className="px-2 py-1.5 text-left font-bold text-gray-600 border-b">Pattern</th>
                             <th className="px-2 py-1.5 text-right font-bold text-gray-600 border-b">Ordered</th>
                           </tr>
                         </thead>
@@ -241,6 +246,9 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                                 <td className="px-2 py-1.5 border-b border-gray-100">
                                   {vendorCodeFromPoLineItem(it) || "no vendor code"}
                                 </td>
+                                <td className="px-2 py-1.5 border-b border-gray-100">{dashOr(it.type)}</td>
+                                <td className="px-2 py-1.5 border-b border-gray-100">{dashOr(it.color)}</td>
+                                <td className="px-2 py-1.5 border-b border-gray-100">{dashOr(it.pattern)}</td>
                                 <td className="px-2 py-1.5 text-right border-b border-gray-100">
                                   {Number(it.quantity || 0).toLocaleString()}
                                 </td>
@@ -274,15 +282,35 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                             </div>
                           </div>
                           {p.poItems && p.poItems.length > 0 && (
-                            <div className="border-t border-gray-100 pt-2">
+                            <div className="border-t border-gray-100 pt-2 overflow-x-auto">
                               <span className="text-gray-500 block mb-0.5">PO lines</span>
-                              <ul className="list-disc list-inside text-gray-900 space-y-0.5">
-                                {p.poItems.map((lineId) => (
-                                  <li key={String(lineId)}>
-                                    {productNameForPoLineId(String(lineId), poItems)}
-                                  </li>
-                                ))}
-                              </ul>
+                              <table className="min-w-full text-[10px]">
+                                <thead>
+                                  <tr className="text-gray-500">
+                                    <th className="text-left pr-2 pb-0.5 font-medium">Article</th>
+                                    <th className="text-left pr-2 pb-0.5 font-medium">Vendor code</th>
+                                    <th className="text-left pr-2 pb-0.5 font-medium">Type</th>
+                                    <th className="text-left pr-2 pb-0.5 font-medium">Color</th>
+                                    <th className="text-left pb-0.5 font-medium">Pattern</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {p.poItems.map((lineId) => {
+                                    const line = findPoLineItemById(String(lineId), poItems);
+                                    return (
+                                      <tr key={String(lineId)} className="text-gray-900">
+                                        <td className="py-0.5 pr-2">{productNameForPoLineId(String(lineId), poItems)}</td>
+                                        <td className="py-0.5 pr-2">
+                                          {line ? vendorCodeFromPoLineItem(line) || "no vendor code" : "—"}
+                                        </td>
+                                        <td className="py-0.5 pr-2">{dashOr(line?.type)}</td>
+                                        <td className="py-0.5 pr-2">{dashOr(line?.color)}</td>
+                                        <td className="py-0.5">{dashOr(line?.pattern)}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
                             </div>
                           )}
                         </div>
@@ -382,6 +410,9 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                             <tr>
                               <th className="px-2 py-2 text-left font-bold text-gray-600">Article</th>
                               <th className="px-2 py-2 text-left font-bold text-gray-600">Vendor code</th>
+                              <th className="px-2 py-2 text-left font-bold text-gray-600">Type</th>
+                              <th className="px-2 py-2 text-left font-bold text-gray-600">Color</th>
+                              <th className="px-2 py-2 text-left font-bold text-gray-600">Pattern</th>
                               {!isReadOnly && <th className="px-2 py-2 text-right">Max</th>}
                               <th className="px-2 py-2 text-right w-[88px]">Qty</th>
                               <th className="px-2 py-2 text-right w-[88px]">Boxes</th>
@@ -398,6 +429,9 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                                 <tr key={`${lotIndex}-${id}`} className="border-t border-gray-100">
                                   <td className="px-2 py-2 text-gray-900">{it.productName || "—"}</td>
                                   <td className="px-2 py-2 text-gray-700">{vendorCodeFromPoLineItem(it) || "no vendor code"}</td>
+                                  <td className="px-2 py-2 text-gray-700">{dashOr(it.type)}</td>
+                                  <td className="px-2 py-2 text-gray-700">{dashOr(it.color)}</td>
+                                  <td className="px-2 py-2 text-gray-700">{dashOr(it.pattern)}</td>
                                   {!isReadOnly && <td className="px-2 py-2 text-right text-gray-500">{max}</td>}
                                   <td className="px-2 py-2">
                                     {isReadOnly ? (

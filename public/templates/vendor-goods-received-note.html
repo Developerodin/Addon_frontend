@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Vendor Goods Received Note</title>
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 12px; margin: 24px; color: #111; }
+    h1 { font-size: 18px; margin: 0 0 8px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+    th { background: #f3f4f6; font-size: 10px; text-transform: uppercase; }
+    .text-right { text-align: right; }
+    .meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 12px; }
+    .meta label { display: block; font-size: 10px; color: #666; text-transform: uppercase; }
+  </style>
+</head>
+<body>
+  <h1>Vendor Goods Received Note</h1>
+  <p id="grn-number"></p>
+  <div class="meta">
+    <div><label>GRN Date</label><span id="grn-date"></span></div>
+    <div><label>VPO</label><span id="vpo-number"></span></div>
+    <div><label>Vendor</label><span id="vendor-name"></span></div>
+    <div><label>Verified Qty</label><span id="verified-total"></span></div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Lot</th>
+        <th>Article</th>
+        <th>Vendor Code</th>
+        <th class="text-right">Expected</th>
+        <th class="text-right">Scan</th>
+        <th class="text-right">Verified</th>
+        <th class="text-right">M1</th>
+        <th class="text-right">M2</th>
+        <th class="text-right">M3</th>
+        <th class="text-right">M4</th>
+        <th class="text-right">Variance</th>
+      </tr>
+    </thead>
+    <tbody id="line-items"></tbody>
+  </table>
+  <script>
+    /** Populate from window.__VENDOR_GRN__ injected by print view. */
+    (function () {
+      var grn = window.__VENDOR_GRN__;
+      if (!grn) return;
+      document.getElementById('grn-number').textContent = grn.grnNumber || '';
+      document.getElementById('grn-date').textContent = grn.grnDate ? new Date(grn.grnDate).toLocaleDateString() : '';
+      document.getElementById('vpo-number').textContent = grn.vpoNumber || '';
+      document.getElementById('vendor-name').textContent = (grn.vendor && grn.vendor.vendorName) || '';
+      document.getElementById('verified-total').textContent = String((grn.totals && grn.totals.verified) || 0);
+      var tbody = document.getElementById('line-items');
+      (grn.lots || []).forEach(function (lot) {
+        (lot.items || []).forEach(function (item) {
+          var tr = document.createElement('tr');
+          tr.innerHTML = [
+            lot.lotNumber,
+            item.productName || '',
+            item.vendorCode || '',
+            item.expectedQty,
+            item.scanAcceptedQty,
+            item.verifiedQty,
+            item.m1,
+            item.m2,
+            item.m3,
+            item.m4,
+            item.varianceQty
+          ].map(function (c, i) {
+            return '<td class="' + (i > 2 ? 'text-right' : '') + '">' + c + '</td>';
+          }).join('');
+          tbody.appendChild(tr);
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -69,6 +69,7 @@ export type BrandingFloorPatchPayload =
 export interface QualityFloorQuantity extends BaseFloorQuantity {
   m1Quantity: number;
   m2Quantity: number;
+  m3Quantity: number;
   m4Quantity: number;
   m1Transferred: number;
   m1Remaining: number;

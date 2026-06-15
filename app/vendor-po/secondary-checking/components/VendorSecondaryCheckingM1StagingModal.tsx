@@ -27,7 +27,7 @@ type Props = {
   baselineFlow: VendorProductionFlow | null;
   pendingPatch: PendingSecondaryCheckingPatch | null;
   /** Resolved totals after this save (for display); pendingPatch carries entered absolutes + repair. */
-  displayTotals: { m1: number; m2: number; m4: number } | null;
+  displayTotals: { m1: number; m2: number; m3: number; m4: number } | null;
   /** When true, Save requires an empty container and runs transfer after PATCH. */
   requireContainerScan: boolean;
   /** Client hint: M1 − m1Transferred before PATCH (for copy in UI). */

@@ -8,30 +8,48 @@ import VendorPOLineItemsTable from "./VendorPOLineItemsTable";
 import VendorPOOrderTotalsSection from "./VendorPOOrderTotalsSection";
 import VendorPOArticlePickerPortal from "./VendorPOArticlePickerPortal";
 import VendorPOFormActions from "./VendorPOFormActions";
+import {
+  getVendorPoFormFieldAccess,
+  type VendorPoFormFieldAccess,
+  type VendorPoRaiseFormMode,
+} from "./vendorPoRaiseAccess";
+import type { VendorPoApiStatus } from "@/shared/services/vendorPurchaseOrderService";
+
+export type VendorPoFormSubmitAction = "draft" | "submit";
 
 interface VendorPOFormProps {
   initialData: VendorPOFormData | null;
   vendors: { id: string; vendorCode: string; vendorName: string }[];
   articles: VendorPOArticle[];
   onVendorChange?: (vendorId: string) => void;
-  isApproved?: boolean;
-  onSubmit: (data: VendorPOFormData) => void;
-  submitButtonText?: string;
+  formMode?: VendorPoRaiseFormMode;
+  apiStatus?: VendorPoApiStatus | null;
+  workflowLocked?: boolean;
+  onSubmit: (data: VendorPOFormData, action: VendorPoFormSubmitAction) => void;
   onCancel: () => void;
   isSubmitting?: boolean;
 }
 
+/**
+ * Vendor PO raise form with role-based field access (user / accounts / admin).
+ */
 export default function VendorPOForm({
   initialData,
   vendors,
   articles,
   onVendorChange,
-  isApproved = false,
+  formMode = "full",
+  apiStatus = null,
+  workflowLocked = false,
   onSubmit,
-  submitButtonText = "Create PO",
   onCancel,
   isSubmitting = false,
 }: VendorPOFormProps) {
+  const fieldAccess: VendorPoFormFieldAccess = useMemo(
+    () => getVendorPoFormFieldAccess(formMode, apiStatus, workflowLocked),
+    [formMode, apiStatus, workflowLocked]
+  );
+
   const [vendorId, setVendorId] = useState(initialData?.vendorId ?? "");
   const [creditDays, setCreditDays] = useState<number>(initialData?.creditDays ?? 0);
   const [estimatedOrderDeliveryDate, setEstimatedOrderDeliveryDate] = useState<string>(
@@ -53,8 +71,7 @@ export default function VendorPOForm({
   const articleInputRef = useRef<HTMLInputElement | null>(null);
   const articleDropdownRef = useRef<HTMLDivElement>(null);
 
-  const locked = isApproved;
-  const lineItemsDisabled = locked || !vendorId;
+  const lineItemsDisabled = workflowLocked || !vendorId;
 
   const updateDropdownPosition = useCallback(() => {
     const input = articleInputRef.current;
@@ -82,9 +99,8 @@ export default function VendorPOForm({
         window.removeEventListener("scroll", onScrollOrResize, true);
         window.removeEventListener("resize", onScrollOrResize);
       };
-    } else {
-      setDropdownPosition(null);
     }
+    setDropdownPosition(null);
   }, [articleOpen, updateDropdownPosition]);
 
   useEffect(() => {
@@ -119,29 +135,48 @@ export default function VendorPOForm({
     });
   }, [articles]);
 
-  const validate = (): boolean => {
+  /**
+   * Validate form for draft save or vendor submit.
+   * @param action - draft or submit
+   */
+  const validate = (action: VendorPoFormSubmitAction): boolean => {
     const e: Record<string, string> = {};
-    if (!vendorId.trim()) e.vendor = "Vendor is required";
-    if (creditDays < 0) e.creditDays = "Credit days must be 0 or greater";
-    if (!estimatedOrderDeliveryDate?.trim()) {
-      e.estimatedOrderDeliveryDate = "Estimated order delivery date is required";
+    const requirePricing = action === "submit" && fieldAccess.canEditPricingFields;
+
+    if (fieldAccess.canEditHeader) {
+      if (!vendorId.trim()) e.vendor = "Vendor is required";
+      if (creditDays < 0) e.creditDays = "Credit days must be 0 or greater";
+      if (!estimatedOrderDeliveryDate?.trim()) {
+        e.estimatedOrderDeliveryDate = "Estimated order delivery date is required";
+      }
     }
+
     if (!lineItems.length) e.lineItems = "At least one line item is required";
+
     const articleIdCounts = new Map<string, number>();
     lineItems.forEach((row) => {
       if (!row.articleId) return;
       articleIdCounts.set(row.articleId, (articleIdCounts.get(row.articleId) || 0) + 1);
     });
+
     lineItems.forEach((row) => {
-      if (!row.articleId) e[`article_${row.id}`] = "Article is required";
-      if (row.articleId && (articleIdCounts.get(row.articleId) || 0) > 1) {
-        e[`dup_article_${row.id}`] = "This article is already on another line";
+      if (fieldAccess.canEditUserLineFields) {
+        if (!row.articleId) e[`article_${row.id}`] = "Article is required";
+        if (row.articleId && (articleIdCounts.get(row.articleId) || 0) > 1) {
+          e[`dup_article_${row.id}`] = "This article is already on another line";
+        }
+        if (row.orderedQty <= 0) e[`qty_${row.id}`] = "Qty must be greater than 0";
       }
-      if (row.orderedQty <= 0) e[`qty_${row.id}`] = "Qty must be greater than 0";
-      if ((row.rate ?? 0) <= 0) e[`rate_${row.id}`] = "Rate must be greater than 0";
-      if ((row.gstRate ?? 0) <= 0) e[`gst_${row.id}`] = "GST % is required";
+      if (requirePricing || (action === "submit" && formMode === "full")) {
+        if ((row.rate ?? 0) <= 0) e[`rate_${row.id}`] = "Rate must be greater than 0";
+        if ((row.gstRate ?? 0) <= 0) e[`gst_${row.id}`] = "GST % is required";
+      }
     });
+
     setErrors(e);
+    if (Object.keys(e).length > 0) {
+      toast.error("Please fix the highlighted fields before continuing.");
+    }
     return Object.keys(e).length === 0;
   };
 
@@ -181,16 +216,20 @@ export default function VendorPOForm({
     ),
   });
 
+  const handleFormAction = (action: VendorPoFormSubmitAction) => {
+    if (!validate(action)) return;
+    onSubmit(getFormData(), action);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate()) return;
-    onSubmit(getFormData());
+    handleFormAction("submit");
   };
 
   const clearError = (key: string) => setErrors((p) => ({ ...p, [key]: "" }));
 
   const addRow = () => {
-    if (lineItemsDisabled) return;
+    if (lineItemsDisabled || !fieldAccess.canAddLines) return;
     setLineItems((prev) => [...prev, newVendorPOLineItem()]);
     setErrors((prev) => {
       const next = { ...prev };
@@ -200,7 +239,7 @@ export default function VendorPOForm({
   };
 
   const removeRow = (id: string) => {
-    if (lineItemsDisabled) return;
+    if (lineItemsDisabled || !fieldAccess.canRemoveLines) return;
     if (lineItems.length <= 1) return;
     setLineItems((prev) => prev.filter((r) => r.id !== id));
     setErrors((prev) => {
@@ -208,15 +247,15 @@ export default function VendorPOForm({
       delete next[`article_${id}`];
       delete next[`dup_article_${id}`];
       delete next[`qty_${id}`];
+      delete next[`rate_${id}`];
       delete next[`gst_${id}`];
       return next;
     });
   };
 
-  /** When user types after a selection, clear the line article so `value` follows search text (avoids a "stuck" input). */
   const onArticleInputChange = useCallback(
     (rowId: string, value: string) => {
-      if (lineItemsDisabled) return;
+      if (lineItemsDisabled || !fieldAccess.canEditUserLineFields) return;
       setLineItems((prev) =>
         prev.map((r) =>
           r.id === rowId && r.articleId
@@ -241,11 +280,11 @@ export default function VendorPOForm({
         return next;
       });
     },
-    [lineItemsDisabled]
+    [lineItemsDisabled, fieldAccess.canEditUserLineFields]
   );
 
   const setLineItemArticle = (rowId: string, article: VendorPOArticle) => {
-    if (lineItemsDisabled) return;
+    if (lineItemsDisabled || !fieldAccess.canEditUserLineFields) return;
     if (lineItems.some((r) => r.id !== rowId && r.articleId === article.id)) {
       toast.error("This article is already added on another line.");
       setArticleOpen(null);
@@ -277,7 +316,7 @@ export default function VendorPOForm({
   };
 
   const setLineItemQty = (rowId: string, value: number) => {
-    if (lineItemsDisabled) return;
+    if (lineItemsDisabled || !fieldAccess.canEditUserLineFields) return;
     const n = Number(value);
     setLineItems((prev) =>
       prev.map((r) => (r.id === rowId ? { ...r, orderedQty: isNaN(n) ? 0 : n } : r))
@@ -290,7 +329,7 @@ export default function VendorPOForm({
   };
 
   const setLineItemRate = (rowId: string, value: number) => {
-    if (lineItemsDisabled) return;
+    if (lineItemsDisabled || !fieldAccess.canEditPricingFields) return;
     const n = Number(value);
     setLineItems((prev) =>
       prev.map((r) => (r.id === rowId ? { ...r, rate: isNaN(n) ? 0 : n } : r))
@@ -303,7 +342,7 @@ export default function VendorPOForm({
   };
 
   const setLineItemGstRate = (rowId: string, value: number) => {
-    if (lineItemsDisabled) return;
+    if (lineItemsDisabled || !fieldAccess.canEditPricingFields) return;
     const n = Number(value);
     setLineItems((prev) =>
       prev.map((r) => (r.id === rowId ? { ...r, gstRate: isNaN(n) ? 0 : n } : r))
@@ -316,7 +355,7 @@ export default function VendorPOForm({
   };
 
   const setLineItemRemarks = (rowId: string, value: string) => {
-    if (lineItemsDisabled) return;
+    if (lineItemsDisabled || !fieldAccess.canEditRemarks) return;
     setLineItems((prev) =>
       prev.map((r) => (r.id === rowId ? { ...r, lineRemarks: value } : r))
     );
@@ -350,8 +389,19 @@ export default function VendorPOForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {formMode === "user_draft" ? (
+        <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-3 py-2">
+          User role: enter vendor, delivery details, and article lines only. Save as draft — accounts will add rate & GST later.
+        </p>
+      ) : null}
+      {formMode === "accounts_draft" ? (
+        <p className="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 rounded px-3 py-2">
+          Accounts role: review user-entered lines, add rate & GST, then submit to supplier. Header and article details are read-only.
+        </p>
+      ) : null}
+
       <VendorPOFormHeaderSection
-        locked={locked}
+        canEditHeader={fieldAccess.canEditHeader}
         vendorId={vendorId}
         creditDays={creditDays}
         estimatedOrderDeliveryDate={estimatedOrderDeliveryDate}
@@ -366,7 +416,7 @@ export default function VendorPOForm({
 
       <VendorPOLineItemsTable
         lineItems={lineItems}
-        locked={locked}
+        fieldAccess={fieldAccess}
         lineItemsDisabled={lineItemsDisabled}
         vendorId={vendorId}
         errors={errors}
@@ -383,22 +433,24 @@ export default function VendorPOForm({
         removeRow={removeRow}
       />
 
-      <VendorPOOrderTotalsSection totals={totals} />
+      <VendorPOOrderTotalsSection totals={totals} show={fieldAccess.showOrderTotals} />
 
-      <div className="border-t pt-4">
-        <label className="text-xs font-medium text-gray-600 mb-1 block">Notes</label>
-        <textarea
-          value={remarks}
-          onChange={(e) => setRemarks(e.target.value)}
-          className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
-          rows={2}
-          disabled={locked}
-          placeholder="Additional notes about the purchase order..."
-        />
-      </div>
+      {fieldAccess.canEditRemarks ? (
+        <div className="border-t pt-4">
+          <label className="text-xs font-medium text-gray-600 mb-1 block">Notes</label>
+          <textarea
+            value={remarks}
+            onChange={(e) => setRemarks(e.target.value)}
+            className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded focus:ring-0 focus:border-purple-300"
+            rows={2}
+            disabled={workflowLocked}
+            placeholder="Additional notes about the purchase order..."
+          />
+        </div>
+      ) : null}
 
       <VendorPOArticlePickerPortal
-        articleOpen={articleOpen}
+        articleOpen={fieldAccess.canEditUserLineFields ? articleOpen : null}
         dropdownPosition={dropdownPosition}
         articleDropdownRef={articleDropdownRef}
         filteredArticles={portalFiltered}
@@ -406,10 +458,14 @@ export default function VendorPOForm({
       />
 
       <VendorPOFormActions
-        locked={locked}
+        showSaveDraft={fieldAccess.showSaveDraft}
+        showSubmitToVendor={fieldAccess.showSubmitToVendor}
         isSubmitting={!!isSubmitting}
-        submitButtonText={submitButtonText}
+        saveDraftLabel={formMode === "accounts_draft" ? "Save pricing draft" : "Save Draft"}
+        submitLabel={formMode === "accounts_draft" ? "Submit to Supplier" : "Submit to Supplier"}
         onCancel={onCancel}
+        onSaveDraft={() => handleFormAction("draft")}
+        workflowLocked={workflowLocked}
       />
     </form>
   );

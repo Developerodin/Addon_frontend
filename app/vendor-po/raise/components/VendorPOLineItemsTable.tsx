@@ -1,6 +1,7 @@
 "use client";
 import React, { RefObject } from "react";
 import { VendorPOLineItem } from "../types";
+import type { VendorPoFormFieldAccess } from "./vendorPoRaiseAccess";
 
 /** Shown next to article name; only vendor code is stored — missing → label. */
 function articleVendorCodeLabel(articleCode: string | undefined): string {
@@ -10,7 +11,7 @@ function articleVendorCodeLabel(articleCode: string | undefined): string {
 
 type Props = {
   lineItems: VendorPOLineItem[];
-  locked: boolean;
+  fieldAccess: VendorPoFormFieldAccess;
   lineItemsDisabled: boolean;
   vendorId: string;
   errors: Record<string, string>;
@@ -32,7 +33,7 @@ type Props = {
  */
 export default function VendorPOLineItemsTable({
   lineItems,
-  locked,
+  fieldAccess,
   lineItemsDisabled,
   vendorId,
   errors,
@@ -48,11 +49,15 @@ export default function VendorPOLineItemsTable({
   addRow,
   removeRow,
 }: Props) {
+  const { canEditUserLineFields, canEditPricingFields, canAddLines, canRemoveLines, showPricingColumns } =
+    fieldAccess;
+  const userLineReadOnly = !canEditUserLineFields;
+  const pricingReadOnly = !canEditPricingFields;
   return (
     <div className="border-t pt-4">
       <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
         <h4 className="text-xs font-bold text-gray-800">Items</h4>
-        {!locked && (
+        {!canAddLines ? null : (
           <button
             type="button"
             onClick={addRow}
@@ -100,36 +105,42 @@ export default function VendorPOLineItemsTable({
                     Qty <span className="text-red-500">*</span>
                   </span>
                 </th>
-                <th className="border border-gray-300 px-1.5 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-24 whitespace-normal leading-tight align-bottom">
-                  Rate <span className="text-red-500">*</span>
-                </th>
-                <th className="border border-gray-300 px-1.5 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-24 whitespace-normal leading-tight align-bottom">
-                  <span className="block">GST</span>
-                  <span className="block">
-                    % <span className="text-red-500">*</span>
-                  </span>
-                </th>
-                <th className="border border-gray-300 px-1.5 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-24 whitespace-normal leading-tight align-bottom">
-                  <span className="block">Sub</span>
-                  <span className="block">Total</span>
-                </th>
-                <th className="border border-gray-300 px-1.5 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-24 whitespace-normal leading-tight align-bottom">
-                  <span className="block">GST</span>
-                  <span className="block">Amt</span>
-                </th>
-                <th className="border border-gray-300 px-1.5 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-24 whitespace-normal leading-tight align-bottom">
-                  <span className="block">Line</span>
-                  <span className="block">Total</span>
-                </th>
-                <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[9rem] whitespace-normal leading-tight align-bottom">
-                  <span className="block">Line</span>
-                  <span className="block">Remarks</span>
-                </th>
-                {!locked && (
+                {showPricingColumns ? (
+                  <>
+                    <th className="border border-gray-300 px-1.5 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-24 whitespace-normal leading-tight align-bottom">
+                      Rate <span className="text-red-500">*</span>
+                    </th>
+                    <th className="border border-gray-300 px-1.5 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-24 whitespace-normal leading-tight align-bottom">
+                      <span className="block">GST</span>
+                      <span className="block">
+                        % <span className="text-red-500">*</span>
+                      </span>
+                    </th>
+                    <th className="border border-gray-300 px-1.5 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-24 whitespace-normal leading-tight align-bottom">
+                      <span className="block">Sub</span>
+                      <span className="block">Total</span>
+                    </th>
+                    <th className="border border-gray-300 px-1.5 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-24 whitespace-normal leading-tight align-bottom">
+                      <span className="block">GST</span>
+                      <span className="block">Amt</span>
+                    </th>
+                    <th className="border border-gray-300 px-1.5 py-1.5 text-right text-[10px] font-bold text-gray-700 uppercase tracking-wider w-24 whitespace-normal leading-tight align-bottom">
+                      <span className="block">Line</span>
+                      <span className="block">Total</span>
+                    </th>
+                  </>
+                ) : null}
+                {fieldAccess.canEditRemarks ? (
+                  <th className="border border-gray-300 px-2 py-1.5 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider min-w-[9rem] whitespace-normal leading-tight align-bottom">
+                    <span className="block">Line</span>
+                    <span className="block">Remarks</span>
+                  </th>
+                ) : null}
+                {canRemoveLines ? (
                   <th className="border border-gray-300 px-2 py-1.5 text-center text-[10px] font-bold text-gray-700 uppercase tracking-wider w-20">
                     Action
                   </th>
-                )}
+                ) : null}
               </tr>
             </thead>
             <tbody className="bg-white">
@@ -141,7 +152,7 @@ export default function VendorPOLineItemsTable({
                   <tr key={row.id} className="hover:bg-gray-50">
                     <td className="border border-gray-300 px-2 py-1.5 align-top overflow-visible">
                       <div className="relative">
-                        {locked ? (
+                        {userLineReadOnly ? (
                           <span
                             className={`text-sm ${row.articleCode?.trim() ? "text-gray-800 font-medium" : "text-amber-600 italic"}`}
                           >
@@ -179,7 +190,7 @@ export default function VendorPOLineItemsTable({
                       </div>
                     </td>
                     <td className="border border-gray-300 px-2 py-1.5 align-top">
-                      {locked ? (
+                      {userLineReadOnly ? (
                         <span className="text-xs text-gray-700">{row.type || "–"}</span>
                       ) : (
                         <input
@@ -194,7 +205,7 @@ export default function VendorPOLineItemsTable({
                       )}
                     </td>
                     <td className="border border-gray-300 px-2 py-1.5 align-top">
-                      {locked ? (
+                      {userLineReadOnly ? (
                         <span className="text-xs text-gray-700">{row.color || "–"}</span>
                       ) : (
                         <input
@@ -209,7 +220,7 @@ export default function VendorPOLineItemsTable({
                       )}
                     </td>
                     <td className="border border-gray-300 px-2 py-1.5 align-top">
-                      {locked ? (
+                      {userLineReadOnly ? (
                         <span className="text-xs text-gray-700">{row.pattern || "–"}</span>
                       ) : (
                         <input
@@ -224,7 +235,7 @@ export default function VendorPOLineItemsTable({
                       )}
                     </td>
                     <td className="border border-gray-300 px-2 py-1.5 align-top text-right">
-                      {locked ? (
+                      {userLineReadOnly ? (
                         <span className="text-sm tabular-nums">{row.orderedQty}</span>
                       ) : (
                         <>
@@ -246,67 +257,69 @@ export default function VendorPOLineItemsTable({
                         </>
                       )}
                     </td>
-                    <td className="border border-gray-300 px-2 py-1.5 align-top text-right">
-                      {locked ? (
-                        <span className="text-sm tabular-nums">{Number(row.rate || 0).toFixed(2)}</span>
-                      ) : (
-                        <>
-                          <input
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            className={`w-full px-1.5 py-1 text-xs border rounded focus:outline-none focus:ring-0 focus:border-purple-300 text-right ${
-                              errors[`rate_${row.id}`] ? "border-red-400" : "border-gray-200"
-                            }`}
-                            value={row.rate || ""}
-                            onChange={(e) =>
-                              setLineItemRate(row.id, e.target.value === "" ? 0 : Number(e.target.value))
-                            }
-                            disabled={lineItemsDisabled}
-                          />
-                          {errors[`rate_${row.id}`] && (
-                            <p className="text-red-600 text-xs mt-1">{errors[`rate_${row.id}`]}</p>
+                    {showPricingColumns ? (
+                      <>
+                        <td className="border border-gray-300 px-2 py-1.5 align-top text-right">
+                          {pricingReadOnly ? (
+                            <span className="text-sm tabular-nums">{Number(row.rate || 0).toFixed(2)}</span>
+                          ) : (
+                            <>
+                              <input
+                                type="number"
+                                min={0}
+                                step="0.01"
+                                className={`w-full px-1.5 py-1 text-xs border rounded focus:outline-none focus:ring-0 focus:border-purple-300 text-right ${
+                                  errors[`rate_${row.id}`] ? "border-red-400" : "border-gray-200"
+                                }`}
+                                value={row.rate || ""}
+                                onChange={(e) =>
+                                  setLineItemRate(row.id, e.target.value === "" ? 0 : Number(e.target.value))
+                                }
+                                disabled={lineItemsDisabled}
+                              />
+                              {errors[`rate_${row.id}`] && (
+                                <p className="text-red-600 text-xs mt-1">{errors[`rate_${row.id}`]}</p>
+                              )}
+                            </>
                           )}
-                        </>
-                      )}
-                    </td>
-                    <td className="border border-gray-300 px-2 py-1.5 align-top text-right">
-                      {locked ? (
-                        <span className="text-sm tabular-nums">{Number(row.gstRate || 0).toFixed(2)}</span>
-                      ) : (
-                        <>
-                          <input
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            className={`w-full px-1.5 py-1 text-xs border rounded focus:outline-none focus:ring-0 focus:border-purple-300 text-right ${
-                              errors[`gst_${row.id}`] ? "border-red-400" : "border-gray-200"
-                            }`}
-                            value={row.gstRate || ""}
-                            onChange={(e) =>
-                              setLineItemGstRate(row.id, e.target.value === "" ? 0 : Number(e.target.value))
-                            }
-                            disabled={lineItemsDisabled}
-                          />
-                          {errors[`gst_${row.id}`] && (
-                            <p className="text-red-600 text-xs mt-1 text-right">{errors[`gst_${row.id}`]}</p>
+                        </td>
+                        <td className="border border-gray-300 px-2 py-1.5 align-top text-right">
+                          {pricingReadOnly ? (
+                            <span className="text-sm tabular-nums">{Number(row.gstRate || 0).toFixed(2)}</span>
+                          ) : (
+                            <>
+                              <input
+                                type="number"
+                                min={0}
+                                step="0.01"
+                                className={`w-full px-1.5 py-1 text-xs border rounded focus:outline-none focus:ring-0 focus:border-purple-300 text-right ${
+                                  errors[`gst_${row.id}`] ? "border-red-400" : "border-gray-200"
+                                }`}
+                                value={row.gstRate || ""}
+                                onChange={(e) =>
+                                  setLineItemGstRate(row.id, e.target.value === "" ? 0 : Number(e.target.value))
+                                }
+                                disabled={lineItemsDisabled}
+                              />
+                              {errors[`gst_${row.id}`] && (
+                                <p className="text-red-600 text-xs mt-1 text-right">{errors[`gst_${row.id}`]}</p>
+                              )}
+                            </>
                           )}
-                        </>
-                      )}
-                    </td>
-                    <td className="border border-gray-300 px-2 py-1.5 align-top text-right">
-                      <span className="text-xs tabular-nums">{rowSubTotal.toFixed(2)}</span>
-                    </td>
-                    <td className="border border-gray-300 px-2 py-1.5 align-top text-right">
-                      <span className="text-xs tabular-nums">{rowGstAmount.toFixed(2)}</span>
-                    </td>
-                    <td className="border border-gray-300 px-2 py-1.5 align-top text-right">
-                      <span className="text-xs font-semibold tabular-nums">{rowTotal.toFixed(2)}</span>
-                    </td>
-                    <td className="border border-gray-300 px-2 py-1.5 align-top">
-                      {locked ? (
-                        <span className="text-sm text-gray-600">{row.lineRemarks || "–"}</span>
-                      ) : (
+                        </td>
+                        <td className="border border-gray-300 px-2 py-1.5 align-top text-right">
+                          <span className="text-xs tabular-nums">{rowSubTotal.toFixed(2)}</span>
+                        </td>
+                        <td className="border border-gray-300 px-2 py-1.5 align-top text-right">
+                          <span className="text-xs tabular-nums">{rowGstAmount.toFixed(2)}</span>
+                        </td>
+                        <td className="border border-gray-300 px-2 py-1.5 align-top text-right">
+                          <span className="text-xs font-semibold tabular-nums">{rowTotal.toFixed(2)}</span>
+                        </td>
+                      </>
+                    ) : null}
+                    {fieldAccess.canEditRemarks ? (
+                      <td className="border border-gray-300 px-2 py-1.5 align-top">
                         <input
                           type="text"
                           className="w-full px-1.5 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-0 focus:border-purple-300"
@@ -315,9 +328,9 @@ export default function VendorPOLineItemsTable({
                           onChange={(e) => setLineItemRemarks(row.id, e.target.value)}
                           disabled={lineItemsDisabled}
                         />
-                      )}
-                    </td>
-                    {!locked && (
+                      </td>
+                    ) : null}
+                    {canRemoveLines ? (
                       <td className="border border-gray-300 px-2 py-1.5 align-top text-center">
                         <button
                           type="button"
@@ -329,7 +342,7 @@ export default function VendorPOLineItemsTable({
                           <i className="ri-delete-bin-line text-xs" />
                         </button>
                       </td>
-                    )}
+                    ) : null}
                   </tr>
                 );
               })}
