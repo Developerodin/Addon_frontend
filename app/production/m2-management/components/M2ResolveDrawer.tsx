@@ -39,7 +39,7 @@ export interface M2ResolveDrawerProps {
 const ACTION_LABELS: Record<M2ResolveAction, { title: string; hint: string; btn: string }> = {
   merge: {
     title: "Merge M2 → M1 (cascade)",
-    hint: "Adds qty to M1 on source floor and all downstream floors through Dispatch.",
+    hint: "Adds qty to M1 on source floor and all downstream floors through Dispatch. Allowed only after the article is received on Dispatch floor.",
     btn: "Confirm merge",
   },
   m3: {
@@ -216,7 +216,8 @@ export default function M2ResolveDrawer({
     quantity <= maxQty &&
     remarks.trim().length > 0 &&
     brandSplitValid &&
-    !isLoadingBrandContext;
+    !isLoadingBrandContext &&
+    !(action === "merge" && entry.canMergeToM1 === false);
 
   return (
     <>
@@ -252,6 +253,12 @@ export default function M2ResolveDrawer({
               <span className="text-yellow-800 font-bold">{maxQty}</span>
             </p>
             <p className="text-[10px] text-yellow-800 mt-2">{labels.hint}</p>
+            {action === "merge" && entry.canMergeToM1 === false && (
+              <p className="text-[10px] text-red-700 font-medium mt-2" role="alert">
+                {entry.mergeBlockedReason ||
+                  "Merge is blocked until the article is received on Dispatch floor."}
+              </p>
+            )}
           </div>
 
           <div>

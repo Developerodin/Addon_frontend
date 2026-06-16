@@ -372,6 +372,10 @@ export interface M2EntryRow {
   userEmail?: string;
   floorSupervisorId?: string;
   timestamp: string;
+  /** True when the article is present on Dispatch floor */
+  canMergeToM1?: boolean;
+  /** Set when canMergeToM1 is false */
+  mergeBlockedReason?: string | null;
 }
 
 export interface M2EntriesResponse {

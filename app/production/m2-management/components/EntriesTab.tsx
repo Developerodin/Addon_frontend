@@ -126,13 +126,31 @@ export default function EntriesTab({ refreshKey, onResolve }: EntriesTabProps) {
                   </td>
                   <td className="p-2">
                     <div className="flex flex-wrap gap-1">
-                      <button
-                        type="button"
-                        className="px-2 py-0.5 text-[10px] font-bold bg-green-100 border border-green-400 rounded hover:bg-green-200"
-                        onClick={() => onResolve(row, "merge")}
-                      >
-                        Merge M1
-                      </button>
+                      {row.canMergeToM1 !== false ? (
+                        <button
+                          type="button"
+                          className="px-2 py-0.5 text-[10px] font-bold bg-green-100 border border-green-400 rounded hover:bg-green-200"
+                          onClick={() => onResolve(row, "merge")}
+                        >
+                          Merge M1
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled
+                          className="px-2 py-0.5 text-[10px] font-bold bg-gray-100 border border-gray-300 rounded text-gray-500 cursor-not-allowed"
+                          title={
+                            row.mergeBlockedReason ||
+                            "Merge available only after the article is received on Dispatch floor"
+                          }
+                          aria-label={
+                            row.mergeBlockedReason ||
+                            "Merge M1 blocked until the article is received on Dispatch floor"
+                          }
+                        >
+                          Merge M1
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="px-2 py-0.5 text-[10px] font-bold bg-orange-100 border border-orange-400 rounded hover:bg-orange-200"
