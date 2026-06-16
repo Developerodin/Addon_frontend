@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from "react";
 import type { VendorProductionFlow } from "@/shared/services/vendorProductionFlowService";
 import {
-  filterActiveScFlows,
+  filterSecondaryCheckingFlowsForView,
   getFlowId,
   groupFlowsByOrder,
 } from "../utils/groupVendorScFlows";
@@ -21,6 +21,7 @@ export type VendorSecondaryCheckingOrderTabProps = {
   highlightVpoId?: string | null;
   highlightFlowId?: string | null;
   onProcess: (flow: VendorProductionFlow) => void;
+  showAll?: boolean;
 };
 
 /**
@@ -38,12 +39,13 @@ export function VendorSecondaryCheckingOrderTab({
   highlightVpoId = null,
   highlightFlowId = null,
   onProcess,
+  showAll = false,
 }: VendorSecondaryCheckingOrderTabProps) {
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
 
   const orderGroups = useMemo(() => {
-    const active = filterActiveScFlows(flows);
-    const groups = groupFlowsByOrder(active);
+    const pool = filterSecondaryCheckingFlowsForView(flows, showAll);
+    const groups = groupFlowsByOrder(pool);
     const q = searchQuery.trim().toLowerCase();
     if (!q) return groups;
 
@@ -60,7 +62,7 @@ export function VendorSecondaryCheckingOrderTab({
           return ref.includes(q) || product.includes(q);
         }),
     );
-  }, [flows, searchQuery]);
+  }, [flows, searchQuery, showAll]);
 
   const totalPages = Math.max(1, Math.ceil(orderGroups.length / itemsPerPage));
   const paginatedGroups = useMemo(() => {

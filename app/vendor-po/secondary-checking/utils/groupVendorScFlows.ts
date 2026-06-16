@@ -124,6 +124,44 @@ export function filterActiveScFlows(
 }
 
 /**
+ * Whether secondary checking still has work (remaining qty or boxes pending scan).
+ * @param flow - Vendor production flow document
+ */
+export function hasSecondaryCheckingWorkRemaining(flow: VendorProductionFlow): boolean {
+  const sc = flow.floorQuantities?.secondaryChecking;
+  return (sc?.remaining ?? 0) > 0 || (sc?.pendingFromBoxes ?? 0) > 0;
+}
+
+/**
+ * Whether this flow has secondary checking floor history.
+ * @param flow - Vendor production flow document
+ */
+export function hasSecondaryCheckingFloorHistory(flow: VendorProductionFlow): boolean {
+  const sc = flow.floorQuantities?.secondaryChecking;
+  if (!sc) return false;
+  return (
+    (sc.received ?? 0) > 0 ||
+    (sc.transferred ?? 0) > 0 ||
+    (sc.pendingFromBoxes ?? 0) > 0
+  );
+}
+
+/**
+ * Filters flows for secondary checking floor UI.
+ * @param flows - Flows from list API
+ * @param showAll - When true, include completed batches
+ */
+export function filterSecondaryCheckingFlowsForView(
+  flows: VendorProductionFlow[],
+  showAll: boolean,
+): VendorProductionFlow[] {
+  if (showAll) return flows.filter(hasSecondaryCheckingFloorHistory);
+  return flows.filter(
+    (f) => hasSecondaryCheckingFloorHistory(f) && hasSecondaryCheckingWorkRemaining(f),
+  );
+}
+
+/**
  * Sums secondary checking quantities across flows.
  * @param flows - Flows to aggregate
  */

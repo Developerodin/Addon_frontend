@@ -14,6 +14,8 @@ import { getStyleCodesByVendorCode, type StyleCodeByVendorRow } from "@/shared/s
 import { resolveVendorCodeForStyleLookup } from "../../branding/brandingFloorUtils";
 import { allowedStyleCodeIdsFromInbound } from "../../final-checking/finalCheckingInboundAggregates";
 import {
+  brandLabelForStyleId,
+  buildBrandSelectOptions,
   styleOptionId,
   toVendorTransferItems,
   type TransferredStyleRowDraft,
@@ -191,6 +193,15 @@ export function VendorDispatchProcessDrawer({
       return sid && allowedStyleCodeIds.has(sid);
     });
   }, [styleOptions, allowedStyleCodeIds]);
+
+  const brandSelectOptions = useMemo(
+    () =>
+      buildBrandSelectOptions(
+        styleOptions,
+        allowedStyleCodeIds.size ? allowedStyleCodeIds : undefined,
+      ),
+    [styleOptions, allowedStyleCodeIds],
+  );
 
   const updateRow = (index: number, patch: Partial<TransferredStyleRowDraft>) => {
     if (index < lockedCount) return;
@@ -418,7 +429,11 @@ export function VendorDispatchProcessDrawer({
                       key={i}
                       className="text-[10px] px-1.5 py-0.5 rounded border bg-emerald-50/80 border-emerald-100"
                     >
-                      {row.styleCode ?? "—"} / {row.brand ?? "—"}: {row.transferred ?? 0}
+                      {brandLabelForStyleId(
+                        styleOptions,
+                        String(row.styleCode ?? "").trim(),
+                        row.brand,
+                      )}: {row.transferred ?? 0}
                     </span>
                   ))}
                 </div>
@@ -431,16 +446,18 @@ export function VendorDispatchProcessDrawer({
               <div className={CRM.drawerSectionHead}>2. Previously saved (read-only)</div>
               <div className="p-3 space-y-2">
                 {rows.slice(0, lockedCount).map((row, index) => {
-                  const allOpts = filteredStyleOptions.length ? filteredStyleOptions : styleOptions;
-                  const match = allOpts.find((s) => styleOptionId(s) === row.styleCodeId);
-                  const label = match ? `${match.styleCode} — ${match.brand}` : row.styleCodeId || "—";
+                  const label = brandLabelForStyleId(
+                    styleOptions,
+                    row.styleCodeId,
+                    row.brand,
+                  );
                   return (
                   <div
                     key={`locked-${index}`}
                     className="grid grid-cols-1 sm:grid-cols-[1fr_88px_auto] gap-2 items-end border border-gray-200 rounded p-2 bg-gray-100/70 opacity-75"
                   >
                     <div>
-                      <label className="block text-[10px] font-medium text-gray-400 mb-0.5">Style</label>
+                      <label className="block text-[10px] font-medium text-gray-400 mb-0.5">Brand</label>
                       <div className="w-full border border-gray-200 rounded px-2 py-1 text-[11px] bg-gray-100 text-gray-600 cursor-not-allowed">
                         {label}
                       </div>
@@ -465,7 +482,7 @@ export function VendorDispatchProcessDrawer({
           )}
 
           <div className={CRM.drawerSection}>
-            <div className={CRM.drawerSectionHead}>{lockedCount > 0 ? "3" : "2"}. New quantity per style (for warehouse)</div>
+            <div className={CRM.drawerSectionHead}>{lockedCount > 0 ? "3" : "2"}. New quantity per brand (for warehouse)</div>
             <div className="p-3 space-y-2">
               {rows.slice(lockedCount).map((row, idx) => {
                 const index = lockedCount + idx;
@@ -475,24 +492,20 @@ export function VendorDispatchProcessDrawer({
                     className="grid grid-cols-1 sm:grid-cols-[1fr_88px_auto] gap-2 items-end border border-gray-100 rounded p-2 bg-gray-50/80"
                   >
                     <div>
-                      <label className="block text-[10px] font-medium text-gray-600 mb-0.5">Style</label>
+                      <label className="block text-[10px] font-medium text-gray-600 mb-0.5">Brand</label>
                       <select
                         value={row.styleCodeId}
                         onChange={(e) => onStyleSelect(index, e.target.value)}
                         disabled={saving || loadingStyles}
                         className="w-full border border-gray-200 rounded px-2 py-1 text-[11px]"
-                        aria-label={`Style line ${idx + 1}`}
+                        aria-label={`Brand line ${idx + 1}`}
                       >
-                        <option value="">Select…</option>
-                        {(filteredStyleOptions.length ? filteredStyleOptions : styleOptions).map((s) => {
-                          const sid = styleOptionId(s);
-                          if (!sid) return null;
-                          return (
-                            <option key={sid} value={sid}>
-                              {s.styleCode} — {s.brand}
-                            </option>
-                          );
-                        })}
+                        <option value="">Select brand…</option>
+                        {brandSelectOptions.map((opt) => (
+                          <option key={opt.styleCodeId} value={opt.styleCodeId}>
+                            {opt.brand}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div>

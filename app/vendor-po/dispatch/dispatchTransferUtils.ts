@@ -19,12 +19,28 @@ export function getDispatchTransferableRemaining(
 }
 
 /**
+ * Style/brand lines for dispatch list cells: prefer dispatch receivedData, else FC inbound.
+ * @param flow - Vendor production flow document
+ */
+export function dispatchStyleLinesForList(
+  flow: VendorProductionFlow,
+): ReceivedDataRow[] {
+  const disp = flow.floorQuantities?.dispatch;
+  if (disp?.receivedData?.length) {
+    return disp.receivedData.filter(
+      (r) =>
+        !String(r.receivedStatusFromPreviousFloor ?? "").startsWith("warehouse:"),
+    );
+  }
+  return flow.floorQuantities?.finalChecking?.receivedData ?? [];
+}
+
+/**
  * Style/brand lines eligible for dispatch→warehouse splits: prefer dispatch `receivedData`, else FC inbound.
  */
 export function dispatchStyleInboundReceivedData(
   flow: VendorProductionFlow | null | undefined,
 ): ReceivedDataRow[] {
-  const fromDispatch = flow?.floorQuantities?.dispatch?.receivedData;
-  if (fromDispatch?.length) return fromDispatch;
-  return flow?.floorQuantities?.finalChecking?.receivedData ?? [];
+  if (!flow) return [];
+  return dispatchStyleLinesForList(flow);
 }

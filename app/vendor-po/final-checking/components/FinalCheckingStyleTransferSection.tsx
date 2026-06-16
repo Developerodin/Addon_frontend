@@ -3,7 +3,7 @@
 import React from "react";
 import { CRM } from "../../vendor-list/crmUiClasses";
 import type { StyleCodeByVendorRow } from "@/shared/services/productService";
-import { styleOptionId, type TransferredStyleRowDraft } from "../../utils/transferredStyleRows";
+import { buildBrandSelectOptions, type TransferredStyleRowDraft } from "../../utils/transferredStyleRows";
 
 type Props = {
   sectionIndex: string;
@@ -34,18 +34,15 @@ export function FinalCheckingStyleTransferSection({
   onStyleSelect,
   onQtyChange,
 }: Props) {
-  const filteredOptions =
-    allowedStyleCodeIds && allowedStyleCodeIds.size > 0
-      ? styleOptions.filter((s) => {
-          const sid = styleOptionId(s);
-          return sid && allowedStyleCodeIds.has(sid);
-        })
-      : styleOptions;
+  const brandSelectOptions = buildBrandSelectOptions(
+    styleOptions,
+    allowedStyleCodeIds?.size ? allowedStyleCodeIds : undefined,
+  );
 
   return (
     <div className={CRM.drawerSection}>
       <div className={CRM.drawerSectionHead}>
-        {sectionIndex}. M1 completed breakdown (style &amp; qty)
+        {sectionIndex}. M1 completed breakdown (brand &amp; qty)
       </div>
       <div className="p-3 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 items-center mb-2">
         <p className="text-[10px] text-gray-600 leading-relaxed">
@@ -56,7 +53,7 @@ export function FinalCheckingStyleTransferSection({
           <i className="ri-add-line" /> Row
         </button>
       </div>
-      {allowedStyleCodeIds && allowedStyleCodeIds.size > 0 && filteredOptions.length === 0 && (
+      {allowedStyleCodeIds && allowedStyleCodeIds.size > 0 && brandSelectOptions.length === 0 && (
         <p className="px-3 pb-0 text-[10px] text-amber-700">
           Inbound style ids don&apos;t match the product catalog for this vendor — refresh styles or check style codes on the
           flow.
@@ -69,27 +66,21 @@ export function FinalCheckingStyleTransferSection({
             className="grid grid-cols-1 sm:grid-cols-[1fr_minmax(0,120px)_auto] gap-2 items-end border border-gray-100 rounded-lg p-2 bg-gray-50/80"
           >
             <div>
-              <label className={CRM.label}>Style / brand</label>
+              <label className={CRM.label}>Brand</label>
               <select
                 className={CRM.select}
                 value={row.styleCodeId}
                 onChange={(e) => onStyleSelect(index, e.target.value)}
                 disabled={saving || transferLoading || loadingStyles}
+                aria-label="Select brand"
               >
-                <option value="">Unspecified</option>
-                {filteredOptions.map((s) => {
-                  const sid = styleOptionId(s);
-                  if (!sid) return null;
-                  return (
-                    <option key={sid} value={sid}>
-                      {s.styleCode} — {s.brand}
-                    </option>
-                  );
-                })}
+                <option value="">Select brand…</option>
+                {brandSelectOptions.map((opt) => (
+                  <option key={opt.styleCodeId} value={opt.styleCodeId}>
+                    {opt.brand}
+                  </option>
+                ))}
               </select>
-              {row.styleCodeId && row.brand && (
-                <p className="text-[10px] text-gray-500 mt-0.5">Brand sent: {row.brand}</p>
-              )}
             </div>
             <div>
               <label className={CRM.label}>M1 qty</label>

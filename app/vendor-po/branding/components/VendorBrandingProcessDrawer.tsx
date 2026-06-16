@@ -15,6 +15,8 @@ import {
 import { resolveVendorCodeForStyleLookup } from "../brandingFloorUtils";
 import {
   brandingDeltaTransferredRows,
+  brandLabelForStyleId,
+  buildBrandSelectOptions,
   isMeaningfulEditableTransferredRow,
   rowsFromTransferredApi,
   styleOptionId,
@@ -125,6 +127,10 @@ export function VendorBrandingProcessDrawer({
     [rows, styleOptions],
   );
   const lineSumOverReceived = totalTransferred > lineSumMax;
+  const brandSelectOptions = useMemo(
+    () => buildBrandSelectOptions(styleOptions),
+    [styleOptions],
+  );
 
   useEffect(() => {
     if (!open || !styleOptions.length) return;
@@ -363,7 +369,7 @@ export function VendorBrandingProcessDrawer({
             <div
               className={`${CRM.drawerSectionHead} flex flex-wrap items-center justify-between gap-2`}
             >
-              <span>1. Style breakdown (transferredData + transfer lines)</span>
+              <span>1. Brand breakdown (transferredData + transfer lines)</span>
               <button
                 type="button"
                 className={CRM.btnSecondary}
@@ -384,44 +390,33 @@ export function VendorBrandingProcessDrawer({
                   }`}
                 >
                   <div>
-                    <label className={CRM.label}>Style / brand</label>
+                    <label className={CRM.label}>Brand</label>
                     {row.fromServer ? (
                       <p className="text-[11px] font-medium text-gray-800 py-2 px-1">
-                        {row.styleCodeId
-                          ? styleOptions.find(
-                              (o) => styleOptionId(o) === row.styleCodeId,
-                            )?.styleCode ?? row.styleCodeId
-                          : "—"}{" "}
-                        — {row.brand || "—"}{" "}
+                        {brandLabelForStyleId(
+                          styleOptions,
+                          row.styleCodeId,
+                          row.brand,
+                        )}{" "}
                         <span className="text-[10px] font-normal text-gray-500">
                           (recorded)
                         </span>
                       </p>
                     ) : (
-                      <>
-                        <select
-                          className={CRM.select}
-                          value={row.styleCodeId}
-                          onChange={(e) => onStyleSelect(index, e.target.value)}
-                          disabled={saving || loadingStyles}
-                        >
-                          <option value="">Unspecified</option>
-                          {styleOptions.map((s) => {
-                            const sid = styleOptionId(s);
-                            if (!sid) return null;
-                            return (
-                              <option key={sid} value={sid}>
-                                {s.styleCode} — {s.brand}
-                              </option>
-                            );
-                          })}
-                        </select>
-                        {row.styleCodeId && row.brand ? (
-                          <p className="text-[10px] text-gray-500 mt-0.5">
-                            Brand sent: {row.brand}
-                          </p>
-                        ) : null}
-                      </>
+                      <select
+                        className={CRM.select}
+                        value={row.styleCodeId}
+                        onChange={(e) => onStyleSelect(index, e.target.value)}
+                        disabled={saving || loadingStyles}
+                        aria-label="Select brand"
+                      >
+                        <option value="">Select brand…</option>
+                        {brandSelectOptions.map((opt) => (
+                          <option key={opt.styleCodeId} value={opt.styleCodeId}>
+                            {opt.brand}
+                          </option>
+                        ))}
+                      </select>
                     )}
                   </div>
                   <div>

@@ -8,14 +8,15 @@ import { useSearchParams } from "next/navigation";
 import Seo from "@/shared/layout-components/seo/seo";
 import WarehouseFloorSupervisorDashboard from "@/shared/components/production/warehouse-floor/WarehouseFloorSupervisorDashboard";
 import WhmsInwardReceivedTab from "@/shared/components/production/warehouse-floor/WhmsInwardReceivedTab";
+import { VendorFloorUpcomingContainersTab } from "@/app/vendor-po/components/VendorFloorUpcomingContainersTab";
 import UpcomingTab from "@/app/production/floor-supervisor/components/UpcomingTab";
-import VendorReceiveProcessTab from "./VendorReceiveProcessTab";
 
-type InwardPageTab = "production" | "vendor-receive" | "inward-received" | "upcoming";
+type InwardPageTab = "production" | "inward-received" | "upcoming";
 
 /** Maps `?tab=` to an inward page tab, or null if missing/invalid. */
 function tabFromQuery(raw: string | null): InwardPageTab | null {
-  if (raw === "production" || raw === "vendor-receive" || raw === "inward-received" || raw === "upcoming") return raw;
+  if (raw === "production" || raw === "inward-received" || raw === "upcoming") return raw;
+  if (raw === "vendor-receive") return "inward-received";
   return null;
 }
 
@@ -23,6 +24,7 @@ function tabFromQuery(raw: string | null): InwardPageTab | null {
 function InwardPageInner() {
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<InwardPageTab>("inward-received");
+  const [upcomingMode, setUpcomingMode] = useState<"vendor" | "production">("vendor");
 
   const inwardSourceParam = searchParams?.get("inwardSource");
   const vendorFlowId = searchParams?.get("vendorProductionFlowId")?.trim() || undefined;
@@ -36,7 +38,9 @@ function InwardPageInner() {
   useEffect(() => {
     const t = tabFromQuery(searchParams?.get("tab") ?? null);
     if (t) setTab(t);
-  }, [searchParams]);
+    if (inwardSourceParam === "vendor") setUpcomingMode("vendor");
+    if (inwardSourceParam === "production") setUpcomingMode("production");
+  }, [searchParams, inwardSourceParam]);
 
   return (
     <div className="main-content !p-[10px]">
@@ -54,17 +58,6 @@ function InwardPageInner() {
             onClick={() => setTab("production")}
           >
             Production receiving
-          </button>
-          <button
-            type="button"
-            className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${
-              tab === "vendor-receive"
-                ? "border-teal-600 text-teal-600"
-                : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
-            onClick={() => setTab("vendor-receive")}
-          >
-            Vendor bag accept
           </button>
           <button
             type="button"
@@ -97,8 +90,6 @@ function InwardPageInner() {
             pageHeading="Warehouse Inward"
             helpTitle="Warehouse Inward — Production receiving"
           />
-        ) : tab === "vendor-receive" ? (
-          <VendorReceiveProcessTab />
         ) : tab === "inward-received" ? (
           <WhmsInwardReceivedTab
             key={vendorFlowId ?? "default"}
@@ -106,8 +97,37 @@ function InwardPageInner() {
             initialVendorProductionFlowId={vendorFlowId}
           />
         ) : (
-          <div className="min-h-[280px] border-t border-gray-100">
-            <UpcomingTab floorName="Warehouse" />
+          <div className="min-h-[280px] border-t border-gray-100 p-[10px] space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-bold text-gray-500 uppercase">Upcoming view:</span>
+              <button
+                type="button"
+                className={`px-2.5 py-1 text-[10px] font-bold rounded border ${
+                  upcomingMode === "vendor"
+                    ? "bg-teal-600 text-white border-teal-600"
+                    : "bg-white text-gray-600 border-gray-300"
+                }`}
+                onClick={() => setUpcomingMode("vendor")}
+              >
+                Vendor bags (Warehouse Inward)
+              </button>
+              <button
+                type="button"
+                className={`px-2.5 py-1 text-[10px] font-bold rounded border ${
+                  upcomingMode === "production"
+                    ? "bg-teal-600 text-white border-teal-600"
+                    : "bg-white text-gray-600 border-gray-300"
+                }`}
+                onClick={() => setUpcomingMode("production")}
+              >
+                Production (Warehouse)
+              </button>
+            </div>
+            {upcomingMode === "vendor" ? (
+              <VendorFloorUpcomingContainersTab floorName="Warehouse Inward" />
+            ) : (
+              <UpcomingTab floorName="Warehouse" />
+            )}
           </div>
         )}
       </div>

@@ -36,6 +36,7 @@ const SecondaryCheckingPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
+  const [showAllArticles, setShowAllArticles] = useState(false);
   const [highlightFlowId, setHighlightFlowId] = useState<string | null>(null);
   const [highlightVpoId, setHighlightVpoId] = useState<string | null>(null);
   const [upcomingRefreshKey, setUpcomingRefreshKey] = useState(0);
@@ -292,10 +293,11 @@ const SecondaryCheckingPage = () => {
             </div>
 
             <div
-              className="flex items-center border-b border-gray-300"
+              className="flex items-center justify-between border-b border-gray-300"
               role="tablist"
               aria-label="Secondary checking views"
             >
+              <div className="flex flex-wrap">
               <button
                 type="button"
                 role="tab"
@@ -335,6 +337,16 @@ const SecondaryCheckingPage = () => {
               >
                 Upcoming
               </button>
+              </div>
+              <label className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-gray-700 border border-gray-200 rounded bg-white cursor-pointer hover:bg-gray-50 mr-2">
+                <input
+                  type="checkbox"
+                  checked={showAllArticles}
+                  onChange={(e) => setShowAllArticles(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                Show all
+              </label>
             </div>
           </div>
 
@@ -352,6 +364,7 @@ const SecondaryCheckingPage = () => {
                 highlightVpoId={highlightVpoId}
                 highlightFlowId={highlightFlowId}
                 onProcess={handleOpenProcess}
+                showAll={showAllArticles}
               />
             ) : activeTab === "article-view" ? (
               <VendorSecondaryCheckingArticleTab
@@ -365,6 +378,7 @@ const SecondaryCheckingPage = () => {
                 setCurrentPage={setCurrentPage}
                 highlightFlowId={highlightFlowId}
                 onProcess={handleOpenProcess}
+                showAllArticles={showAllArticles}
               />
             ) : (
               <VendorSecondaryCheckingUpcomingTab refreshKey={upcomingRefreshKey} />

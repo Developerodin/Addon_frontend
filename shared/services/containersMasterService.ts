@@ -459,12 +459,13 @@ class ContainersMasterService {
    */
   async getByFloorWithArticles(
     floorName: string,
-    params?: { status?: string }
+    params?: { status?: string; contentDomain?: 'vendor' | 'production' }
   ): Promise<ContainersByFloorWithArticlesResponse> {
     const floor = floorName?.trim();
     if (!floor) throw new Error('floorName is required');
     const sp = new URLSearchParams();
     if (params?.status) sp.append('status', params.status);
+    if (params?.contentDomain) sp.append('contentDomain', params.contentDomain);
     const q = sp.toString() ? `?${sp.toString()}` : '';
     const path = `/by-floor/${encodeURIComponent(floor)}/with-articles${q}`;
     return this.request<ContainersByFloorWithArticlesResponse>(path);

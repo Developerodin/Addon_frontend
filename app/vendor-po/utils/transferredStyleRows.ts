@@ -21,6 +21,54 @@ export function styleOptionId(s: StyleCodeByVendorRow): string {
   return String(raw).trim();
 }
 
+/** One brand per dropdown row (first matching style id when brands repeat). */
+export type BrandSelectOption = { brand: string; styleCodeId: string };
+
+/**
+ * Builds brand-only select options from style catalog rows.
+ * @param styleOptions - Style codes from vendor catalog API
+ * @param allowedStyleCodeIds - When set, only include these style ids (e.g. inbound filter)
+ */
+export function buildBrandSelectOptions(
+  styleOptions: StyleCodeByVendorRow[],
+  allowedStyleCodeIds?: Set<string>,
+): BrandSelectOption[] {
+  const seenBrands = new Set<string>();
+  const out: BrandSelectOption[] = [];
+
+  for (const s of styleOptions) {
+    const styleCodeId = styleOptionId(s);
+    if (!styleCodeId) continue;
+    if (allowedStyleCodeIds?.size && !allowedStyleCodeIds.has(styleCodeId)) {
+      continue;
+    }
+    const brand = (s.brand ?? "").trim();
+    if (!brand || seenBrands.has(brand)) continue;
+    seenBrands.add(brand);
+    out.push({ brand, styleCodeId });
+  }
+
+  return out.sort((a, b) => a.brand.localeCompare(b.brand));
+}
+
+/**
+ * Display label for a stored style id — brand only (no style code).
+ * @param styleOptions - Style catalog for lookup
+ * @param styleCodeId - Stored style master id
+ * @param fallbackBrand - Row `brand` field when catalog lookup fails
+ */
+export function brandLabelForStyleId(
+  styleOptions: StyleCodeByVendorRow[],
+  styleCodeId: string,
+  fallbackBrand?: string,
+): string {
+  const sid = styleCodeId.trim();
+  if (!sid) return fallbackBrand?.trim() || "—";
+  const opt = styleOptions.find((o) => styleOptionId(o) === sid);
+  if (opt?.brand?.trim()) return opt.brand.trim();
+  return fallbackBrand?.trim() || "—";
+}
+
 export function rowsFromTransferredApi(
   data: TransferredDataRow[] | undefined,
   opts?: { markRowsFromServer?: boolean },

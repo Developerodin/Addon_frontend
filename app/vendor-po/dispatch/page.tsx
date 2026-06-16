@@ -1,35 +1,49 @@
 "use client";
+
 import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Seo from "@/shared/layout-components/seo/seo";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { toast } from "react-hot-toast";
-import { CRM } from "../vendor-list/crmUiClasses";
 import vendorProductionFlowService, {
   mergeProductionFlowPreservePopulatedRefs,
   VendorProductionFlow,
   type VendorTransferItem,
 } from "@/shared/services/vendorProductionFlowService";
-import { formatTransferredRowLabel } from "../utils/transferredStyleRows";
-import { getDispatchTransferableRemaining } from "./dispatchTransferUtils";
 import { VendorScanContainerDrawer } from "../components/VendorScanContainerDrawer";
+import { VendorFloorUpcomingContainersTab } from "../components/VendorFloorUpcomingContainersTab";
 import { VendorDispatchProcessDrawer } from "./components/VendorDispatchProcessDrawer";
+import { VendorDispatchOrderTab } from "./components/VendorDispatchOrderTab";
+import { VendorDispatchArticleTab } from "./components/VendorDispatchArticleTab";
 import {
   VendorDispatchWarehouseStagingModal,
   type PendingDispatchStagingPatch,
 } from "./components/VendorDispatchWarehouseStagingModal";
+import { VendorTransferNotePrintModal } from "./components/VendorTransferNotePrintModal";
+import { VendorTransferNoteHistoryTab } from "./components/VendorTransferNoteHistoryTab";
 import { productionFlowListParams } from "../utils/vendorPoProductionFlowList";
+import {
+  filterDispatchFlowsForView,
+} from "../utils/groupVendorProductionFlows";
+import { getDispatchTransferableRemaining } from "./dispatchTransferUtils";
 
 const DISPATCH_FLOOR_LABEL = "Dispatch";
+
+type DispatchTab = "orders" | "article-view" | "upcoming" | "transfer-notes";
 
 function DispatchPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [flows, setFlows] = useState<VendorProductionFlow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<DispatchTab>("article-view");
   const [searchQuery, setSearchQuery] = useState("");
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
+  const [showAllArticles, setShowAllArticles] = useState(false);
+  const [upcomingRefreshKey, setUpcomingRefreshKey] = useState(0);
+  const [transferNoteRefreshKey, setTransferNoteRefreshKey] = useState(0);
+  const [showPrintModal, setShowPrintModal] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [scanInitialBarcode, setScanInitialBarcode] = useState<string | undefined>();
   const [selectedFlow, setSelectedFlow] = useState<VendorProductionFlow | null>(null);
@@ -68,6 +82,36 @@ function DispatchPageContent() {
     loadFlows();
   }, [loadFlows]);
 
+  const activeFlows = useMemo(
+    () => filterDispatchFlowsForView(flows, showAllArticles),
+    [flows, showAllArticles],
+  );
+
+  const stats = useMemo(() => {
+    let received = 0;
+    let transferred = 0;
+    let remaining = 0;
+    for (const flow of activeFlows) {
+      const disp = flow.floorQuantities?.dispatch;
+      received += disp?.received ?? 0;
+      transferred += disp?.transferred ?? 0;
+      remaining += getDispatchTransferableRemaining(flow);
+    }
+    return {
+      batches: activeFlows.length,
+      received,
+      transferred,
+      remaining,
+    };
+  }, [activeFlows]);
+
+  const printFilters = useMemo(
+    () => ({
+      ...(searchQuery.trim() ? { search: searchQuery.trim() } : {}),
+    }),
+    [searchQuery],
+  );
+
   const handleOpenProcess = (flow: VendorProductionFlow) => {
     setScanOpen(false);
     setWarehouseStagingOpen(false);
@@ -101,10 +145,6 @@ function DispatchPageContent() {
     [mergeFlowInState],
   );
 
-  /**
-   * Called by the process drawer when user clicks "Save & stage to Warehouse".
-   * Closes the process drawer and opens the warehouse staging modal.
-   */
   const handleStagingRequested = useCallback(
     (ctx: {
       flow: VendorProductionFlow;
@@ -127,274 +167,197 @@ function DispatchPageContent() {
     setWarehouseStagingTransferItems([]);
   }, []);
 
-  const filteredFlows = useMemo(() => {
-    return flows.filter((f) => {
-      const q = searchQuery.trim().toLowerCase();
-      const refCode = f.referenceCode?.toLowerCase() || "";
-      const vendorName =
-        typeof f.vendor === "object"
-          ? f.vendor?.header?.vendorName?.toLowerCase() || ""
-          : "";
-      const poNumber =
-        typeof f.vendorPurchaseOrder === "object"
-          ? f.vendorPurchaseOrder?.vpoNumber?.toLowerCase() || ""
-          : "";
-      return (
-        !q ||
-        refCode.includes(q) ||
-        vendorName.includes(q) ||
-        poNumber.includes(q)
-      );
-    });
-  }, [flows, searchQuery]);
+  const handleContainerAccepted = useCallback(async () => {
+    await loadFlows();
+    setUpcomingRefreshKey((k) => k + 1);
+  }, [loadFlows]);
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredFlows.length / itemsPerPage),
+  const handleStagingComplete = useCallback(
+    (updated: VendorProductionFlow) => {
+      mergeFlowInState(updated);
+      setTransferNoteRefreshKey((k) => k + 1);
+    },
+    [mergeFlowInState],
   );
-  const paginatedFlows = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return filteredFlows.slice(start, start + itemsPerPage);
-  }, [filteredFlows, currentPage, itemsPerPage]);
 
-  if (loading) {
-    return (
-      <div className={CRM.mainContent}>
-        <div className={CRM.loadingWrap}>
-          <div className={CRM.spinner} />
-          <p className={CRM.loadingLabel}>Loading Dispatch...</p>
-        </div>
-      </div>
-    );
-  }
+  const handleTransferNoteCreated = useCallback(() => {
+    setTransferNoteRefreshKey((k) => k + 1);
+    void loadFlows();
+  }, [loadFlows]);
 
   return (
-    <div className={CRM.mainContent}>
+    <div className="main-content !p-[10px]">
       <Seo title="Dispatch" />
 
-      <div className={CRM.titleRow}>
-        <div className={CRM.titleWithAccent}>
-          <div className={CRM.titleAccent} />
-          <h1 className={CRM.pageTitle}>Dispatch Stage</h1>
-          <HelpIcon
-            title="Dispatch"
-            content="1) Scan container: accept goods from FC onto dispatch floor. 2) Process: enter quantity per style code. Save updates counters. Save & stage opens container scan to stage goods for warehouse. 3) Warehouse scans the same barcode to complete inward."
-          />
-        </div>
-        <div className="flex gap-2">
-          <button type="button" onClick={loadFlows} className={CRM.btnSecondary}>
-            <i className="ri-refresh-line text-xs" aria-hidden />
-            Refresh
-          </button>
-          <button
-            type="button"
-            onClick={() => setScanOpen(true)}
-            className={CRM.btnSecondary}
-          >
-            <i className="ri-qr-scan-2-line text-xs" aria-hidden />
-            Scan container
-          </button>
-        </div>
-      </div>
-
-      <div className={CRM.card}>
-        <div className={CRM.cardBody}>
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="relative w-full sm:w-80">
-              <input
-                type="text"
-                className={CRM.inputSearch}
-                placeholder="Search by batch, vendor or PO..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                aria-label="Search dispatch batches"
-              />
-              <i className="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs" aria-hidden />
-            </div>
+      <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
+        <div className="p-[10px]">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
             <div className="flex items-center gap-2">
-              <label className={`${CRM.label} mb-0`} htmlFor="dispatch-page-size">
-                Show:
+              <div className="w-[3px] h-5 bg-teal-600 rounded-full" />
+              <h1 className="text-sm font-bold text-gray-800">Vendor Dispatch</h1>
+              <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                {activeFlows.length}
+              </span>
+              <HelpIcon
+                title="Vendor Dispatch"
+                content="Scan containers from Final Checking, process brand quantities, stage to warehouse, print transfer notes (V-series STN), then complete inward at Warehouse Management."
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
+                onClick={() => setShowPrintModal(true)}
+                title="Print transfer note list"
+              >
+                <i className="ri-printer-line text-xs" aria-hidden />
+                Print List
+              </button>
+              <button
+                type="button"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
+                onClick={() => void loadFlows()}
+                disabled={loading}
+                title="Refresh batches"
+              >
+                <i className={`ri-refresh-line text-xs ${loading ? "animate-spin" : ""}`} aria-hidden />
+                Refresh
+              </button>
+              <button
+                type="button"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-[11px] font-bold rounded hover:bg-teal-700 transition-colors shadow-sm"
+                onClick={() => setScanOpen(true)}
+              >
+                <i className="ri-qr-scan-2-line text-xs" aria-hidden />
+                Scan container
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+            <div className="bg-teal-50 border border-teal-100 rounded p-2 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-teal-700 uppercase tracking-wide">Batches</span>
+              <span className="text-sm font-bold text-teal-900">{stats.batches}</span>
+            </div>
+            <div className="bg-green-50 border border-green-100 rounded p-2 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-green-700 uppercase tracking-wide">Received</span>
+              <span className="text-sm font-bold text-green-900">{stats.received.toLocaleString()}</span>
+            </div>
+            <div className="bg-yellow-50 border border-yellow-100 rounded p-2 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-yellow-700 uppercase tracking-wide">WH Staged</span>
+              <span className="text-sm font-bold text-yellow-900">{stats.transferred.toLocaleString()}</span>
+            </div>
+            <div className="bg-orange-50 border border-orange-100 rounded p-2 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-orange-700 uppercase tracking-wide">Remaining</span>
+              <span className="text-sm font-bold text-orange-900">{stats.remaining.toLocaleString()}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between border-b border-gray-300 mb-0">
+            <div className="flex flex-wrap" role="tablist" aria-label="Dispatch views">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "orders"}
+                className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${
+                  activeTab === "orders"
+                    ? "border-teal-600 text-teal-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+                onClick={() => setActiveTab("orders")}
+              >
+                Order-wise
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "article-view"}
+                className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${
+                  activeTab === "article-view"
+                    ? "border-teal-600 text-teal-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+                onClick={() => setActiveTab("article-view")}
+              >
+                Article-wise
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "upcoming"}
+                className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${
+                  activeTab === "upcoming"
+                    ? "border-teal-600 text-teal-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+                onClick={() => setActiveTab("upcoming")}
+              >
+                Upcoming
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "transfer-notes"}
+                className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${
+                  activeTab === "transfer-notes"
+                    ? "border-teal-600 text-teal-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+                onClick={() => setActiveTab("transfer-notes")}
+              >
+                Transfer Notes
+              </button>
+            </div>
+            {activeTab !== "transfer-notes" && activeTab !== "upcoming" ? (
+              <label className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-gray-700 border border-gray-200 rounded bg-white cursor-pointer hover:bg-gray-50 mr-2">
+                <input
+                  type="checkbox"
+                  checked={showAllArticles}
+                  onChange={(e) => setShowAllArticles(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                Show all
               </label>
-              <select
-                id="dispatch-page-size"
-                className={`${CRM.select} w-20`}
-                value={itemsPerPage}
-                onChange={(e) => setItemsPerPage(Number(e.target.value))}
-              >
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-              </select>
-            </div>
+            ) : null}
           </div>
+        </div>
 
-          <div className={CRM.tableWrap}>
-            <table className={CRM.table}>
-              <thead>
-                <tr className={CRM.theadTr}>
-                  <th className={CRM.th}>Batch / Reference</th>
-                  <th className={CRM.th}>Vendor &amp; PO</th>
-                  <th className={CRM.thRight}>FC received</th>
-                  <th className={CRM.thRight}>Dispatch received</th>
-                  <th className={CRM.thRight} title="Units already staged to warehouse">
-                    WH staged
-                  </th>
-                  <th className={CRM.thRight} title="Units still on dispatch (max transferable)">
-                    Remaining
-                  </th>
-                  <th className={CRM.th}>Style lines (FC / dispatch)</th>
-                  <th className={CRM.th}>Final QC</th>
-                  <th className={CRM.th}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedFlows.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={9}
-                      className="py-10 text-center text-gray-400 text-xs font-bold uppercase tracking-widest"
-                    >
-                      No dispatch batches found
-                    </td>
-                  </tr>
-                ) : (
-                  paginatedFlows.map((flow) => {
-                    const final = flow.floorQuantities.finalChecking;
-                    const disp = flow.floorQuantities.dispatch;
-                    const remaining = getDispatchTransferableRemaining(flow);
-                    const dispRows = disp?.receivedData?.length
-                      ? disp.receivedData.filter(
-                          (r) => !String(r.receivedStatusFromPreviousFloor ?? "").startsWith("warehouse:"),
-                        )
-                      : final?.receivedData ?? [];
-                    const vendorName =
-                      typeof flow.vendor === "object"
-                        ? flow.vendor?.header?.vendorName
-                        : "Unknown";
-                    const poNumber =
-                      typeof flow.vendorPurchaseOrder === "object"
-                        ? flow.vendorPurchaseOrder?.vpoNumber
-                        : "N/A";
-                    return (
-                      <tr key={flow.id} className={CRM.tbodyTr}>
-                        <td className={CRM.td}>
-                          <div className="font-bold text-gray-900 text-[12px]">
-                            {flow.referenceCode || "—"}
-                          </div>
-                          <div className="text-[10px] text-gray-400 font-medium uppercase leading-none">
-                            ID: {flow.id.slice(-6)}
-                          </div>
-                        </td>
-                        <td className={CRM.td}>
-                          <div className="font-bold text-purple-600 underline underline-offset-2 decoration-purple-200">
-                            {vendorName}
-                          </div>
-                          <div className="text-[10px] text-gray-500 font-bold mt-0.5">
-                            VPO: {poNumber}
-                          </div>
-                        </td>
-                        <td className={`${CRM.td} text-right font-medium`}>
-                          {(final.received ?? 0).toLocaleString()}
-                        </td>
-                        <td
-                          className={`${CRM.td} text-right font-bold text-emerald-700`}
-                          title="Total accepted on Dispatch (container scans)"
-                        >
-                          {(disp?.received ?? 0).toLocaleString()}
-                        </td>
-                        <td className={`${CRM.td} text-right font-medium tabular-nums`} title="dispatch.transferred">
-                          {(disp?.transferred ?? 0).toLocaleString()}
-                        </td>
-                        <td
-                          className={`${CRM.td} text-right font-bold tabular-nums ${
-                            remaining <= 0 ? "text-gray-400" : "text-amber-800"
-                          }`}
-                          title="dispatch.remaining (transferable to warehouse)"
-                        >
-                          {remaining.toLocaleString()}
-                        </td>
-                        <td className={CRM.td}>
-                          <div className="flex flex-wrap gap-1 max-w-[240px]">
-                            {dispRows.length ? (
-                              dispRows.map((row, i) => (
-                                <span
-                                  key={i}
-                                  className={`text-[10px] px-1 py-0.5 rounded border ${
-                                    disp?.receivedData?.length
-                                      ? "bg-emerald-50/80 border-emerald-100"
-                                      : "bg-gray-50 border-gray-100"
-                                  }`}
-                                  title={
-                                    disp?.receivedData?.length
-                                      ? "dispatch.receivedData"
-                                      : "finalChecking.receivedData (from FC)"
-                                  }
-                                >
-                                  {formatTransferredRowLabel(row)}
-                                </span>
-                              ))
-                            ) : (
-                              <span className="text-gray-400 text-[10px]">—</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className={CRM.td}>
-                          <span
-                            className={
-                              flow.finalQualityConfirmed
-                                ? CRM.badgeActive
-                                : CRM.badgeInactive
-                            }
-                          >
-                            {flow.finalQualityConfirmed
-                              ? "CONFIRMED"
-                              : "PENDING"}
-                          </span>
-                        </td>
-                        <td className={CRM.td}>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenProcess(flow)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
-                            aria-label={`Process batch ${flow.referenceCode || flow.id.slice(-6)}`}
-                          >
-                            <i className="ri-edit-line" aria-hidden />
-                            Process
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className={CRM.paginationBar}>
-            <p className={CRM.paginationSummary}>
-              Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
-              {Math.min(currentPage * itemsPerPage, filteredFlows.length)} of{" "}
-              {filteredFlows.length} batches
-            </p>
-            <div className="flex gap-1">
-              <button
-                type="button"
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage((p) => p - 1)}
-                className={CRM.pageNavBtn}
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((p) => p + 1)}
-                className={CRM.pageNavBtn}
-              >
-                Next
-              </button>
-            </div>
-          </div>
+        <div className="min-h-[300px]" role="tabpanel">
+          {activeTab === "orders" ? (
+            <VendorDispatchOrderTab
+              flows={flows}
+              loading={loading}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              itemsPerPage={itemsPerPage}
+              setItemsPerPage={setItemsPerPage}
+              currentPage={currentPage}
+              setCurrentPage={setCurrentPage}
+              onProcess={handleOpenProcess}
+              showAll={showAllArticles}
+            />
+          ) : activeTab === "article-view" ? (
+            <VendorDispatchArticleTab
+              flows={flows}
+              loading={loading}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              itemsPerPage={itemsPerPage}
+              setItemsPerPage={setItemsPerPage}
+              currentPage={currentPage}
+              setCurrentPage={setCurrentPage}
+              onProcess={handleOpenProcess}
+              showAllArticles={showAllArticles}
+              onScanContainerClick={() => setScanOpen(true)}
+            />
+          ) : activeTab === "transfer-notes" ? (
+            <VendorTransferNoteHistoryTab refreshKey={transferNoteRefreshKey} />
+          ) : (
+            <VendorFloorUpcomingContainersTab
+              floorName={DISPATCH_FLOOR_LABEL}
+              refreshKey={upcomingRefreshKey}
+            />
+          )}
         </div>
       </div>
 
@@ -412,7 +375,7 @@ function DispatchPageContent() {
         pendingPatch={warehouseStagingPatch}
         transferItems={warehouseStagingTransferItems}
         onClose={closeWarehouseStagingModal}
-        onFloorUpdated={mergeFlowInState}
+        onFloorUpdated={handleStagingComplete}
       />
 
       <VendorScanContainerDrawer
@@ -423,7 +386,14 @@ function DispatchPageContent() {
         }}
         expectedFloorName={DISPATCH_FLOOR_LABEL}
         initialBarcode={scanInitialBarcode}
-        onAccepted={loadFlows}
+        onAccepted={handleContainerAccepted}
+      />
+
+      <VendorTransferNotePrintModal
+        open={showPrintModal}
+        onClose={() => setShowPrintModal(false)}
+        printFilters={printFilters}
+        onCreated={handleTransferNoteCreated}
       />
     </div>
   );
@@ -432,11 +402,9 @@ function DispatchPageContent() {
 const DispatchPage = () => (
   <Suspense
     fallback={
-      <div className={CRM.mainContent}>
-        <div className={CRM.loadingWrap}>
-          <div className={CRM.spinner} />
-          <p className={CRM.loadingLabel}>Loading Dispatch...</p>
-        </div>
+      <div className="main-content !p-[10px] flex flex-col items-center justify-center min-h-[240px]">
+        <div className="animate-spin rounded-full h-10 w-10 border-2 border-teal-600 border-t-transparent mb-3" />
+        <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Loading Dispatch…</p>
       </div>
     }
   >

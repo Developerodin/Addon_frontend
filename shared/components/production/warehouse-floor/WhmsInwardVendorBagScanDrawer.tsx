@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "react-hot-toast";
 import { containersMasterService } from "@/shared/services/containersMasterService";
+import { lookupVendorBagProductionFlow } from "./whmsVendorBagFlowSession";
 
 type Props = {
   open: boolean;
@@ -17,6 +18,8 @@ type Props = {
 export default function WhmsInwardVendorBagScanDrawer({ open, onClose, onAccepted }: Props) {
   const [barcode, setBarcode] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const linkedFlowId = useMemo(() => lookupVendorBagProductionFlow(barcode), [barcode]);
 
   useEffect(() => {
     if (!open) return;
@@ -37,7 +40,11 @@ export default function WhmsInwardVendorBagScanDrawer({ open, onClose, onAccepte
       } catch {
         /* best-effort */
       }
-      toast.success("Container accept completed.");
+      toast.success(
+        linkedFlowId
+          ? `Container accept completed for vendor flow ${linkedFlowId.slice(-6)}. Check Inward Received list.`
+          : "Container accept completed. Check Inward Received list.",
+      );
       await onAccepted?.();
       onClose();
     } catch (e) {
@@ -60,7 +67,7 @@ export default function WhmsInwardVendorBagScanDrawer({ open, onClose, onAccepte
       >
         <div className="flex justify-between items-center p-[10px] border-b border-gray-200 shrink-0">
           <h3 id="inward-vendor-bag-scan-title" className="text-sm font-bold text-gray-800">
-            Scan bag — complete inward accept
+            Scan vendor bag — complete inward accept
           </h3>
           <button
             type="button"
@@ -74,8 +81,9 @@ export default function WhmsInwardVendorBagScanDrawer({ open, onClose, onAccepte
         </div>
         <div className="flex-1 overflow-y-auto p-[10px] space-y-4">
           <p className="text-[11px] text-gray-600 leading-relaxed">
-            Use the barcode of the <strong>Active</strong> bag used on dispatch for <strong>dispatch → warehouse</strong>{" "}
-            transfer. This sends an empty-body accept so the server clears staged vendor items and completes the handoff.
+            Use the barcode of the <strong>Active</strong> bag used on dispatch for{" "}
+            <strong>dispatch → warehouse</strong> transfer. This sends an empty-body accept so the server clears
+            staged vendor items and creates inward receive lines.
           </p>
           <div className="space-y-1">
             <label htmlFor="inward-vendor-bag-bc" className="block text-[11px] font-medium text-[#495057]">
@@ -94,6 +102,11 @@ export default function WhmsInwardVendorBagScanDrawer({ open, onClose, onAccepte
               aria-label="Warehouse staged bag barcode"
             />
           </div>
+          {linkedFlowId ? (
+            <p className="text-[10px] text-teal-800 bg-teal-50 border border-teal-100 rounded px-2 py-1.5">
+              Linked vendor production flow: <span className="font-mono font-bold">{linkedFlowId}</span>
+            </p>
+          ) : null}
           <button
             type="button"
             disabled={loading || !barcode.trim()}

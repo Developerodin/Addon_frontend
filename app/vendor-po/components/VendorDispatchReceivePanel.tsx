@@ -15,6 +15,7 @@ import { getStyleCodesByVendorCode, type StyleCodeByVendorRow } from "@/shared/s
 import { resolveVendorCodeForStyleLookup } from "../branding/brandingFloorUtils";
 import { allowedStyleCodeIdsFromInbound } from "../final-checking/finalCheckingInboundAggregates";
 import {
+  buildBrandSelectOptions,
   styleOptionId,
   toVendorTransferItems,
   type TransferredStyleRowDraft,
@@ -146,6 +147,15 @@ export function VendorDispatchReceivePanel({
       return sid && allowedStyleCodeIds.has(sid);
     });
   }, [styleOptions, allowedStyleCodeIds]);
+
+  const brandSelectOptions = useMemo(
+    () =>
+      buildBrandSelectOptions(
+        styleOptions,
+        allowedStyleCodeIds.size ? allowedStyleCodeIds : undefined,
+      ),
+    [styleOptions, allowedStyleCodeIds],
+  );
 
   const updateRow = (index: number, patch: Partial<TransferredStyleRowDraft>) => {
     setRows((prev) => {
@@ -306,7 +316,7 @@ export function VendorDispatchReceivePanel({
           disabled={acceptLoading || styleListBusy}
           className="rounded border-gray-300"
         />
-        Style / brand lines (like Final QC)
+        Brand lines (like Final QC)
       </label>
 
       {!useStyleLines ? (
@@ -324,7 +334,7 @@ export function VendorDispatchReceivePanel({
         </div>
       ) : (
         <div className="space-y-2">
-          {allowedStyleCodeIds.size > 0 && filteredStyleOptions.length === 0 && !styleListBusy ? (
+          {allowedStyleCodeIds.size > 0 && brandSelectOptions.length === 0 && !styleListBusy ? (
             <p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-100 rounded p-2">
               Inbound style ids do not match catalog — try refreshing or pick from full list below.
             </p>
@@ -335,23 +345,20 @@ export function VendorDispatchReceivePanel({
               className="grid grid-cols-1 gap-2 border border-gray-100 rounded-lg p-2 bg-gray-50/80 sm:grid-cols-[1fr_minmax(0,88px)_auto]"
             >
               <div>
-                <label className="block text-[10px] font-medium text-gray-600 mb-0.5">Style</label>
+                <label className="block text-[10px] font-medium text-gray-600 mb-0.5">Brand</label>
                 <select
                   value={row.styleCodeId}
                   onChange={(e) => onStyleSelect(index, e.target.value)}
                   disabled={acceptLoading || styleListBusy}
                   className="w-full border border-gray-200 rounded px-2 py-1 text-[11px] font-medium focus:ring-0 focus:border-purple-300"
+                  aria-label="Select brand"
                 >
-                  <option value="">Select…</option>
-                  {(filteredStyleOptions.length ? filteredStyleOptions : styleOptions).map((s) => {
-                    const sid = styleOptionId(s);
-                    if (!sid) return null;
-                    return (
-                      <option key={sid} value={sid}>
-                        {s.styleCode} — {s.brand}
-                      </option>
-                    );
-                  })}
+                  <option value="">Select brand…</option>
+                  {brandSelectOptions.map((opt) => (
+                    <option key={opt.styleCodeId} value={opt.styleCodeId}>
+                      {opt.brand}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>

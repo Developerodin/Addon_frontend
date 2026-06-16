@@ -253,6 +253,14 @@ export function VendorDispatchWarehouseStagingModal({
               >
                 Done
               </button>
+              {baselineFlow?.id ? (
+                <a
+                  href={`/warehouse-management/inward?tab=inward-received&inwardSource=vendor&vendorProductionFlowId=${encodeURIComponent(baselineFlow.id)}`}
+                  className="block w-full text-center px-3 py-2 text-[12px] font-bold rounded bg-teal-600 text-white hover:bg-teal-700"
+                >
+                  Open Warehouse Inward
+                </a>
+              ) : null}
             </div>
           ) : (
             <>

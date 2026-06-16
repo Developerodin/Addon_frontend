@@ -48,7 +48,7 @@ export default function WhmsInwardReceivedToolbar({
           title="Scan the warehouse bag used in dispatch → warehouse transfer, then confirm accept"
         >
           <i className="ri-barcode-line text-xs" aria-hidden />
-          Scan bag
+          Scan vendor bag
         </button>
       ) : (
         <button
