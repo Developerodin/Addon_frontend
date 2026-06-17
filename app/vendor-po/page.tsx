@@ -7,8 +7,6 @@ const VendorPOPage = () => {
   const modules = [
     { title: "Purchase Management", path: "/vendor-po/purchase-management", icon: "ri-shopping-cart-line" },
     { title: "Secondary Checking", path: "/vendor-po/secondary-checking", icon: "ri-checkbox-circle-line" },
-    { title: "Washing", path: "/vendor-po/washing", icon: "ri-water-flash-line" },
-    { title: "Boarding", path: "/vendor-po/boarding", icon: "ri-airplay-line" },
     { title: "GRN", path: "/vendor-po/grn", icon: "ri-draft-line" },
     { title: "Branding", path: "/vendor-po/branding", icon: "ri-price-tag-3-line" },
     { title: "Final Checking", path: "/vendor-po/final-checking", icon: "ri-check-double-line" },

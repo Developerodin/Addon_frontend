@@ -27,7 +27,7 @@ type Props = {
   baselineFlow: VendorProductionFlow | null;
   pendingPatch: PendingSecondaryCheckingPatch | null;
   /** Resolved totals after this save (for display); pendingPatch carries entered absolutes + repair. */
-  displayTotals: { m1: number; m2: number; m3: number; m4: number } | null;
+  displayTotals: { m1: number; m2: number; m3: number; vm4: number } | null;
   /** When true, Save requires an empty container and runs transfer after PATCH. */
   requireContainerScan: boolean;
   /** Client hint: M1 − m1Transferred before PATCH (for copy in UI). */
@@ -237,7 +237,7 @@ export function VendorSecondaryCheckingM1StagingModal({
                 M2: <strong>{d.m2.toLocaleString()}</strong>
               </span>
               <span>
-                M4: <strong>{d.m4.toLocaleString()}</strong>
+                VM4: <strong>{d.vm4.toLocaleString()}</strong>
               </span>
             </div>
             <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-gray-600">
@@ -402,7 +402,7 @@ export function VendorSecondaryCheckingM1StagingModal({
             <div className="space-y-3">
               <p className="text-gray-700">
                 No M1 staging on a container is needed for this save. Confirm to
-                write M1 / M2 / M4 and repair fields to the server.
+                write M1 / M2 / M3 / VM4 and repair fields to the server.
               </p>
               <button
                 type="button"

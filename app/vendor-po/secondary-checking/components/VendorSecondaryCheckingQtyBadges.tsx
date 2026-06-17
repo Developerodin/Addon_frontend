@@ -10,7 +10,7 @@ type Props = {
 };
 
 /**
- * Renders M1/M2/M3/M4 quantity badges for a secondary checking flow.
+ * Renders M1/M2/M3/VM4 quantity badges for a secondary checking flow.
  */
 export function VendorSecondaryCheckingQtyBadges({ sc }: Props) {
   return (
@@ -32,7 +32,7 @@ export function VendorSecondaryCheckingQtyBadges({ sc }: Props) {
       </div>
       <div className="bg-red-50 border border-red-100 px-1.5 py-0.5 rounded">
         <span className="text-red-700 font-bold text-[10px]">
-          M4: {sc.m4Quantity ?? 0}
+          VM4: {sc.vm4Quantity ?? (sc as { m4Quantity?: number }).m4Quantity ?? 0}
         </span>
       </div>
     </div>

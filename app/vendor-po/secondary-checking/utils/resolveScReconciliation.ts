@@ -1,11 +1,11 @@
 import type { VendorProductionFlow } from "@/shared/services/vendorProductionFlowService";
 
-/** Optional draft M1–M4 totals while the process drawer form is being edited. */
+/** Optional draft M1–M3/VM4 totals while the process drawer form is being edited. */
 export type ScDraftTotals = {
   m1?: number;
   m2?: number;
   m3?: number;
-  m4?: number;
+  vm4?: number;
 };
 
 /** Quantity reconciliation row for secondary checking process drawer. */
@@ -14,10 +14,14 @@ export interface ScReconciliation {
   expected: number;
   scanAccepted: number;
   classified: number;
-  /** Unclassified within scan-accepted qty (preview uses draft M1–M4 when provided). */
+  /** Unclassified within scan-accepted qty (preview uses draft M1–M3/VM4 when provided). */
   remaining: number;
   pendingBoxScan: number;
   variancePreview: number;
+}
+
+function savedVm4(sc: VendorProductionFlow["floorQuantities"]["secondaryChecking"]): number {
+  return sc.vm4Quantity ?? (sc as { m4Quantity?: number }).m4Quantity ?? 0;
 }
 
 /**
@@ -77,14 +81,14 @@ export function resolveLotExpectedQty(flow: VendorProductionFlow): number {
 /**
  * Resolves expected vs verified quantities for the process drawer reconciliation table.
  * @param flow - Populated vendor production flow
- * @param draftTotals - Optional in-form M1–M4 preview (before save)
+ * @param draftTotals - Optional in-form M1–M3/VM4 preview (before save)
  */
 export function resolveScReconciliation(
   flow: VendorProductionFlow,
   draftTotals?: ScDraftTotals,
 ): ScReconciliation {
   const sc = flow.floorQuantities.secondaryChecking;
-  const resolveDraft = (key: "m1" | "m2" | "m3" | "m4", saved: number) => {
+  const resolveDraft = (key: "m1" | "m2" | "m3" | "vm4", saved: number) => {
     const raw = draftTotals?.[key];
     if (raw === undefined || raw === null) return saved;
     const n = Math.round(Number(raw));
@@ -93,8 +97,8 @@ export function resolveScReconciliation(
   const m1 = resolveDraft("m1", sc.m1Quantity ?? 0);
   const m2 = resolveDraft("m2", sc.m2Quantity ?? 0);
   const m3 = resolveDraft("m3", sc.m3Quantity ?? 0);
-  const m4 = resolveDraft("m4", sc.m4Quantity ?? 0);
-  const classified = m1 + m2 + m3 + m4;
+  const vm4 = resolveDraft("vm4", savedVm4(sc));
+  const classified = m1 + m2 + m3 + vm4;
   const scanAccepted = sc.received ?? 0;
   const pendingBoxScan = sc.pendingFromBoxes ?? 0;
   const remaining =
@@ -164,7 +168,7 @@ export function resolveScReconciliation(
 }
 
 /**
- * Sum of saved M1–M4 on secondary checking (verified qty at issue time).
+ * Sum of saved M1–M3/VM4 on secondary checking (verified qty at issue time).
  * @param flow - Vendor production flow
  */
 export function savedVerifiedQty(flow: VendorProductionFlow): number {
@@ -173,6 +177,6 @@ export function savedVerifiedQty(flow: VendorProductionFlow): number {
     (sc.m1Quantity ?? 0) +
     (sc.m2Quantity ?? 0) +
     (sc.m3Quantity ?? 0) +
-    (sc.m4Quantity ?? 0)
+    savedVm4(sc)
   );
 }

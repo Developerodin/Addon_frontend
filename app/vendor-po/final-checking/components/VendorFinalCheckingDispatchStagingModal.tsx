@@ -29,6 +29,7 @@ const Z_PANEL = 110;
 export type PendingFinalCheckingStagingPatch = {
   m1Quantity: number;
   m2Quantity: number;
+  m3Quantity: number;
   m4Quantity: number;
   repairStatus: RepairStatus;
   repairRemarks: string;
@@ -236,6 +237,9 @@ export function VendorFinalCheckingDispatchStagingModal({
               </span>
               <span>
                 M2: <strong>{pendingPatch.m2Quantity.toLocaleString()}</strong>
+              </span>
+              <span>
+                M3: <strong>{pendingPatch.m3Quantity.toLocaleString()}</strong>
               </span>
               <span>
                 M4: <strong>{pendingPatch.m4Quantity.toLocaleString()}</strong>

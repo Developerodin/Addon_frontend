@@ -92,11 +92,12 @@ interface NavigationPermissions {
     'Vendor PO Raise': boolean;
     'Vendor PO Receive': boolean;
     'Secondary Checking': boolean;
-    'Washing': boolean;
-    'Boarding': boolean;
     'Branding': boolean;
     'Final Checking': boolean;
     'Dispatch': boolean;
+    'M2 Management': boolean;
+    'M3 Management': boolean;
+    'M4 Management': boolean;
     'Counting & Dispatch': boolean;
     'GRN': boolean;
     'Vendor PO Return': boolean;
@@ -282,11 +283,12 @@ const defaultPermissions: NavigationPermissions = {
     'Vendor PO Raise': false,
     'Vendor PO Receive': false,
     'Secondary Checking': false,
-    'Washing': false,
-    'Boarding': false,
     'Branding': false,
     'Final Checking': false,
     'Dispatch': false,
+    'M2 Management': false,
+    'M3 Management': false,
+    'M4 Management': false,
     'Counting & Dispatch': false,
     'GRN': false,
     'Vendor PO Return': false,

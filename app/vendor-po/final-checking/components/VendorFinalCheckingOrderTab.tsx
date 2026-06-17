@@ -187,7 +187,7 @@ export function VendorFinalCheckingOrderTab({
                               Pending
                             </th>
                             <th className="px-1.5 py-2 text-left text-[10px] font-bold uppercase border border-gray-200">
-                              M1/M2/M4
+                              M1/M2/M3/M4
                             </th>
                             <th className="px-1.5 py-2 text-left text-[10px] font-bold uppercase border border-gray-200">
                               Style breakdown
@@ -239,6 +239,9 @@ export function VendorFinalCheckingOrderTab({
                                     </span>
                                     <span className="text-amber-700 font-bold text-[10px] bg-amber-50 px-1 py-0.5 rounded">
                                       M2: {fc.m2Quantity}
+                                    </span>
+                                    <span className="text-violet-700 font-bold text-[10px] bg-violet-50 px-1 py-0.5 rounded">
+                                      M3: {fc.m3Quantity ?? 0}
                                     </span>
                                     <span className="text-red-700 font-bold text-[10px] bg-red-50 px-1 py-0.5 rounded">
                                       M4: {fc.m4Quantity}

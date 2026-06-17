@@ -94,6 +94,9 @@ export interface NavigationPermissions {
     'Branding': boolean;
     'Final Checking': boolean;
     'Dispatch': boolean;
+    'M2 Management': boolean;
+    'M3 Management': boolean;
+    'M4 Management': boolean;
     'Counting & Dispatch': boolean;
     'GRN': boolean;
     'Vendor PO Return': boolean;

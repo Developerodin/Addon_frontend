@@ -69,6 +69,13 @@ export const getFirstAvailableRoute = (permissions: NavigationPermissions | null
     { path: '/warehouse-management/layout', permission: permissions['Warehouse Management']?.['Layout'] },
     { path: '/warehouse-management/stock', permission: permissions['Warehouse Management']?.['Stock'] },
     { path: '/warehouse-management/reports', permission: permissions['Warehouse Management']?.['Reports'] },
+    { path: '/vendor-po/m2-management', permission: permissions['Vendor PO']?.['M2 Management'] },
+    { path: '/vendor-po/m3-management', permission: permissions['Vendor PO']?.['M3 Management'] },
+    { path: '/vendor-po/m4-management', permission: permissions['Vendor PO']?.['M4 Management'] },
+    { path: '/vendor-po/secondary-checking', permission: permissions['Vendor PO']?.['Secondary Checking'] },
+    { path: '/vendor-po/branding', permission: permissions['Vendor PO']?.['Branding'] },
+    { path: '/vendor-po/final-checking', permission: permissions['Vendor PO']?.['Final Checking'] },
+    { path: '/vendor-po/dispatch', permission: permissions['Vendor PO']?.['Dispatch'] },
   ];
 
   // Find the first route the user has permission for

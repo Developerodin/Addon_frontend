@@ -13,7 +13,7 @@ export interface VendorScQuantityTotals {
   m1: number;
   m2: number;
   m3: number;
-  m4: number;
+  vm4: number;
 }
 
 /** Vendor PO order group with nested article flows. */
@@ -177,7 +177,7 @@ export function sumScQuantities(
     m1: 0,
     m2: 0,
     m3: 0,
-    m4: 0,
+    vm4: 0,
   };
 
   for (const flow of flows) {
@@ -189,7 +189,7 @@ export function sumScQuantities(
       m1Quantity: 0,
       m2Quantity: 0,
       m3Quantity: 0,
-      m4Quantity: 0,
+      vm4Quantity: 0,
       m1Transferred: 0,
       m1Remaining: 0,
       repairStatus: "NOT_REQUIRED",
@@ -202,7 +202,7 @@ export function sumScQuantities(
     totals.m1 += sc.m1Quantity ?? 0;
     totals.m2 += sc.m2Quantity ?? 0;
     totals.m3 += sc.m3Quantity ?? 0;
-    totals.m4 += sc.m4Quantity ?? 0;
+    totals.vm4 += sc.vm4Quantity ?? (sc as { m4Quantity?: number }).m4Quantity ?? 0;
   }
 
   return totals;
@@ -234,7 +234,7 @@ export function groupFlowsByOrder(
           m1: 0,
           m2: 0,
           m3: 0,
-          m4: 0,
+          vm4: 0,
         },
       });
     }

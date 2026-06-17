@@ -2,7 +2,7 @@
 
 Aligned with `article.model.js` `floorQuantities.finalChecking` for **counters + repair + styleCode/brand** on `transferredData` and `receivedData`.
 
-**Vendor vs article:** vendor final checking tracks **M1 / M2 / M4** only (no **M3** in this module). Article production may include `m3Quantity`; ignore M3 for vendor UI.
+**Vendor vs article:** vendor final checking tracks **M1 / M2 / M3 / M4**. Secondary checking uses **VM4** (vendor return qty) instead of M4.
 
 ## Endpoint
 

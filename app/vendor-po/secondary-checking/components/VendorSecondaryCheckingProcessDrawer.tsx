@@ -89,10 +89,10 @@ export function VendorSecondaryCheckingProcessDrawer({
       d.m3 = Number(processingData.m3Quantity);
     }
     if (
-      processingData.m4Quantity !== undefined &&
-      processingData.m4Quantity !== null
+      processingData.vm4Quantity !== undefined &&
+      processingData.vm4Quantity !== null
     ) {
-      d.m4 = Number(processingData.m4Quantity);
+      d.vm4 = Number(processingData.vm4Quantity);
     }
     return Object.keys(d).length > 0 ? d : undefined;
   }, [processingData]);
@@ -114,7 +114,7 @@ export function VendorSecondaryCheckingProcessDrawer({
   const handleIssueGrn = async () => {
     if (!flow) return;
     if (verifiedSaved <= 0) {
-      toast.error("Save M1–M4 classification before issuing GRN");
+      toast.error("Save M1–M3/VM4 classification before issuing GRN");
       return;
     }
     if (scIncomplete) {
@@ -182,9 +182,9 @@ export function VendorSecondaryCheckingProcessDrawer({
           <>
             <div className={CRM.drawerBodyScroll}>
               <p className={CRM.drawerHint}>
-                Enter <strong>absolute totals</strong> for M1 / M2 / M3 / M4 (blank = keep
+                Enter <strong>absolute totals</strong> for M1 / M2 / M3 / VM4 (blank = keep
                 saved). Save sends <strong>setSplitTotals</strong> to the server. M1 saves
-                open the container staging modal; M2/M3/M4-only saves post immediately.
+                open the container staging modal; M2/M3/VM4-only saves post immediately.
               </p>
 
               {linkedGrn && (
@@ -282,7 +282,7 @@ export function VendorSecondaryCheckingProcessDrawer({
                           ["Invoice / lot expected", reconciliation.expected],
                           ["Scan accepted", reconciliation.scanAccepted],
                           ["Boxes not yet scanned", reconciliation.pendingBoxScan],
-                          ["Classified (M1+M2+M3+M4)", reconciliation.classified],
+                          ["Classified (M1+M2+M3+VM4)", reconciliation.classified],
                           ["Unclassified (scanned qty)", reconciliation.remaining],
                           ["Variance preview", reconciliation.variancePreview],
                         ].map(([label, qty]) => (
@@ -311,7 +311,7 @@ export function VendorSecondaryCheckingProcessDrawer({
 
               <div className={CRM.drawerSection}>
                 <div className={CRM.drawerSectionHead}>
-                  3. Quality counts (M1 / M2 / M3 / M4)
+                  3. Quality counts (M1 / M2 / M3 / VM4)
                 </div>
                 {scSaved && (
                   <div className="px-3 pt-2 pb-1">
@@ -329,7 +329,7 @@ export function VendorSecondaryCheckingProcessDrawer({
                         M3: {(scSaved.m3Quantity ?? 0).toLocaleString()}
                       </span>
                       <span className="inline-flex items-center rounded border border-red-100 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-800">
-                        M4: {(scSaved.m4Quantity ?? 0).toLocaleString()}
+                        VM4: {(scSaved.vm4Quantity ?? (scSaved as { m4Quantity?: number }).m4Quantity ?? 0).toLocaleString()}
                       </span>
                     </div>
                   </div>
@@ -411,26 +411,26 @@ export function VendorSecondaryCheckingProcessDrawer({
                     />
                   </div>
                   <div>
-                    <label className={CRM.label}>M4 total (reject)</label>
+                    <label className={CRM.label}>VM4 total (vendor return)</label>
                     <input
                       type="number"
                       min={0}
-                      aria-label="M4 total reject"
+                      aria-label="VM4 total vendor return"
                       className={`${CRM.input} border-red-200 focus:border-red-500`}
-                      placeholder="Total M4 for batch"
+                      placeholder="Total VM4 for batch"
                       value={
-                        processingData.m4Quantity === undefined ||
-                        processingData.m4Quantity === null
+                        processingData.vm4Quantity === undefined ||
+                        processingData.vm4Quantity === null
                           ? ""
-                          : processingData.m4Quantity
+                          : processingData.vm4Quantity
                       }
                       onChange={(e) => {
                         const v = e.target.value;
                         setProcessingData((p) => {
-                          if (v === "") return { ...p, m4Quantity: undefined };
+                          if (v === "") return { ...p, vm4Quantity: undefined };
                           const n = Number(v);
                           if (!Number.isFinite(n)) return p;
-                          return { ...p, m4Quantity: Math.round(n) };
+                          return { ...p, vm4Quantity: Math.round(n) };
                         });
                       }}
                     />

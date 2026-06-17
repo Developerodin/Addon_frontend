@@ -130,7 +130,7 @@ const SecondaryCheckingPage = () => {
     m1: number;
     m2: number;
     m3: number;
-    m4: number;
+    vm4: number;
   } | null>(null);
   const [m1StagingRequireContainer, setM1StagingRequireContainer] =
     useState(false);
@@ -192,7 +192,7 @@ const SecondaryCheckingPage = () => {
         m1Quantity: ev.displayTotals.m1,
         m2Quantity: ev.displayTotals.m2,
         m3Quantity: ev.displayTotals.m3,
-        m4Quantity: ev.displayTotals.m4,
+        vm4Quantity: ev.displayTotals.vm4,
       };
       const plannedHint = m1RemainingForTransfer(
         mergedSc as VendorProductionFlow["floorQuantities"]["secondaryChecking"],

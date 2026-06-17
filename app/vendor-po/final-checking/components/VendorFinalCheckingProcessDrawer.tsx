@@ -47,7 +47,7 @@ type Props = {
   }) => void;
 };
 
-/** Final QC drawer: M1/M2/M4 counts, style `transferredData`; dispatch staging opens a container-scan modal (parent). */
+/** Final QC drawer: M1/M2/M3/M4 counts, style `transferredData`; dispatch staging opens a container-scan modal (parent). */
 export function VendorFinalCheckingProcessDrawer({
   open,
   flow,
@@ -56,6 +56,7 @@ export function VendorFinalCheckingProcessDrawer({
   onStagingRequested,
 }: Props) {
   const [m2Quantity, setM2Quantity] = useState(0);
+  const [m3Quantity, setM3Quantity] = useState(0);
   const [m4Quantity, setM4Quantity] = useState(0);
   const [rows, setRows] = useState<TransferredStyleRowDraft[]>([{ styleCodeId: "", brand: "", transferred: 0 }]);
   const [styleOptions, setStyleOptions] = useState<StyleCodeByVendorRow[]>([]);
@@ -92,6 +93,7 @@ export function VendorFinalCheckingProcessDrawer({
     if (!open || !flow) return;
     const fc = flow.floorQuantities.finalChecking;
     setM2Quantity(fc.m2Quantity ?? 0);
+    setM3Quantity(fc.m3Quantity ?? 0);
     setM4Quantity(fc.m4Quantity ?? 0);
     setRows(initialFinalCheckingStyleRows(fc));
     transferredBaselineRef.current = finalCheckingTransferredBaselineDraft(fc);
@@ -179,6 +181,7 @@ export function VendorFinalCheckingProcessDrawer({
     const base: PendingFinalCheckingStagingPatch = {
       m1Quantity: Math.max(0, Number(m1Quantity) || 0),
       m2Quantity: Math.max(0, Number(m2Quantity) || 0),
+      m3Quantity: Math.max(0, Number(m3Quantity) || 0),
       m4Quantity: Math.max(0, Number(m4Quantity) || 0),
       repairStatus: fcPersist.repairStatus ?? "NOT_REQUIRED",
       repairRemarks: (fcPersist.repairRemarks ?? "").trim(),
@@ -199,7 +202,7 @@ export function VendorFinalCheckingProcessDrawer({
   };
 
   /**
-   * QC-only save: M1/M2/M4 + repair — **no** `transferredData` (sending it on the same floor PATCH can
+   * QC-only save: M1/M2/M3/M4 + repair — **no** `transferredData` (sending it on the same floor PATCH can
    * auto-forward to dispatch with the new API). Style lines apply when you use **Save & stage**.
    */
   const handleSaveOnly = async () => {
@@ -216,6 +219,7 @@ export function VendorFinalCheckingProcessDrawer({
       const updated = await vendorProductionFlowService.updateFloor(flow.id, "finalChecking", {
         m1Quantity: Math.max(0, Number(m1Quantity) || 0),
         m2Quantity: Math.max(0, Number(m2Quantity) || 0),
+        m3Quantity: Math.max(0, Number(m3Quantity) || 0),
         m4Quantity: Math.max(0, Number(m4Quantity) || 0),
         repairStatus: fcPersist.repairStatus ?? "NOT_REQUIRED",
         repairRemarks: (fcPersist.repairRemarks ?? "").trim(),
@@ -292,7 +296,7 @@ export function VendorFinalCheckingProcessDrawer({
         <div className={`${CRM.drawerBodyScroll} min-h-0`}>
           <p className={CRM.drawerHint}>
             <strong>Final QC:</strong> M1 rows ≤ inbound <code className="text-[10px]">receivedData</code>.{" "}
-            <strong>Save</strong> updates M1/M2/M4 and repair fields only — it does <strong>not</strong> send{" "}
+            <strong>Save</strong> updates M1/M2/M3/M4 and repair fields only — it does <strong>not</strong> send{" "}
             <code className="text-[10px]">transferredData</code> (that path can auto-move to dispatch).{" "}
             <strong>Save &amp; stage</strong> opens the container modal: <code className="text-[10px]">PATCH …/floors/finalChecking</code> with{" "}
             <code className="text-[10px]">transferredData</code> + <code className="text-[10px]">existingContainerBarcode</code> only. Then go to{" "}
@@ -330,13 +334,15 @@ export function VendorFinalCheckingProcessDrawer({
 
           <div className={CRM.drawerSection}>
             <div className={CRM.drawerSectionHead}>
-              {sec.qc}. Quality counts (M1 / M2 / M4)
+              {sec.qc}. Quality counts (M1 / M2 / M3 / M4)
             </div>
-            <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label className={CRM.label}>M2 qty (fix)</label>
                 <input
                   type="number"
+                  min={0}
+                  aria-label="M2 total repair"
                   className={`${CRM.input} border-amber-200 focus:border-amber-500`}
                   value={m2Quantity}
                   onChange={(e) => setM2Quantity(Number(e.target.value))}
@@ -344,9 +350,23 @@ export function VendorFinalCheckingProcessDrawer({
                 />
               </div>
               <div>
+                <label className={CRM.label}>M3 qty</label>
+                <input
+                  type="number"
+                  min={0}
+                  aria-label="M3 total"
+                  className={`${CRM.input} border-violet-200 focus:border-violet-500`}
+                  value={m3Quantity}
+                  onChange={(e) => setM3Quantity(Number(e.target.value))}
+                  disabled={saving}
+                />
+              </div>
+              <div>
                 <label className={CRM.label}>M4 qty (reject)</label>
                 <input
                   type="number"
+                  min={0}
+                  aria-label="M4 total reject"
                   className={`${CRM.input} border-red-200 focus:border-red-500`}
                   value={m4Quantity}
                   onChange={(e) => setM4Quantity(Number(e.target.value))}
@@ -359,6 +379,8 @@ export function VendorFinalCheckingProcessDrawer({
                 M1 qty auto-derived from style rows: <strong>{m1Quantity.toLocaleString()}</strong> · M1 transferred:{" "}
                 {(finalLive.m1Transferred ?? 0).toLocaleString()} · Available for dispatch:{" "}
                 <strong className="text-emerald-700">{m1Avail.toLocaleString()}</strong>
+                {" · "}M2/M3/M4 on floor:{" "}
+                <strong>{(m2Quantity + m3Quantity + m4Quantity).toLocaleString()}</strong>
               </p>
             </div>
           </div>

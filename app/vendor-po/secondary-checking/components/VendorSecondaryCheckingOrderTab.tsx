@@ -205,7 +205,7 @@ export function VendorSecondaryCheckingOrderTab({
                               Remaining
                             </th>
                             <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase border border-gray-200">
-                              M1/M2/M4
+                              M1/M2/M3/VM4
                             </th>
                             <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase border border-gray-200">
                               Status

@@ -3,8 +3,6 @@ import Cookies from "js-cookie";
 
 export type VendorFloorKey =
   | "secondaryChecking"
-  | "washing"
-  | "boarding"
   | "branding"
   | "finalChecking"
   | "dispatch";
@@ -35,19 +33,6 @@ export interface BaseFloorQuantity {
   receivedData?: ReceivedDataRow[];
 }
 
-/** Standard floors (e.g. boarding): full counters — no M1/M2/M4 */
-export type StandardFloorPatchPayload = Pick<BaseFloorQuantity, "received" | "completed" | "transferred">;
-
-/** Washing floor from vendor UI: PATCH only `completed` (received/transferred not sent from this screen) */
-export type WashingFloorPatchPayload =
-  | { completed: number }
-  | { mode: "increment"; completedDelta: number; autoTransferToNextFloor?: boolean };
-
-/** Boarding floor from vendor UI: PATCH only `completed` (received/transferred not sent from this screen) */
-export type BoardingFloorPatchPayload =
-  | { completed: number }
-  | { mode: "increment"; completedDelta: number; autoTransferToNextFloor?: boolean };
-
 /**
  * Branding floor: send `transferredData` as **delta** lines only (qty &gt; 0). Server merges
  * by trimmed styleCode + brand, recalculates completed/transferred/remaining; do not send
@@ -66,11 +51,12 @@ export type BrandingFloorPatchPayload =
     }
   | { mode: "increment"; completedDelta: number; autoTransferToNextFloor?: boolean };
 
-export interface QualityFloorQuantity extends BaseFloorQuantity {
+export interface SecondaryCheckingFloorQuantity extends BaseFloorQuantity {
   m1Quantity: number;
   m2Quantity: number;
   m3Quantity: number;
-  m4Quantity: number;
+  /** Vendor return / warranty qty — feeds PO Return, not M4 Management. */
+  vm4Quantity: number;
   m1Transferred: number;
   m1Remaining: number;
   m2Transferred?: number;
@@ -81,11 +67,24 @@ export interface QualityFloorQuantity extends BaseFloorQuantity {
   repairRemarks?: string;
 }
 
-export interface BrandingFloorQuantity extends BaseFloorQuantity {
+/** @deprecated Use SecondaryCheckingFloorQuantity — kept for drawer compat */
+export type QualityFloorQuantity = SecondaryCheckingFloorQuantity;
+
+export interface FinalCheckingFloorQuantity extends BaseFloorQuantity {
+  m1Quantity: number;
+  m2Quantity: number;
+  m3Quantity: number;
+  m4Quantity: number;
+  m1Transferred: number;
+  m1Remaining: number;
+  m2Transferred?: number;
+  m2Remaining?: number;
+  repairStatus: RepairStatus;
+  repairRemarks?: string;
   transferredData?: TransferredDataRow[];
 }
 
-export interface FinalCheckingFloorQuantity extends QualityFloorQuantity {
+export interface BrandingFloorQuantity extends BaseFloorQuantity {
   transferredData?: TransferredDataRow[];
 }
 
@@ -107,8 +106,6 @@ export interface VendorProductionFlow {
   completedAt?: string;
   floorQuantities: {
     secondaryChecking: QualityFloorQuantity;
-    washing: BaseFloorQuantity;
-    boarding: BaseFloorQuantity;
     branding: BrandingFloorQuantity;
     finalChecking: FinalCheckingFloorQuantity;
     /** Present when API returns dispatch floor; increments on container accept at Dispatch. */
@@ -170,7 +167,7 @@ export interface TransferProductionFlowPayload {
   transferItems?: VendorTransferItem[];
 }
 
-export type FinalCheckingM2TransferToFloorKey = "washing" | "boarding" | "branding";
+export type FinalCheckingM2TransferToFloorKey = "branding";
 
 export interface FinalCheckingM2TransferPayload {
   toFloorKey: FinalCheckingM2TransferToFloorKey;
