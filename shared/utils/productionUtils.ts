@@ -260,6 +260,33 @@ export function getApplicableFloorKeysFromProcesses(
     .filter((key): key is string => Boolean(key && floorKeys.has(key)));
 }
 
+/**
+ * Whether a canonical floor (e.g. "Final Checking") appears in the article product process.
+ */
+export function articleHasFloorInProcess(
+  processes: ArticleProcess[] | null | undefined,
+  floor: string,
+  linkingType?: LinkingType
+): boolean {
+  const floorKey = CANONICAL_FLOOR_TO_KEY[floor];
+  if (!floorKey) return false;
+  return getApplicableFloorKeysFromProcesses(processes, linkingType).includes(floorKey);
+}
+
+/**
+ * Human-readable process flow label for error messages.
+ */
+export function formatProcessFlowLabel(
+  processes: ArticleProcess[] | null | undefined,
+  linkingType?: LinkingType
+): string {
+  const keys = getApplicableFloorKeysFromProcesses(processes, linkingType);
+  if (keys.length === 0) return "unknown";
+  return keys
+    .map((key) => PRODUCTION_FLOORS.find((f) => CANONICAL_FLOOR_TO_KEY[f] === key) ?? key)
+    .join(" → ");
+}
+
 /** Whether floorQuantities row has any recorded movement. */
 export function floorHasActivity(data?: {
   received?: number;

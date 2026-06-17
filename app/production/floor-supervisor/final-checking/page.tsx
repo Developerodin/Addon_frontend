@@ -16,6 +16,12 @@ import {
 } from "@/shared/utils/qcFloorQuantities";
 import ConfirmQualitySubmitModal, { type QualityConfirmLine } from "@/shared/components/production/ConfirmQualitySubmitModal";
 import { getArticleMongoId, resolveNextFloorFromProcesses } from "@/shared/utils/productionUtils";
+import {
+  resolveArticlesToSubmit,
+  validateFinalCheckingProcessFlow,
+  ensureArticlesHaveProcesses,
+  type FinalCheckingSubmitSnapshot,
+} from "./finalCheckingSubmit.util";
 import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuantityDisplay";
 import QcM2MergeHistoryPanel, { MERGE_CASCADE_ACTION } from "@/shared/components/production/QcM2MergeHistoryPanel";
 import ArticleViewTab from "./components/ArticleViewTab";
@@ -51,6 +57,19 @@ import { teamMasterService, type TeamMaster, PRODUCTION_FLOORS } from "@/shared/
 type FinalCheckingTab = "orders" | "article-view" | "my-team" | "upcoming";
 
 const FLOOR_CATALOG_LIMIT = 2000;
+
+/**
+ * Resolve a user-visible message from a thrown Error or API failure payload.
+ */
+function getProductionSubmitErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+  if (typeof error === "string" && error.trim()) {
+    return error.trim();
+  }
+  return "Failed to update order";
+}
 
 interface ArticleLog {
   id: string;
@@ -149,6 +168,8 @@ const FinalCheckingFloorSupervisorPage = () => {
   const [updateContainerNextFloor, setUpdateContainerNextFloor] = useState("Warehouse");
   const [updateContainerSubmitting, setUpdateContainerSubmitting] = useState(false);
   const [updateContainerRestageOnly, setUpdateContainerRestageOnly] = useState(false);
+  /** Backend / submit errors shown inline in update drawer and container modal */
+  const [updateSubmitError, setUpdateSubmitError] = useState<string | null>(null);
 
   /** When false (default): article view lists only articles with final checking remaining > 0. When true: all with received > 0. */
   const [showAllArticles, setShowAllArticles] = useState(false);
@@ -544,6 +565,34 @@ const FinalCheckingFloorSupervisorPage = () => {
     setSelectedArticleId(null);
     setUpdateData({});
     setTransferM2M3M4({});
+    setUpdateSubmitError(null);
+  };
+
+  /** Surface submit/API errors in the drawer/modal and as a toast. */
+  const reportSubmitError = (message: string) => {
+    const msg = message.trim() || "Failed to update order";
+    setUpdateSubmitError(msg);
+    toast.error(msg);
+  };
+
+  /**
+   * Undo article transfers after container staging fails (compensating transaction).
+   */
+  const revertSubmitSnapshots = async (snapshots: FinalCheckingSubmitSnapshot[]): Promise<void> => {
+    for (const snap of snapshots) {
+      if (snap.transferItems.length === 0) continue;
+      const response = await productionService.revertFloorTransfer(snap.articleId, {
+        floor: "Final Checking",
+        transferItems: snap.transferItems,
+        ...(snap.m1Quantity > 0 ? { m1Quantity: snap.m1Quantity } : {}),
+        ...(snap.m2Quantity > 0 ? { m2Quantity: snap.m2Quantity } : {}),
+        ...(snap.m3Quantity > 0 ? { m3Quantity: snap.m3Quantity } : {}),
+        ...(snap.m4Quantity > 0 ? { m4Quantity: snap.m4Quantity } : {}),
+      });
+      if (!response.success) {
+        throw new Error(response.error?.message || `Failed to revert transfer for article ${snap.articleId}`);
+      }
+    }
   };
 
   /** Reset and hide the scan-bag modal shown before M1 transfer. */
@@ -556,6 +605,7 @@ const FinalCheckingFloorSupervisorPage = () => {
     setUpdateContainerCheckStatus("idle");
     setUpdateContainerFetched(null);
     setUpdateContainerRestageOnly(false);
+    setUpdateSubmitError(null);
   };
 
   const handleRemarksChange = (articleId: string, value: string) => {
@@ -669,7 +719,7 @@ const FinalCheckingFloorSupervisorPage = () => {
   const requestQualityConfirm = (afterConfirm: () => void, articles: Article[]) => {
     const lines = buildQualityConfirmLines(articles);
     if (lines.length === 0) {
-      void handleUpdateSubmit();
+      void handleUpdateSubmit({ articles });
       return;
     }
     setQualityConfirmLines(lines);
@@ -694,36 +744,66 @@ const FinalCheckingFloorSupervisorPage = () => {
 
   /**
    * Persist QC / transfer changes for the open update drawer.
-   * @param options.closeDrawer - Close drawer after success (M1 transfer + container flow)
+   * @param options.closeDrawer - Close drawer after success (direct submit only)
+   * @param options.articles - Scope submit to these articles (defaults to drawer filter)
+   * @returns Snapshots of successful transfers for compensation if container staging fails
    */
-  const handleUpdateSubmit = async (options?: { closeDrawer?: boolean }): Promise<void> => {
-    if (!selectedOrder) return;
+  const handleUpdateSubmit = async (options?: {
+    closeDrawer?: boolean;
+    articles?: Article[];
+  }): Promise<FinalCheckingSubmitSnapshot[]> => {
+    if (!selectedOrder) return [];
 
-    for (const article of selectedOrder.articles) {
+    const articlesToSubmit = resolveArticlesToSubmit(
+      selectedOrder.articles,
+      selectedArticleId,
+      options?.articles
+    );
+
+    const articlesWithProcesses = await ensureArticlesHaveProcesses(
+      articlesToSubmit,
+      async (articleId) => {
+        const response = await productionService.getArticleProcesses(articleId);
+        if (!response.success || !response.data?.processes?.length) return null;
+        return response.data.processes;
+      }
+    );
+
+    const processFlowError = validateFinalCheckingProcessFlow(
+      articlesWithProcesses,
+      updateData,
+      transferM2M3M4,
+      getTransferTotal
+    );
+    if (processFlowError) {
+      reportSubmitError(processFlowError);
+      throw new Error(processFlowError);
+    }
+
+    for (const article of articlesToSubmit) {
       const articleId = article.id || article._id;
       if (!articleId) continue;
       const update = updateData[articleId];
       if (!update) continue;
       const transfer = transferM2M3M4[articleId];
       const transferTotal = getTransferTotal(update.transferItems ?? []);
-      // transferItems are the M1 good qty; m1Quantity is synced from them — do not add both
       const m1QcDelta = transferTotal > 0 ? transferTotal : (update.m1Quantity ?? 0);
       const m2Delta = transfer?.m2 ?? 0;
       const m3Delta = transfer?.m3 ?? 0;
       const m4Delta = transfer?.m4 ?? 0;
       const batchTotal = m1QcDelta + m2Delta + m3Delta + m4Delta;
       const halfStepError = getFirstHalfStepError([
-        { value: m1QcDelta, label: 'M1', skipZero: true },
-        { value: m2Delta, label: 'M2', skipZero: true },
-        { value: m3Delta, label: 'M3', skipZero: true },
-        { value: m4Delta, label: 'M4', skipZero: true },
+        { value: m1QcDelta, label: "M1", skipZero: true },
+        { value: m2Delta, label: "M2", skipZero: true },
+        { value: m3Delta, label: "M3", skipZero: true },
+        { value: m4Delta, label: "M4", skipZero: true },
       ]);
       if (halfStepError) {
         toast.error(`${article.articleNumber ?? articleId}: ${HALF_STEP_QTY_ERROR}`);
         throw new Error(halfStepError);
       }
       if (batchTotal > 0) {
-        const cumulative = getCumulativeQty(article, 'finalChecking');
+        const cumulative = getCumulativeQty(article, "finalChecking");
         if (batchTotal > cumulative.remaining) {
           const msg = `${article.articleNumber ?? articleId}: batch total (${batchTotal}) exceeds remaining (${cumulative.remaining})`;
           toast.error(msg);
@@ -731,7 +811,7 @@ const FinalCheckingFloorSupervisorPage = () => {
         }
       }
       if (transferTotal > 0) {
-        const cumulative = getCumulativeQty(article, 'finalChecking');
+        const cumulative = getCumulativeQty(article, "finalChecking");
         if (cumulative.completed + transferTotal > cumulative.received) {
           const msg = `${article.articleNumber ?? articleId}: M1 transfer (${transferTotal}) exceeds inspectable received (${cumulative.received - cumulative.completed} left)`;
           toast.error(msg);
@@ -740,8 +820,7 @@ const FinalCheckingFloorSupervisorPage = () => {
       }
     }
 
-    // Fetch fresh article data to avoid stale remaining (transferable) validation
-    const articlesWithTransfer = selectedOrder.articles.filter((a) => {
+    const articlesWithTransfer = articlesToSubmit.filter((a) => {
       const total = getTransferTotal(updateData[a.id || a._id || ""]?.transferItems ?? []);
       return total > 0;
     });
@@ -766,8 +845,7 @@ const FinalCheckingFloorSupervisorPage = () => {
     const getArticleForValidation = (article: Article) =>
       freshArticles.get(article.id || article._id || "") ?? article;
 
-    // Validate M1 (sum of transferItems, per-style-code) before submission - use fresh data
-    const invalidArticles = selectedOrder.articles.filter(article => {
+    const invalidArticles = articlesToSubmit.filter((article) => {
       const fresh = getArticleForValidation(article);
       const articleId = article.id || article._id;
       if (!articleId) return false;
@@ -780,27 +858,31 @@ const FinalCheckingFloorSupervisorPage = () => {
     });
 
     if (invalidArticles.length > 0) {
-      toast.error('Cannot submit: Some articles have transfer quantity exceeding remaining or received per brand');
-      throw new Error('Transfer validation failed');
+      toast.error("Cannot submit: Some articles have transfer quantity exceeding remaining or received per brand");
+      throw new Error("Transfer validation failed");
     }
+
+    const snapshots: FinalCheckingSubmitSnapshot[] = [];
 
     try {
       setIsLoading(true);
-      
-      const updatePromises = selectedOrder.articles.map(async (article) => {
-        const articleId = article.id || article._id;
-        if (!articleId) return null;
-        const fresh = getArticleForValidation(article);
+      setUpdateSubmitError(null);
 
+      for (const article of articlesToSubmit) {
+        const articleId = article.id || article._id;
+        if (!articleId) continue;
+        const fresh = getArticleForValidation(article);
         const update = updateData[articleId];
-        const transferTotal = getTransferTotal(update?.transferItems ?? []);
-        const m1QcDelta = transferTotal > 0 ? transferTotal : (update?.m1Quantity ?? 0);
+        if (!update) continue;
+
+        const transferTotal = getTransferTotal(update.transferItems ?? []);
+        const m1QcDelta = transferTotal > 0 ? transferTotal : (update.m1Quantity ?? 0);
         const m2Delta = transferM2M3M4[articleId]?.m2 ?? 0;
         const m3Delta = transferM2M3M4[articleId]?.m3 ?? 0;
         const m4Delta = transferM2M3M4[articleId]?.m4 ?? 0;
         const hasQtyChange = m1QcDelta > 0 || m2Delta > 0 || m3Delta > 0 || m4Delta > 0;
         const validItems = prepareBrandTransferItemsForSubmit(
-          update?.transferItems ?? [],
+          update.transferItems ?? [],
           transferTotal,
           fresh.floorQuantities?.finalChecking?.receivedData as BrandTransferLine[],
           fresh.floorQuantities?.finalChecking?.transferredData as BrandTransferLine[]
@@ -810,108 +892,67 @@ const FinalCheckingFloorSupervisorPage = () => {
           throw new Error("Missing brand for transfer");
         }
         const hasTransfer = validItems.length > 0;
-        const hasProgressChange = update && (
-          update.remarks !== (fresh.remarks || '') ||
+        const hasProgressChange =
+          update.remarks !== (fresh.remarks || "") ||
           hasTransfer ||
           update.repairStatus !== fresh.repairStatus ||
-          update.repairRemarks !== (fresh.repairRemarks || '')
+          update.repairRemarks !== (fresh.repairRemarks || "");
+
+        if (!hasProgressChange && !hasQtyChange) continue;
+
+        const userId = user?.id ?? user?._id;
+        const floorSupervisorId = user?.id ?? user?._id;
+        if (!userId || !floorSupervisorId) {
+          toast.error("User session required for update. Please log in again.");
+          throw new Error("User session required");
+        }
+        if (hasTransfer) {
+          const received = fresh.floorQuantities?.finalChecking?.received ?? 0;
+          if (received <= 0) {
+            toast.error("Transfer requires received work. Accept the container first (scan container → Accept Article Quantity).");
+            throw new Error("No received work for transfer");
+          }
+        }
+
+        const progressData = {
+          remarks: update.remarks,
+          repairStatus: update.repairStatus,
+          repairRemarks: update.repairRemarks,
+          ...(hasTransfer ? { transferredData: validItems } : {}),
+          ...(hasQtyChange && m1QcDelta > 0 ? { m1Quantity: m1QcDelta } : {}),
+          ...(hasQtyChange && m2Delta > 0 ? { m2Quantity: m2Delta } : {}),
+          ...(hasQtyChange && m3Delta > 0 ? { m3Quantity: m3Delta } : {}),
+          ...(hasQtyChange && m4Delta > 0 ? { m4Quantity: m4Delta } : {}),
+          ...(userId ? { userId } : {}),
+          ...(floorSupervisorId ? { floorSupervisorId } : {}),
+        };
+
+        const response = await productionService.updateArticleProgress(
+          "FinalChecking",
+          getOrderRefId(selectedOrder),
+          article._id || article.id,
+          progressData
         );
-        if (update && (hasProgressChange || hasQtyChange)) {
-          const userId = user?.id ?? user?._id;
-          const floorSupervisorId = user?.id ?? user?._id;
-          if (hasTransfer) {
-            const received = fresh.floorQuantities?.finalChecking?.received ?? 0;
-            if (received <= 0) {
-              toast.error("Transfer requires received work. Accept the container first (scan container → Accept Article Quantity).");
-              throw new Error('No received work for transfer');
-            }
-            if (!userId || !floorSupervisorId) {
-              toast.error("User session required for transfer. Please log in again.");
-              throw new Error('User session required');
-            }
-          }
-
-          // QC first when M1 transfer or M2/M3/M4 deltas — sets completed before transfer
-          if (hasQtyChange) {
-            const inspectedQuantity = m1QcDelta + m2Delta + m3Delta + m4Delta;
-            try {
-              const qualityResponse = await productionService.updateQualityInspection(
-                article._id || article.id,
-                {
-                  inspectedQuantity,
-                  m1Quantity: m1QcDelta,
-                  m2Quantity: m2Delta,
-                  m3Quantity: m3Delta,
-                  m4Quantity: m4Delta,
-                  remarks: update.remarks,
-                  floor: "Final Checking"
-                }
-              );
-              if (!qualityResponse.success) {
-                throw new Error(qualityResponse.error?.message || 'Failed to update quality inspection');
-              }
-            } catch (error) {
-              console.error(`Error updating quality inspection for article ${articleId}:`, error);
-              throw error;
-            }
-          }
-
-          if (hasProgressChange) {
-            const progressData = {
-              remarks: update.remarks,
-              repairStatus: update.repairStatus,
-              repairRemarks: update.repairRemarks,
-              ...(hasTransfer ? { transferredData: validItems } : {}),
-              ...(userId ? { userId } : {}),
-              ...(floorSupervisorId ? { floorSupervisorId } : {}),
-            };
-            try {
-              const response = await productionService.updateArticleProgress(
-                'FinalChecking',
-                getOrderRefId(selectedOrder),
-                article._id || article.id,
-                progressData
-              );
-              if (!response.success) {
-                throw new Error(response.error?.message || 'Failed to update article');
-              }
-            } catch (error: unknown) {
-              const msg = error instanceof Error ? error.message : String(error);
-              if (msg.includes("exceeds transferable") || msg.includes("transferable (0)")) {
-                toast.error("Transfer quantity exceeds remaining. Refresh and enter only the new amount to transfer (max: remaining).");
-              } else {
-                toast.error(msg);
-              }
-              throw error;
-            }
-          }
-
-          try {
-            return (await productionService.getArticle(article._id || article.id))?.data ?? null;
-          } catch {
-            return null;
-          }
+        if (!response.success) {
+          throw new Error(response.error?.message || "Failed to update article");
         }
-        return null;
-      }).filter(Boolean);
 
-      const results = await Promise.allSettled(updatePromises);
-      
-      const failedUpdates = results.filter(result => result.status === 'rejected');
-      if (failedUpdates.length > 0) {
-        console.error('Some updates failed:', failedUpdates);
-        const firstReason = (failedUpdates[0] as PromiseRejectedResult)?.reason;
-        const firstMsg = firstReason instanceof Error ? firstReason.message : String(firstReason ?? '');
-        if (firstMsg.includes("exceeds transferable") || firstMsg.includes("transferable (0)")) {
-          toast.error("Transfer requires received work. Accept the container first (scan container → Accept Article Quantity).");
-        } else if (!firstMsg.includes('No received work') && !firstMsg.includes('User session')) {
-          toast.error(`${failedUpdates.length} article(s) failed to update`);
+        if (hasTransfer) {
+          snapshots.push({
+            articleId: String(article._id || article.id),
+            transferItems: validItems,
+            m1Quantity: m1QcDelta,
+            m2Quantity: m2Delta,
+            m3Quantity: m3Delta,
+            m4Quantity: m4Delta,
+          });
         }
-        throw firstReason instanceof Error ? firstReason : new Error(firstMsg || 'Update failed');
       }
 
+      setUpdateSubmitError(null);
+
       if (!options?.closeDrawer) {
-        toast.success('Order updated successfully');
+        toast.success("Order updated successfully");
       }
       const orderId = getOrderRefId(selectedOrder);
       void loadFloorOrdersCatalog();
@@ -924,23 +965,37 @@ const FinalCheckingFloorSupervisorPage = () => {
             refreshUpdateDrawerFromOrder(freshOrder);
           }
         } catch (refreshErr) {
-          console.error('Failed to refresh update drawer after save:', refreshErr);
+          console.error("Failed to refresh update drawer after save:", refreshErr);
         }
       }
+      return snapshots;
     } catch (error: unknown) {
-      console.error('Error updating order:', error);
-      const msg = error instanceof Error ? error.message : 'Failed to update order';
-      if (msg.includes("exceeds transferable") || msg.includes("transferable (0)")) {
-        toast.error("Transfer requires received work. Accept the container first (scan container → Accept Article Quantity).");
-      } else if (
-        !msg.includes('Transfer validation failed') &&
-        !msg.includes('No received work') &&
-        !msg.includes('User session') &&
-        !msg.includes('exceeds remaining') &&
-        !msg.includes('inspectable received')
-      ) {
-        toast.error(msg);
+      console.error("Error updating order:", error);
+      if (snapshots.length > 0) {
+        try {
+          await revertSubmitSnapshots(snapshots);
+        } catch (revertErr) {
+          console.error("Failed to revert partial article submit:", revertErr);
+        }
       }
+      const msg = getProductionSubmitErrorMessage(error);
+      if (msg.includes("exceeds transferable") || msg.includes("transferable (0)")) {
+        reportSubmitError("Transfer requires received work. Accept the container first (scan container → Accept Article Quantity).");
+      } else if (msg.includes("No received work")) {
+        reportSubmitError("Transfer requires received work. Accept the container first (scan container → Accept Article Quantity).");
+      } else if (msg.includes("User session")) {
+        reportSubmitError("User session required for transfer. Please log in again.");
+      } else if (
+        !msg.includes("Transfer validation failed") &&
+        !msg.includes("half step") &&
+        !msg.includes("exceeds remaining") &&
+        !msg.includes("inspectable received") &&
+        !msg.includes("Missing brand") &&
+        !msg.includes("not in this product's process flow")
+      ) {
+        reportSubmitError(msg);
+      }
+      void loadFloorOrdersCatalog();
       throw error;
     } finally {
       setIsLoading(false);
@@ -1664,6 +1719,16 @@ const FinalCheckingFloorSupervisorPage = () => {
                 ? "Transfer is already recorded but the bag is empty. Scan a container to re-stage for Dispatch accept."
                 : "Scan or enter the container/bag code for final checking articles (M1 good) for transfer to next floor. Quantity comes from M1 quantity."}
             </p>
+            {updateSubmitError && (
+              <div
+                role="alert"
+                aria-live="assertive"
+                className="text-[11px] text-red-800 bg-red-50 border border-red-300 rounded px-2 py-2"
+              >
+                <strong className="font-bold block mb-0.5">Could not save order</strong>
+                {updateSubmitError}
+              </div>
+            )}
             {isRestageOnly && (
               <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
                 Recovery mode: staging pending handoff only (no new transfer).
@@ -1671,7 +1736,16 @@ const FinalCheckingFloorSupervisorPage = () => {
             )}
             <div>
               <label className="block text-[11px] font-semibold text-gray-600 mb-1">Container barcode</label>
-              <input type="text" placeholder="Scan or enter barcode" value={updateContainerBarcode} onChange={(e) => setUpdateContainerBarcode(e.target.value)} className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px] focus:ring-0 focus:border-teal-300" />
+              <input
+                type="text"
+                placeholder="Scan or enter barcode"
+                value={updateContainerBarcode}
+                onChange={(e) => {
+                  setUpdateContainerBarcode(e.target.value);
+                  if (updateSubmitError) setUpdateSubmitError(null);
+                }}
+                className="w-full border border-gray-200 rounded px-3 py-1.5 text-[11px] focus:ring-0 focus:border-teal-300"
+              />
               {updateContainerCheckStatus === "loading" && <p className="text-[11px] text-gray-500 mt-1 flex items-center gap-1"><span className="animate-spin rounded-full h-3 w-3 border-2 border-gray-400 border-t-transparent" /> Checking...</p>}
               {updateContainerCheckStatus === "not-found" && <p className="text-[11px] text-red-600 mt-1">Container not found.</p>}
               {updateContainerCheckStatus === "already-filled" && (
@@ -1735,6 +1809,9 @@ const FinalCheckingFloorSupervisorPage = () => {
                     .filter((i) => i.article);
                   if (newRows.some((i) => !i.article)) { toast.error("Invalid article id"); return; }
                   setUpdateContainerSubmitting(true);
+                  setUpdateSubmitError(null);
+                  let orderSubmitAttempted = isRestageOnly;
+                  let submitSnapshots: FinalCheckingSubmitSnapshot[] = [];
                   try {
                     const containerNow = await containersMasterService.getByBarcode(barcode);
                     const existingItems = containerNow.activeItems as ContainerActiveItem[] | undefined;
@@ -1750,9 +1827,9 @@ const FinalCheckingFloorSupervisorPage = () => {
                     const alreadyStaged = isContainerAlreadyStagedForArticles(existingItems, newRows);
                     if (!staged.ok && !alreadyStaged) {
                       if (staged.reason === 'duplicate-article') {
-                        toast.error("Article already in this container with different qty. Clear the container or use another.");
+                        reportSubmitError("Article already in this container with different qty. Clear the container or use another.");
                       } else {
-                        toast.error("Invalid container items");
+                        reportSubmitError("Invalid container items");
                       }
                       return;
                     }
@@ -1761,12 +1838,19 @@ const FinalCheckingFloorSupervisorPage = () => {
                       alreadyStaged && activeFloorNorm === floor.trim().toLowerCase();
 
                     if (!isRestageOnly) {
-                      await handleUpdateSubmit({ closeDrawer: true });
+                      orderSubmitAttempted = true;
+                      submitSnapshots = await handleUpdateSubmit({
+                        closeDrawer: false,
+                        articles: modalArticles,
+                      });
                     }
 
                     if (!skipContainerPatch) {
                       if (!staged.ok || !staged.activeItems) {
-                        toast.error("Invalid container items");
+                        reportSubmitError("Invalid container items");
+                        if (submitSnapshots.length > 0) {
+                          await revertSubmitSnapshots(submitSnapshots);
+                        }
                         return;
                       }
                       await containersMasterService.updateByBarcode(barcode, {
@@ -1776,29 +1860,32 @@ const FinalCheckingFloorSupervisorPage = () => {
                     }
 
                     closeContainerStagingModal();
-                    if (isRestageOnly) {
-                      closeUpdateModal();
-                    }
+                    closeUpdateModal();
                     toast.success(
                       isRestageOnly
                         ? "Container staged for Dispatch — scan same barcode on Dispatch and accept"
                         : "Order updated and container staged"
                     );
                   } catch (err) {
-                    const msg = err instanceof Error ? err.message : String(err);
-                    if (msg.includes("404")) {
-                      toast.error("Container not found");
-                    } else if (msg.includes("batch total") || msg.includes("exceeds remaining")) {
-                      toast.error(msg);
-                    } else if (msg.includes("Transfer validation failed")) {
-                      toast.error("Cannot submit: transfer quantity exceeds remaining or received per brand");
-                    } else if (msg.includes("inspectable received")) {
-                      toast.error(msg);
-                    } else if (msg.includes("exceeds transferable") || msg.includes("transferable (0)")) {
-                      toast.error("Transfer quantity exceeds remaining. Complete QC (M1) before transfer.");
-                    } else {
-                      toast.error(msg || "Failed to update order and container");
+                    const msg = getProductionSubmitErrorMessage(err);
+                    if (submitSnapshots.length > 0) {
+                      try {
+                        await revertSubmitSnapshots(submitSnapshots);
+                        if (orderSubmitAttempted && !isRestageOnly) {
+                          reportSubmitError(
+                            "Transfer rolled back — container could not be staged. Fix the issue and retry."
+                          );
+                        }
+                      } catch (revertErr) {
+                        reportSubmitError(
+                          getProductionSubmitErrorMessage(revertErr) ||
+                            "Transfer recorded but rollback failed — contact support"
+                        );
+                      }
+                    } else if (!orderSubmitAttempted) {
+                      reportSubmitError(msg.includes("404") ? "Container not found" : msg || "Failed to load container");
                     }
+                    void loadFloorOrdersCatalog();
                   } finally {
                     setUpdateContainerSubmitting(false);
                   }
@@ -1863,7 +1950,7 @@ const FinalCheckingFloorSupervisorPage = () => {
                     });
                     const hasPendingHandoff = hasPendingContainerHandoff(modalArticles);
                     if (!hasAnyM1 && !hasPendingHandoff) {
-                      requestQualityConfirm(() => { void handleUpdateSubmit(); }, modalArticles);
+                      requestQualityConfirm(() => { void handleUpdateSubmit({ articles: modalArticles }); }, modalArticles);
                       return;
                     }
                     const stagingForModal = resolveArticlesForContainerStaging(
@@ -1877,6 +1964,7 @@ const FinalCheckingFloorSupervisorPage = () => {
                     setUpdateContainerBarcode("");
                     setUpdateContainerCheckStatus("idle");
                     setUpdateContainerFetched(null);
+                    setUpdateSubmitError(null);
                     const firstWithQty = stagingForModal[0]?.article ?? modalArticles.find((a) => {
                       const id = a.id ?? a._id;
                       return id && getTransferTotal(updateData[id]?.transferItems ?? []) > 0;
@@ -1914,6 +2002,16 @@ const FinalCheckingFloorSupervisorPage = () => {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto px-3 pt-3 pb-24">
+            {updateSubmitError && (
+              <div
+                role="alert"
+                aria-live="assertive"
+                className="mb-4 px-3 py-2 rounded-md bg-red-50 border-2 border-red-300 text-[11px] text-red-900"
+              >
+                <strong className="font-bold block mb-0.5">Update failed</strong>
+                {updateSubmitError}
+              </div>
+            )}
             {/* Short intro so user knows what to do */}
             <div className="mb-4 px-3 py-2 rounded-md bg-teal-50 border-2 border-teal-200 text-[11px] text-teal-900">
               <strong>How to update:</strong> Enter M1 (good → next floor), M2/M3/M4 for this save. M2 creates entries in <strong>M2 Management</strong>. Resolve repairs there (cascade merge to all floors).
@@ -2555,7 +2653,11 @@ const FinalCheckingFloorSupervisorPage = () => {
           const next = pendingQualitySubmit;
           setPendingQualitySubmit(null);
           if (next) next();
-          else void handleUpdateSubmit();
+          else if (selectedOrder) {
+            void handleUpdateSubmit({
+              articles: resolveArticlesToSubmit(selectedOrder.articles, selectedArticleId),
+            });
+          }
         }}
       />
 

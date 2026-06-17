@@ -51,6 +51,8 @@ export interface Article {
   finalQualityConfirmedAt?: string;
   createdAt?: string;
   updatedAt?: string;
+  /** Product process route — populated via GET /articles/:id/processes when needed */
+  processes?: ArticleProcess[];
   floorQuantities?: {
     knitting: { received: number; completed: number; remaining: number; transferred: number; m4Quantity?: number; weight?: number; repairReceived?: number; repairFromFloor?: string };
     linking: { received: number; completed: number; remaining: number; transferred: number; repairReceived?: number; repairFromFloor?: string };
@@ -197,6 +199,15 @@ export interface UpdateArticleProgressRequest {
   repairRemarks?: string;
   machineId?: string;
   shiftId?: string;
+}
+
+export interface RevertFloorTransferRequest {
+  floor: string;
+  transferItems: TransferItem[];
+  m1Quantity?: number;
+  m2Quantity?: number;
+  m3Quantity?: number;
+  m4Quantity?: number;
 }
 
 export interface TransferArticleRequest {
@@ -583,7 +594,8 @@ class ProductionService {
       finalQualityConfirmedAt: article.finalQualityConfirmedAt,
       createdAt: article.createdAt,
       updatedAt: article.updatedAt,
-      floorQuantities: article.floorQuantities
+      floorQuantities: article.floorQuantities,
+      ...(Array.isArray(article.processes) ? { processes: article.processes } : {}),
     };
     return transformed;
   }
@@ -899,6 +911,17 @@ class ProductionService {
     return this.request<Article>(`/floors/${floor}/orders/${orderId}/articles/${articleId}`, {
       method: 'PATCH',
       body: JSON.stringify(progressData),
+    });
+  }
+
+  /** POST /articles/:articleId/revert-floor-transfer – undo transfer when container staging fails. */
+  async revertFloorTransfer(
+    articleId: string,
+    payload: RevertFloorTransferRequest
+  ): Promise<ApiResponse<Article>> {
+    return this.request<Article>(`/articles/${articleId}/revert-floor-transfer`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
     });
   }
 
