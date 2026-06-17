@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { toast } from "react-hot-toast";
 import * as XLSX from "xlsx";
 import storageSlotService from "@/shared/services/storageSlotService";
+import yarnConeService, { YarnCone } from "@/shared/services/yarnConeService";
 import ZoneReportFullView from "./ZoneReportFullView";
 import { BoxWithRack, ConeWithRack } from "./zoneReportSearch";
 
@@ -30,6 +31,7 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
   const [cones, setCones] = useState<ConeWithRack[]>([]);
   const [summary, setSummary] = useState<ZoneSummary | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDownloadingIssued, setIsDownloadingIssued] = useState(false);
   const [viewMode, setViewMode] = useState<"menu" | "summary" | "full">("menu");
 
   useEffect(() => {
@@ -110,6 +112,57 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
     0
   );
 
+  /**
+   * Builds Excel row objects for issued cone export.
+   */
+  const buildIssuedConeExcelRows = (issuedCones: YarnCone[]) =>
+    issuedCones.map((c) => {
+      const gross = c.coneWeight ?? 0;
+      const tear = c.tearWeight ?? 0;
+      return {
+        "Cone Barcode": c.barcode,
+        "Box ID": c.boxId,
+        "PO Number": c.poNumber,
+        "Yarn Name": c.yarnName ?? "-",
+        "Shade Code": c.shadeCode ?? "-",
+        "Issue Status": c.issueStatus ?? "-",
+        "Return Status": c.returnStatus ?? "-",
+        "Cone Gross Weight (kg)": gross,
+        "Cone Tear Weight (kg)": tear,
+        "Cone Net Weight (kg)": gross - tear,
+        "Issue Weight (kg)": c.issueWeight ?? "-",
+        "Issue Date": c.issueDate
+          ? new Date(c.issueDate).toLocaleString()
+          : "-",
+        "Issued By": c.issuedBy?.username ?? "-",
+        "Last Storage Location": c.coneStorageId ?? "-",
+        "Order ID": c.orderId ?? "-",
+        "Article ID": c.articleId ?? "-",
+      };
+    });
+
+  const handleDownloadIssuedConesExcel = async () => {
+    setIsDownloadingIssued(true);
+    try {
+      const issuedCones = await yarnConeService.getIssuedCones();
+      if (issuedCones.length === 0) {
+        toast.error("No issued cones to export");
+        return;
+      }
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(buildIssuedConeExcelRows(issuedCones));
+      XLSX.utils.book_append_sheet(wb, ws, "Issued Cones");
+      const fileName = `${zoneLabel.replace(/\s+/g, "_")}_issued_cones_${new Date().toISOString().split("T")[0]}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      toast.success(`Exported ${issuedCones.length} issued cone(s)`);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to download issued cones Excel");
+    } finally {
+      setIsDownloadingIssued(false);
+    }
+  };
+
   const handleDownloadExcel = () => {
     const hasData = isLongTerm ? boxes.length > 0 : boxes.length > 0 || cones.length > 0;
     if (!hasData) {
@@ -148,6 +201,8 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
             "PO Number": c.poNumber,
             "Yarn Name": c.yarnName ?? "-",
             "Shade Code": c.shadeCode ?? "-",
+            "Issue Status": c.issueStatus ?? "-",
+            "Return Status": c.returnStatus ?? "-",
             "Cone Gross Weight (kg)": gross,
             "Cone Tear Weight (kg)": tear,
             "Cone Net Weight (kg)": gross - tear,
@@ -225,10 +280,36 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
                   <div className="text-xs text-gray-500">
                     {isLongTerm
                       ? "Export boxes with rack, weight, PO"
-                      : "Export boxes & cones with rack, weight, PO"}
+                      : "Export boxes & cones with rack, weight, PO, status"}
                   </div>
                 </div>
               </button>
+              {!isLongTerm && (
+                <button
+                  type="button"
+                  onClick={handleDownloadIssuedConesExcel}
+                  disabled={isDownloadingIssued}
+                  className="w-full flex items-center gap-3 px-4 py-3 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-left"
+                  aria-label="Download issued cones Excel"
+                >
+                  {isDownloadingIssued ? (
+                    <div
+                      className="h-6 w-6 shrink-0 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"
+                      aria-hidden
+                    />
+                  ) : (
+                    <i className="ri-file-excel-2-line text-2xl text-blue-600" aria-hidden />
+                  )}
+                  <div>
+                    <div className="font-semibold text-gray-900">
+                      Download Issued Cones Excel
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      Export cones issued to production with weight, PO, issue date
+                    </div>
+                  </div>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setViewMode("summary")}
@@ -257,7 +338,7 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
                   <div className="text-xs text-gray-500">
                     {isLongTerm
                       ? "All boxes with rack, weight, PO"
-                      : "All boxes & cones with rack, weight, PO"}
+                      : "All boxes & cones with rack, weight, PO, status"}
                   </div>
                 </div>
               </button>

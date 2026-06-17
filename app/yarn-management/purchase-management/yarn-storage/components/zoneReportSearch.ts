@@ -69,6 +69,8 @@ export function filterReportCones(
       c.rackCode,
       c.rackBarcode,
       c.coneStorageId,
+      c.issueStatus,
+      c.returnStatus,
     ])
   );
 }

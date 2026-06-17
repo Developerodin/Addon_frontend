@@ -20,6 +20,12 @@ import {
 
 type ReportTab = "boxes" | "cones";
 
+/**
+ * Formats cone status values for display (e.g. not_issued → not issued).
+ */
+const formatConeStatus = (value?: string): string =>
+  value ? value.replace(/_/g, " ") : "-";
+
 interface ZoneReportFullViewProps {
   isLongTerm: boolean;
   boxes: BoxWithRack[];
@@ -285,6 +291,12 @@ const ZoneReportFullView: React.FC<ZoneReportFullViewProps> = ({
                   <th className="min-w-[12rem] px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wide text-gray-600">
                     Yarn
                   </th>
+                  <th className="whitespace-nowrap px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wide text-gray-600">
+                    Issue Status
+                  </th>
+                  <th className="whitespace-nowrap px-3 py-2.5 text-left text-xs font-bold uppercase tracking-wide text-gray-600">
+                    Return Status
+                  </th>
                   <th className="whitespace-nowrap px-3 py-2.5 text-right text-xs font-bold uppercase tracking-wide text-gray-600">
                     Gross (kg)
                   </th>
@@ -313,6 +325,12 @@ const ZoneReportFullView: React.FC<ZoneReportFullViewProps> = ({
                       </td>
                       <td className="max-w-[16rem] px-3 py-2 text-gray-800" title={c.yarnName}>
                         <span className="line-clamp-2 break-words">{c.yarnName ?? "-"}</span>
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2 capitalize text-gray-700">
+                        {formatConeStatus(c.issueStatus)}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2 capitalize text-gray-700">
+                        {formatConeStatus(c.returnStatus)}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums">
                         {gross.toFixed(2)}

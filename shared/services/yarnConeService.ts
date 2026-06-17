@@ -21,6 +21,10 @@ export interface YarnCone {
   tearWeight: number;
   issueStatus: YarnConeIssueStatus;
   issueWeight: number;
+  issueDate?: string;
+  issuedBy?: { username?: string; user?: string };
+  orderId?: string;
+  articleId?: string;
   returnStatus: string;
   returnWeight: number;
   coneStorageId?: string;
@@ -183,6 +187,17 @@ class YarnConeService {
       method: "PATCH",
       body: JSON.stringify(payload),
     });
+  }
+
+  /**
+   * Lists all yarn cones with issueStatus === "issued" (out for production).
+   * Uses GET /yarn-cones?issue_status=issued
+   */
+  async getIssuedCones(): Promise<YarnCone[]> {
+    const data = await this.makeRequest<YarnCone[] | { results?: YarnCone[] }>(
+      "/?issue_status=issued"
+    );
+    return Array.isArray(data) ? data : (data.results ?? []);
   }
 
   /** GET /by-storage-location/:storageLocation - Cones at given coneStorageId (no limit) */
