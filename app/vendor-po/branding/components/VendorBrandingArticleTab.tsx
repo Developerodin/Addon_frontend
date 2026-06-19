@@ -146,6 +146,9 @@ export function VendorBrandingArticleTab({
                       <div className="text-[10px] text-gray-500 font-bold mt-0.5">
                         VPO: {row.vpoNumber}
                       </div>
+                      <div className="text-[10px] text-gray-500 font-semibold mt-0.5">
+                        {row.vendorCode}
+                      </div>
                     </td>
                     <td className={`${CRM.td} text-right font-medium`}>
                       {(br.received ?? 0).toLocaleString()}

@@ -233,6 +233,7 @@ export function VendorDispatchArticleTab({
                     <td className="px-1.5 py-2.5 border border-gray-200">
                       <div className="text-[12px] font-bold text-teal-700">{row.vendorName}</div>
                       <div className="text-[10px] text-gray-500 font-semibold">VPO: {row.vpoNumber}</div>
+                      <div className="text-[10px] text-gray-500 font-semibold mt-0.5">{row.vendorCode}</div>
                     </td>
                     <td className="px-1.5 py-2.5 text-center text-[12px] text-gray-700 border border-gray-200">
                       {(final.received ?? 0).toLocaleString()}

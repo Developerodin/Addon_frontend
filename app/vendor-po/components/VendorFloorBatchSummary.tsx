@@ -3,6 +3,10 @@
 import React from "react";
 import { CRM } from "../vendor-list/crmUiClasses";
 import type { VendorProductionFlow } from "@/shared/services/vendorProductionFlowService";
+import {
+  getArticleVendorCode,
+  getProductName,
+} from "../utils/groupVendorProductionFlows";
 
 type Props = {
   flow: VendorProductionFlow;
@@ -18,6 +22,8 @@ type Props = {
 export function VendorFloorBatchSummary({ flow, sectionTitle = "1. Batch summary", footerInfo }: Props) {
   const vendorName = typeof flow.vendor === "object" ? flow.vendor?.header?.vendorName ?? "—" : "—";
   const poNumber = typeof flow.vendorPurchaseOrder === "object" ? flow.vendorPurchaseOrder?.vpoNumber ?? "—" : "—";
+  const productName = getProductName(flow);
+  const vendorCode = getArticleVendorCode(flow);
 
   return (
     <div className={CRM.drawerSection}>
@@ -26,6 +32,14 @@ export function VendorFloorBatchSummary({ flow, sectionTitle = "1. Batch summary
         <div>
           <span className="text-[10px] font-bold text-gray-500 uppercase block mb-0.5">Vendor</span>
           <span className="font-semibold text-gray-900">{vendorName}</span>
+        </div>
+        <div>
+          <span className="text-[10px] font-bold text-gray-500 uppercase block mb-0.5">Product</span>
+          <span className="font-semibold text-gray-900">{productName}</span>
+        </div>
+        <div>
+          <span className="text-[10px] font-bold text-gray-500 uppercase block mb-0.5">Vendor code</span>
+          <span className="font-semibold font-mono text-gray-800">{vendorCode}</span>
         </div>
         <div>
           <span className="text-[10px] font-bold text-gray-500 uppercase block mb-0.5">VPO</span>

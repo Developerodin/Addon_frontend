@@ -174,6 +174,9 @@ export function VendorFinalCheckingArticleTab({
                       <div className="font-bold text-purple-600 underline decoration-purple-200 underline-offset-1">
                         {row.vendorName}
                       </div>
+                      <div className="text-[10px] text-gray-500 font-semibold mt-0.5">
+                        {row.vendorCode}
+                      </div>
                     </td>
                     <td className="px-1.5 py-2.5 text-right font-medium text-[12px] text-gray-700 border border-gray-200">
                       {fc.received.toLocaleString()}

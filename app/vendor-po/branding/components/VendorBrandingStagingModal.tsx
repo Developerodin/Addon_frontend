@@ -14,6 +14,7 @@ import {
 } from "@/shared/services/containersMasterService";
 import { containerRef } from "../../secondary-checking/utils/m1Staging";
 import { formatTransferredRowLabel } from "../../utils/transferredStyleRows";
+import { VendorStagingBatchHeader } from "../../components/VendorFlowBatchLabels";
 
 const Z_BACK = 100;
 const Z_PANEL = 110;
@@ -182,13 +183,7 @@ export function VendorBrandingStagingModal({
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 text-[11px]">
-          <div className="p-2 rounded border border-gray-200 bg-gray-50 space-y-1">
-            <div>
-              Batch:{" "}
-              <strong>
-                {baselineFlow.referenceCode || baselineFlow.id.slice(-6)}
-              </strong>
-            </div>
+          <VendorStagingBatchHeader flow={baselineFlow}>
             <div>
               Style lines to stage:{" "}
               <strong className="text-purple-800">
@@ -237,7 +232,7 @@ export function VendorBrandingStagingModal({
                 </strong>
               </span>
             </div>
-          </div>
+          </VendorStagingBatchHeader>
 
           {step === "success" ? (
             <div className="space-y-3">

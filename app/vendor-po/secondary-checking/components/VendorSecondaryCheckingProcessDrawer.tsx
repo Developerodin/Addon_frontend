@@ -14,6 +14,10 @@ import {
   savedVerifiedQty,
   type ScDraftTotals,
 } from "../utils/resolveScReconciliation";
+import {
+  getArticleVendorCode,
+  getProductName,
+} from "../utils/groupVendorScFlows";
 
 /** Form state: floor qty (container scan happens after save in a separate modal). */
 export type VendorSecondaryCheckingProcessData = Partial<QualityFloorQuantity>;
@@ -213,6 +217,22 @@ export function VendorSecondaryCheckingProcessDrawer({
                       {typeof flow.vendor === "object"
                         ? (flow.vendor?.header?.vendorName ?? "—")
                         : "—"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-500 uppercase block mb-0.5">
+                      Product
+                    </span>
+                    <span className="font-semibold text-gray-900">
+                      {getProductName(flow)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-500 uppercase block mb-0.5">
+                      Vendor code
+                    </span>
+                    <span className="font-semibold font-mono text-gray-800">
+                      {getArticleVendorCode(flow)}
                     </span>
                   </div>
                   <div>

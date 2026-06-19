@@ -2,7 +2,7 @@
 
 import React from "react";
 import type { QualityFloorQuantity } from "@/shared/services/vendorProductionFlowService";
-import { statusBadgeClass } from "../utils/groupVendorScFlows";
+import { getArticleVendorCode, statusBadgeClass } from "../utils/groupVendorScFlows";
 import type { VendorProductionFlow } from "@/shared/services/vendorProductionFlowService";
 
 type Props = {
@@ -71,6 +71,9 @@ export function VendorSecondaryCheckingFlowRow({
         <td className="px-1.5 py-2.5 border border-gray-200">
           <div className="font-bold text-gray-900 text-[12px]">
             {productName || "—"}
+          </div>
+          <div className="text-[10px] text-gray-500 font-semibold mt-0.5">
+            {getArticleVendorCode(flow)}
           </div>
           <div className="text-[10px] text-gray-400 font-medium">
             Ref: {flow.referenceCode || "—"}

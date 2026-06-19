@@ -5,6 +5,7 @@ import type { VendorProductionFlow } from "@/shared/services/vendorProductionFlo
 import { formatTransferredRowLabel } from "../../utils/transferredStyleRows";
 import {
   filterBrandingFlowsForView,
+  getArticleVendorCode,
   getFlowId,
   groupFlowsByOrder,
   sumBrandingQuantities,
@@ -191,6 +192,9 @@ export function VendorBrandingOrderTab({
                                   </div>
                                   <div className="text-[10px] text-gray-400">
                                     {productName || "—"}
+                                  </div>
+                                  <div className="text-[10px] text-gray-500 font-semibold">
+                                    {getArticleVendorCode(flow)}
                                   </div>
                                 </td>
                                 <td className={`${CRM.td} text-right font-medium`}>

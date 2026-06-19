@@ -5,6 +5,7 @@ import type { VendorProductionFlow } from "@/shared/services/vendorProductionFlo
 import { formatTransferredRowLabel } from "../../utils/transferredStyleRows";
 import {
   filterDispatchFlowsForView,
+  getArticleVendorCode,
   getFlowId,
   groupFlowsByOrder,
   sumDispatchQuantities,
@@ -202,6 +203,9 @@ export function VendorDispatchOrderTab({
                                 <td className="px-2 py-2 border border-gray-200">
                                   <div className="font-bold text-gray-900">{flow.referenceCode || "—"}</div>
                                   <div className="text-[10px] text-gray-500">{productName || "—"}</div>
+                                  <div className="text-[10px] text-gray-500 font-semibold">
+                                    {getArticleVendorCode(flow)}
+                                  </div>
                                 </td>
                                 <td className="px-2 py-2 text-right border border-gray-200">
                                   {(final.received ?? 0).toLocaleString()}
