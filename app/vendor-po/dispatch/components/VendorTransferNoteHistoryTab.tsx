@@ -269,7 +269,7 @@ export function VendorTransferNoteHistoryTab({ refreshKey = 0 }: VendorTransferN
                                 <tr>
                                   <th className="text-left py-1 font-semibold text-gray-500">VPO</th>
                                   <th className="text-left py-1 font-semibold text-gray-500">Vendor</th>
-                                  <th className="text-left py-1 font-semibold text-gray-500">Article No</th>
+                                  <th className="text-left py-1 font-semibold text-gray-500">Vendor Code</th>
                                   <th className="text-left py-1 font-semibold text-gray-500">Brand</th>
                                   <th className="text-left py-1 font-semibold text-gray-500">Article Name</th>
                                   <th className="text-right py-1 font-semibold text-gray-500">Qty</th>

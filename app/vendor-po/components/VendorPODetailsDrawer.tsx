@@ -506,6 +506,7 @@ export function VendorPODetailsDrawer({
                                         <th className="border border-blue-100 px-1.5 py-1 text-left font-medium text-gray-600">Color</th>
                                         <th className="border border-blue-100 px-1.5 py-1 text-left font-medium text-gray-600">Pattern</th>
                                         <th className="border border-blue-100 px-1.5 py-1 text-right font-medium text-gray-600">Qty</th>
+                                        <th className="border border-blue-100 px-1.5 py-1 text-right font-medium text-gray-600">Boxes</th>
                                       </tr>
                                     </thead>
                                     <tbody>
@@ -523,6 +524,9 @@ export function VendorPODetailsDrawer({
                                             <td className="border border-blue-100 px-1.5 py-1">{dashOr(line?.pattern)}</td>
                                             <td className="border border-blue-100 px-1.5 py-1 text-right tabular-nums">
                                               {Number(p.receivedQuantity || 0).toLocaleString()} pcs
+                                            </td>
+                                            <td className="border border-blue-100 px-1.5 py-1 text-right tabular-nums">
+                                              {Number(p.receivedBoxes || 0).toLocaleString()}
                                             </td>
                                           </tr>
                                         );

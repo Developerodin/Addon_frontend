@@ -76,6 +76,11 @@ export function maxQtyForLineInLot(
   return Math.max(0, ordered - sumOther);
 }
 
+/** Total boxes for an invoice = sum of per-article boxes (single source of truth). */
+export function totalBoxesForDraft(draft: VendorLotDraft): number {
+  return Object.keys(draft.lineBoxes).reduce((s, k) => s + Math.max(0, Number(draft.lineBoxes[k] ?? 0)), 0);
+}
+
 export function validateVendorLotDrafts(
   drafts: VendorLotDraft[],
   orderedByLine: Record<string, number>,
@@ -85,18 +90,21 @@ export function validateVendorLotDrafts(
     const d = drafts[i];
     if (d.isExisting) continue;
     if (!d.lotNumber.trim()) return `Invoice ${i + 1}: invoice number is required`;
-    if (!d.numberOfBoxes || d.numberOfBoxes < 1) return `Invoice ${i + 1}: number of boxes must be at least 1`;
     const batch = Object.keys(d.lineQty).reduce((s, k) => s + Math.max(0, Number(d.lineQty[k] ?? 0)), 0);
     if (batch <= 0) return `Invoice ${i + 1}: enter received quantity for at least one line`;
-  }
-  for (const lineId of Object.keys(orderedByLine)) {
-    let sum = 0;
-    for (const d of drafts) sum += Math.max(0, Number(d.lineQty[lineId] ?? 0));
-    if (sum > orderedByLine[lineId] + 1e-6) {
-      const name = poItems.find((it) => getPoLineItemId(it) === lineId)?.productName || "line";
-      return `Total received for ${name} across all invoices (${sum}) exceeds ordered (${orderedByLine[lineId]})`;
+    // Per-article boxes are authoritative: every received article needs at least one box.
+    for (const lineId of Object.keys(d.lineQty)) {
+      const qty = Math.max(0, Number(d.lineQty[lineId] ?? 0));
+      const boxes = Math.max(0, Number(d.lineBoxes[lineId] ?? 0));
+      if (qty > 0 && boxes < 1) {
+        const name = poItems.find((it) => getPoLineItemId(it) === lineId)?.productName || "an article";
+        return `Invoice ${i + 1}: enter number of boxes for ${name}`;
+      }
     }
+    if (totalBoxesForDraft(d) < 1) return `Invoice ${i + 1}: total boxes must be at least 1`;
   }
+  // Note: over-receipt is intentionally allowed — vendors sometimes ship more than ordered,
+  // so we no longer block received qty from exceeding the ordered qty.
   return null;
 }
 
@@ -110,9 +118,11 @@ export function draftsToReceivedLotDetails(drafts: VendorLotDraft[]): VendorRece
     }
     /** Vendor PO Joi schema: catalog lots use `totalUnits` (yarn-only fields like extra weight are omitted). */
     const totalUnits = poItems.reduce((s, p) => s + Number(p.receivedQuantity || 0), 0);
+    /** Lot-level box count is derived from per-article boxes (single source of truth). */
+    const numberOfBoxes = totalBoxesForDraft(d);
     return {
       lotNumber: d.lotNumber.trim(),
-      numberOfBoxes: d.numberOfBoxes,
+      numberOfBoxes,
       totalUnits,
       poItems,
       status: "lot_pending",

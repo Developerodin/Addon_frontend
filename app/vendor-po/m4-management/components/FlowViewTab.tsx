@@ -33,7 +33,8 @@ export default function FlowViewTab({
     return rows.filter(
       (r) =>
         r.referenceCode.toLowerCase().includes(q) ||
-        r.vpoNumber.toLowerCase().includes(q)
+        r.vpoNumber.toLowerCase().includes(q) ||
+        (r.productVendorCode ?? "").toLowerCase().includes(q)
     );
   }, [rows, search]);
 
@@ -78,6 +79,7 @@ export default function FlowViewTab({
             <tr>
               <th className="border border-gray-300 px-1 py-1 text-left w-[120px]">VPO</th>
               <th className="border border-gray-300 px-1 py-1 text-left w-[120px]">Reference</th>
+              <th className="border border-gray-300 px-1 py-1 text-left w-[110px]">Vendor Code</th>
               <th className="border border-gray-300 px-1 py-1 text-right bg-red-50 text-red-800 w-[90px]">
                 M4 on hand
               </th>
@@ -89,11 +91,11 @@ export default function FlowViewTab({
           <tbody className="bg-white">
             {isLoading ? (
               <tr>
-                <td colSpan={6} className="border border-gray-300 px-2 py-6 text-center text-gray-500">Loading…</td>
+                <td colSpan={7} className="border border-gray-300 px-2 py-6 text-center text-gray-500">Loading…</td>
               </tr>
             ) : paged.length === 0 ? (
               <tr>
-                <td colSpan={6} className="border border-gray-300 px-2 py-6 text-center text-gray-500">
+                <td colSpan={7} className="border border-gray-300 px-2 py-6 text-center text-gray-500">
                   No flows with M4 activity
                 </td>
               </tr>
@@ -105,6 +107,7 @@ export default function FlowViewTab({
                   <tr key={rowId} className="hover:bg-gray-50/50">
                     <td className="border border-gray-300 px-1 py-1 font-medium">{row.vpoNumber || "—"}</td>
                     <td className="border border-gray-300 px-1 py-1 font-semibold">{row.referenceCode || "—"}</td>
+                    <td className="border border-gray-300 px-1 py-1">{row.productVendorCode || "—"}</td>
                     <td className="border border-gray-300 px-1 py-1 text-right bg-red-50/50 font-bold text-red-900">{s.onHand}</td>
                     <td className="border border-gray-300 px-1 py-1 text-right text-red-700">{s.outwardTotal}</td>
                     <td className="border border-gray-300 px-1 py-1 text-right text-red-800 font-bold">{s.availableForOutward}</td>

@@ -4,8 +4,11 @@ import Cookies from "js-cookie";
 export type VendorFloorKey =
   | "secondaryChecking"
   | "branding"
+  | "reBoarding"
   | "finalChecking"
   | "dispatch";
+
+export type VendorBrandingType = "Heat Transfer" | "Embroidery";
 
 export type RepairStatus = "NOT_REQUIRED" | "REQUIRED" | "IN_PROGRESS" | "REPAIRED";
 
@@ -101,12 +104,16 @@ export interface VendorProductionFlow {
   plannedQuantity: number;
   remarks?: string;
   currentFloorKey: VendorFloorKey;
+  /** Branding method; drives routing: Embroidery → branding → reBoarding → finalChecking, Heat Transfer → branding → finalChecking. */
+  brandingType?: VendorBrandingType;
   finalQualityConfirmed: boolean;
   startedAt?: string;
   completedAt?: string;
   floorQuantities: {
     secondaryChecking: QualityFloorQuantity;
     branding: BrandingFloorQuantity;
+    /** Re-Boarding floor (used by Embroidery articles); same shape as branding, always present on the doc. */
+    reBoarding: BrandingFloorQuantity;
     finalChecking: FinalCheckingFloorQuantity;
     /** Present when API returns dispatch floor; increments on container accept at Dispatch. */
     dispatch?: DispatchFloorQuantity;
@@ -275,6 +282,20 @@ export const vendorProductionFlowService = {
     return requestJson(`${baseUrl}/${flowId}/floors/${floorKey}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * Set the branding method (chosen on the Branding floor). Drives routing:
+   * Embroidery → branding → reBoarding → finalChecking; Heat Transfer → branding → finalChecking.
+   */
+  updateBrandingType: async (
+    flowId: string,
+    brandingType: VendorBrandingType,
+  ): Promise<VendorProductionFlow> => {
+    return requestJson(`${baseUrl}/${flowId}/branding-type`, {
+      method: "PATCH",
+      body: JSON.stringify({ brandingType }),
     });
   },
 

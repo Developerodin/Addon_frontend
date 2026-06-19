@@ -404,13 +404,33 @@ const VendorPOReceivePage = () => {
                               Pending: {sum.pending.toLocaleString()} pcs
                             </div>
                           )}
+                          {sum.ordered > 0 && sum.received > sum.ordered && (
+                            <div
+                              className="text-[10px] font-bold text-green-600"
+                              title="Received more than ordered (extra qty counted at receiving)"
+                            >
+                              Extra received: {(sum.received - sum.ordered).toLocaleString()} pcs
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td className="px-1.5 py-2.5 text-[12px] text-gray-900 text-right border border-gray-200">
                         {order.totalQty.toLocaleString()}
                       </td>
-                      <td className="px-1.5 py-2.5 text-[12px] text-gray-900 text-right border border-gray-200">
-                        {pendingQty.toLocaleString()}
+                      <td className="px-1.5 py-2.5 text-[12px] text-right border border-gray-200">
+                        {pendingQty < 0 ? (
+                          <span
+                            className="inline-flex flex-col items-end leading-tight"
+                            title={`Over-received: ${Math.abs(pendingQty).toLocaleString()} pcs more than ordered`}
+                          >
+                            <span className="text-gray-900">0</span>
+                            <span className="text-[10px] font-bold text-green-600">
+                              +{Math.abs(pendingQty).toLocaleString()} extra received
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-gray-900">{pendingQty.toLocaleString()}</span>
+                        )}
                       </td>
                       <td className="px-1.5 py-2.5 text-right border border-gray-200">
                         <div className="flex flex-wrap items-center justify-end gap-1">

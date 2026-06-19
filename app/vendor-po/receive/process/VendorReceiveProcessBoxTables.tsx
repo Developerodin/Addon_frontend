@@ -6,8 +6,8 @@ import type { VendorBox } from "@/shared/services/vendorBoxService";
 import { dashOr } from "../../components/vendorPacklistHelpers";
 import {
   getVendorBoxId,
-  getVendorPoItemOptionsForLot,
   groupVendorBoxesByLot,
+  resolveVendorBoxArticleFromPo,
   resolveVendorBoxLineAttrsFromPo,
   validateVendorProcessNum,
 } from "./vendorReceiveProcessHelpers";
@@ -24,6 +24,8 @@ type Props = {
   setActiveBoxId: (id: string | null) => void;
   updatingId: string | null;
   saveBox: (box: VendorBox) => void | Promise<void>;
+  onResyncLot: (lot: string) => void | Promise<void>;
+  resyncingLot: string | null;
   barcodeRef: RefObject<HTMLInputElement>;
   barcodeScanValue: string;
   setBarcodeScanValue: (v: string) => void;
@@ -72,6 +74,8 @@ export function VendorReceiveProcessBoxTables({
   setActiveBoxId,
   updatingId,
   saveBox,
+  onResyncLot,
+  resyncingLot,
   barcodeRef,
   barcodeScanValue,
   setBarcodeScanValue,
@@ -137,10 +141,34 @@ export function VendorReceiveProcessBoxTables({
         </p>
       )}
 
-      {boxesByLot.sortedLots.map((lot) => (
+      {boxesByLot.sortedLots.map((lot) => {
+        const lotBoxes = boxesByLot.grouped[lot] || [];
+        const lotLocked = lotBoxes.some(
+          (b) => b.secondaryCheckingAccepted || b.storedStatus || b.returnedToVendor
+        );
+        const isResyncing = resyncingLot === lot;
+        return (
         <div key={lot} className="mb-4 overflow-hidden rounded-lg border border-gray-100 bg-white shadow-sm">
-          <div className="bg-gray-50 px-3 py-2 text-[11px] font-bold text-gray-800 border-b border-gray-100">
-            Invoice {lot}
+          <div className="bg-gray-50 px-3 py-2 border-b border-gray-100 flex items-center justify-between gap-2">
+            <span className="text-[11px] font-bold text-gray-800">Invoice {lot}</span>
+            <button
+              type="button"
+              onClick={() => void onResyncLot(lot)}
+              disabled={lotLocked || isResyncing}
+              title={
+                lotLocked
+                  ? "Cannot re-create: a box in this invoice is already scanned/stored/returned"
+                  : "Delete and recreate this invoice's boxes split by article"
+              }
+              className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded transition-colors ${
+                lotLocked
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  : "bg-amber-100 text-amber-800 hover:bg-amber-200"
+              }`}
+            >
+              <i className={`ri-refresh-line text-xs ${isResyncing ? "animate-spin" : ""}`} />
+              {isResyncing ? "Re-creating…" : "Re-create boxes"}
+            </button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse border border-gray-200">
@@ -167,14 +195,16 @@ export function VendorReceiveProcessBoxTables({
                   const bid = getVendorBoxId(box);
                   const isActive = activeBoxId === bid;
                   const d = boxData[bid] || emptyVendorBoxFormRow();
-                  const opts = getVendorPoItemOptionsForLot(apiPo, d.lotNumber || lot);
+                  // Resolve each box's own article (from its vendorPoItemId/productName),
+                  // not the lot's first article, so multi-article invoices show correctly.
+                  const art = resolveVendorBoxArticleFromPo(apiPo, box);
                   const displayRow: VendorBoxFormRow = {
                     ...d,
-                    productName: d.productName || box.productName || opts[0]?.productName || "",
-                    articleCode: d.articleCode || opts[0]?.code || "",
-                    type: d.type || opts[0]?.type || "",
-                    color: d.color || opts[0]?.color || "",
-                    pattern: d.pattern || opts[0]?.pattern || "",
+                    productName: d.productName || art.productName || box.productName || "",
+                    articleCode: d.articleCode || art.code || "",
+                    type: d.type || art.type || "",
+                    color: d.color || art.color || "",
+                    pattern: d.pattern || art.pattern || "",
                   };
                   return (
                     <tr
@@ -246,7 +276,8 @@ export function VendorReceiveProcessBoxTables({
             </table>
           </div>
         </div>
-      ))}
+        );
+      })}
 
       {boxesByLot.unassigned.length > 0 && (
         <div className="mb-4 overflow-hidden rounded-lg border border-amber-200 bg-amber-50/30 shadow-sm">

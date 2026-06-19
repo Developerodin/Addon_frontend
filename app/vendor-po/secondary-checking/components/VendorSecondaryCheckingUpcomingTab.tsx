@@ -227,6 +227,9 @@ export function VendorSecondaryCheckingUpcomingTab({
                   Product
                 </th>
                 <th className="px-1.5 py-2 text-left text-[10px] font-bold uppercase border border-gray-200">
+                  Vendor code
+                </th>
+                <th className="px-1.5 py-2 text-left text-[10px] font-bold uppercase border border-gray-200">
                   Lot
                 </th>
                 <th className="px-1.5 py-2 text-right text-[10px] font-bold uppercase border border-gray-200">
@@ -255,6 +258,11 @@ export function VendorSecondaryCheckingUpcomingTab({
                         ? (box.productId as { name?: string })?.name
                         : undefined) ||
                       "—"}
+                  </td>
+                  <td className="px-1.5 py-2 border border-gray-200 text-[11px] font-mono text-gray-700">
+                    {(typeof box.productId === "object"
+                      ? (box.productId as { vendorCode?: string })?.vendorCode?.trim()
+                      : undefined) || "no vendor code"}
                   </td>
                   <td className="px-1.5 py-2 border border-gray-200 text-[10px] text-gray-500">
                     {box.lotNumber || "—"}
@@ -309,6 +317,9 @@ export function VendorSecondaryCheckingUpcomingTab({
                             Product
                           </th>
                           <th className="px-1.5 py-1.5 text-left text-[10px] font-bold uppercase border border-gray-200">
+                            Vendor code
+                          </th>
+                          <th className="px-1.5 py-1.5 text-left text-[10px] font-bold uppercase border border-gray-200">
                             Lot
                           </th>
                           <th className="px-1.5 py-1.5 text-right text-[10px] font-bold uppercase border border-gray-200">
@@ -324,6 +335,11 @@ export function VendorSecondaryCheckingUpcomingTab({
                             </td>
                             <td className="px-1.5 py-1.5 border border-gray-200 text-[10px]">
                               {box.productName || "—"}
+                            </td>
+                            <td className="px-1.5 py-1.5 border border-gray-200 text-[10px] font-mono text-gray-700">
+                              {(typeof box.productId === "object"
+                                ? (box.productId as { vendorCode?: string })?.vendorCode?.trim()
+                                : undefined) || "no vendor code"}
                             </td>
                             <td className="px-1.5 py-1.5 border border-gray-200 text-[10px] text-gray-500">
                               {box.lotNumber || "—"}

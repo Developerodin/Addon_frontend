@@ -244,7 +244,7 @@ export default function WhmsWarehouseInventoryTab() {
                     Product
                   </th>
                   <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">
-                    Factory
+                    Vendor Code
                   </th>
                   <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">
                     Style
@@ -274,7 +274,7 @@ export default function WhmsWarehouseInventoryTab() {
                       {r.product?.name ?? "—"}
                     </td>
                     <td className="px-2 py-1.5 border-r border-gray-300 text-gray-700 whitespace-nowrap font-mono text-[10px]">
-                      {r.product?.factoryCode ?? "—"}
+                      {r.product?.vendorCode ?? r.product?.factoryCode ?? "—"}
                     </td>
                     <td className="px-2 py-1.5 border-r border-gray-300 font-medium text-gray-900 max-w-[100px] truncate" title={r.styleCode}>
                       {r.styleCode ?? r.styleCodeMaster?.styleCode ?? "—"}

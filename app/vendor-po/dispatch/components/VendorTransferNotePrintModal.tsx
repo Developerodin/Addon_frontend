@@ -152,7 +152,7 @@ export function VendorTransferNotePrintModal({
                   <thead className="bg-gray-50 sticky top-0">
                     <tr>
                       <th className="text-left px-2 py-1.5 font-semibold text-gray-600">VPO</th>
-                      <th className="text-left px-2 py-1.5 font-semibold text-gray-600">Article No</th>
+                      <th className="text-left px-2 py-1.5 font-semibold text-gray-600">Vendor Code</th>
                       <th className="text-left px-2 py-1.5 font-semibold text-gray-600">Brand</th>
                       <th className="text-left px-2 py-1.5 font-semibold text-gray-600">Article Name</th>
                       <th className="text-right px-2 py-1.5 font-semibold text-gray-600">Qty</th>

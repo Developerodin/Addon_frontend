@@ -733,7 +733,13 @@ export async function getAssignmentLogs(
     throw new Error((err as { message?: string }).message || 'Failed to fetch logs');
   }
   const data = await res.json();
-  const results = data.results ?? data.data?.results ?? [];
+  /**
+   * Normalize each log so `userId` is always a string and `userName` is extracted —
+   * the API may populate `userId` as a full user object, which would otherwise be
+   * rendered directly as a React child and crash the logs modal.
+   */
+  const rawResults = data.results ?? data.data?.results ?? [];
+  const results = (Array.isArray(rawResults) ? rawResults : []).map(normalizeAuditLog);
   return { results, totalResults: data.totalResults ?? data.total };
 }
 

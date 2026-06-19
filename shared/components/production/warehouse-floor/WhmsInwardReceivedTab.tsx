@@ -168,6 +168,7 @@ export default function WhmsInwardReceivedTab({
     return rows.filter((r) => {
       const blob = [
         r.articleNumber,
+        r.vendorCode,
         r.styleCode,
         inwardReceiveDisplayStyleCode(r, styleCodeIdToMaster),
         r.brand,
@@ -263,6 +264,7 @@ export default function WhmsInwardReceivedTab({
                 <tr>
                   <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Source</th>
                   <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Article</th>
+                  <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Vendor Code</th>
                   <th className="px-2 py-1.5 text-right font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Qty factory</th>
                   <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Style</th>
                   <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">Brand</th>
@@ -284,6 +286,9 @@ export default function WhmsInwardReceivedTab({
                       </td>
                       <td className="px-2 py-1.5 border-r border-gray-300 font-semibold text-gray-900 whitespace-nowrap">
                         {r.articleNumber || "—"}
+                      </td>
+                      <td className="px-2 py-1.5 border-r border-gray-300 font-medium text-gray-800 whitespace-nowrap">
+                        {r.vendorCode || "—"}
                       </td>
                       <td className="px-2 py-1.5 border-r border-gray-300 text-right font-medium tabular-nums text-teal-800">
                         {(r.QuantityFromFactory ?? 0).toLocaleString()}

@@ -74,6 +74,7 @@ export const getFirstAvailableRoute = (permissions: NavigationPermissions | null
     { path: '/vendor-po/m4-management', permission: permissions['Vendor PO']?.['M4 Management'] },
     { path: '/vendor-po/secondary-checking', permission: permissions['Vendor PO']?.['Secondary Checking'] },
     { path: '/vendor-po/branding', permission: permissions['Vendor PO']?.['Branding'] },
+    { path: '/vendor-po/re-boarding', permission: permissions['Vendor PO']?.['Re-Boarding'] },
     { path: '/vendor-po/final-checking', permission: permissions['Vendor PO']?.['Final Checking'] },
     { path: '/vendor-po/dispatch', permission: permissions['Vendor PO']?.['Dispatch'] },
   ];

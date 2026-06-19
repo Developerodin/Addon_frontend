@@ -171,6 +171,10 @@ export default function WarehouseInventoryDetailDrawer({
                   <dd className="font-semibold">{row.product?.name ?? "—"}</dd>
                 </div>
                 <div className="grid grid-cols-[110px_1fr] gap-1">
+                  <dt className="text-gray-500 font-medium">Vendor code</dt>
+                  <dd>{row.product?.vendorCode ?? row.product?.factoryCode ?? "—"}</dd>
+                </div>
+                <div className="grid grid-cols-[110px_1fr] gap-1">
                   <dt className="text-gray-500 font-medium">Factory code</dt>
                   <dd>{row.product?.factoryCode ?? "—"}</dd>
                 </div>

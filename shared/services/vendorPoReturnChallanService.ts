@@ -8,12 +8,28 @@ import type {
 
 export type VendorPoReturnChallanStatus = 'active';
 
+export interface VendorPoReturnChallanBoxItem {
+  vendorProductionFlowId?: string | null;
+  productId?: string | null;
+  productName: string;
+  vendorCode: string;
+  quantity: number;
+}
+
+export interface VendorPoReturnChallanBox {
+  boxNumber: number;
+  boxWeight: number;
+  items: VendorPoReturnChallanBoxItem[];
+}
+
 export interface VendorPoReturnChallan extends VendorPoReturnChallanSnapshot {
   id: string;
   status: VendorPoReturnChallanStatus;
   vendorReturnId: string;
   vendorPurchaseOrder: string;
   lines: VendorPoReturnChallanSnapshotLine[];
+  /** Operator-defined box packing for article-wise returns (serial, weight, packed articles). */
+  returnBoxes?: VendorPoReturnChallanBox[];
   transport?: VendorPoReturnChallanSnapshotTransport;
   completedAt?: string;
   createdBy?: { user?: string | null; username?: string; email?: string };
@@ -160,6 +176,20 @@ class VendorPoReturnChallanService {
     return this.request<VendorPoReturnChallan>(`/${challanId}/transport`, {
       method: 'PATCH',
       body: JSON.stringify(fields),
+    });
+  }
+
+  /**
+   * Save the box packing (serial / weight / packed articles + qty) for an article-wise return challan.
+   */
+  async patchChallanBoxes(
+    challanId: string,
+    boxes: VendorPoReturnChallanBox[]
+  ): Promise<VendorPoReturnChallan> {
+    if (!challanId) throw new Error('Challan id is required');
+    return this.request<VendorPoReturnChallan>(`/${challanId}/boxes`, {
+      method: 'PATCH',
+      body: JSON.stringify({ boxes }),
     });
   }
 }

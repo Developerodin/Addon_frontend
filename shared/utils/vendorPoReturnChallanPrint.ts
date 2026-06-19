@@ -13,6 +13,19 @@ export interface VendorPoReturnChallanSnapshotLine {
   numberOfUnits?: number;
   m4Quantity?: number;
   articleQuantity?: number;
+  vendorProductionFlowId?: string;
+}
+
+export interface VendorPoReturnChallanSnapshotBoxItem {
+  productName?: string;
+  vendorCode?: string;
+  quantity?: number;
+}
+
+export interface VendorPoReturnChallanSnapshotBox {
+  boxNumber?: number;
+  boxWeight?: number;
+  items?: VendorPoReturnChallanSnapshotBoxItem[];
 }
 
 export interface VendorPoReturnChallanSnapshotParty {
@@ -50,6 +63,8 @@ export interface VendorPoReturnChallanSnapshot {
   consignor?: VendorPoReturnChallanSnapshotParty;
   vendor?: VendorPoReturnChallanSnapshotParty;
   lines: VendorPoReturnChallanSnapshotLine[];
+  /** Box packing for article-wise returns (serial / weight / packed articles + qty). */
+  returnBoxes?: VendorPoReturnChallanSnapshotBox[];
   totals?: VendorPoReturnChallanSnapshotTotals;
   cancellationIntent?: string;
   remark?: string;
@@ -119,6 +134,61 @@ const buildLinesHtml = (lines: VendorPoReturnChallanSnapshotLine[]): string =>
     })
     .join('');
 
+const escapeHtml = (value: unknown): string =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+/**
+ * Builds the box-packing section (article-wise returns): per box, the packed articles, qty and box weight.
+ */
+const buildBoxesHtml = (boxes: VendorPoReturnChallanSnapshotBox[]): string => {
+  if (!boxes || !boxes.length) return '';
+  const rows = boxes
+    .map((box, bi) => {
+      const items = box.items && box.items.length ? box.items : [{}];
+      return items
+        .map((it, ii) => {
+          const boxCell =
+            ii === 0
+              ? `<td class="text-center" rowspan="${items.length}"><strong>Box ${escapeHtml(
+                  box.boxNumber ?? bi + 1
+                )}</strong></td>`
+              : '';
+          const weightCell =
+            ii === 0
+              ? `<td class="text-right" rowspan="${items.length}">${escapeHtml(box.boxWeight ?? 0)}</td>`
+              : '';
+          return `<tr>
+            ${boxCell}
+            <td>${escapeHtml(it.productName || '—')}</td>
+            <td>${escapeHtml(it.vendorCode || '—')}</td>
+            <td class="text-right">${escapeHtml(it.quantity ?? 0)}</td>
+            ${weightCell}
+          </tr>`;
+        })
+        .join('');
+    })
+    .join('');
+  return `
+    <div style="margin-top:16px">
+      <h3 style="font-size:12px;margin:0 0 6px">Box Packing Details</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:11px" border="1" cellpadding="4">
+        <thead>
+          <tr>
+            <th class="text-center">Box No</th>
+            <th>Article</th>
+            <th>Vendor Code</th>
+            <th class="text-right">Qty</th>
+            <th class="text-right">Box Weight (KG)</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+};
+
 /**
  * Replaces inner HTML of an element by id.
  */
@@ -173,6 +243,14 @@ export const renderVendorPoReturnChallanHtml = async (
     /<tbody id="lines-body">[\s\S]*?<\/tbody>/,
     `<tbody id="lines-body">${buildLinesHtml(challan.lines)}</tbody>`
   );
+
+  /** Append the box-packing breakdown (article-wise returns) so the printed challan shows box/weight/qty. */
+  const boxesHtml = buildBoxesHtml(challan.returnBoxes || []);
+  if (boxesHtml) {
+    html = /<\/body>/i.test(html)
+      ? html.replace(/<\/body>/i, `${boxesHtml}</body>`)
+      : html + boxesHtml;
+  }
 
   return html;
 };

@@ -210,6 +210,8 @@ export interface WhmsInwardReceiveRow {
   articleId: WhmsInwardReceivePopulatedArticle | string;
   orderId: WhmsInwardReceivePopulatedOrder | string;
   articleNumber: string;
+  /** Vendor's product code (resolved for vendor-source rows); blank for factory production lines. */
+  vendorCode?: string;
   QuantityFromFactory: number;
   receivedQuantity: number;
   /** Often the StyleCode document id (24-char hex) from vendor floors; PATCH accept expects the master code string. */
@@ -269,6 +271,7 @@ export interface WhmsWarehouseInventoryProduct {
   id: string;
   name?: string;
   factoryCode?: string;
+  vendorCode?: string;
 }
 
 export interface WhmsWarehouseInventoryStyleMaster {

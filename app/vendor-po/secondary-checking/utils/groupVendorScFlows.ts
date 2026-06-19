@@ -134,16 +134,17 @@ export function hasSecondaryCheckingWorkRemaining(flow: VendorProductionFlow): b
 
 /**
  * Whether this flow has secondary checking floor history.
+ *
+ * An article only counts as "on the floor" once at least one of its boxes has been
+ * **scanned & accepted** here — acceptance moves units from `pendingFromBoxes` into
+ * `received`. Boxes that are merely awaiting a scan (`pendingFromBoxes` only) must NOT
+ * surface the article in the order / article views; the operator must accept a box first.
  * @param flow - Vendor production flow document
  */
 export function hasSecondaryCheckingFloorHistory(flow: VendorProductionFlow): boolean {
   const sc = flow.floorQuantities?.secondaryChecking;
   if (!sc) return false;
-  return (
-    (sc.received ?? 0) > 0 ||
-    (sc.transferred ?? 0) > 0 ||
-    (sc.pendingFromBoxes ?? 0) > 0
-  );
+  return (sc.received ?? 0) > 0 || (sc.transferred ?? 0) > 0;
 }
 
 /**

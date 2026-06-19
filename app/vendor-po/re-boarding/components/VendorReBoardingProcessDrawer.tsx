@@ -7,13 +7,12 @@ import { CRM } from "../../vendor-list/crmUiClasses";
 import { VendorFloorBatchSummary } from "../../components/VendorFloorBatchSummary";
 import vendorProductionFlowService, {
   type VendorProductionFlow,
-  type VendorBrandingType,
 } from "@/shared/services/vendorProductionFlowService";
 import {
   getStyleCodesByVendorCode,
   type StyleCodeByVendorRow,
 } from "@/shared/services/productService";
-import { resolveVendorCodeForStyleLookup } from "../brandingFloorUtils";
+import { resolveVendorCodeForStyleLookup } from "../../branding/brandingFloorUtils";
 import {
   brandingDeltaTransferredRows,
   brandLabelForStyleId,
@@ -24,8 +23,8 @@ import {
   toVendorTransferItems,
   type TransferredStyleRowDraft,
 } from "../../utils/transferredStyleRows";
-import type { PendingBrandingStagingPatch } from "./VendorBrandingStagingModal";
-export type BrandingRowDraft = TransferredStyleRowDraft;
+import type { PendingReBoardingStagingPatch } from "./VendorReBoardingStagingModal";
+export type ReBoardingRowDraft = TransferredStyleRowDraft;
 
 type Props = {
   open: boolean;
@@ -35,11 +34,11 @@ type Props = {
   /** Opens container modal (secondary-checking style); parent closes this drawer. */
   onStagingRequested: (ctx: {
     flow: VendorProductionFlow;
-    patch: PendingBrandingStagingPatch;
+    patch: PendingReBoardingStagingPatch;
   }) => void;
 };
 /** Branding: floor PATCH + optional transfer to Final (container + transferItems). */
-export function VendorBrandingProcessDrawer({
+export function VendorReBoardingProcessDrawer({
   open,
   flow,
   onClose,
@@ -52,47 +51,22 @@ export function VendorBrandingProcessDrawer({
   const [styleOptions, setStyleOptions] = useState<StyleCodeByVendorRow[]>([]);
   const [loadingStyles, setLoadingStyles] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [brandingTypeSaving, setBrandingTypeSaving] = useState(false);
   const [vendorCodeResolved, setVendorCodeResolved] = useState<string | null>(
     null,
   );
-  const brandingType = flow?.brandingType;
-  /** Embroidery articles pass through Re-Boarding before Final Checking; Heat Transfer skips it. */
-  const stageTargetLabel =
-    brandingType === "Embroidery" ? "Re-Boarding" : "Final Checking";
-
-  const handleBrandingTypeChange = useCallback(
-    async (value: VendorBrandingType) => {
-      if (!flow || value === flow.brandingType) return;
-      setBrandingTypeSaving(true);
-      try {
-        const updated = await vendorProductionFlowService.updateBrandingType(
-          flow.id,
-          value,
-        );
-        toast.success(`Branding type set to ${value}`);
-        onSaved(updated);
-      } catch (e: unknown) {
-        const msg =
-          e instanceof Error ? e.message : "Could not update branding type";
-        toast.error(msg);
-      } finally {
-        setBrandingTypeSaving(false);
-      }
-    },
-    [flow, onSaved],
-  );
+  /** Re-Boarding always stages forward to Final Checking. */
+  const stageTargetLabel = "Final Checking";
   /** Render drawer in `document.body` so layout `overflow` / stacking contexts cannot block clicks. */
   const [portalEl, setPortalEl] = useState<HTMLElement | null>(null);
   useEffect(() => {
     setPortalEl(document.body);
   }, []);
-  const receivedQty = flow?.floorQuantities.branding.received ?? 0;
-  const remainingQty = flow?.floorQuantities.branding.remaining ?? 0;
+  const receivedQty = flow?.floorQuantities.reBoarding.received ?? 0;
+  const remainingQty = flow?.floorQuantities.reBoarding.remaining ?? 0;
   const scalarTransferredOut =
-    flow?.floorQuantities.branding.transferred ?? 0;
+    flow?.floorQuantities.reBoarding.transferred ?? 0;
   /** Server-derived `completed` — shown in summary only; line cap follows received (API: lineSum ≤ received). */
-  const completedFromServer = flow?.floorQuantities.branding.completed ?? 0;
+  const completedFromServer = flow?.floorQuantities.reBoarding.completed ?? 0;
   const lineSumMax = useMemo(() => Math.max(0, receivedQty), [receivedQty]);
   const totalTransferred = useMemo(
     () =>
@@ -115,7 +89,7 @@ export function VendorBrandingProcessDrawer({
 
   useEffect(() => {
     if (!open || !flow) return;
-    const br = flow.floorQuantities.branding;
+    const br = flow.floorQuantities.reBoarding;
     setRows(
       rowsFromTransferredApi(br.transferredData, { markRowsFromServer: true }),
     );
@@ -246,7 +220,7 @@ export function VendorBrandingProcessDrawer({
     try {
       const updated = await vendorProductionFlowService.updateFloor(
         flow.id,
-        "branding",
+        "reBoarding",
         {
           transferredData: deltaTransferredPayload,
         },
@@ -291,7 +265,7 @@ export function VendorBrandingProcessDrawer({
       );
       return;
     }
-    const patch: PendingBrandingStagingPatch = {
+    const patch: PendingReBoardingStagingPatch = {
       transferredData: deltaTransferredPayload,
     };
     onStagingRequested({ flow, patch });
@@ -317,7 +291,7 @@ export function VendorBrandingProcessDrawer({
       >
         <div className={CRM.drawerHeaderBar}>
           <h2 id="vendor-branding-drawer-title" className={CRM.drawerTitle}>
-            Branding — {flow.referenceCode || flow.id.slice(-6)}
+            Re-Boarding — {flow.referenceCode || flow.id.slice(-6)}
           </h2>
           <button
             type="button"
@@ -345,38 +319,6 @@ export function VendorBrandingProcessDrawer({
               floor outbound <code className="text-[10px]">transferred</code>.
             </span>
           </p>
-          <div className="px-3 pt-1 pb-2">
-            <label className={CRM.label} htmlFor="vendor-branding-type">
-              Branding type
-            </label>
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                id="vendor-branding-type"
-                className={CRM.select}
-                value={brandingType ?? ""}
-                onChange={(e) =>
-                  void handleBrandingTypeChange(
-                    e.target.value as VendorBrandingType,
-                  )
-                }
-                disabled={brandingTypeSaving || saving}
-                aria-label="Branding type"
-              >
-                <option value="" disabled>
-                  Select branding type…
-                </option>
-                <option value="Heat Transfer">Heat Transfer</option>
-                <option value="Embroidery">Embroidery</option>
-              </select>
-              <span className="text-[10px] text-gray-500">
-                {brandingType === "Embroidery"
-                  ? "Routes: Branding → Re-Boarding → Final Checking"
-                  : brandingType === "Heat Transfer"
-                    ? "Routes: Branding → Final Checking"
-                    : "Choose how this article is branded — it sets the next floor."}
-              </span>
-            </div>
-          </div>
           <VendorFloorBatchSummary
             flow={flow}
             footerInfo={

@@ -18,8 +18,8 @@ import {
   buildVendorLotDrafts,
   draftsToReceivedLotDetails,
   emptyLineQtyMap,
-  maxQtyForLineInLot,
   orderedQtyByLine,
+  totalBoxesForDraft,
   totalReceivedFromDrafts,
   validateVendorLotDrafts,
 } from "./vendorGoodsReceivedModalHelpers";
@@ -92,8 +92,9 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
 
   const setLineQty = (lotIndex: number, lineId: string, value: number) => {
     setLots((prev) => {
-      const max = maxQtyForLineInLot(lineId, lotIndex, prev, orderedMap);
-      const v = Math.max(0, Math.min(Number(value) || 0, max));
+      // Over-receipt allowed: vendors sometimes ship more than ordered, so we don't
+      // clamp received qty to the ordered amount.
+      const v = Math.max(0, Number(value) || 0);
       const next = [...prev];
       const lot = next[lotIndex];
       if (!lot) return prev;
@@ -382,25 +383,11 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                           )}
                         </div>
                         <div>
-                          <label className="text-[10px] font-medium text-gray-600">Number of boxes {isReadOnly ? "" : "*"}</label>
-                          {isReadOnly ? (
-                            <div className="mt-0.5 px-2 py-1.5 text-xs text-gray-700 bg-gray-100 border border-gray-200 rounded text-right">{lot.numberOfBoxes}</div>
-                          ) : (
-                          <input
-                            type="number"
-                            min={1}
-                            className={lotInputCls}
-                            value={lot.numberOfBoxes}
-                            onChange={(e) =>
-                              setLots((prev) => {
-                                const n = [...prev];
-                                if (n[lotIndex])
-                                  n[lotIndex] = { ...n[lotIndex], numberOfBoxes: Math.max(1, Number(e.target.value) || 1) };
-                                return n;
-                              })
-                            }
-                          />
-                          )}
+                          <label className="text-[10px] font-medium text-gray-600">Total boxes (auto)</label>
+                          <div className="mt-0.5 px-2 py-1.5 text-xs text-gray-700 bg-gray-100 border border-gray-200 rounded text-right">
+                            {totalBoxesForDraft(lot)}
+                          </div>
+                          <p className="text-[9px] text-gray-400 mt-0.5">Sum of per-article boxes below</p>
                         </div>
                       </div>
 
@@ -413,7 +400,7 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                               <th className="px-2 py-2 text-left font-bold text-gray-600">Type</th>
                               <th className="px-2 py-2 text-left font-bold text-gray-600">Color</th>
                               <th className="px-2 py-2 text-left font-bold text-gray-600">Pattern</th>
-                              {!isReadOnly && <th className="px-2 py-2 text-right">Max</th>}
+                              {!isReadOnly && <th className="px-2 py-2 text-right">Ordered</th>}
                               <th className="px-2 py-2 text-right w-[88px]">Qty</th>
                               <th className="px-2 py-2 text-right w-[88px]">Boxes</th>
                             </tr>
@@ -422,9 +409,10 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                             {poItems.map((it) => {
                               const id = getPoLineItemId(it);
                               if (!id) return null;
-                              const max = maxQtyForLineInLot(id, lotIndex, lots, orderedMap);
+                              const ordered = orderedMap[id] ?? 0;
                               const v = lot.lineQty[id] ?? 0;
                               const boxV = lot.lineBoxes[id] ?? 0;
+                              const overReceived = v > ordered;
                               return (
                                 <tr key={`${lotIndex}-${id}`} className="border-t border-gray-100">
                                   <td className="px-2 py-2 text-gray-900">{it.productName || "—"}</td>
@@ -432,7 +420,7 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                                   <td className="px-2 py-2 text-gray-700">{dashOr(it.type)}</td>
                                   <td className="px-2 py-2 text-gray-700">{dashOr(it.color)}</td>
                                   <td className="px-2 py-2 text-gray-700">{dashOr(it.pattern)}</td>
-                                  {!isReadOnly && <td className="px-2 py-2 text-right text-gray-500">{max}</td>}
+                                  {!isReadOnly && <td className="px-2 py-2 text-right text-gray-500">{ordered}</td>}
                                   <td className="px-2 py-2">
                                     {isReadOnly ? (
                                       <div className="text-right text-xs text-gray-700">{v || "—"}</div>
@@ -440,9 +428,9 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                                     <input
                                       type="number"
                                       min={0}
-                                      max={max}
-                                      className={lotQtyInputCls}
+                                      className={`${lotQtyInputCls} ${overReceived ? "border-amber-400 bg-amber-50 text-amber-800" : ""}`}
                                       value={v === 0 ? "" : v}
+                                      title={overReceived ? `Over-received: ${v} vs ordered ${ordered}` : undefined}
                                       onChange={(e) => {
                                         const raw = e.target.value;
                                         setLineQty(lotIndex, id, raw === "" ? 0 : Number(raw));
@@ -451,9 +439,8 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                                     )}
                                   </td>
                                   <td className="px-2 py-2">
-                                    {isReadOnly ? (
-                                      <div className="text-right text-xs text-gray-700">{boxV || "—"}</div>
-                                    ) : (
+                                    {/* Boxes stay editable even on saved invoices so per-article
+                                        counts can be corrected, then re-synced on the process page. */}
                                     <input
                                       type="number"
                                       min={0}
@@ -464,6 +451,8 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                                         setLineBoxes(lotIndex, id, raw === "" ? 0 : Number(raw));
                                       }}
                                     />
+                                    {isReadOnly && v > 0 && boxV < 1 && (
+                                      <p className="text-[9px] text-amber-600 mt-0.5 text-right">set boxes</p>
                                     )}
                                   </td>
                                 </tr>

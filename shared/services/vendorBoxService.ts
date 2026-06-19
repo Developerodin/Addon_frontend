@@ -25,6 +25,8 @@ export interface VendorBox {
   updatedAt?: string;
   secondaryCheckingAccepted?: boolean;
   secondaryCheckingAcceptedAt?: string;
+  storedStatus?: boolean;
+  returnedToVendor?: boolean;
   vendor?: string | { header?: { vendorName?: string; vendorCode?: string } };
 }
 
@@ -153,6 +155,28 @@ export async function updateVendorBox(
   });
 }
 
+export interface VendorResyncLotResponse {
+  deletedCount?: number;
+  createdCount?: number;
+  boxes?: VendorBox[];
+  skippedLots?: unknown[];
+}
+
+/**
+ * Delete & recreate a lot's boxes from the PO's current per-article receivedBoxes.
+ * Fixes boxes created against the wrong article. Backend refuses if any box in the lot
+ * has already been scanned/stored/returned.
+ */
+export async function resyncVendorLotBoxes(
+  vpoNumber: string,
+  lotNumber: string
+): Promise<VendorResyncLotResponse> {
+  return requestJson<VendorResyncLotResponse>(`${baseUrl}/resync-lot`, {
+    method: "POST",
+    body: JSON.stringify({ vpoNumber, lotNumber }),
+  });
+}
+
 export interface ScanAcceptResponse {
   box: VendorBox;
   flow: Record<string, unknown> | null;
@@ -198,6 +222,7 @@ export async function scanAcceptVendorBox(
 const vendorBoxService = {
   list: listVendorBoxes,
   bulkCreate: bulkCreateVendorBoxes,
+  resyncLot: resyncVendorLotBoxes,
   update: updateVendorBox,
   lookupForSecondaryChecking: lookupVendorBoxForSecondaryChecking,
   scanAccept: scanAcceptVendorBox,

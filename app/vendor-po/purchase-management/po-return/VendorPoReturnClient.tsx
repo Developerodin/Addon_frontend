@@ -6,6 +6,7 @@ import { toast } from "react-hot-toast";
 import vendorPurchaseOrderService from "@/shared/services/vendorPurchaseOrderService";
 import vendorPoReturnService, {
   type VendorPoReturnArticleCandidate,
+  type VendorPoReturnArticleBox,
 } from "@/shared/services/vendorPoReturnService";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { VendorPoReturnWorkflowPanel } from "./VendorPoReturnWorkflowPanel";
@@ -48,6 +49,8 @@ export function VendorPoReturnClient() {
   const [articleCandidatesLoading, setArticleCandidatesLoading] = useState(false);
   const [articleDraftFlowId, setArticleDraftFlowId] = useState("");
   const [articleDraftQty, setArticleDraftQty] = useState("");
+  const [articleBoxes, setArticleBoxes] = useState<VendorPoReturnArticleBox[]>([]);
+  const [articleBoxesLoading, setArticleBoxesLoading] = useState(false);
 
   const [activeTab, setActiveTab] = useState<"return" | "challan">(
     canAccessReturn ? "return" : "challan"
@@ -103,6 +106,31 @@ export function VendorPoReturnClient() {
     void fetchArticleCandidates(selectedPo.vpoNumber);
   }, [canAccessReturn, selectedPo?.vpoNumber, fetchArticleCandidates]);
 
+  /** Load the boxes for the selected article so the user can pick which boxes to return. */
+  useEffect(() => {
+    const vpo = selectedPo?.vpoNumber?.trim();
+    if (!canAccessReturn || !vpo || !articleDraftFlowId) {
+      setArticleBoxes([]);
+      return;
+    }
+    let cancelled = false;
+    setArticleBoxesLoading(true);
+    void (async () => {
+      try {
+        const res = await vendorPoReturnService.getArticleBoxes(vpo, articleDraftFlowId);
+        if (!cancelled) setArticleBoxes(res.results || []);
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) setArticleBoxes([]);
+      } finally {
+        if (!cancelled) setArticleBoxesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [canAccessReturn, selectedPo?.vpoNumber, articleDraftFlowId]);
+
   useEffect(() => {
     if (!canAccessReturn || poLoading || urlPrefillDone.current || !urlVpoNumber || poOptions.length === 0) return;
     const match = poOptions.find((p) => p.vpoNumber === urlVpoNumber);
@@ -152,6 +180,7 @@ export function VendorPoReturnClient() {
     setBarcodeInput("");
     setArticleDraftFlowId("");
     setArticleDraftQty("");
+    setArticleBoxes([]);
     setWorkflowError(null);
   }, []);
 
@@ -235,6 +264,12 @@ export function VendorPoReturnClient() {
       return;
     }
     const candidate = articleCandidates.find((c) => c.flowId === articleDraftFlowId);
+    /** Maximum return validation — never allow more than the verified available quantity. */
+    const maxAvailable = candidate?.verifiedAvailable;
+    if (typeof maxAvailable === "number" && qty > maxAvailable) {
+      toast.error(`Cannot return more than ${maxAvailable} available unit(s) for this article`);
+      return;
+    }
     setSessionBusy(true);
     try {
       await vendorPoReturnService.addArticleQtyLine(sessionId, {
@@ -261,6 +296,41 @@ export function VendorPoReturnClient() {
       toast.success("Article quantity staged");
     } catch (e) {
       const msg = getErrorMessage(e, "Could not stage article quantity");
+      setWorkflowError(msg);
+      toast.error(msg);
+    } finally {
+      setSessionBusy(false);
+    }
+  };
+
+  /**
+   * Toggle a specific box into / out of the return (article-wise box selection).
+   * Selecting stages the box via the scan endpoint; unselecting removes it.
+   */
+  const handleToggleArticleBox = async (box: VendorPoReturnArticleBox, selected: boolean) => {
+    if (!sessionId) {
+      toast.error("Start a session first");
+      return;
+    }
+    setSessionBusy(true);
+    try {
+      if (selected) {
+        const res = await vendorPoReturnService.scanBarcode(sessionId, box.barcode);
+        const preview = res.boxPreview;
+        setPendingBoxes((prev) => {
+          const next = prev.filter((r) => r.barcode !== preview.barcode);
+          next.push(preview);
+          return next;
+        });
+        toast.success(`Box ${preview.boxId || preview.barcode} added`);
+      } else {
+        await vendorPoReturnService.removeBarcode(sessionId, box.barcode);
+        setPendingBoxes((prev) => prev.filter((r) => r.barcode !== box.barcode));
+        toast.success(`Box ${box.boxId || box.barcode} removed`);
+      }
+      setWorkflowError(null);
+    } catch (e) {
+      const msg = getErrorMessage(e, "Could not update box selection");
       setWorkflowError(msg);
       toast.error(msg);
     } finally {
@@ -404,6 +474,10 @@ export function VendorPoReturnClient() {
           articleDraftQty={articleDraftQty}
           onArticleDraftQtyChange={setArticleDraftQty}
           onAddArticleQtyLine={handleAddArticleQtyLine}
+          articleBoxes={articleBoxes}
+          articleBoxesLoading={articleBoxesLoading}
+          stagedBarcodes={pendingBoxes.map((b) => b.barcode)}
+          onToggleArticleBox={handleToggleArticleBox}
         />
       )}
 

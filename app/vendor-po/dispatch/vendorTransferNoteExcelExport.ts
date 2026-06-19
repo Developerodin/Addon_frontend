@@ -15,7 +15,7 @@ function rowsToExportRecords(rows: VendorDispatchTransferNoteReportRow[]): Recor
     Category: row.categoryLabel ?? '',
     VPO: row.vpoNumber ?? '',
     Vendor: row.vendorName ?? '',
-    'Article No': row.articleNumber ?? '',
+    'Vendor Code': row.articleNumber ?? '',
     Brand: row.brand ?? row.sapArticleNo ?? '',
     'Article Name': row.articleName ?? '',
     'Qty (Pairs)': row.qtyInPairs ?? '',

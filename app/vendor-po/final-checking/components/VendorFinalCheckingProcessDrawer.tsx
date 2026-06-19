@@ -92,9 +92,10 @@ export function VendorFinalCheckingProcessDrawer({
   useEffect(() => {
     if (!open || !flow) return;
     const fc = flow.floorQuantities.finalChecking;
-    setM2Quantity(fc.m2Quantity ?? 0);
-    setM3Quantity(fc.m3Quantity ?? 0);
-    setM4Quantity(fc.m4Quantity ?? 0);
+    /** Additive entry: start blank so the operator types the NEW amount to add to the running M2/M3/M4 totals. */
+    setM2Quantity(0);
+    setM3Quantity(0);
+    setM4Quantity(0);
     setRows(initialFinalCheckingStyleRows(fc));
     transferredBaselineRef.current = finalCheckingTransferredBaselineDraft(fc);
   }, [open, flow?.id]);
@@ -207,24 +208,29 @@ export function VendorFinalCheckingProcessDrawer({
    */
   const handleSaveOnly = async () => {
     if (!flow) return;
-    if (totalTransferred > transferCap) {
-      toast.error(
-        `M1 row total cannot exceed inbound received (${transferCap.toLocaleString()}).`,
-      );
+    const addM2 = Math.max(0, Number(m2Quantity) || 0);
+    const addM3 = Math.max(0, Number(m3Quantity) || 0);
+    const addM4 = Math.max(0, Number(m4Quantity) || 0);
+    if (addM2 + addM3 + addM4 <= 0) {
+      toast.error("Enter an M2, M3 or M4 quantity to add.");
       return;
     }
     setSaving(true);
     try {
       const fcPersist = flow.floorQuantities.finalChecking;
+      /**
+       * QC-only save: send M2/M3/M4 as **additive deltas** (server merges into the running totals).
+       * M1 is intentionally NOT sent here — M1 is committed only via "Save & stage to Dispatch".
+       * No container is required for this update.
+       */
       const updated = await vendorProductionFlowService.updateFloor(flow.id, "finalChecking", {
-        m1Quantity: Math.max(0, Number(m1Quantity) || 0),
-        m2Quantity: Math.max(0, Number(m2Quantity) || 0),
-        m3Quantity: Math.max(0, Number(m3Quantity) || 0),
-        m4Quantity: Math.max(0, Number(m4Quantity) || 0),
+        m2Quantity: addM2,
+        m3Quantity: addM3,
+        m4Quantity: addM4,
         repairStatus: fcPersist.repairStatus ?? "NOT_REQUIRED",
         repairRemarks: (fcPersist.repairRemarks ?? "").trim(),
       });
-      toast.success("Final quality details saved");
+      toast.success("M2 / M3 / M4 added");
       onSaved(updated);
       onClose();
     } catch (e: unknown) {
@@ -295,14 +301,10 @@ export function VendorFinalCheckingProcessDrawer({
 
         <div className={`${CRM.drawerBodyScroll} min-h-0`}>
           <p className={CRM.drawerHint}>
-            <strong>Final QC:</strong> M1 rows ≤ inbound <code className="text-[10px]">receivedData</code>.{" "}
-            <strong>Save</strong> updates M1/M2/M3/M4 and repair fields only — it does <strong>not</strong> send{" "}
-            <code className="text-[10px]">transferredData</code> (that path can auto-move to dispatch).{" "}
-            <strong>Save &amp; stage</strong> opens the container modal: <code className="text-[10px]">PATCH …/floors/finalChecking</code> with{" "}
-            <code className="text-[10px]">transferredData</code> + <code className="text-[10px]">existingContainerBarcode</code> only. Then go to{" "}
-            <strong>Dispatch</strong> and run <code className="text-[10px]">POST …/containers-masters/barcode/…/accept</code> on the same barcode (dispatch data only). WHMS{" "}
-            <code className="text-[10px]">promote-vendor-dispatch</code> creates inward rows. No{" "}
-            <code className="text-[10px]">PATCH …/transfer</code>.
+            <strong>Save M2/M3/M4</strong> adds the entered amounts to the running totals (boxes start blank; the
+            current total is shown beside each). It does <strong>not</strong> touch M1 and needs{" "}
+            <strong>no container</strong>. Use <strong>Save &amp; stage to Dispatch</strong> only when you have M1
+            to transfer forward (that step asks for a container).
           </p>
 
           <VendorFloorBatchSummary
@@ -334,41 +336,59 @@ export function VendorFinalCheckingProcessDrawer({
 
           <div className={CRM.drawerSection}>
             <div className={CRM.drawerSectionHead}>
-              {sec.qc}. Quality counts (M1 / M2 / M3 / M4)
+              {sec.qc}. Quality counts — add M2 / M3 / M4 (merged with running totals)
             </div>
             <div className="p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
-                <label className={CRM.label}>M2 qty (fix)</label>
+                <label className={CRM.label}>
+                  M2 qty to add{" "}
+                  <span className="text-[10px] font-normal text-gray-400">
+                    (current {(finalLive.m2Quantity ?? 0).toLocaleString()})
+                  </span>
+                </label>
                 <input
                   type="number"
                   min={0}
-                  aria-label="M2 total repair"
+                  placeholder="0"
+                  aria-label="M2 quantity to add"
                   className={`${CRM.input} border-amber-200 focus:border-amber-500`}
-                  value={m2Quantity}
+                  value={m2Quantity || ""}
                   onChange={(e) => setM2Quantity(Number(e.target.value))}
                   disabled={saving}
                 />
               </div>
               <div>
-                <label className={CRM.label}>M3 qty</label>
+                <label className={CRM.label}>
+                  M3 qty to add{" "}
+                  <span className="text-[10px] font-normal text-gray-400">
+                    (current {(finalLive.m3Quantity ?? 0).toLocaleString()})
+                  </span>
+                </label>
                 <input
                   type="number"
                   min={0}
-                  aria-label="M3 total"
+                  placeholder="0"
+                  aria-label="M3 quantity to add"
                   className={`${CRM.input} border-violet-200 focus:border-violet-500`}
-                  value={m3Quantity}
+                  value={m3Quantity || ""}
                   onChange={(e) => setM3Quantity(Number(e.target.value))}
                   disabled={saving}
                 />
               </div>
               <div>
-                <label className={CRM.label}>M4 qty (reject)</label>
+                <label className={CRM.label}>
+                  M4 qty to add{" "}
+                  <span className="text-[10px] font-normal text-gray-400">
+                    (current {(finalLive.m4Quantity ?? 0).toLocaleString()})
+                  </span>
+                </label>
                 <input
                   type="number"
                   min={0}
-                  aria-label="M4 total reject"
+                  placeholder="0"
+                  aria-label="M4 quantity to add"
                   className={`${CRM.input} border-red-200 focus:border-red-500`}
-                  value={m4Quantity}
+                  value={m4Quantity || ""}
                   onChange={(e) => setM4Quantity(Number(e.target.value))}
                   disabled={saving}
                 />
@@ -376,11 +396,12 @@ export function VendorFinalCheckingProcessDrawer({
             </div>
             <div className="px-3 pb-3">
               <p className="text-[10px] text-gray-500">
-                M1 qty auto-derived from style rows: <strong>{m1Quantity.toLocaleString()}</strong> · M1 transferred:{" "}
-                {(finalLive.m1Transferred ?? 0).toLocaleString()} · Available for dispatch:{" "}
-                <strong className="text-emerald-700">{m1Avail.toLocaleString()}</strong>
-                {" · "}M2/M3/M4 on floor:{" "}
-                <strong>{(m2Quantity + m3Quantity + m4Quantity).toLocaleString()}</strong>
+                After save · M2:{" "}
+                <strong>{((finalLive.m2Quantity ?? 0) + m2Quantity).toLocaleString()}</strong> · M3:{" "}
+                <strong>{((finalLive.m3Quantity ?? 0) + m3Quantity).toLocaleString()}</strong> · M4:{" "}
+                <strong>{((finalLive.m4Quantity ?? 0) + m4Quantity).toLocaleString()}</strong>
+                {" · "}M1 (transfer via Save &amp; stage):{" "}
+                <strong className="text-emerald-700">{m1Avail.toLocaleString()}</strong> available
               </p>
             </div>
           </div>
@@ -415,17 +436,13 @@ export function VendorFinalCheckingProcessDrawer({
               e.stopPropagation();
               void handleSaveOnly();
             }}
-            className={CRM.btnSecondary}
-            disabled={saving || totalTransferred > transferCap}
-            title={
-              totalTransferred > transferCap
-                ? "M1 row total cannot exceed inbound received"
-                : undefined
-            }
+            className={CRM.btnPrimary}
+            disabled={saving}
+            title="Add the entered M2 / M3 / M4 to the running totals (no container needed)"
           >
             {saving ? "…" : (
               <>
-                <i className="ri-save-line text-xs" /> Save
+                <i className="ri-save-line text-xs" /> Save M2/M3/M4
               </>
             )}
           </button>
@@ -436,7 +453,7 @@ export function VendorFinalCheckingProcessDrawer({
               e.stopPropagation();
               handleSaveAndStage();
             }}
-            className={CRM.btnPrimary}
+            className={CRM.btnSecondary}
             disabled={
               saving ||
               totalTransferred > transferCap ||
@@ -446,11 +463,11 @@ export function VendorFinalCheckingProcessDrawer({
               totalTransferred > transferCap
                 ? "M1 row total cannot exceed inbound received"
                 : totalTransferred <= 0
-                  ? "Enter M1 quantities on style rows to stage"
-                  : undefined
+                  ? "Only needed to transfer M1 forward — enter M1 style quantities first"
+                  : "Transfer M1 to Dispatch (asks for a container)"
             }
           >
-            <i className="ri-inbox-archive-line text-xs" /> Save &amp; stage to Dispatch
+            <i className="ri-inbox-archive-line text-xs" /> Save &amp; stage M1 to Dispatch
           </button>
         </div>
       </div>

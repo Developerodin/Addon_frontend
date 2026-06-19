@@ -36,6 +36,8 @@ export interface VendorM2EntryRow {
   remainingQuantity?: number;
   vendorProductionFlowId: string;
   referenceCode: string;
+  productName?: string;
+  productVendorCode?: string;
   vpoNumber: string;
   sourceFloor?: VendorM2SourceFloorKey | null;
   quantity: number;
@@ -89,6 +91,8 @@ export interface VendorM3FlowRow {
   _id?: string;
   vendorProductionFlowId: string;
   referenceCode: string;
+  productName?: string;
+  productVendorCode?: string;
   vpoNumber: string;
   vendor?: string | { id?: string; header?: { vendorName?: string } };
   vendorPurchaseOrder?: string | { id?: string; vpoNumber?: string };
@@ -101,6 +105,8 @@ export interface VendorM4FlowRow {
   _id?: string;
   vendorProductionFlowId: string;
   referenceCode: string;
+  productName?: string;
+  productVendorCode?: string;
   vpoNumber: string;
   vendor?: string | { id?: string; header?: { vendorName?: string } };
   vendorPurchaseOrder?: string | { id?: string; vpoNumber?: string };

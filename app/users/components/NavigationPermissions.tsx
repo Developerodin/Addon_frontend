@@ -107,6 +107,7 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
     { key: 'Vendor PO Receive', label: 'Vendor PO Receive' },
     { key: 'Secondary Checking', label: 'Secondary Checking' },
     { key: 'Branding', label: 'Branding' },
+    { key: 'Re-Boarding', label: 'Re-Boarding' },
     { key: 'Final Checking', label: 'Final Checking' },
     { key: 'Dispatch', label: 'Dispatch' },
     { key: 'M2 Management', label: 'M2 Management' },

@@ -18,6 +18,7 @@ export type VendorPoLotLineOption = {
 export type VendorLotReceivedLineRow = {
   productName: string;
   quantity: number;
+  boxes: number;
   vendorCode: string;
   type: string;
   color: string;
@@ -108,6 +109,38 @@ export function resolveVendorBoxLineAttrsFromPo(
   };
 }
 
+/**
+ * Resolve a box's own article (product + attributes) from the PO.
+ * Prefers the box's persisted `vendorPoItemId` (exact PO line), then falls back to its
+ * `productName`. This keeps each box bound to the article it was created for instead of
+ * defaulting every box to the lot's first article.
+ * @param po - Purchase order with populated lines
+ * @param box - The vendor box
+ */
+export function resolveVendorBoxArticleFromPo(
+  po: VendorPurchaseOrder,
+  box: VendorBox
+): VendorPoLotLineOption {
+  const empty: VendorPoLotLineOption = { productName: "", code: "", type: "", color: "", pattern: "" };
+  const lineFromId = box.vendorPoItemId
+    ? (po.poItems || []).find((it) => String(it._id ?? it.id) === String(box.vendorPoItemId))
+    : undefined;
+  if (lineFromId) {
+    const pid = lineFromId.productId;
+    return {
+      productName: lineFromId.productName || (typeof pid === "object" ? pid?.name || "" : "") || box.productName || "",
+      code: vendorCodeFromPoLineItem(lineFromId),
+      type: lineFromId.type?.trim() || "",
+      color: lineFromId.color?.trim() || "",
+      pattern: lineFromId.pattern?.trim() || "",
+    };
+  }
+  const name = box.productName?.trim() || "";
+  if (!name) return empty;
+  const attrs = resolveVendorBoxLineAttrsFromPo(po, name, box.lotNumber || undefined);
+  return { productName: name, ...attrs };
+}
+
 /** Per-line product and received qty for a receipt lot (from `receivedLotDetails[].poItems`). */
 export function getVendorLotReceivedLines(
   po: VendorPurchaseOrder,
@@ -124,6 +157,7 @@ export function getVendorLotReceivedLines(
     out.push({
       productName,
       quantity: Number(p.receivedQuantity ?? 0),
+      boxes: Math.max(0, Number(p.receivedBoxes ?? 0)),
       vendorCode: vendorCodeFromPoLineItem(line),
       type: line.type?.trim() || "",
       color: line.color?.trim() || "",

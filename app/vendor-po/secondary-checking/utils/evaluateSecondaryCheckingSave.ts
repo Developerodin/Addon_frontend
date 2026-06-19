@@ -47,12 +47,10 @@ function resolveQty(raw: unknown, cur: number): number | null {
 export function evaluateSecondaryCheckingSave(
   currentSc: QualityFloorQuantity,
   processingData: VendorSecondaryCheckingProcessData,
+  // plannedQuantity kept for call-site compatibility; unused now that over-count is allowed.
   plannedQuantity?: number,
 ): SecondaryCheckingSaveResult {
-  const received = numOr0(currentSc.received);
-  const planned = numOr0(plannedQuantity);
-  /** If API leaves received at 0, fall back to planned batch size for the M1+M2+M3+VM4 cap. */
-  const quantityCap = received > 0 ? received : planned > 0 ? planned : null;
+  void plannedQuantity;
   const currentM1 = numOr0(currentSc.m1Quantity);
   const currentM2 = numOr0(currentSc.m2Quantity);
   const currentM3 = numOr0(currentSc.m3Quantity);
@@ -75,17 +73,8 @@ export function evaluateSecondaryCheckingSave(
     };
   }
 
-  const splitSum = m1Quantity + m2Quantity + m3Quantity + vm4Quantity;
-  if (
-    quantityCap !== null &&
-    Number.isFinite(quantityCap) &&
-    splitSum > quantityCap
-  ) {
-    return {
-      ok: false,
-      error: `M1 + M2 + M3 + VM4 cannot exceed batch quantity (${quantityCap.toLocaleString()})`,
-    };
-  }
+  // Over-count is intentionally allowed here: secondary checking is the physical counting
+  // floor, so the actual M1+M2+M3+VM4 total may exceed the box-scanned received quantity.
 
   const { body, displayTotals, noop } = buildSecondaryCheckingFloorPatch(
     currentSc,
@@ -100,13 +89,6 @@ export function evaluateSecondaryCheckingSave(
   }
 
   const hasM1InPatch = body.m1Quantity !== undefined;
-
-  if (hasM1InPatch && quantityCap !== null && m1Quantity > quantityCap) {
-    return {
-      ok: false,
-      error: `M1 cannot exceed batch quantity (${quantityCap.toLocaleString()})`,
-    };
-  }
 
   /** Any explicit M1 save goes through the staging modal so operators always attach a container when M1 is written. */
   const route: SecondaryCheckingSaveRoute = hasM1InPatch

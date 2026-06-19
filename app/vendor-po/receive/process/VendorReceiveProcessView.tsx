@@ -13,8 +13,7 @@ import { dashOr, vendorCodeFromPoLineItem } from "../../components/vendorPacklis
 import {
   getVendorBoxId,
   getVendorLotReceivedLines,
-  getVendorPoItemOptionsForLot,
-  resolveVendorBoxLineAttrsFromPo,
+  resolveVendorBoxArticleFromPo,
 } from "./vendorReceiveProcessHelpers";
 import {
   exportVendorBoxesExcel,
@@ -36,6 +35,7 @@ export function VendorReceiveProcessView({ orderId }: Props) {
   const [boxes, setBoxes] = useState<VendorBox[]>([]);
   const [loading, setLoading] = useState(true);
   const [creatingBoxes, setCreatingBoxes] = useState(false);
+  const [resyncingLot, setResyncingLot] = useState<string | null>(null);
   const [activeBoxId, setActiveBoxId] = useState<string | null>(null);
   const [barcodeScanValue, setBarcodeScanValue] = useState("");
   const [boxData, setBoxData] = useState<Record<string, VendorBoxFormRow>>({});
@@ -67,17 +67,13 @@ export function VendorReceiveProcessView({ orderId }: Props) {
           if (!id) continue;
           const ex = next[id];
           const lot = b.lotNumber || "";
-          const opts = lot ? getVendorPoItemOptionsForLot(po, lot) : [];
-          const def = opts[0];
-          const attrs = def
-            ? { code: def.code, type: def.type, color: def.color, pattern: def.pattern }
-            : resolveVendorBoxLineAttrsFromPo(po, b.productName || "", lot);
+          const art = resolveVendorBoxArticleFromPo(po, b);
           next[id] = {
-            productName: ex?.productName || b.productName || def?.productName || "",
-            articleCode: ex?.articleCode || attrs.code || "",
-            type: ex?.type || attrs.type || "",
-            color: ex?.color || attrs.color || "",
-            pattern: ex?.pattern || attrs.pattern || "",
+            productName: ex?.productName || art.productName || b.productName || "",
+            articleCode: ex?.articleCode || art.code || "",
+            type: ex?.type || art.type || "",
+            color: ex?.color || art.color || "",
+            pattern: ex?.pattern || art.pattern || "",
             lotNumber: ex?.lotNumber || lot,
             numberOfUnits: ex?.numberOfUnits || (b.numberOfUnits != null ? String(b.numberOfUnits) : ""),
           };
@@ -121,6 +117,28 @@ export function VendorReceiveProcessView({ orderId }: Props) {
     }
   };
 
+  const resyncLot = async (lot: string) => {
+    if (!apiPo || !lot) return;
+    const lotBoxes = boxes.filter((b) => (b.lotNumber?.trim() || "") === lot);
+    if (
+      !window.confirm(
+        `Re-create boxes for invoice ${lot}? This deletes ${lotBoxes.length} box(es) and recreates them split by article from the invoice. Units entered on these boxes will be cleared.`
+      )
+    ) {
+      return;
+    }
+    setResyncingLot(lot);
+    try {
+      const res = await vendorBoxService.resyncLot(apiPo.vpoNumber, lot);
+      toast.success(`Re-synced invoice ${lot}: ${res.deletedCount ?? 0} removed, ${res.createdCount ?? 0} created`);
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Failed to re-sync boxes");
+    } finally {
+      setResyncingLot(null);
+    }
+  };
+
   const handleBarcodeKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== "Enter" || !barcodeScanValue.trim() || !apiPo) return;
     const code = barcodeScanValue.trim();
@@ -132,21 +150,17 @@ export function VendorReceiveProcessView({ orderId }: Props) {
     }
     const bid = getVendorBoxId(found);
     const lot = found.lotNumber?.trim() || "";
-    const opts = lot ? getVendorPoItemOptionsForLot(apiPo, lot) : [];
-    const first = opts[0];
-    const attrs = first
-      ? { code: first.code, type: first.type, color: first.color, pattern: first.pattern }
-      : resolveVendorBoxLineAttrsFromPo(apiPo, found.productName || "", lot);
+    const art = resolveVendorBoxArticleFromPo(apiPo, found);
     setBoxData((prev) => ({
       ...prev,
       [bid]: {
         ...prev[bid],
         lotNumber: prev[bid]?.lotNumber || lot,
-        productName: prev[bid]?.productName || first?.productName || found.productName || "",
-        articleCode: prev[bid]?.articleCode || attrs.code || "",
-        type: prev[bid]?.type || attrs.type || "",
-        color: prev[bid]?.color || attrs.color || "",
-        pattern: prev[bid]?.pattern || attrs.pattern || "",
+        productName: prev[bid]?.productName || art.productName || found.productName || "",
+        articleCode: prev[bid]?.articleCode || art.code || "",
+        type: prev[bid]?.type || art.type || "",
+        color: prev[bid]?.color || art.color || "",
+        pattern: prev[bid]?.pattern || art.pattern || "",
       },
     }));
     setActiveBoxId(bid);
@@ -411,7 +425,8 @@ export function VendorReceiveProcessView({ orderId }: Props) {
                     <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Color</th>
                     <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Pattern</th>
                     <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Received qty</th>
-                    <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Boxes (expected)</th>
+                    <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Boxes</th>
+                    <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Total boxes</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -486,7 +501,18 @@ export function VendorReceiveProcessView({ orderId }: Props) {
                           </div>
                         )}
                       </td>
-                      <td className="px-1.5 py-2 text-[11px] text-right text-gray-700 border border-gray-200">{l.numberOfBoxes}</td>
+                      <td className="px-1.5 py-2 text-[11px] text-right text-gray-700 border border-gray-200 tabular-nums align-top">
+                        {lines.length === 0 ? (
+                          "—"
+                        ) : (
+                          <div className="flex flex-col gap-0.5 items-end">
+                            {lines.map((row, i) => (
+                              <span key={i}>{row.boxes}</span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-1.5 py-2 text-[11px] text-right text-gray-700 border border-gray-200 align-top">{l.numberOfBoxes}</td>
                     </tr>
                     );
                   })}
@@ -519,6 +545,8 @@ export function VendorReceiveProcessView({ orderId }: Props) {
             setActiveBoxId={setActiveBoxId}
             updatingId={updatingId}
             saveBox={saveBox}
+            onResyncLot={resyncLot}
+            resyncingLot={resyncingLot}
             barcodeRef={barcodeRef}
             barcodeScanValue={barcodeScanValue}
             setBarcodeScanValue={setBarcodeScanValue}

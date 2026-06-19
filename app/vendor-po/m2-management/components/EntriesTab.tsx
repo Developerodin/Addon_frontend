@@ -80,6 +80,7 @@ export default function EntriesTab({ refreshKey, onResolve }: EntriesTabProps) {
             <tr>
               <th className="text-left p-2 font-bold">VPO</th>
               <th className="text-left p-2 font-bold">Reference</th>
+              <th className="text-left p-2 font-bold">Vendor Code</th>
               <th className="text-left p-2 font-bold">Floor</th>
               <th className="text-right p-2 font-bold">Orig</th>
               <th className="text-right p-2 font-bold">Remaining</th>
@@ -92,13 +93,13 @@ export default function EntriesTab({ refreshKey, onResolve }: EntriesTabProps) {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={9} className="p-6 text-center text-gray-500">
+                <td colSpan={10} className="p-6 text-center text-gray-500">
                   Loading M2 entries…
                 </td>
               </tr>
             ) : entries.length === 0 ? (
               <tr>
-                <td colSpan={9} className="p-6 text-center text-gray-500">
+                <td colSpan={10} className="p-6 text-center text-gray-500">
                   No open M2 entries match your filters.
                 </td>
               </tr>
@@ -107,6 +108,7 @@ export default function EntriesTab({ refreshKey, onResolve }: EntriesTabProps) {
                 <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="p-2">{row.vpoNumber || "—"}</td>
                   <td className="p-2 font-medium">{row.referenceCode || "—"}</td>
+                  <td className="p-2">{row.productVendorCode || "—"}</td>
                   <td className="p-2">{formatVendorQcFloor(row.sourceFloor)}</td>
                   <td className="p-2 text-right">{row.originalQuantity ?? row.quantity}</td>
                   <td className="p-2 text-right font-bold text-yellow-800">

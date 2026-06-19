@@ -20,7 +20,7 @@ const Z_BACK = 100;
 const Z_PANEL = 110;
 
 /** Branding floor PATCH body fragment: delta `transferredData` only; modal adds container + auto-transfer. */
-export type PendingBrandingStagingPatch = {
+export type PendingReBoardingStagingPatch = {
   transferredData: TransferredDataRow[];
 };
 
@@ -29,7 +29,7 @@ type Step = "form" | "success";
 type Props = {
   open: boolean;
   baselineFlow: VendorProductionFlow | null;
-  pendingPatch: PendingBrandingStagingPatch | null;
+  pendingPatch: PendingReBoardingStagingPatch | null;
   onClose: () => void;
   onFloorUpdated: (updated: VendorProductionFlow) => void;
 };
@@ -38,7 +38,7 @@ type Props = {
  * Container scan + PATCH branding with auto-transfer to Final Checking.
  * APIs run here only (not in the process drawer), matching vendor secondary-checking M1 staging.
  */
-export function VendorBrandingStagingModal({
+export function VendorReBoardingStagingModal({
   open,
   baselineFlow,
   pendingPatch,
@@ -53,9 +53,8 @@ export function VendorBrandingStagingModal({
   const [submitLoading, setSubmitLoading] = useState(false);
   const [successBarcode, setSuccessBarcode] = useState<string | undefined>();
 
-  /** Embroidery routes Branding → Re-Boarding; Heat Transfer (and unset) → Final Checking. */
-  const destinationLabel =
-    baselineFlow?.brandingType === "Embroidery" ? "Re-Boarding" : "Final Checking";
+  /** Re-Boarding always stages forward to Final Checking. */
+  const destinationLabel = "Final Checking";
 
   const reset = useCallback(() => {
     setStep("form");
@@ -127,7 +126,7 @@ export function VendorBrandingStagingModal({
       };
       const updated = (await vendorProductionFlowService.updateFloor(
         baselineFlow.id,
-        "branding",
+        "reBoarding",
         patchWithContainer,
       )) as VendorProductionFlow & {
         vendorTransferContainer?: { _id?: string; barcode?: string };
@@ -207,7 +206,7 @@ export function VendorBrandingStagingModal({
                 Received:{" "}
                 <strong>
                   {(
-                    baselineFlow.floorQuantities.branding.received ?? 0
+                    baselineFlow.floorQuantities.reBoarding.received ?? 0
                   ).toLocaleString()}
                 </strong>
               </span>
@@ -215,7 +214,7 @@ export function VendorBrandingStagingModal({
                 Completed:{" "}
                 <strong className="text-emerald-800">
                   {(
-                    baselineFlow.floorQuantities.branding.completed ?? 0
+                    baselineFlow.floorQuantities.reBoarding.completed ?? 0
                   ).toLocaleString()}
                 </strong>
               </span>
@@ -223,7 +222,7 @@ export function VendorBrandingStagingModal({
                 Remaining:{" "}
                 <strong className="text-amber-900">
                   {(
-                    baselineFlow.floorQuantities.branding.remaining ?? 0
+                    baselineFlow.floorQuantities.reBoarding.remaining ?? 0
                   ).toLocaleString()}
                 </strong>
               </span>
@@ -231,7 +230,7 @@ export function VendorBrandingStagingModal({
                 Transferred (handoff):{" "}
                 <strong className="text-purple-800">
                   {(
-                    baselineFlow.floorQuantities.branding.transferred ?? 0
+                    baselineFlow.floorQuantities.reBoarding.transferred ?? 0
                   ).toLocaleString()}
                 </strong>
               </span>

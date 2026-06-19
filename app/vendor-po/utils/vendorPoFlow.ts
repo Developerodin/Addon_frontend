@@ -132,17 +132,28 @@ export function mapVendorPurchaseOrderToUi(po: VendorPurchaseOrder): VendorPO {
   };
 }
 
-/** Build lot rows for bulk box create from received lot details. */
+/**
+ * Build lot rows for bulk box create from received lot details.
+ *
+ * Emits ONE row per article (PO line) using that article's own `receivedBoxes`, so a
+ * multi-article invoice creates boxes split correctly across its articles instead of
+ * dumping every box on the first article. Each row carries its `vendorPoItemId` so the
+ * backend binds the box to the right article / vendor code.
+ */
 export function lotDetailsForBulkBoxes(
   vpoNumber: string,
   lots: VendorReceivedLotDetail[] | undefined
 ): { lotNumber: string; numberOfBoxes: number; vendorPoItemId?: string; productId?: string }[] {
   if (!lots?.length) return [];
   return lots
-    .filter((l) => l.lotNumber?.trim() && Number(l.numberOfBoxes) > 0)
-    .map((l) => ({
-      lotNumber: l.lotNumber.trim(),
-      numberOfBoxes: Number(l.numberOfBoxes),
-      vendorPoItemId: l.poItems?.[0]?.poItem,
-    }));
+    .filter((l) => l.lotNumber?.trim())
+    .flatMap((l) =>
+      (l.poItems || [])
+        .filter((p) => p.poItem && Number(p.receivedBoxes) > 0)
+        .map((p) => ({
+          lotNumber: l.lotNumber.trim(),
+          numberOfBoxes: Math.max(0, Math.trunc(Number(p.receivedBoxes))),
+          vendorPoItemId: p.poItem,
+        }))
+    );
 }

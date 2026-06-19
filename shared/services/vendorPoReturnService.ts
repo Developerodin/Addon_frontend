@@ -63,6 +63,16 @@ export interface VendorPoReturnArticleCandidate {
   breakdown: { m1: number; m2: number; m3: number; m4: number };
 }
 
+export interface VendorPoReturnArticleBox {
+  boxId: string;
+  barcode: string;
+  lotNumber: string;
+  productName: string;
+  vendorCode: string;
+  boxWeight: number;
+  numberOfUnits: number;
+}
+
 export interface VendorPoReturnFinalizeResult {
   vendorReturn: VendorPoReturnSession;
   challan?: { id?: string; challanNumber?: string };
@@ -241,6 +251,17 @@ class VendorPoReturnService {
   async getArticleCandidates(vpoNumber: string): Promise<{ results: VendorPoReturnArticleCandidate[] }> {
     const q = new URLSearchParams({ vpoNumber });
     return request(`/article-candidates?${q.toString()}`);
+  }
+
+  /**
+   * Boxes available for return for a given article (production flow) on a VPO.
+   */
+  async getArticleBoxes(
+    vpoNumber: string,
+    vendorProductionFlowId: string
+  ): Promise<{ results: VendorPoReturnArticleBox[] }> {
+    const q = new URLSearchParams({ vpoNumber, vendorProductionFlowId });
+    return request(`/article-boxes?${q.toString()}`);
   }
 
   /**

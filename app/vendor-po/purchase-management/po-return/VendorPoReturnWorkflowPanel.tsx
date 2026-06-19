@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import React from "react";
-import type { VendorPoReturnArticleCandidate } from "@/shared/services/vendorPoReturnService";
+import type {
+  VendorPoReturnArticleCandidate,
+  VendorPoReturnArticleBox,
+} from "@/shared/services/vendorPoReturnService";
 import type { PendingArticleQtyRow, PendingBoxRow, VpoOption } from "./vendorPoReturnHelpers";
 import { sumPendingReturnUnits } from "./vendorPoReturnHelpers";
 
@@ -38,6 +41,10 @@ type VendorPoReturnWorkflowPanelProps = {
   articleDraftQty: string;
   onArticleDraftQtyChange: (v: string) => void;
   onAddArticleQtyLine: () => void;
+  articleBoxes: VendorPoReturnArticleBox[];
+  articleBoxesLoading: boolean;
+  stagedBarcodes: string[];
+  onToggleArticleBox: (box: VendorPoReturnArticleBox, selected: boolean) => void;
 };
 
 /**
@@ -75,10 +82,15 @@ export function VendorPoReturnWorkflowPanel({
   articleDraftQty,
   onArticleDraftQtyChange,
   onAddArticleQtyLine,
+  articleBoxes,
+  articleBoxesLoading,
+  stagedBarcodes,
+  onToggleArticleBox,
 }: VendorPoReturnWorkflowPanelProps) {
   const totals = sumPendingReturnUnits(pendingBoxes, pendingArticleQtyLines);
   const canFinalize = pendingBoxes.length > 0 || pendingArticleQtyLines.length > 0;
   const selectedCandidate = articleCandidates.find((c) => c.flowId === articleDraftFlowId);
+  const stagedBarcodeSet = new Set(stagedBarcodes);
 
   return (
     <div className="space-y-4">
@@ -247,6 +259,7 @@ export function VendorPoReturnWorkflowPanel({
                         <th className="px-2 py-1.5">Barcode</th>
                         <th className="px-2 py-1.5">Lot</th>
                         <th className="px-2 py-1.5">Product</th>
+                        <th className="px-2 py-1.5">Vendor Code</th>
                         <th className="px-2 py-1.5 text-right">Units</th>
                         <th className="px-2 py-1.5 text-right">Remove</th>
                       </tr>
@@ -257,6 +270,7 @@ export function VendorPoReturnWorkflowPanel({
                           <td className="px-2 py-1.5 font-mono">{row.barcode}</td>
                           <td className="px-2 py-1.5">{row.lotNumber || "—"}</td>
                           <td className="px-2 py-1.5">{row.productName || "—"}</td>
+                          <td className="px-2 py-1.5">{row.vendorCode || "—"}</td>
                           <td className="px-2 py-1.5 text-right">{row.numberOfUnits ?? 0}</td>
                           <td className="px-2 py-1.5 text-right">
                             <button
@@ -330,9 +344,58 @@ export function VendorPoReturnWorkflowPanel({
                 {selectedCandidate && (
                   <p className="text-[10px] text-gray-500">
                     Available: {selectedCandidate.verifiedAvailable} (M1: {selectedCandidate.breakdown.m1}, M2:{" "}
-                    {selectedCandidate.breakdown.m2}, M3: {selectedCandidate.breakdown.m3}, M4:{" "}
+                    {selectedCandidate.breakdown.m2}, M3: {selectedCandidate.breakdown.m3}, VM4:{" "}
                     {selectedCandidate.breakdown.m4})
                   </p>
+                )}
+
+                {articleDraftFlowId && (
+                  <div className="mt-2 rounded-md border border-gray-200 bg-white p-2 space-y-2">
+                    <h4 className="text-[10px] font-bold text-gray-700 uppercase tracking-wide">
+                      Select boxes to return
+                    </h4>
+                    {articleBoxesLoading ? (
+                      <p className="text-[11px] text-gray-500">Loading boxes…</p>
+                    ) : articleBoxes.length === 0 ? (
+                      <p className="text-[11px] text-gray-500">No returnable boxes for this article.</p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full text-left text-xs" aria-label="Article boxes">
+                          <thead className="bg-gray-50 text-[10px] uppercase text-gray-600">
+                            <tr>
+                              <th className="px-2 py-1.5">Return</th>
+                              <th className="px-2 py-1.5">Box Number</th>
+                              <th className="px-2 py-1.5">Lot</th>
+                              <th className="px-2 py-1.5 text-right">Box Weight (KG)</th>
+                              <th className="px-2 py-1.5 text-right">Quantity</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {articleBoxes.map((box) => {
+                              const checked = stagedBarcodeSet.has(box.barcode);
+                              return (
+                                <tr key={box.barcode} className="border-t border-gray-100">
+                                  <td className="px-2 py-1.5">
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      disabled={sessionBusy}
+                                      onChange={(e) => onToggleArticleBox(box, e.target.checked)}
+                                      aria-label={`Return box ${box.boxId}`}
+                                    />
+                                  </td>
+                                  <td className="px-2 py-1.5 font-mono">{box.boxId}</td>
+                                  <td className="px-2 py-1.5">{box.lotNumber || "—"}</td>
+                                  <td className="px-2 py-1.5 text-right">{box.boxWeight || 0}</td>
+                                  <td className="px-2 py-1.5 text-right">{box.numberOfUnits || 0}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {pendingArticleQtyLines.length > 0 && (
@@ -341,6 +404,7 @@ export function VendorPoReturnWorkflowPanel({
                       <thead className="bg-white text-[10px] uppercase text-gray-600">
                         <tr>
                           <th className="px-2 py-1.5">Article</th>
+                          <th className="px-2 py-1.5">Vendor Code</th>
                           <th className="px-2 py-1.5">Lot</th>
                           <th className="px-2 py-1.5 text-right">Qty</th>
                           <th className="px-2 py-1.5 text-right">Remove</th>
@@ -350,6 +414,7 @@ export function VendorPoReturnWorkflowPanel({
                         {pendingArticleQtyLines.map((row) => (
                           <tr key={row.vendorProductionFlowId} className="border-t border-gray-100 bg-white">
                             <td className="px-2 py-1.5">{row.productName || row.referenceCode || "—"}</td>
+                            <td className="px-2 py-1.5">{row.vendorCode || "—"}</td>
                             <td className="px-2 py-1.5">{row.lotNumber || "—"}</td>
                             <td className="px-2 py-1.5 text-right">{row.quantity}</td>
                             <td className="px-2 py-1.5 text-right">

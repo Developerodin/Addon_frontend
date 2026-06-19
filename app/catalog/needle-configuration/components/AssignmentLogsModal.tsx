@@ -13,6 +13,16 @@ export interface AssignmentLogsModalProps {
   assignmentLabel?: string;
 }
 
+/** Never render a raw object as a child: extract a name/email/id, else a dash. */
+const renderUser = (u: unknown): string => {
+  if (u == null || u === "") return "-";
+  if (typeof u === "object") {
+    const o = u as { name?: string; fullName?: string; email?: string; userName?: string; id?: string; _id?: string };
+    return o.name ?? o.fullName ?? o.email ?? o.userName ?? o.id ?? o._id ?? "-";
+  }
+  return String(u);
+};
+
 const formatDate = (v?: string) =>
   v
     ? new Date(v).toLocaleString("en-US", {
@@ -128,7 +138,7 @@ export default function AssignmentLogsModal({
                         {formatDate(log.timestamp ?? log.createdAt)}
                       </td>
                       <td className="py-1.5 pr-2">
-                        {log.userName ?? log.userId ?? "-"}
+                        {renderUser(log.userName ?? log.userId)}
                       </td>
                       <td className="py-1.5 pr-2">{log.action ?? "-"}</td>
                       <td className="py-1.5">

@@ -142,6 +142,7 @@ export function VendorPoReturnChallanPanel({ vpoNumberFilter }: VendorPoReturnCh
                     <th className="text-left px-2 py-2">Date</th>
                     <th className="text-left px-2 py-2">VPO</th>
                     <th className="text-left px-2 py-2">Vendor</th>
+                    <th className="text-left px-2 py-2">Vendor Code</th>
                     <th className="text-right px-2 py-2">Boxes</th>
                     <th className="text-right px-2 py-2">Article Qty</th>
                     <th className="text-right px-2 py-2">Actions</th>
@@ -154,6 +155,11 @@ export function VendorPoReturnChallanPanel({ vpoNumberFilter }: VendorPoReturnCh
                       <td className="px-2 py-2 whitespace-nowrap">{fmtDate(row.challanDate)}</td>
                       <td className="px-2 py-2 font-mono">{row.vpoNumber}</td>
                       <td className="px-2 py-2">{row.vendor?.name || "—"}</td>
+                      <td className="px-2 py-2 font-medium text-gray-800">
+                        {(row.lines || []).map((l) => l.vendorCode).find(Boolean) ||
+                          row.vendor?.vendorCode ||
+                          "—"}
+                      </td>
                       <td className="px-2 py-2 text-right">{row.totals?.boxCount ?? 0}</td>
                       <td className="px-2 py-2 text-right">{row.totals?.articleQtyCount ?? row.totals?.m4UnitCount ?? 0}</td>
                       <td className="px-2 py-2 text-right whitespace-nowrap">

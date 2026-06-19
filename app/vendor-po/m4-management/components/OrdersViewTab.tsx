@@ -147,7 +147,12 @@ export default function OrdersViewTab({
                           <tr key={rowId} className="hover:bg-gray-50/50">
                             <td className="border border-gray-300 px-1 py-1" />
                             <td className="border border-gray-300 px-1 py-1 text-gray-400 text-[9px] pl-3">{group.vpoNumber}</td>
-                            <td className="border border-gray-300 px-1 py-1 font-medium pl-2">{row.referenceCode || "—"}</td>
+                            <td className="border border-gray-300 px-1 py-1 font-medium pl-2">
+                              {row.referenceCode || "—"}
+                              {row.productVendorCode ? (
+                                <span className="block text-[9px] font-normal text-gray-500">VC: {row.productVendorCode}</span>
+                              ) : null}
+                            </td>
                             <td className="border border-gray-300 px-1 py-1 text-right bg-red-50/30">{s.byFloor.finalChecking}</td>
                             <td className="border border-gray-300 px-1 py-1 text-right">{s.onHand}</td>
                             <td className="border border-gray-300 px-1 py-1 text-right text-red-700">{s.outwardTotal}</td>

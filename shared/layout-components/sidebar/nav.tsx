@@ -687,6 +687,14 @@ const BaseMenuItems: any = [
         title: "Branding",
       },
       {
+        icon: BrandingIcon,
+        path: "/vendor-po/re-boarding",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Re-Boarding",
+      },
+      {
         icon: FinalCheckIcon,
         path: "/vendor-po/final-checking",
         type: "link",
