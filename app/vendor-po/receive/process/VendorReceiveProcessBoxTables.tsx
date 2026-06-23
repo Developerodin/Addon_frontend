@@ -26,6 +26,9 @@ type Props = {
   saveBox: (box: VendorBox) => void | Promise<void>;
   onResyncLot: (lot: string) => void | Promise<void>;
   resyncingLot: string | null;
+  onPrintLot: (lot: string, lotBoxes: VendorBox[]) => void | Promise<void>;
+  printingLot: string | null;
+  qzReady: boolean;
   barcodeRef: RefObject<HTMLInputElement>;
   barcodeScanValue: string;
   setBarcodeScanValue: (v: string) => void;
@@ -76,6 +79,9 @@ export function VendorReceiveProcessBoxTables({
   saveBox,
   onResyncLot,
   resyncingLot,
+  onPrintLot,
+  printingLot,
+  qzReady,
   barcodeRef,
   barcodeScanValue,
   setBarcodeScanValue,
@@ -150,25 +156,44 @@ export function VendorReceiveProcessBoxTables({
         return (
         <div key={lot} className="mb-4 overflow-hidden rounded-lg border border-gray-100 bg-white shadow-sm">
           <div className="bg-gray-50 px-3 py-2 border-b border-gray-100 flex items-center justify-between gap-2">
-            <span className="text-[11px] font-bold text-gray-800">Invoice {lot}</span>
-            <button
-              type="button"
-              onClick={() => void onResyncLot(lot)}
-              disabled={lotLocked || isResyncing}
-              title={
-                lotLocked
-                  ? "Cannot re-create: a box in this invoice is already scanned/stored/returned"
-                  : "Delete and recreate this invoice's boxes split by article"
-              }
-              className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded transition-colors ${
-                lotLocked
-                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  : "bg-amber-100 text-amber-800 hover:bg-amber-200"
-              }`}
-            >
-              <i className={`ri-refresh-line text-xs ${isResyncing ? "animate-spin" : ""}`} />
-              {isResyncing ? "Re-creating…" : "Re-create boxes"}
-            </button>
+            <span className="text-[11px] font-bold text-gray-800">
+              Invoice {lot}
+              <span className="ml-1.5 font-medium text-gray-500">({lotBoxes.length} box{lotBoxes.length === 1 ? "" : "es"})</span>
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void onPrintLot(lot, lotBoxes)}
+                disabled={!qzReady || printingLot === lot}
+                title={!qzReady ? "Start QZ Tray and select a printer" : `Print barcodes for invoice ${lot}`}
+                className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded transition-colors ${
+                  qzReady && printingLot !== lot
+                    ? "bg-purple-100 text-purple-800 hover:bg-purple-200"
+                    : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                }`}
+              >
+                <i className={`text-xs ${printingLot === lot ? "ri-loader-4-line animate-spin" : "ri-printer-line"}`} />
+                {printingLot === lot ? "Printing…" : "Print barcodes"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void onResyncLot(lot)}
+                disabled={lotLocked || isResyncing}
+                title={
+                  lotLocked
+                    ? "Cannot re-create: a box in this invoice is already scanned/stored/returned"
+                    : "Delete and recreate this invoice's boxes split by article"
+                }
+                className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded transition-colors ${
+                  lotLocked
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-amber-100 text-amber-800 hover:bg-amber-200"
+                }`}
+              >
+                <i className={`ri-refresh-line text-xs ${isResyncing ? "animate-spin" : ""}`} />
+                {isResyncing ? "Re-creating…" : "Re-create boxes"}
+              </button>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse border border-gray-200">
@@ -281,8 +306,24 @@ export function VendorReceiveProcessBoxTables({
 
       {boxesByLot.unassigned.length > 0 && (
         <div className="mb-4 overflow-hidden rounded-lg border border-amber-200 bg-amber-50/30 shadow-sm">
-          <div className="bg-amber-100 px-3 py-2 text-[11px] font-bold border-b border-amber-200 text-amber-900">
-            Unassigned to invoice ({boxesByLot.unassigned.length})
+          <div className="bg-amber-100 px-3 py-2 border-b border-amber-200 flex items-center justify-between gap-2">
+            <span className="text-[11px] font-bold text-amber-900">
+              Unassigned to invoice ({boxesByLot.unassigned.length})
+            </span>
+            <button
+              type="button"
+              onClick={() => void onPrintLot("__unassigned__", boxesByLot.unassigned)}
+              disabled={!qzReady || printingLot === "__unassigned__"}
+              title={!qzReady ? "Start QZ Tray and select a printer" : "Print barcodes for unassigned boxes"}
+              className={`flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded transition-colors ${
+                qzReady && printingLot !== "__unassigned__"
+                  ? "bg-purple-100 text-purple-800 hover:bg-purple-200"
+                  : "bg-gray-100 text-gray-400 cursor-not-allowed"
+              }`}
+            >
+              <i className={`text-xs ${printingLot === "__unassigned__" ? "ri-loader-4-line animate-spin" : "ri-printer-line"}`} />
+              {printingLot === "__unassigned__" ? "Printing…" : "Print barcodes"}
+            </button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse border border-gray-200">

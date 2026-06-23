@@ -174,7 +174,7 @@ export function defaultVendorLabelPrintSettings() {
     paperHeight: 558,
     orientation: "vertical" as const,
     labelsPerPage: 1,
-    columnsPerRow: 2,
+    columnsPerRow: 1,
     firstLabelTopMargin: 0,
     showCutLines: false,
     qrCodeSize: 5,

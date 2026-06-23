@@ -18,6 +18,7 @@ import {
 import {
   exportVendorBoxesExcel,
   printAllVendorBoxLabels,
+  printVendorBoxLabels,
   type VendorBoxFormRow,
 } from "./vendorReceiveProcessPrintExport";
 import { VendorReceiveProcessBoxTables } from "./VendorReceiveProcessBoxTables";
@@ -42,6 +43,7 @@ export function VendorReceiveProcessView({ orderId }: Props) {
   const [rawInput, setRawInput] = useState<Record<string, string>>({});
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [printingLot, setPrintingLot] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [itemsOpen, setItemsOpen] = useState(false);
   const [qz, setQz] = useState({ connected: false, printer: null as { name: string } | null });
@@ -213,6 +215,23 @@ export function VendorReceiveProcessView({ orderId }: Props) {
       toast.error(e instanceof Error ? e.message : "Print failed");
     } finally {
       setIsPrinting(false);
+    }
+  };
+
+  const handlePrintLot = async (lot: string, lotBoxes: VendorBox[]) => {
+    if (!apiPo) return;
+    if (!lotBoxes.length) {
+      toast.error("No boxes to print for this invoice");
+      return;
+    }
+    setPrintingLot(lot);
+    try {
+      const scopeLabel = lot === "__unassigned__" ? "unassigned boxes" : `Invoice ${lot}`;
+      await printVendorBoxLabels(apiPo, lotBoxes, boxData, { scopeLabel });
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Print failed");
+    } finally {
+      setPrintingLot(null);
     }
   };
 
@@ -547,6 +566,9 @@ export function VendorReceiveProcessView({ orderId }: Props) {
             saveBox={saveBox}
             onResyncLot={resyncLot}
             resyncingLot={resyncingLot}
+            onPrintLot={handlePrintLot}
+            printingLot={printingLot}
+            qzReady={qz.connected && !!qz.printer}
             barcodeRef={barcodeRef}
             barcodeScanValue={barcodeScanValue}
             setBarcodeScanValue={setBarcodeScanValue}

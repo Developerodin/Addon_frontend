@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Vendor } from "./types";
 import VendorViewDrawer from "./components/VendorViewDrawer";
 import { toast } from "react-hot-toast";
-import { bulkImportVendors, listVendors, patchVendor } from "@/shared/services/vendorManagementService";
+import { bulkImportVendors, deleteVendor, listVendors, patchVendor } from "@/shared/services/vendorManagementService";
 import { mapVendorDocToVendor } from "./vendorMappers";
 import {
   downloadVendorBulkExcelTemplate,
@@ -132,6 +132,27 @@ const VendorListPage = () => {
       }
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Update failed");
+    }
+  };
+
+  const handleDelete = async (vendor: Vendor) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to permanently delete "${vendor.vendorName}"? This cannot be undone.`
+    );
+    if (!confirmed) return;
+    try {
+      await deleteVendor(vendor.id);
+      toast.success("Vendor deleted successfully");
+      if (selectedVendor?.id === vendor.id) {
+        closeViewModal();
+      }
+      if (vendors.length === 1 && page > 1) {
+        setPage((p) => Math.max(1, p - 1));
+      } else {
+        await loadVendors();
+      }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Delete failed");
     }
   };
 
@@ -419,6 +440,14 @@ const VendorListPage = () => {
                             <i
                               className={`${vendor.status === "active" ? "ri-forbid-line" : "ri-check-line"} text-xs`}
                             />
+                          </button>
+                          <button
+                            type="button"
+                            className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 border border-red-100 rounded hover:bg-red-100 transition-colors"
+                            title="Delete"
+                            onClick={() => handleDelete(vendor)}
+                          >
+                            <i className="ri-delete-bin-line text-xs" />
                           </button>
                         </div>
                       </td>
