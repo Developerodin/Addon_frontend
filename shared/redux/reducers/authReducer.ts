@@ -15,6 +15,7 @@ function clearNavigationCache(): void {
         return;
     }
     localStorage.removeItem('navigationPermissions');
+    localStorage.removeItem('navigationPermissionsVersion');
     localStorage.removeItem('cachedUserId');
 }
 

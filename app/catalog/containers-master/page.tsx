@@ -13,6 +13,7 @@ import {
   type CreateContainerBody,
   type UpdateContainerBody,
 } from "@/shared/services/containersMasterService";
+import BulkCreateContainersModal from "./components/BulkCreateContainersModal";
 import { QZTrayLoader, QZTrayStatus, QZTrayUntrustedWarning, QZTrayRequestBlocked } from "@/shared/components/qzTray";
 import { printContainerLabels, connectQZ, getDefaultPrinter, isQZLoaded } from "@/shared/utils/qzTrayOther";
 
@@ -41,6 +42,7 @@ const ContainersMasterPage = () => {
   const [selectAll, setSelectAll] = useState(false);
 
   const [sideModalOpen, setSideModalOpen] = useState(false);
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [editingContainer, setEditingContainer] = useState<ContainerMaster | null>(null);
   const [formStatus, setFormStatus] = useState<ContainerStatus>("Active");
   const [formContainerName, setFormContainerName] = useState("");
@@ -508,6 +510,14 @@ const ContainersMasterPage = () => {
               */}
               <button
                 type="button"
+                onClick={() => setBulkModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border bg-white text-purple-700 border-purple-200 hover:bg-purple-50 transition-colors shadow-sm"
+              >
+                <i className="ri-stack-line text-xs" aria-hidden />
+                Bulk Create
+              </button>
+              <button
+                type="button"
                 onClick={openAddModal}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
               >
@@ -663,6 +673,11 @@ const ContainersMasterPage = () => {
       </div>
 
       {/* Side modal: Add / Edit */}
+      <BulkCreateContainersModal
+        isOpen={bulkModalOpen}
+        onClose={() => setBulkModalOpen(false)}
+        onSuccess={fetchList}
+      />
       {sideModalOpen && (
         <div className="fixed inset-0 z-50 flex justify-end" aria-modal="true">
           <div className="absolute inset-0 bg-black/50" onClick={closeModal} />

@@ -106,6 +106,16 @@ interface NavigationPermissions {
   };
 }
 
+/**
+ * Whether Help & Support nav is explicitly enabled for this user.
+ * @param permissions - Merged navigation permissions from context
+ */
+export function canAccessHelpSupport(
+  permissions: { 'Help & Support'?: boolean } | null | undefined
+): boolean {
+  return permissions?.['Help & Support'] === true;
+}
+
 interface NavigationContextType {
   permissions: NavigationPermissions | null;
   hasPermission: (path: string) => boolean;
@@ -301,45 +311,36 @@ const defaultPermissions: NavigationPermissions = {
 /** Defaults for Yarn Issue submenu keys — used when normalizing legacy user documents. */
 export const EMPTY_YARN_ISSUE_NAV_DEFAULTS = defaultPermissions['Yarn Management']['Yarn Issue'];
 
+const NAVIGATION_CACHE_KEY = 'navigationPermissions';
+const NAVIGATION_CACHE_VERSION_KEY = 'navigationPermissionsVersion';
+/** Bump when permission semantics change (e.g. Help & Support opt-in). */
+const NAVIGATION_CACHE_VERSION = '3';
+
 interface NavigationProviderProps {
   children: ReactNode;
 }
 
 export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children }) => {
-  const [permissions, setPermissions] = useState<NavigationPermissions | null>(() => {
-    // Initialize with cached permissions if available
-    if (typeof window !== 'undefined') {
-      const cachedPermissions = localStorage.getItem('navigationPermissions');
-      if (cachedPermissions) {
-        try {
-          return JSON.parse(cachedPermissions);
-        } catch (error) {
-          console.error('Failed to parse cached permissions on init:', error);
-        }
-      }
-    }
-    return null;
-  });
-  const [isLoading, setIsLoading] = useState(() => {
-    // If we have cached permissions, don't show loading initially
-    if (typeof window !== 'undefined') {
-      const cachedPermissions = localStorage.getItem('navigationPermissions');
-      return !cachedPermissions;
-    }
-    return true;
-  });
-  
-  // Get user from Redux store
+  const [permissions, setPermissions] = useState<NavigationPermissions | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
   const user = useSelector((state: any) => state.auth?.user);
+  const authInitialized = useSelector((state: any) => state.auth?.authInitialized);
 
   useEffect(() => {
+    if (!authInitialized) {
+      setIsLoading(true);
+      return;
+    }
+
     console.log('Navigation context - User data:', user);
     console.log('Navigation context - User navigation:', user?.navigation);
-    
+
     // Clear cache if no user (logout or expired session)
     if (!user) {
-      localStorage.removeItem('navigationPermissions');
+      localStorage.removeItem(NAVIGATION_CACHE_KEY);
       localStorage.removeItem('cachedUserId');
+      localStorage.removeItem(NAVIGATION_CACHE_VERSION_KEY);
       setPermissions(null);
       setIsLoading(false);
       return;
@@ -350,16 +351,20 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
       console.log('Setting navigation permissions from user:', user.navigation);
       const mergedPermissions = mergeNavigationWithDefaults(user.navigation);
       setPermissions(mergedPermissions);
-      // Cache permissions for faster loading on refresh
-      localStorage.setItem('navigationPermissions', JSON.stringify(mergedPermissions));
+      localStorage.setItem(NAVIGATION_CACHE_KEY, JSON.stringify(mergedPermissions));
       localStorage.setItem('cachedUserId', user.id);
+      localStorage.setItem(NAVIGATION_CACHE_VERSION_KEY, NAVIGATION_CACHE_VERSION);
       setIsLoading(false);
     } else if (user) {
-      // User exists but no navigation permissions - check cache first
-      const cachedPermissions = localStorage.getItem('navigationPermissions');
+      const cachedPermissions = localStorage.getItem(NAVIGATION_CACHE_KEY);
       const cachedUserId = localStorage.getItem('cachedUserId');
+      const cacheVersion = localStorage.getItem(NAVIGATION_CACHE_VERSION_KEY);
       
-      if (cachedPermissions && cachedUserId === user.id) {
+      if (
+        cachedPermissions &&
+        cachedUserId === user.id &&
+        cacheVersion === NAVIGATION_CACHE_VERSION
+      ) {
         try {
           const parsedPermissions = JSON.parse(cachedPermissions);
           setPermissions(parsedPermissions);
@@ -378,19 +383,18 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
         Dashboard: true, // Always show dashboard for authenticated users
       };
       setPermissions(securePermissions);
-      // Cache permissions for faster loading on refresh
-      localStorage.setItem('navigationPermissions', JSON.stringify(securePermissions));
+      localStorage.setItem(NAVIGATION_CACHE_KEY, JSON.stringify(securePermissions));
       localStorage.setItem('cachedUserId', user.id);
+      localStorage.setItem(NAVIGATION_CACHE_VERSION_KEY, NAVIGATION_CACHE_VERSION);
       setIsLoading(false);
     } else {
-      // No user - use completely secure defaults
       console.log('No user found, using secure defaults');
       setPermissions(defaultPermissions);
-      // Cache permissions for faster loading on refresh
-      localStorage.setItem('navigationPermissions', JSON.stringify(defaultPermissions));
+      localStorage.setItem(NAVIGATION_CACHE_KEY, JSON.stringify(defaultPermissions));
+      localStorage.removeItem(NAVIGATION_CACHE_VERSION_KEY);
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, authInitialized]);
 
   // Check if user has permission for a main menu item
   const hasPermission = (path: string): boolean => {
@@ -411,6 +415,9 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
 
     const permissionKey = pathMap[path];
     if (permissionKey && typeof permissions[permissionKey] === 'boolean') {
+      if (path === '/help-and-support') {
+        return permissions[permissionKey] === true;
+      }
       return permissions[permissionKey] as boolean;
     }
 

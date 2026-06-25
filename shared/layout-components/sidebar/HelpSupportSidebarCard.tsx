@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { useNavigation } from '@/shared/contextapi/navigationContext';
+import { useNavigation, canAccessHelpSupport } from '@/shared/contextapi/navigationContext';
 
 const HELP_SUPPORT_PATH = '/help-and-support';
 
@@ -10,9 +10,9 @@ const HELP_SUPPORT_PATH = '/help-and-support';
  * Pinned bottom card in the sidebar for Help & Support (opens in a new tab).
  */
 export default function HelpSupportSidebarCard() {
-  const { hasPermission, isLoading } = useNavigation();
+  const { permissions, isLoading } = useNavigation();
 
-  if (isLoading || !hasPermission(HELP_SUPPORT_PATH)) {
+  if (isLoading || !canAccessHelpSupport(permissions)) {
     return null;
   }
 

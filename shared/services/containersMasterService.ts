@@ -357,6 +357,47 @@ export interface CreateContainerBody {
   tearWeight?: number;
 }
 
+/** Naming pattern detected from existing containers (bulk create). */
+export interface ContainerNamingPattern {
+  id: string;
+  label: string;
+  prefix: string;
+  separator: string;
+  nextNumber: number;
+  count: number;
+  suggestedType: ContainerType | null;
+  suggestedTearWeight: number | null;
+}
+
+export interface ContainerNamingPatternsResponse {
+  patterns: ContainerNamingPattern[];
+  defaultPatternId: string | null;
+}
+
+export interface BulkCreateContainersBody {
+  count: number;
+  type: ContainerType;
+  tearWeight: number;
+  status?: ContainerStatus;
+  namePatternId?: string;
+}
+
+export interface BulkCreateContainersResponse {
+  created: number;
+  startNumber: number;
+  endNumber: number;
+  namingLabel: string;
+  namePreview: string[];
+  containers: ContainerMaster[];
+}
+
+/** Default tear weight hints per container type (matches seed script). */
+export const CONTAINER_TYPE_TEAR_WEIGHT_DEFAULTS: Record<ContainerType, number> = {
+  bag: 0.412,
+  bigContainer: 4.12,
+  container: 1.98,
+};
+
 export interface UpdateContainerBody {
   containerName?: string;
   status?: ContainerStatus;
@@ -473,6 +514,19 @@ class ContainersMasterService {
 
   async create(body: CreateContainerBody): Promise<ContainerMaster> {
     return this.request<ContainerMaster>('', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  /** GET /naming-patterns — detected name formats from existing containers. */
+  async getNamingPatterns(): Promise<ContainerNamingPatternsResponse> {
+    return this.request<ContainerNamingPatternsResponse>('/naming-patterns');
+  }
+
+  /** POST /bulk — create many containers with auto-generated names. */
+  async bulkCreate(body: BulkCreateContainersBody): Promise<BulkCreateContainersResponse> {
+    return this.request<BulkCreateContainersResponse>('/bulk', {
       method: 'POST',
       body: JSON.stringify(body),
     });

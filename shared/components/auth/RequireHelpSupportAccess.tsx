@@ -2,10 +2,8 @@
 
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useNavigation } from '@/shared/contextapi/navigationContext';
+import { useNavigation, canAccessHelpSupport } from '@/shared/contextapi/navigationContext';
 import { getFirstAvailableRoute } from '@/shared/utils/routeUtils';
-
-const HELP_SUPPORT_PATH = '/help-and-support';
 
 interface RequireHelpSupportAccessProps {
   children: React.ReactNode;
@@ -16,8 +14,8 @@ interface RequireHelpSupportAccessProps {
  */
 export function RequireHelpSupportAccess({ children }: RequireHelpSupportAccessProps) {
   const router = useRouter();
-  const { hasPermission, isLoading, permissions } = useNavigation();
-  const allowed = hasPermission(HELP_SUPPORT_PATH);
+  const { permissions, isLoading } = useNavigation();
+  const allowed = canAccessHelpSupport(permissions);
 
   useEffect(() => {
     if (!isLoading && !allowed) {
