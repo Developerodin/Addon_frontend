@@ -124,7 +124,8 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
                 { key: 'Stores', label: 'Stores' },
                 { key: 'Analytics', label: 'Analytics' },
                 { key: 'Replenishment Agent', label: 'Replenishment Agent' },
-                { key: 'File Manager', label: 'File Manager' }
+                { key: 'File Manager', label: 'File Manager' },
+                { key: 'Help & Support', label: 'Help & Support' }
               ].map(section => (
                 <label key={section.key} className="flex items-center">
                   <input

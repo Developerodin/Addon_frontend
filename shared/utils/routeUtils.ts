@@ -36,6 +36,7 @@ export const getFirstAvailableRoute = (permissions: NavigationPermissions | null
     { path: '/analytics', permission: permissions.Analytics },
     { path: '/replenishment', permission: permissions['Replenishment Agent'] },
     { path: '/filemanager', permission: permissions['File Manager'] },
+    { path: '/help-and-support', permission: permissions['Help & Support'] },
     { path: '/users', permission: permissions.Users },
     { path: '/production/supervisor', permission: permissions['Production Planning']?.['Production Orders'] },
     { path: '/production/floor-supervisor/knitting', permission: permissions['Production Planning']?.['Knitting Floor'] },

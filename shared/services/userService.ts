@@ -26,6 +26,7 @@ export interface NavigationPermissions {
   Analytics: boolean;
   'Replenishment Agent': boolean;
   'File Manager': boolean;
+  'Help & Support': boolean;
   Users: boolean;
   'Production Planning': {
     'Production Orders': boolean;

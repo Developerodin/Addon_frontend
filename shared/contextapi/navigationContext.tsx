@@ -27,6 +27,7 @@ interface NavigationPermissions {
   Analytics: boolean;
   'Replenishment Agent': boolean;
   'File Manager': boolean;
+  'Help & Support': boolean;
   Users: boolean;
   'Production Planning': {
     'Production Orders': boolean;
@@ -218,6 +219,7 @@ const defaultPermissions: NavigationPermissions = {
   Analytics: false,
   'Replenishment Agent': false,
   'File Manager': false,
+  'Help & Support': false,
   Users: false,
   'Production Planning': {
     'Production Orders': false,
@@ -393,6 +395,10 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
   // Check if user has permission for a main menu item
   const hasPermission = (path: string): boolean => {
     if (!permissions) return false;
+
+    if (path === '/help-and-support') {
+      return Boolean(user);
+    }
     
     // Map paths to permission keys
     const pathMap: { [key: string]: keyof NavigationPermissions } = {
@@ -403,6 +409,7 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
       '/analytics': 'Analytics',
       '/replenishment': 'Replenishment Agent',
       '/filemanager': 'File Manager',
+      '/help-and-support': 'Help & Support',
       '/vendor-po': 'Vendor PO',
     };
 

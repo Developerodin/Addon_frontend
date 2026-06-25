@@ -16,6 +16,7 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
     { key: 'Analytics', label: 'Analytics' },
     { key: 'Replenishment Agent', label: 'Replenishment Agent' },
     { key: 'File Manager', label: 'File Manager' },
+    { key: 'Help & Support', label: 'Help & Support' },
     { key: 'Users', label: 'Users Management' }
   ]
 

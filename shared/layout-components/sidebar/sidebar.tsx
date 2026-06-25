@@ -9,6 +9,7 @@ import Menuloop from "./menuloop";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMenuItems } from "./nav";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
+import HelpSupportSidebarCard from "./HelpSupportSidebarCard";
 
 const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 	const filteredMenuItems = useMenuItems();
@@ -956,7 +957,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 					}
 					menuClose(e.nativeEvent); 
 				}}></div>
-			<aside className="app-sidebar" id="sidebar" onMouseOver={() => Onhover()}
+			<aside className="app-sidebar app-sidebar--with-help-card" id="sidebar" onMouseOver={() => Onhover()}
 				onMouseLeave={() => Outhover()}>
 				<div className="main-sidebar-header">
 					<Link
@@ -1008,6 +1009,32 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 													</span>
 													: ""}
 												{levelone.type === "link" ?
+													levelone.openInNewTab ? (
+													<Link
+														href={levelone.path}
+														target="_blank"
+														rel="noopener noreferrer"
+														className={`side-menu__item ${levelone.selected ? 'active' : ''}`}
+														onClick={(e) => e.stopPropagation()}
+													>
+													<span className={`hs-tooltip inline-block [--placement:right] leading-none ${local_varaiable?.dataVerticalStyle == 'doublemenu' ? '' : 'hidden'}`}>
+														<button type="button" className="hs-tooltip-toggle  inline-flex justify-center items-center
+																">
+															{levelone.icon}
+															<span className="hs-tooltip-content hs-tooltip-shown:opacity-100 hs-tooltip-shown:visible opacity-0 transition-opacity inline-block absolute invisible z-10 py-1 px-2 bg-black text-xs font-medium text-white rounded shadow-sm dark:bg-neutral-700" role="tooltip">
+																{levelone.title}
+															</span>
+														</button>
+													</span>
+
+													{local_varaiable.dataVerticalStyle != "doublemenu" ? levelone.icon :""}
+													<span className="side-menu__label">{levelone.title} {levelone.badgetxt ? (<span className={levelone.class}> {levelone.badgetxt}</span>
+														) : (
+															""
+														)}
+														</span>
+													</Link>
+													) : (
 													<Link href={levelone.path} className={`side-menu__item ${levelone.selected ? 'active' : ''}`} onClick={(e) => { 
 														console.log('🟢 Top-level menu link clicked:', {
 															path: levelone.path,
@@ -1057,6 +1084,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 														)}
 														</span>
 													</Link>
+													)
 													: ""}
 												{levelone.type === "empty" ?
 													<Link href="#!" className='side-menu__item'
@@ -1083,6 +1111,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 							</div>
 						</nav>
 				</SimpleBar>
+				<HelpSupportSidebarCard />
 			</aside>
 		</Fragment>
 	);
