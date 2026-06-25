@@ -395,10 +395,6 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
   // Check if user has permission for a main menu item
   const hasPermission = (path: string): boolean => {
     if (!permissions) return false;
-
-    if (path === '/help-and-support') {
-      return Boolean(user);
-    }
     
     // Map paths to permission keys
     const pathMap: { [key: string]: keyof NavigationPermissions } = {
