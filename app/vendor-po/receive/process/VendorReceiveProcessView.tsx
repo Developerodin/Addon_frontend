@@ -13,6 +13,7 @@ import { dashOr, vendorCodeFromPoLineItem } from "../../components/vendorPacklis
 import {
   getVendorBoxId,
   getVendorLotReceivedLines,
+  MAX_VENDOR_BOX_UNITS,
   resolveVendorBoxArticleFromPo,
 } from "./vendorReceiveProcessHelpers";
 import {
@@ -185,6 +186,12 @@ export function VendorReceiveProcessView({ orderId }: Props) {
     }
     if (Number.isNaN(nu) || nu <= 0) {
       toast.error("Units (pcs) must be > 0");
+      return;
+    }
+    if (nu > MAX_VENDOR_BOX_UNITS) {
+      toast.error(
+        `Units cannot exceed ${MAX_VENDOR_BOX_UNITS.toLocaleString()} — check for a scanned barcode in the units field`
+      );
       return;
     }
     setUpdatingId(bid);

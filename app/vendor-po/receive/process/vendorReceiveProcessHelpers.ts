@@ -25,6 +25,9 @@ export type VendorLotReceivedLineRow = {
   pattern: string;
 };
 
+/** Max pcs per vendor box — blocks barcode accidentally saved as units. */
+export const MAX_VENDOR_BOX_UNITS = 100_000;
+
 /** Sanitize numeric input for weight/qty fields. */
 export function validateVendorProcessNum(value: string, allowDec = true): string {
   if (value === "") return "";
