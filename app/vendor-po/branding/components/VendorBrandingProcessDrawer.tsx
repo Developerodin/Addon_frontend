@@ -268,6 +268,10 @@ export function VendorBrandingProcessDrawer({
       toast.error("Batch not loaded — close and open Process again.");
       return;
     }
+    if (!brandingType) {
+      toast.error("Select branding type (Heat Transfer or Embroidery) before staging.");
+      return;
+    }
     if (lineSumOverReceived) {
       toast.error(
         `Line total cannot exceed received (${lineSumMax.toLocaleString()}). Reduce quantities.`,
@@ -337,9 +341,11 @@ export function VendorBrandingProcessDrawer({
             server merges by style + brand and sets{" "}
             <code className="text-[10px]">completed</code> / counters — do not send those scalars.
             Recorded lines are <strong>read-only</strong>; use <strong>Row</strong> for new qty.{" "}
-            <strong>Save &amp; stage to Final FC</strong> opens the container modal: the same PATCH
+            <strong>Save &amp; stage to {stageTargetLabel}</strong> opens the container modal: the same PATCH
             adds <code className="text-[10px]">existingContainerBarcode</code> +{" "}
             <code className="text-[10px]">autoTransferToNextFloor</code> with that delta.{" "}
+            <strong className="text-amber-800">Select branding type first</strong> — Embroidery stages to
+            Re-Boarding; Heat Transfer stages to Final Checking.{" "}
             <span className="text-gray-600">
               <code className="text-[10px]">receivedData[].transferred</code> = inbound line qty, not
               floor outbound <code className="text-[10px]">transferred</code>.
@@ -564,12 +570,15 @@ export function VendorBrandingProcessDrawer({
             className={CRM.btnPrimary}
             disabled={
               saving ||
+              !brandingType ||
               lineSumOverReceived ||
               newRowsTransferredTotal <= 0 ||
               deltaTransferredPayload.length === 0
             }
             title={
-              lineSumOverReceived
+              !brandingType
+                ? "Select branding type first"
+                : lineSumOverReceived
                 ? "Line total cannot exceed received"
                 : newRowsTransferredTotal <= 0 ||
                     deltaTransferredPayload.length === 0
