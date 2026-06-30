@@ -17,6 +17,12 @@ import {
   storageInputClass,
   storagePaginationBarClass,
 } from "./storageUiClasses";
+import {
+  formatWeightKgCell,
+  resolveBoxGrossWeightKg,
+  resolveBoxNetWeightKg,
+  resolveConeNetWeightKg,
+} from "../utils/boxWeightDisplay";
 
 type ReportTab = "boxes" | "cones";
 
@@ -247,8 +253,8 @@ const ZoneReportFullView: React.FC<ZoneReportFullViewProps> = ({
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {paginatedBoxes.map((b) => {
-                  const gross = b.boxWeight ?? 0;
-                  const net = gross - (b.tearweight ?? 0);
+                  const gross = resolveBoxGrossWeightKg(b);
+                  const net = resolveBoxNetWeightKg(b);
                   return (
                     <tr key={b._id ?? b.boxId ?? b.barcode} className="hover:bg-gray-50/80">
                       <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-gray-900">
@@ -261,11 +267,11 @@ const ZoneReportFullView: React.FC<ZoneReportFullViewProps> = ({
                         <span className="line-clamp-2 break-words">{b.yarnName ?? "-"}</span>
                       </td>
                       <td className="whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums">
-                        {gross.toFixed(2)}
+                        {formatWeightKgCell(gross, 2)}
                       </td>
                       {isLongTerm ? (
                         <td className="whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums">
-                          {net.toFixed(2)}
+                          {formatWeightKgCell(net, 2)}
                         </td>
                       ) : null}
                       <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-gray-700">

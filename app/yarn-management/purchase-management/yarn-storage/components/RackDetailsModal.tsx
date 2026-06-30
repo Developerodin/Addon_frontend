@@ -14,6 +14,12 @@ import {
   exportBoxesToExcel,
   exportConesToExcel,
 } from "../utils/storageReportUtils";
+import {
+  formatWeightKgCell,
+  resolveBoxGrossWeightKg,
+  resolveBoxNetWeightKg,
+  resolveConeNetWeightKg,
+} from "../utils/boxWeightDisplay";
 import StorageReportModal from "./StorageReportModal";
 
 interface RackDetailsModalProps {
@@ -288,6 +294,7 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
                                   <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Box Info</th>
                                   <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">PO & Yarn</th>
                                   <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Attributes</th>
+                                  <th className="px-3 py-2 text-center font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Gross Weight</th>
                                   <th className="px-3 py-2 text-center font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Net Weight</th>
                                   <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">QC Status</th>
                                   <th className="px-3 py-2 text-right pr-4 font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Date</th>
@@ -310,7 +317,13 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
                                     </td>
                                     <td className="px-3 py-2.5 text-center">
                                       <div className="font-bold text-gray-900">
-                                        {formatKg(box.boxWeight, 4)}{" "}
+                                        {formatWeightKgCell(resolveBoxGrossWeightKg(box))}{" "}
+                                        <span className="text-[9px] font-bold text-gray-600 uppercase">kg</span>
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2.5 text-center">
+                                      <div className="font-bold text-gray-900">
+                                        {formatWeightKgCell(resolveBoxNetWeightKg(box))}{" "}
                                         <span className="text-[9px] font-bold text-gray-600 uppercase">kg</span>
                                       </div>
                                       <div className="text-gray-700 mt-0.5 font-medium">{box.numberOfCones} <span className="text-[9px] font-bold text-gray-600 uppercase">cones</span></div>
@@ -350,7 +363,8 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
                                   <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Cone Barcode</th>
                                   <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Box & PO</th>
                                   <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Yarn</th>
-                                  <th className="px-3 py-2 text-center font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Weight</th>
+                                  <th className="px-3 py-2 text-center font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Gross Weight</th>
+                                  <th className="px-3 py-2 text-center font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Net Weight</th>
                                   <th className="px-3 py-2 text-left font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Status</th>
                                   <th className="px-3 py-2 text-right pr-4 font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Date</th>
                                 </tr>
@@ -371,11 +385,17 @@ const RackDetailsModal: React.FC<RackDetailsModalProps> = ({
                                     </td>
                                     <td className="px-3 py-2.5 text-center">
                                       <div className="font-bold text-gray-900">
-                                        {formatKg(cone.coneWeight, 4)}{" "}
+                                        {formatWeightKgCell(cone.coneWeight)}{" "}
                                         <span className="text-[9px] font-bold text-gray-600 uppercase">kg</span>
                                       </div>
                                       <div className="text-[9px] text-gray-600 mt-0.5 font-medium">
-                                        Tear: {formatKg(cone.tearWeight, 4)}
+                                        Tear: {formatWeightKgCell(cone.tearWeight)}
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2.5 text-center">
+                                      <div className="font-bold text-gray-900">
+                                        {formatWeightKgCell(resolveConeNetWeightKg(cone))}{" "}
+                                        <span className="text-[9px] font-bold text-gray-600 uppercase">kg</span>
                                       </div>
                                     </td>
                                     <td className="px-3 py-2.5">

@@ -10,6 +10,12 @@ import {
   computeBoxSummary,
   computeConeSummary,
 } from "../utils/storageReportUtils";
+import {
+  formatWeightKgCell,
+  resolveBoxGrossWeightKg,
+  resolveBoxNetWeightKg,
+  resolveConeNetWeightKg,
+} from "../utils/boxWeightDisplay";
 
 type ReportView = "summary" | "full";
 
@@ -163,8 +169,11 @@ const StorageReportModal: React.FC<StorageReportModalProps> = ({
                           <th className="px-3 py-2 text-left font-bold text-gray-600 uppercase">
                             PO & Yarn
                           </th>
-                          <th className="px-3 py-2 text-left font-bold text-gray-600 uppercase">
-                            Weight
+                          <th className="px-3 py-2 text-right font-bold text-gray-600 uppercase">
+                            Gross (kg)
+                          </th>
+                          <th className="px-3 py-2 text-right font-bold text-gray-600 uppercase">
+                            Net (kg)
                           </th>
                           <th className="px-3 py-2 text-left font-bold text-gray-600 uppercase">
                             Cones
@@ -187,7 +196,12 @@ const StorageReportModal: React.FC<StorageReportModalProps> = ({
                                 {b.yarnName}
                               </div>
                             </td>
-                            <td className="px-3 py-2 font-bold">{b.boxWeight} kg</td>
+                            <td className="px-3 py-2 text-right font-bold tabular-nums">
+                              {formatWeightKgCell(resolveBoxGrossWeightKg(b), 2)}
+                            </td>
+                            <td className="px-3 py-2 text-right font-bold tabular-nums">
+                              {formatWeightKgCell(resolveBoxNetWeightKg(b), 2)}
+                            </td>
                             <td className="px-3 py-2">{b.numberOfCones}</td>
                             <td className="px-3 py-2 text-gray-600">
                               {formatDateTime(b.receivedDate).split(",")[0]}
@@ -211,8 +225,11 @@ const StorageReportModal: React.FC<StorageReportModalProps> = ({
                           <th className="px-3 py-2 text-left font-bold text-gray-600 uppercase">
                             Yarn
                           </th>
-                          <th className="px-3 py-2 text-left font-bold text-gray-600 uppercase">
-                            Weight
+                          <th className="px-3 py-2 text-right font-bold text-gray-600 uppercase">
+                            Gross (kg)
+                          </th>
+                          <th className="px-3 py-2 text-right font-bold text-gray-600 uppercase">
+                            Net (kg)
                           </th>
                           <th className="px-3 py-2 text-left font-bold text-gray-600 uppercase">
                             Date
@@ -233,7 +250,12 @@ const StorageReportModal: React.FC<StorageReportModalProps> = ({
                             <td className="px-3 py-2 text-gray-700 truncate max-w-[120px]" title={c.yarnName}>
                               {c.yarnName}
                             </td>
-                            <td className="px-3 py-2 font-bold">{c.coneWeight} kg</td>
+                            <td className="px-3 py-2 text-right font-bold tabular-nums">
+                              {formatWeightKgCell(c.coneWeight, 2)}
+                            </td>
+                            <td className="px-3 py-2 text-right font-bold tabular-nums">
+                              {formatWeightKgCell(resolveConeNetWeightKg(c), 2)}
+                            </td>
                             <td className="px-3 py-2 text-gray-600">
                               {formatDateTime(c.createdAt).split(",")[0]}
                             </td>

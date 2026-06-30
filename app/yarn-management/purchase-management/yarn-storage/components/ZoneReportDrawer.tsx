@@ -6,6 +6,11 @@ import storageSlotService from "@/shared/services/storageSlotService";
 import yarnConeService, { YarnCone } from "@/shared/services/yarnConeService";
 import ZoneReportFullView from "./ZoneReportFullView";
 import { BoxWithRack, ConeWithRack } from "./zoneReportSearch";
+import {
+  resolveBoxGrossWeightKg,
+  resolveBoxNetWeightKg,
+  resolveConeNetWeightKg,
+} from "../utils/boxWeightDisplay";
 
 interface ZoneReportDrawerProps {
   isOpen: boolean;
@@ -98,9 +103,12 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
         : cones.map((c) => c.yarnName || "Unknown")
     ).size;
 
-  const totalBoxGrossWeight = boxes.reduce((sum, b) => sum + (b.boxWeight ?? 0), 0);
+  const totalBoxGrossWeight = boxes.reduce(
+    (sum, b) => sum + (resolveBoxGrossWeightKg(b) ?? 0),
+    0
+  );
   const totalBoxNetWeight = boxes.reduce(
-    (sum, b) => sum + (b.boxWeight ?? 0) - (b.tearweight ?? 0),
+    (sum, b) => sum + (resolveBoxNetWeightKg(b) ?? 0),
     0
   );
   const totalConeGrossWeight = cones.reduce(
@@ -108,7 +116,7 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
     0
   );
   const totalConeNetWeight = cones.reduce(
-    (sum, c) => sum + ((c.coneWeight ?? 0) - (c.tearWeight ?? 0)),
+    (sum, c) => sum + (resolveConeNetWeightKg(c) ?? 0),
     0
   );
 
@@ -180,7 +188,8 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
           "Yarn Name": b.yarnName ?? "-",
           "Lot Number": b.lotNumber ?? "-",
           "Shade Code": b.shadeCode ?? "-",
-          "Box Weight (kg)": b.boxWeight ?? 0,
+          "Gross Weight (kg)": resolveBoxGrossWeightKg(b) ?? "",
+          "Net Weight (kg)": resolveBoxNetWeightKg(b) ?? "",
           "Number of Cones": b.numberOfCones ?? 0,
           "Rack Code": b.rackCode ?? b.storageLocation ?? "-",
           "Rack Barcode": b.rackBarcode ?? "-",

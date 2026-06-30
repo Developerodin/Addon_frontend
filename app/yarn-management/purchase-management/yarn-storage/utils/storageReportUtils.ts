@@ -3,6 +3,11 @@
  */
 import * as XLSX from "xlsx";
 import { BoxInSlot, ConeInSlot, StorageSlot } from "@/shared/services/storageSlotService";
+import {
+  resolveBoxGrossWeightKg,
+  resolveBoxNetWeightKg,
+  resolveConeNetWeightKg,
+} from "./boxWeightDisplay";
 
 export interface SlotReportSummary {
   totalItems: number;
@@ -22,12 +27,12 @@ export function computeBoxSummary(boxes: BoxInSlot[]): SlotReportSummary {
   let totalWeight = 0;
 
   for (const b of boxes) {
-    totalWeight += b.boxWeight ?? 0;
+    totalWeight += resolveBoxNetWeightKg(b) ?? 0;
     const key = b.yarnName || "Unknown";
     const existing = yarnMap.get(key) || { count: 0, weight: 0 };
     yarnMap.set(key, {
       count: existing.count + 1,
-      weight: existing.weight + (b.boxWeight ?? 0),
+      weight: existing.weight + (resolveBoxNetWeightKg(b) ?? 0),
     });
   }
 
@@ -51,12 +56,12 @@ export function computeConeSummary(cones: ConeInSlot[]): SlotReportSummary {
   let totalWeight = 0;
 
   for (const c of cones) {
-    totalWeight += c.coneWeight ?? 0;
+    totalWeight += resolveConeNetWeightKg(c) ?? 0;
     const key = c.yarnName || "Unknown";
     const existing = yarnMap.get(key) || { count: 0, weight: 0 };
     yarnMap.set(key, {
       count: existing.count + 1,
-      weight: existing.weight + (c.coneWeight ?? 0),
+      weight: existing.weight + (resolveConeNetWeightKg(c) ?? 0),
     });
   }
 
@@ -88,7 +93,8 @@ export function exportBoxesToExcel(
     "Yarn Name": b.yarnName,
     "Lot Number": b.lotNumber,
     "Shade Code": b.shadeCode,
-    "Box Weight (kg)": b.boxWeight,
+    "Gross Weight (kg)": resolveBoxGrossWeightKg(b) ?? "",
+    "Net Weight (kg)": resolveBoxNetWeightKg(b) ?? "",
     "Number of Cones": b.numberOfCones,
     "QC Status": b.qcData?.status ?? "-",
     "Received Date": b.receivedDate ? new Date(b.receivedDate).toLocaleDateString() : "-",
@@ -115,7 +121,8 @@ export function exportConesToExcel(
     "Yarn Name": c.yarnName,
     "Shade Code": c.shadeCode,
     "Cone Weight (kg)": c.coneWeight,
-    "Tear Weight": c.tearWeight,
+    "Tear Weight (kg)": c.tearWeight,
+    "Net Weight (kg)": resolveConeNetWeightKg(c) ?? "",
     "Issue Status": c.issueStatus,
     "Return Status": c.returnStatus,
     "Created At": c.createdAt ? new Date(c.createdAt).toLocaleDateString() : "-",

@@ -111,6 +111,7 @@ export interface BoxInSlot {
   createdAt: string;
   updatedAt: string;
   boxWeight: number;
+  grossWeight?: number;
   lotNumber: string;
   numberOfCones: number;
   shadeCode: string;
