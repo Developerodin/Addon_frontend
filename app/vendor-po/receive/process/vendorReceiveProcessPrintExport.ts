@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { printCones, connectQZ, getDefaultPrinter, isQZLoaded } from "@/shared/utils/qzTray";
 import type { VendorPurchaseOrder } from "@/shared/services/vendorPurchaseOrderService";
 import type { VendorBox } from "@/shared/services/vendorBoxService";
-import { defaultVendorLabelPrintSettings, getVendorBoxId, groupVendorBoxesByLot } from "./vendorReceiveProcessHelpers";
+import { defaultVendorLabelPrintSettings, getVendorBoxId, groupVendorBoxesByLot, resolveVendorBoxArticleFromPo } from "./vendorReceiveProcessHelpers";
 
 export type VendorBoxFormRow = {
   productName: string;
@@ -70,15 +70,27 @@ function vendorBoxesToCones(
     .map((b) => {
       const id = getVendorBoxId(b);
       const d = boxData[id];
+      const lotNumber = d?.lotNumber?.trim() || b.lotNumber?.trim() || "";
+      const unitsRaw = d?.numberOfUnits ?? b.numberOfUnits;
+      const quantity =
+        unitsRaw !== undefined && unitsRaw !== null && String(unitsRaw).trim() !== ""
+          ? Number(unitsRaw)
+          : undefined;
+      const vendorCode =
+        d?.articleCode?.trim() ||
+        resolveVendorBoxArticleFromPo(apiPo, b).code?.trim() ||
+        "";
       return {
         barcode: String(b.barcode),
         boxId: b.boxId || id,
-        yarnName: d?.productName || b.productName || "",
-        shadeCode: d?.articleCode || "",
+        yarnName: d?.productName?.trim() || b.productName?.trim() || "",
+        shadeCode: vendorCode,
         weight: undefined,
-        lotNumber: d?.lotNumber || b.lotNumber || "",
+        lotNumber,
         supplierName: vendorShort,
         poNumber: apiPo.vpoNumber || "",
+        productLabel: "Product",
+        quantity: Number.isFinite(quantity) ? quantity : undefined,
       };
     });
 }

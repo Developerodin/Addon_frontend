@@ -936,6 +936,10 @@ export const generateZPLCone = (
     shadeCode?: string;
     weight?: number;
     boxId?: string;
+    /** Label prefix for material line (default `Yarn`; vendor boxes use `Product`). */
+    productLabel?: string;
+    /** Optional quantity line rendered as `Q: …` below S. */
+    quantity?: number;
     labelWidth?: number;
     labelHeight?: number;
     xOffset?: number;
@@ -958,6 +962,8 @@ export const generateZPLCone = (
     shadeCode,
     weight,
     boxId,
+    productLabel = 'Yarn',
+    quantity,
     labelWidth = 812,
     labelHeight = 400,
     xOffset = 0,
@@ -1053,7 +1059,7 @@ export const generateZPLCone = (
         curX += step;
       }
 
-      const fullName = (yarnName ? `Yarn: ${yarnName}` : '-');
+      const fullName = (yarnName ? `${productLabel}: ${yarnName}` : '-');
       const nameLines = wrapText(fullName, maxCharsVert);
       for (const line of nameLines) {
         zpl += `^FO${curX},${xStart}^A0R,${yarnFontSize},${yarnFontSize}^FB${rowLen},1,0,L^FD${line}^FS\n`;
@@ -1063,6 +1069,10 @@ export const generateZPLCone = (
       zpl += `^FO${curX},${xStart}^A0R,${shadeLotFontSize},${shadeLotFontSize}^FB${rowLen},1,0,L^FDL: ${lotNumber || '-'}^FS\n`;
       curX += step;
       zpl += `^FO${curX},${xStart}^A0R,${shadeLotFontSize},${shadeLotFontSize}^FB${rowLen},1,0,L^FDS: ${shadeCode || '-'}^FS\n`;
+      if (quantity !== undefined && Number.isFinite(quantity)) {
+        curX += step;
+        zpl += `^FO${curX},${xStart}^A0R,${shadeLotFontSize},${shadeLotFontSize}^FB${rowLen},1,0,L^FDQ: ${quantity}^FS\n`;
+      }
       if (weight && weight > 0) {
         curX += step;
         zpl += `^FO${curX},${xStart}^A0R,${shadeLotFontSize},${shadeLotFontSize}^FB${rowLen},1,0,L^FDWT: ${weight} kg^FS\n`;
@@ -1105,9 +1115,9 @@ export const generateZPLCone = (
     }
     curY += 6;
 
-    // 3. Yarn - Allow more lines
+    // 3. Product / yarn name — allow more lines
     if (yarnName) {
-      const fullName = `Yarn: ${yarnName}`;
+      const fullName = `${productLabel}: ${yarnName}`;
       const nameLines = wrapText(fullName, maxChars);
       for (const line of nameLines) {
         zpl += `^FO${labelMargin},${curY}^A0N,${yarnFontSize},${yarnFontSize}^FB${contentWidth},1,0,L^FD${line}^FS\n`;
@@ -1116,10 +1126,14 @@ export const generateZPLCone = (
     }
     curY += 4;
 
-    // 4. Lot and Shade on separate lines
+    // 4. Lot, vendor code, quantity on separate lines
     zpl += `^FO${labelMargin},${curY}^A0N,${shadeLotFontSize},${shadeLotFontSize}^FB${contentWidth},1,0,L^FDL: ${lotNumber || '-'}^FS\n`;
     curY += shadeLotFontSize + 12;
     zpl += `^FO${labelMargin},${curY}^A0N,${shadeLotFontSize},${shadeLotFontSize}^FB${contentWidth},1,0,L^FDS: ${shadeCode || '-'}^FS\n`;
+    if (quantity !== undefined && Number.isFinite(quantity)) {
+      curY += shadeLotFontSize + 12;
+      zpl += `^FO${labelMargin},${curY}^A0N,${shadeLotFontSize},${shadeLotFontSize}^FB${contentWidth},1,0,L^FDQ: ${quantity}^FS\n`;
+    }
     if (weight && weight > 0) {
       curY += shadeLotFontSize + 12;
       zpl += `^FO${labelMargin},${curY}^A0N,${shadeLotFontSize},${shadeLotFontSize}^FB${contentWidth},1,0,L^FDWT: ${weight} kg^FS\n`;
@@ -1758,6 +1772,8 @@ export const printCones = async (
     shadeCode?: string;
     weight?: number;
     boxId?: string;
+    productLabel?: string;
+    quantity?: number;
   }>,
   options: {
     printerName?: string;
@@ -1830,6 +1846,8 @@ export const printCones = async (
             shadeCode: cone.shadeCode,
             weight: cone.weight,
             boxId: cone.boxId,
+            productLabel: cone.productLabel,
+            quantity: cone.quantity,
             labelWidth,
             labelHeight,
             xOffset,
@@ -1840,7 +1858,8 @@ export const printCones = async (
             boxIdFontSize,
             yarnFontSize,
             supplierFontSize,
-            shadeLotFontSize
+            shadeLotFontSize,
+            orientation: options.customSettings.orientation,
           });
         }
 
