@@ -13,8 +13,15 @@ export function resolveBoxNetWeightKg(box: Pick<BoxInSlot, "boxWeight" | "tearwe
   }
   const gw = box.grossWeight;
   const tw = Number(box.tearweight ?? 0);
-  if (typeof gw === "number" && Number.isFinite(gw) && gw > 0 && bw <= gw + 0.0001) {
-    return bw;
+  if (typeof gw === "number" && Number.isFinite(gw) && gw > 0) {
+    // boxWeight stored as gross (legacy bad sync): net = gross − tear
+    if (Math.abs(bw - gw) <= 0.0001) {
+      return Math.max(0, gw - tw);
+    }
+    // Canonical: boxWeight is net when it is less than gross
+    if (bw <= gw + 0.0001) {
+      return bw;
+    }
   }
   return Math.max(0, bw - tw);
 }

@@ -8,6 +8,10 @@ import {
   resolveBoxNetWeightKg,
   resolveConeNetWeightKg,
 } from "./boxWeightDisplay";
+import {
+  buildZoneReportBoxExcelRow,
+  buildZoneReportConeExcelRow,
+} from "./zoneReportExcelRows";
 
 export interface SlotReportSummary {
   totalItems: number;
@@ -87,17 +91,12 @@ export function exportBoxesToExcel(
   zoneType: string
 ): void {
   const rows = boxes.map((b) => ({
-    "Box ID": b.boxId,
-    Barcode: b.barcode,
-    "PO Number": b.poNumber,
-    "Yarn Name": b.yarnName,
-    "Lot Number": b.lotNumber,
-    "Shade Code": b.shadeCode,
-    "Gross Weight (kg)": resolveBoxGrossWeightKg(b) ?? "",
-    "Net Weight (kg)": resolveBoxNetWeightKg(b) ?? "",
-    "Number of Cones": b.numberOfCones,
+    ...buildZoneReportBoxExcelRow({
+      ...b,
+      rackCode: slot?.label,
+      rackBarcode: slot?.barcode,
+    }),
     "QC Status": b.qcData?.status ?? "-",
-    "Received Date": b.receivedDate ? new Date(b.receivedDate).toLocaleDateString() : "-",
   }));
 
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -114,19 +113,13 @@ export function exportConesToExcel(
   cones: ConeInSlot[],
   zoneType: string
 ): void {
-  const rows = cones.map((c) => ({
-    "Cone Barcode": c.barcode,
-    "Box ID": c.boxId,
-    "PO Number": c.poNumber,
-    "Yarn Name": c.yarnName,
-    "Shade Code": c.shadeCode,
-    "Cone Weight (kg)": c.coneWeight,
-    "Tear Weight (kg)": c.tearWeight,
-    "Net Weight (kg)": resolveConeNetWeightKg(c) ?? "",
-    "Issue Status": c.issueStatus,
-    "Return Status": c.returnStatus,
-    "Created At": c.createdAt ? new Date(c.createdAt).toLocaleDateString() : "-",
-  }));
+  const rows = cones.map((c) => {
+    const row = buildZoneReportConeExcelRow(c);
+    return {
+      ...row,
+      "Created At": c.createdAt ? new Date(c.createdAt).toLocaleDateString() : "-",
+    };
+  });
 
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();

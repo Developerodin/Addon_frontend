@@ -7,6 +7,10 @@ import yarnConeService, { YarnCone } from "@/shared/services/yarnConeService";
 import ZoneReportFullView from "./ZoneReportFullView";
 import { BoxWithRack, ConeWithRack } from "./zoneReportSearch";
 import {
+  buildZoneReportBoxExcelRow,
+  buildZoneReportConeExcelRow,
+} from "../utils/zoneReportExcelRows";
+import {
   resolveBoxGrossWeightKg,
   resolveBoxNetWeightKg,
   resolveConeNetWeightKg,
@@ -181,44 +185,13 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
       const wb = XLSX.utils.book_new();
 
       if (boxes.length > 0) {
-        const boxRows = boxes.map((b) => ({
-          "Box ID": b.boxId,
-          Barcode: b.barcode,
-          "PO Number": b.poNumber,
-          "Yarn Name": b.yarnName ?? "-",
-          "Lot Number": b.lotNumber ?? "-",
-          "Shade Code": b.shadeCode ?? "-",
-          "Gross Weight (kg)": resolveBoxGrossWeightKg(b) ?? "",
-          "Net Weight (kg)": resolveBoxNetWeightKg(b) ?? "",
-          "Number of Cones": b.numberOfCones ?? 0,
-          "Rack Code": b.rackCode ?? b.storageLocation ?? "-",
-          "Rack Barcode": b.rackBarcode ?? "-",
-          "Received Date": b.receivedDate ? new Date(b.receivedDate).toLocaleDateString() : "-",
-        }));
+        const boxRows = boxes.map((b) => buildZoneReportBoxExcelRow(b));
         const wsBox = XLSX.utils.json_to_sheet(boxRows);
         XLSX.utils.book_append_sheet(wb, wsBox, "Boxes");
       }
 
       if (cones.length > 0) {
-        const coneRows = cones.map((c) => {
-          // coneWeight in API/DB is gross; net = gross - tear
-          const gross = c.coneWeight ?? 0;
-          const tear = c.tearWeight ?? 0;
-          return {
-            "Cone Barcode": c.barcode,
-            "Box ID": c.boxId,
-            "PO Number": c.poNumber,
-            "Yarn Name": c.yarnName ?? "-",
-            "Shade Code": c.shadeCode ?? "-",
-            "Issue Status": c.issueStatus ?? "-",
-            "Return Status": c.returnStatus ?? "-",
-            "Cone Gross Weight (kg)": gross,
-            "Cone Tear Weight (kg)": tear,
-            "Cone Net Weight (kg)": gross - tear,
-            "Rack Code": c.rackCode ?? c.coneStorageId ?? "-",
-            "Rack Barcode": c.rackBarcode ?? "-",
-          };
-        });
+        const coneRows = cones.map((c) => buildZoneReportConeExcelRow(c));
         const wsCone = XLSX.utils.json_to_sheet(coneRows);
         XLSX.utils.book_append_sheet(wb, wsCone, "Cones");
       }
@@ -288,8 +261,8 @@ const ZoneReportDrawer: React.FC<ZoneReportDrawerProps> = ({
                   <div className="font-semibold text-gray-900">Download Excel</div>
                   <div className="text-xs text-gray-500">
                     {isLongTerm
-                      ? "Export boxes with rack, weight, PO"
-                      : "Export boxes & cones with rack, weight, PO, status"}
+                      ? "Export boxes with rack, gross & net weight, PO"
+                      : "Export boxes & cones with rack, gross & net weight, PO, status"}
                   </div>
                 </div>
               </button>
