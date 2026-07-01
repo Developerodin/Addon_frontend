@@ -203,6 +203,9 @@ export interface BulkImportMultiPairItem {
 
 export interface BulkImportOrderRow {
   clientType: string;
+  /** MongoDB client id — preferred when names collide. */
+  clientId?: string;
+  /** Fallback lookup when clientId is omitted; must be unique per type. */
   clientName: string;
   date: string;
   status: string;
@@ -219,7 +222,7 @@ export interface BulkImportPayload {
 export interface BulkImportSummary {
   created: number;
   failed: number;
-  errors: Array<{ row?: number; reason: string }>;
+  errors: Array<{ row?: number; index?: number; reason?: string; error?: string; clientId?: string; clientName?: string }>;
   processingTime?: number;
 }
 

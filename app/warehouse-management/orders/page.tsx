@@ -4,19 +4,20 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast, Toaster } from "react-hot-toast";
-import * as XLSX from "xlsx";
-import { saveAs } from "file-saver";
 import {
   whmsWarehouseOrders,
   normalizeWarehouseOrderStatus,
   type WarehouseOrder,
   type WarehouseOrderStatus,
-  type BulkImportOrderRow,
-  type BulkImportSinglePairItem,
-  type BulkImportMultiPairItem,
 } from "@/shared/services/whmsWarehouseOrderService";
+import { whmsWarehouseClients } from "@/shared/services/whmsWarehouseClientService";
 import WarehouseOrdersTable from "./components/WarehouseOrdersTable";
 import WarehouseOrderDetailDrawer from "./components/WarehouseOrderDetailDrawer";
+import {
+  downloadWarehouseOrdersBulkTemplate,
+  fetchAllWarehouseClientsForReference,
+  parseWarehouseOrdersBulkImportFile,
+} from "./components/warehouseOrderBulkImport";
 
 const STATUS_TABS: Array<{ id: "all" | WarehouseOrderStatus; label: string }> = [
   { id: "all", label: "All" },
@@ -41,6 +42,7 @@ export default function WarehouseOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
 
   const stats = useMemo(() => {
@@ -105,35 +107,23 @@ export default function WarehouseOrdersPage() {
     }
   };
 
-  const downloadTemplate = () => {
-    const orderRows = [
-      { clientType: "Store", clientName: "My Store Brand", date: "17/02/2026", status: "pending", addonOrderId: "ADDON-1001", pairType: "single", styleCode: "SC-001", quantity: 10, type: "" },
-      { clientType: "", clientName: "", date: "", status: "", addonOrderId: "", pairType: "single", styleCode: "SC-002", quantity: 5, type: "" },
-      { clientType: "", clientName: "", date: "", status: "", addonOrderId: "", pairType: "multi", styleCode: "MP-001", colour: "Green", pattern: "Check", quantity: 20, type: "Cotton" },
-      { clientType: "Trade", clientName: "Another Client", date: "20/02/2026", status: "pending", addonOrderId: "ADDON-2044", pairType: "single", styleCode: "SC-003", quantity: 15, type: "" },
-    ];
-    const instructions = [
-      { Field: "clientType", Description: "Store, Trade, Departmental, or Ecom" },
-      { Field: "clientName", Description: "Human-readable client name (backend resolves to clientId)" },
-      { Field: "date", Description: "DD/MM/YYYY or DD-MM-YYYY" },
-      { Field: "status", Description: "pending, in-progress, packed, dispatched, cancelled" },
-      { Field: "addonOrderId", Description: "Optional external / customer reference (e.g. Addon order number); set on order header rows only" },
-      { Field: "pairType", Description: "'single' or 'multi' — determines single-pair vs multi-pair item" },
-      { Field: "styleCode", Description: "Style code string (backend auto-resolves ID)" },
-      { Field: "quantity", Description: "Numeric quantity" },
-      { Field: "type", Description: "Multi-pair items only: material/type (e.g. Cotton). Leave empty for single-pair rows" },
-      { Field: "colour, pattern", Description: "Multi-pair item rows only; both optional" },
-      { Field: "---", Description: "---" },
-      { Field: "GROUPING", Description: "Rows with clientType filled start a new order. Subsequent rows without clientType are items belonging to the same order." },
-    ];
-    const ws = XLSX.utils.json_to_sheet(orderRows);
-    const wsInst = XLSX.utils.json_to_sheet(instructions);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Orders");
-    XLSX.utils.book_append_sheet(wb, wsInst, "Instructions");
-    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-    saveAs(new Blob([wbout], { type: "application/octet-stream" }), "warehouse-orders-bulk-template.xlsx");
-    toast.success("Template downloaded");
+  const downloadTemplate = async () => {
+    setIsDownloadingTemplate(true);
+    try {
+      const clients = await fetchAllWarehouseClientsForReference(whmsWarehouseClients.listByType);
+      downloadWarehouseOrdersBulkTemplate(clients);
+      toast.success(
+        clients.length
+          ? `Template downloaded (${clients.length} clients in ClientReference sheet)`
+          : "Template downloaded",
+      );
+    } catch (e) {
+      console.error(e);
+      downloadWarehouseOrdersBulkTemplate([]);
+      toast.error(e instanceof Error ? e.message : "Could not load client list; template downloaded without reference");
+    } finally {
+      setIsDownloadingTemplate(false);
+    }
   };
 
   const handleBulkImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -143,78 +133,26 @@ export default function WarehouseOrdersPage() {
     setIsImporting(true);
     try {
       const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array", cellDates: true });
-      const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]] || {}, { defval: "", raw: false });
-      if (!rawRows.length) { toast.error("No rows found in file"); return; }
+      const { orders, errors: parseErrors } = parseWarehouseOrdersBulkImportFile(buf);
 
-      const str = (v: unknown) => String(v ?? "").trim();
-      const num = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
-      const parseDate = (v: unknown): string => {
-        if (v instanceof Date) {
-          const dd = String(v.getUTCDate()).padStart(2, "0");
-          const mm = String(v.getUTCMonth() + 1).padStart(2, "0");
-          return `${dd}/${mm}/${v.getUTCFullYear()}`;
-        }
-        const raw = String(v ?? "").trim();
-        if (!raw) return "";
-        const serial = Number(raw);
-        if (Number.isFinite(serial) && serial > 1000 && serial < 100000) {
-          const d = new Date(Math.round((serial - 25569) * 86400 * 1000));
-          const dd = String(d.getUTCDate()).padStart(2, "0");
-          const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-          return `${dd}/${mm}/${d.getUTCFullYear()}`;
-        }
-        if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/.test(raw)) return raw.replace(/-/g, "/");
-        return raw;
-      };
-
-      const orders: BulkImportOrderRow[] = [];
-      let current: BulkImportOrderRow | null = null;
-
-      for (const row of rawRows) {
-        const ct = str(row.clientType || row.ClientType || row["Client Type"]);
-        const cn = str(row.clientName || row.ClientName || row["Client Name"]);
-        const dt = parseDate(row.date ?? row.Date);
-        const st = str(row.status || row.Status);
-        const sc = str(row.styleCode || row.StyleCode || row["Style Code"]);
-        const colour = str(row.colour || row.Colour || row.color || row.Color);
-        const pattern = str(row.pattern || row.Pattern);
-        const qty = num(row.quantity || row.Quantity || row.qty || row.Qty);
-        const type = str(row.type || row.Type);
-        const pt = str(row.pairType || row.PairType || row["Pair Type"]).toLowerCase();
-
-        if (ct) {
-          const addonOrderId = str(
-            row.addonOrderId ?? row.AddonOrderId ?? row["Addon Order ID"] ?? row["addon order id"],
-          );
-          current = {
-            clientType: ct,
-            clientName: cn,
-            date: dt,
-            status: st || "pending",
-            ...(addonOrderId ? { addonOrderId } : {}),
-          };
-          orders.push(current);
-        }
-        if (!current || !sc) continue;
-
-        if (pt === "multi" || pt === "multipair" || pt === "multi-pair") {
-          const item: BulkImportMultiPairItem = { styleCode: sc, type, colour, pattern, quantity: qty };
-          current.styleCodeMultiPair = [...(current.styleCodeMultiPair || []), item];
-        } else {
-          const item: BulkImportSinglePairItem = { styleCode: sc, colour, pattern, quantity: qty };
-          current.styleCodeSinglePair = [...(current.styleCodeSinglePair || []), item];
-        }
+      if (parseErrors.length) {
+        parseErrors.slice(0, 5).forEach((msg) => toast.error(msg, { duration: 6000 }));
+        if (parseErrors.length > 5) toast(`+${parseErrors.length - 5} parse error(s)`, { icon: "⚠️" });
       }
 
-      if (!orders.length) { toast.error("No valid orders parsed. Ensure clientType is filled for order header rows."); return; }
+      if (!orders.length) {
+        if (!parseErrors.length) toast.error("No valid orders parsed. Fill clientType + clientId (or clientName) on header rows.");
+        return;
+      }
 
       const summary = await whmsWarehouseOrders.bulkImport({ orders });
       if (summary.created > 0) toast.success(`${summary.created} order(s) created successfully`);
       if (summary.failed > 0) toast.error(`${summary.failed} order(s) failed`);
       if (summary.errors?.length) {
         summary.errors.slice(0, 5).forEach((err) => {
-          toast.error(`${err.row != null ? `Row ${err.row}: ` : ""}${err.reason}`, { duration: 6000 });
+          const msg = err.reason || err.error || "Unknown error";
+          const prefix = err.row != null ? `Order ${err.row}: ` : err.index != null ? `Order ${err.index + 1}: ` : "";
+          toast.error(`${prefix}${msg}`, { duration: 8000 });
         });
         if (summary.errors.length > 5) toast(`+${summary.errors.length - 5} more error(s)`, { icon: "⚠️" });
       }
@@ -292,10 +230,15 @@ export default function WarehouseOrdersPage() {
               </div>
               <button
                 type="button"
-                onClick={downloadTemplate}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-[11px] font-bold rounded hover:bg-gray-50 transition-colors shadow-sm"
+                onClick={() => void downloadTemplate()}
+                disabled={isDownloadingTemplate}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-[11px] font-bold rounded hover:bg-gray-50 disabled:opacity-50 transition-colors shadow-sm"
               >
-                <i className="ri-download-2-line text-xs" /> Template
+                {isDownloadingTemplate ? (
+                  <><i className="ri-loader-4-line text-xs animate-spin" /> Loading...</>
+                ) : (
+                  <><i className="ri-download-2-line text-xs" /> Template</>
+                )}
               </button>
               <button
                 type="button"

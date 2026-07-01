@@ -19,6 +19,7 @@ import {
   parseWarehouseClientStoreImportFile,
   parseWarehouseClientTradeImportFile,
 } from "./components/warehouseClientBulkImport";
+import { exportAllWarehouseClients } from "./components/warehouseClientExport";
 
 const TYPE_TABS: { id: WarehouseClientType; label: string }[] = [
   { id: "Store", label: "Store" },
@@ -65,6 +66,7 @@ export default function WarehouseManagementClientsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isBulkImporting, setIsBulkImporting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const storeBulkInputRef = useRef<HTMLInputElement>(null);
   const tradeBulkInputRef = useRef<HTMLInputElement>(null);
 
@@ -177,6 +179,18 @@ export default function WarehouseManagementClientsPage() {
       toast.error(err instanceof Error ? err.message : "Bulk import failed");
     } finally {
       setIsBulkImporting(false);
+    }
+  };
+
+  const handleExportAll = async () => {
+    setIsExporting(true);
+    try {
+      const count = await exportAllWarehouseClients(whmsWarehouseClients.listByType);
+      toast.success(`Exported ${count} client(s) across all types`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -313,6 +327,19 @@ export default function WarehouseManagementClientsPage() {
                 className="hidden"
                 onChange={handleTradeBulkFile}
               />
+              <button
+                type="button"
+                disabled={isBulkImporting || isExporting}
+                onClick={() => void handleExportAll()}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-emerald-200 text-emerald-700 text-[11px] font-bold rounded hover:bg-emerald-50 transition-colors shadow-sm disabled:opacity-50"
+              >
+                {isExporting ? (
+                  <i className="ri-loader-4-line text-xs animate-spin" />
+                ) : (
+                  <i className="ri-download-2-line text-xs" />
+                )}
+                Export all
+              </button>
               <button
                 type="button"
                 disabled={isBulkImporting}
