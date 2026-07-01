@@ -1858,8 +1858,7 @@ export const printCones = async (
             boxIdFontSize,
             yarnFontSize,
             supplierFontSize,
-            shadeLotFontSize,
-            orientation: options.customSettings.orientation,
+            shadeLotFontSize
           });
         }
 
