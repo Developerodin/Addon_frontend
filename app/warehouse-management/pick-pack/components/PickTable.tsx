@@ -1,106 +1,12 @@
 "use client";
 
 import React, { useState } from "react";
-import * as XLSX from "xlsx";
-import type { Range } from "xlsx";
-import { saveAs } from "file-saver";
 import type { PickListOrderGroup, PickListOrderItem } from "../types";
-
-/**
- * Build compact client label (name and/or type) for print/export.
- */
-function formatClientLabel(args: { clientName?: string; clientType?: string }): string | null {
-  const name = (args.clientName ?? "").trim();
-  const type = (args.clientType ?? "").trim();
-  if (!name && !type) return null;
-  if (name && type) return `${name} • ${type}`;
-  return name || type;
-}
-
-function downloadOrderExcel(group: PickListOrderGroup) {
-  const clientLine = formatClientLabel({ clientName: group.clientName, clientType: group.clientType });
-  const headers = ["Order No", "SKU Code", "Style Code", "Color", "Size", "Qty", "Pickup Qty"] as const;
-  const dataRows = group.items.map((item) => [
-    group.orderNumber,
-    item.skuCode,
-    item.styleCode,
-    item.shade || "—",
-    item.size || "—",
-    item.quantity,
-    item.pickupQuantity,
-  ]);
-  const aoa: (string | number)[][] = [[`Pick List – ${group.orderNumber}`]];
-  if (clientLine) aoa.push([`Client: ${clientLine}`]);
-  aoa.push([...headers]);
-  aoa.push(...dataRows);
-
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  const colCount = headers.length;
-  const merges: Range[] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: colCount - 1 } }];
-  if (clientLine) merges.push({ s: { r: 1, c: 0 }, e: { r: 1, c: colCount - 1 } });
-  ws["!merges"] = merges;
-
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Pick List");
-  const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  saveAs(new Blob([buf], { type: "application/octet-stream" }), `${group.orderNumber}-pick-list.xlsx`);
-}
-
-function printOrderPickList(group: PickListOrderGroup) {
-  const esc = (s: string) =>
-    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  const clientLine = formatClientLabel({ clientName: group.clientName, clientType: group.clientType });
-  const clientBlock = clientLine
-    ? `<div class="client">Client: ${esc(clientLine)}</div>`
-    : "";
-  const tableRows = group.items
-    .map(
-      (item) =>
-        `<tr>
-          <td>${esc(item.skuCode)}</td>
-          <td>${esc(item.styleCode)}</td>
-          <td>${esc(item.shade || "—")}</td>
-          <td>${esc(item.size || "—")}</td>
-          <td style="text-align:center">${item.quantity}</td>
-          <td style="text-align:center" class="pickup-qty-cell"></td>
-        </tr>`,
-    )
-    .join("");
-
-  const html = `<!DOCTYPE html>
-<html><head><title>Pick List – ${group.orderNumber}</title>
-<style>
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:Arial,Helvetica,sans-serif;padding:24px;color:#1a1a1a}
-  h2{font-size:16px;margin-bottom:4px}
-  .client{font-size:13px;font-weight:600;color:#374151;margin-bottom:8px}
-  .meta{font-size:12px;color:#666;margin-bottom:16px}
-  table{width:100%;border-collapse:collapse;font-size:12px}
-  th,td{border:1px solid #d1d5db;padding:6px 10px;text-align:left}
-  th{background:#f3f4f6;font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.5px}
-  tr:nth-child(even){background:#fafafa}
-  td.pickup-qty-cell{min-height:1.5em}
-  .summary{margin-top:12px;font-size:11px;color:#555}
-  @media print{body{padding:12px}button{display:none!important}}
-</style>
-</head><body>
-  <h2>Pick List – ${group.orderNumber}</h2>
-  ${clientBlock}
-  <div class="meta">${group.totalItems} items &middot; Total Qty: ${group.totalQuantity} &middot; Picked: ${group.totalPickupQuantity}</div>
-  <table>
-    <thead><tr><th>SKU Code</th><th>Style Code</th><th>Color</th><th>Size</th><th style="text-align:center">Qty</th><th style="text-align:center">Pickup Qty</th></tr></thead>
-    <tbody>${tableRows}</tbody>
-  </table>
-  <div class="summary">Printed on ${new Date().toLocaleString()}</div>
-</body></html>`;
-
-  const w = window.open("", "_blank");
-  if (!w) return;
-  w.document.write(html);
-  w.document.close();
-  w.focus();
-  w.print();
-}
+import {
+  downloadOrderExcel,
+  formatClientLabel,
+  printOrderPickList,
+} from "./pickTableExport";
 
 function statusBadge(status: string) {
   const map: Record<string, { bg: string; text: string; label: string }> = {
@@ -257,9 +163,57 @@ function ItemRow({
   );
 }
 
+function OrderProgressSummary({
+  group,
+  progressPct,
+}: {
+  group: PickListOrderGroup;
+  progressPct: number;
+}) {
+  return (
+    <>
+      <div className="flex items-center gap-3">
+        <div className="flex-1 min-w-[80px]">
+          <div className="w-full bg-gray-200 rounded-full h-1.5">
+            <div
+              className={`h-1.5 rounded-full transition-all ${
+                progressPct >= 100 ? "bg-emerald-500" : progressPct > 0 ? "bg-orange-400" : "bg-gray-300"
+              }`}
+              style={{ width: `${Math.min(progressPct, 100)}%` }}
+            />
+          </div>
+        </div>
+        <span className="text-[10px] font-bold text-gray-500 whitespace-nowrap">
+          {group.totalPickupQuantity}/{group.totalQuantity}
+        </span>
+      </div>
+      <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+        {group.pendingCount > 0 && (
+          <span className="text-[9px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+            {group.pendingCount} pending
+          </span>
+        )}
+        {group.partialCount > 0 && (
+          <span className="text-[9px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">
+            {group.partialCount} partial
+          </span>
+        )}
+        {group.pickedCount > 0 && (
+          <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+            {group.pickedCount} picked
+          </span>
+        )}
+      </div>
+    </>
+  );
+}
+
 function OrderGroupRow({
   group,
   index,
+  expanded,
+  showDetailColumns,
+  onToggleExpand,
   onSave,
   onSetPickerName,
   onDeleteItem,
@@ -267,12 +221,14 @@ function OrderGroupRow({
 }: {
   group: PickListOrderGroup;
   index: number;
+  expanded: boolean;
+  showDetailColumns: boolean;
+  onToggleExpand: () => void;
   onSave: (itemId: string, pickupQty: number) => void;
   onSetPickerName?: (orderId: string, pickerName: string) => Promise<void>;
   onDeleteItem?: (itemId: string) => Promise<void>;
   onDeleteOrder?: (orderId: string, orderNumber: string) => Promise<void>;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const [deletingOrder, setDeletingOrder] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerNameDraft, setPickerNameDraft] = useState(group.pickerName ?? "");
@@ -383,7 +339,7 @@ function OrderGroupRow({
 
       <tr
         className="bg-gray-50/60 hover:bg-gray-100/80 cursor-pointer transition-colors border-t-2 border-gray-200"
-        onClick={() => setExpanded(!expanded)}
+        onClick={onToggleExpand}
       >
         <td className="px-2 py-2.5 text-[11px] font-medium text-gray-500 border border-gray-200 text-center w-10">
           {index + 1}
@@ -413,49 +369,60 @@ function OrderGroupRow({
               {group.totalItems} {group.totalItems === 1 ? "item" : "items"}
             </span>
           </div>
-        </td>
-        <td className="px-2 py-2.5 border border-gray-200" colSpan={2}>
-          <div className="flex items-center gap-3">
-            <div className="flex-1 min-w-[80px]">
-              <div className="w-full bg-gray-200 rounded-full h-1.5">
-                <div
-                  className={`h-1.5 rounded-full transition-all ${
-                    progressPct >= 100 ? "bg-emerald-500" : progressPct > 0 ? "bg-orange-400" : "bg-gray-300"
-                  }`}
-                  style={{ width: `${Math.min(progressPct, 100)}%` }}
-                />
-              </div>
+          {!showDetailColumns ? (
+            <div className="mt-2 pl-5">
+              <OrderProgressSummary group={group} progressPct={progressPct} />
             </div>
-            <span className="text-[10px] font-bold text-gray-500 whitespace-nowrap">
-              {group.totalPickupQuantity}/{group.totalQuantity}
-            </span>
-          </div>
+          ) : null}
         </td>
-        <td className="px-2 py-2.5 border border-gray-200">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {group.pendingCount > 0 && (
-              <span className="text-[9px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
-                {group.pendingCount} pending
-              </span>
-            )}
-            {group.partialCount > 0 && (
-              <span className="text-[9px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">
-                {group.partialCount} partial
-              </span>
-            )}
-            {group.pickedCount > 0 && (
-              <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
-                {group.pickedCount} picked
-              </span>
-            )}
-          </div>
-        </td>
+        {showDetailColumns ? (
+          <>
+            <td className="px-2 py-2.5 border border-gray-200" colSpan={2}>
+              <div className="flex items-center gap-3">
+                <div className="flex-1 min-w-[80px]">
+                  <div className="w-full bg-gray-200 rounded-full h-1.5">
+                    <div
+                      className={`h-1.5 rounded-full transition-all ${
+                        progressPct >= 100 ? "bg-emerald-500" : progressPct > 0 ? "bg-orange-400" : "bg-gray-300"
+                      }`}
+                      style={{ width: `${Math.min(progressPct, 100)}%` }}
+                    />
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold text-gray-500 whitespace-nowrap">
+                  {group.totalPickupQuantity}/{group.totalQuantity}
+                </span>
+              </div>
+            </td>
+            <td className="px-2 py-2.5 border border-gray-200">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {group.pendingCount > 0 && (
+                  <span className="text-[9px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                    {group.pendingCount} pending
+                  </span>
+                )}
+                {group.partialCount > 0 && (
+                  <span className="text-[9px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">
+                    {group.partialCount} partial
+                  </span>
+                )}
+                {group.pickedCount > 0 && (
+                  <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                    {group.pickedCount} picked
+                  </span>
+                )}
+              </div>
+            </td>
+          </>
+        ) : null}
         <td className="px-2 py-2.5 border border-gray-200 text-center w-20">
           <span className="text-[11px] font-bold text-gray-800">{group.totalQuantity}</span>
         </td>
-        <td className="px-2 py-2.5 border border-gray-200 text-center w-24">
-          <span className="text-[11px] font-bold text-gray-400">—</span>
-        </td>
+        {showDetailColumns ? (
+          <td className="px-2 py-2.5 border border-gray-200 text-center w-24">
+            <span className="text-[11px] font-bold text-gray-400">—</span>
+          </td>
+        ) : null}
         <td className="px-2 py-2.5 border border-gray-200 text-center w-28">
           <span className="text-[11px] font-bold text-gray-800">{group.totalPickupQuantity}</span>
         </td>
@@ -492,7 +459,7 @@ function OrderGroupRow({
             <button
               type="button"
               title={expanded ? "Collapse" : "Expand"}
-              onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+              onClick={(e) => { e.stopPropagation(); onToggleExpand(); }}
               className="inline-flex items-center justify-center w-7 h-7 rounded text-[11px] bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors shadow-sm"
             >
               <i className={`ri-arrow-${expanded ? "up" : "down"}-s-line`}></i>
@@ -547,6 +514,21 @@ export default function PickTable({
   onDeleteItem?: (itemId: string) => Promise<void>;
   onDeleteOrder?: (orderId: string, orderNumber: string) => Promise<void>;
 }) {
+  const [expandedOrderIds, setExpandedOrderIds] = useState<Set<string>>(new Set());
+  const showDetailColumns = expandedOrderIds.size > 0;
+
+  /**
+   * Toggle expanded state for an order row and sync detail-column visibility.
+   */
+  const toggleOrderExpand = (orderId: string) => {
+    setExpandedOrderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
+      return next;
+    });
+  };
+
   if (orderGroups.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -561,7 +543,7 @@ export default function PickTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse border border-gray-200 min-w-[820px]">
+      <table className={`w-full border-collapse border border-gray-200 ${showDetailColumns ? "min-w-[820px]" : "min-w-[560px]"}`}>
         <thead>
           <tr className="bg-gray-50/30">
             <th className="px-2 py-2.5 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 text-center w-10">
@@ -570,21 +552,27 @@ export default function PickTable({
             <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
               Order No
             </th>
-            <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-              SKU Code
-            </th>
-            <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-              Style Code
-            </th>
-            <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-              Color
-            </th>
+            {showDetailColumns ? (
+              <>
+                <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                  SKU Code
+                </th>
+                <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                  Style Code
+                </th>
+                <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                  Color
+                </th>
+              </>
+            ) : null}
             <th className="px-2 py-2.5 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 text-center w-20">
               Qty
             </th>
-            <th className="px-2 py-2.5 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 text-center w-24">
-              Stock
-            </th>
+            {showDetailColumns ? (
+              <th className="px-2 py-2.5 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 text-center w-24">
+                Stock
+              </th>
+            ) : null}
             <th className="px-2 py-2.5 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 text-center w-28">
               Pickup Qty
             </th>
@@ -602,6 +590,9 @@ export default function PickTable({
               key={group.orderId}
               group={group}
               index={idx}
+              expanded={expandedOrderIds.has(group.orderId)}
+              showDetailColumns={showDetailColumns}
+              onToggleExpand={() => toggleOrderExpand(group.orderId)}
               onSave={onSave}
               onSetPickerName={onSetPickerName}
               onDeleteItem={onDeleteItem}

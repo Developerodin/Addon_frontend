@@ -8,6 +8,7 @@ import yarnCatalogService, { YarnCatalog } from '@/shared/services/yarnCatalogSe
 import { styleCodeService, StyleCode } from '@/shared/services/styleCodeService';
 import { StyleCodeSelectModal } from '@/app/catalog/style-codes/components/StyleCodeSelectModal';
 import { ProcessSequenceEditor } from '@/app/catalog/items/components/ProcessSequenceEditor';
+import ProductImageUploadField from '@/app/catalog/items/components/ProductImageUploadField';
 import { useSelector } from 'react-redux';
 import { isDesignUser, isProductionUser, isFinalUser, shouldShowAttribute, shouldShowAttributeForFinal } from '@/shared/utils/userUtils';
 
@@ -106,8 +107,6 @@ const EditProductPage = () => {
   const [attributeCategories, setAttributeCategories] = useState<AttributeCategory[]>([]);
   const [processes, setProcesses] = useState<ProcessType[]>([]);
   const [activeTab, setActiveTab] = useState('general');
-  const [selectedImage, setSelectedImage] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string>('');
 
   // Yarn catalog pagination states
   const [currentYarnPage, setCurrentYarnPage] = useState(1);
@@ -329,9 +328,6 @@ const EditProductPage = () => {
         });
         console.log('Product data loaded:', product);
         console.log('Product attributes:', product.attributes);
-        if (product.image) {
-          setImagePreview(product.image);
-        }
 
         // Process attribute categories
         let attrCats = attributesResponse.data.results || [];
@@ -486,12 +482,9 @@ const EditProductPage = () => {
     }
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedImage(file);
-      setImagePreview(URL.createObjectURL(file));
-    }
+  /** Persist uploaded S3 URL on the product form. */
+  const handleProductImageChange = (url: string) => {
+    setFormData((prev) => ({ ...prev, image: url }));
   };
 
   const handleAttributeChange = (categoryName: string, value: string) => {
@@ -852,29 +845,13 @@ const EditProductPage = () => {
         }));
       }
 
-      if (selectedImage) {
-        const formDataObj = new FormData();
-        formDataObj.append('image', selectedImage);
-        
-        // Append all other fields
-        Object.entries(productData).forEach(([key, value]) => {
-          if (value !== undefined && value !== null) {
-            if (typeof value === 'object') {
-              formDataObj.append(key, JSON.stringify(value));
-            } else {
-              formDataObj.append(key, value.toString());
-            }
-          }
-        });
-
-        await axios.patch(`${API_ENDPOINTS.products}/${productId}`, formDataObj, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-      } else {
-        await axios.patch(`${API_ENDPOINTS.products}/${productId}`, productData, {
-          headers: { 'Content-Type': 'application/json' }
-        });
+      if (typeof formData.image === 'string') {
+        productData.image = formData.image.trim();
       }
+
+      await axios.patch(`${API_ENDPOINTS.products}/${productId}`, productData, {
+        headers: { 'Content-Type': 'application/json' }
+      });
 
       alert('Product updated successfully!');
       router.push('/catalog/items');
@@ -1281,21 +1258,11 @@ const EditProductPage = () => {
                             </div>
                             <div className="md:col-span-2">
                               <label className="form-label">Product Image</label>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={handleImageChange}
-                                className="form-control"
+                              <ProductImageUploadField
+                                value={formData.image ?? ''}
+                                onChange={handleProductImageChange}
+                                disabled={isLoading}
                               />
-                              {imagePreview && (
-                                <div className="mt-4">
-                                  <img
-                                    src={imagePreview}
-                                    alt="Product preview"
-                                    className="max-w-xs rounded-lg shadow-sm"
-                                  />
-                                </div>
-                              )}
                             </div>
                           </>
                         )}
@@ -1399,21 +1366,11 @@ const EditProductPage = () => {
                             </div>
                             <div className="md:col-span-2">
                               <label className="form-label">Product Image</label>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={handleImageChange}
-                                className="form-control"
+                              <ProductImageUploadField
+                                value={formData.image ?? ''}
+                                onChange={handleProductImageChange}
+                                disabled={isLoading}
                               />
-                              {imagePreview && (
-                                <div className="mt-4">
-                                  <img
-                                    src={imagePreview}
-                                    alt="Product preview"
-                                    className="max-w-xs rounded-lg shadow-sm"
-                                  />
-                                </div>
-                              )}
                             </div>
                           </>
                         )}

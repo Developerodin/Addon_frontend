@@ -12,6 +12,16 @@ import {
   downloadWarehouseInventoryImportTemplate,
   parseWarehouseInventoryImportFile,
 } from "./warehouseInventoryBulkImport";
+import { downloadWarehouseInventoryExport } from "./warehouseInventoryExport";
+
+/** Resolve catalog category label for a warehouse inventory row. */
+function inventoryCategoryLabel(row: WhmsWarehouseInventoryDTO): string {
+  const fromProduct = row.product?.category?.trim();
+  if (fromProduct) return fromProduct;
+  const fromItemData = row.itemData?.category;
+  if (typeof fromItemData === "string" && fromItemData.trim()) return fromItemData.trim();
+  return "—";
+}
 
 /**
  * WHMS warehouse inventory — GET /v1/whms/warehouse-inventory (list + detail + logs).
@@ -29,6 +39,7 @@ export default function WhmsWarehouseInventoryTab() {
   const [sortBy, setSortBy] = useState("createdAt:desc");
   const [createOpen, setCreateOpen] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -95,6 +106,46 @@ export default function WhmsWarehouseInventoryTab() {
   };
 
   const onPickImportFile = () => importInputRef.current?.click();
+
+  /**
+   * Export all inventory rows matching current filters to Excel.
+   */
+  const onExport = async () => {
+    setExporting(true);
+    try {
+      const exportLimit = 100;
+      let allRows: WhmsWarehouseInventoryDTO[] = [];
+      let currentPage = 1;
+      let totalToFetch = 1;
+
+      do {
+        const params: Record<string, string | number> = {
+          page: currentPage,
+          limit: exportLimit,
+          sortBy,
+        };
+        if (debouncedStyleCode) params.styleCode = debouncedStyleCode;
+        const data = await whmsWarehouseInventory.list(params);
+        const results = data.results ?? [];
+        allRows = allRows.concat(results);
+        totalToFetch = data.totalResults ?? allRows.length;
+        if (results.length < exportLimit || allRows.length >= totalToFetch) break;
+        currentPage += 1;
+      } while (allRows.length < totalToFetch);
+
+      if (!allRows.length) {
+        toast.error("No inventory rows to export");
+        return;
+      }
+
+      downloadWarehouseInventoryExport(allRows);
+      toast.success(`Exported ${allRows.length.toLocaleString()} row(s)`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const onImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -176,6 +227,16 @@ export default function WhmsWarehouseInventoryTab() {
         </button>
         <button
           type="button"
+          onClick={() => void onExport()}
+          disabled={exporting || importing}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 text-white text-[11px] font-bold rounded hover:bg-sky-700 shadow-sm disabled:opacity-50"
+          aria-label="Export warehouse inventory"
+        >
+          <i className={`ri-file-download-line text-xs ${exporting ? "animate-pulse" : ""}`} />
+          {exporting ? "Exporting…" : "Export"}
+        </button>
+        <button
+          type="button"
           onClick={() => void load()}
           disabled={loading}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50"
@@ -252,6 +313,9 @@ export default function WhmsWarehouseInventoryTab() {
                   <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">
                     Brand
                   </th>
+                  <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">
+                    Category
+                  </th>
                   <th className="px-2 py-1.5 text-right font-semibold text-gray-700 border-r border-gray-300 whitespace-nowrap">
                     Total
                   </th>
@@ -281,6 +345,12 @@ export default function WhmsWarehouseInventoryTab() {
                     </td>
                     <td className="px-2 py-1.5 border-r border-gray-300 max-w-[90px] truncate text-gray-800" title={r.styleCodeMaster?.brand}>
                       {r.styleCodeMaster?.brand ?? "—"}
+                    </td>
+                    <td
+                      className="px-2 py-1.5 border-r border-gray-300 max-w-[100px] truncate text-gray-800"
+                      title={inventoryCategoryLabel(r)}
+                    >
+                      {inventoryCategoryLabel(r)}
                     </td>
                     <td className="px-2 py-1.5 border-r border-gray-300 text-right tabular-nums font-semibold text-teal-800">
                       {(r.quantities?.total ?? 0).toLocaleString()}

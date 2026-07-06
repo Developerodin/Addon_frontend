@@ -272,6 +272,10 @@ export interface WhmsWarehouseInventoryProduct {
   name?: string;
   factoryCode?: string;
   vendorCode?: string;
+  /** Populated from Product → Category.name when item is linked. */
+  category?: string;
+  /** S3 URL from Product.image when item is linked. */
+  image?: string;
 }
 
 export interface WhmsWarehouseInventoryStyleMaster {

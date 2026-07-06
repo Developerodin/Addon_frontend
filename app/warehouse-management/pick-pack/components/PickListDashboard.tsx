@@ -106,19 +106,6 @@ const PickListDashboard: React.FC<PickListDashboardProps> = ({
               />
               <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
             </div>
-            <div className="relative">
-              <select
-                value={filterStatus}
-                onChange={(e) => handleStatusFilterChange(e.target.value)}
-                className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 appearance-none cursor-pointer"
-              >
-                <option value="">All Status</option>
-                <option value="pending">Pending</option>
-                <option value="partial">Partial</option>
-                <option value="picked">Picked</option>
-              </select>
-              <i className="ri-arrow-down-s-line absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none" />
-            </div>
             {onRefresh && (
               <button
                 type="button"

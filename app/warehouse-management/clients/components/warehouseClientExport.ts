@@ -38,6 +38,8 @@ function storeClientToRow(c: WarehouseClient): Record<string, string | number> {
     storeLandlineNo: sp.storeLandlineNo ?? '',
     smNameAndContact: sp.smNameAndContact ?? '',
     storeMailId: sp.storeMailId ?? '',
+    abmNameAndContact: sp.abmNameAndContact ?? '',
+    abmMailId: sp.abmMailId ?? '',
   };
 }
 
@@ -103,7 +105,8 @@ export function buildWarehouseClientsExportWorkbook(
   const inst = XLSX.utils.aoa_to_sheet([
     ['Warehouse clients export'],
     [''],
-    ['clientId is the MongoDB id — use it in order bulk-import when names collide.'],
+    ['clientId is for reference only — ignored on bulk import (system assigns ids).'],
+    ['createdAt / updatedAt are not included; timestamps are set by the system on create.'],
     ['Re-import: use Store sheet format with Import Store; Trade/Dept/Ecom sheets with Import Trade.'],
   ]);
   XLSX.utils.book_append_sheet(wb, inst, 'Instructions');

@@ -8,7 +8,19 @@ import {
   type WhmsWarehouseInventoryLog,
 } from "@/shared/services/whmsService";
 
-type DrawerTab = "details" | "activity";
+type DrawerTab = "details" | "image" | "activity";
+
+/**
+ * Resolve product image URL from populated product or cached itemData snapshot.
+ */
+function inventoryProductImageUrl(row: WhmsWarehouseInventoryDTO | null): string {
+  if (!row) return "";
+  const fromProduct = row.product?.image?.trim();
+  if (fromProduct) return fromProduct;
+  const fromItemData = row.itemData?.image;
+  if (typeof fromItemData === "string" && fromItemData.trim()) return fromItemData.trim();
+  return "";
+}
 
 export interface WarehouseInventoryDetailDrawerProps {
   inventoryId: string | null;
@@ -114,6 +126,7 @@ export default function WarehouseInventoryDetailDrawer({
   if (!inventoryId) return null;
 
   const eventsBadge = row?.logsSummary?.total;
+  const productImageUrl = inventoryProductImageUrl(row);
 
   return (
     <>
@@ -140,6 +153,15 @@ export default function WarehouseInventoryDetailDrawer({
             onClick={() => setTab("details")}
           >
             Details
+          </button>
+          <button
+            type="button"
+            className={`px-3 py-2 text-[11px] font-bold border-b-2 ${
+              tab === "image" ? "border-teal-600 text-teal-600" : "border-transparent text-gray-500"
+            }`}
+            onClick={() => setTab("image")}
+          >
+            Image
           </button>
           <button
             type="button"
@@ -282,6 +304,42 @@ export default function WarehouseInventoryDetailDrawer({
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {!loading && row && tab === "image" && (
+            <div className="space-y-3">
+              <dl className="space-y-2">
+                <div className="grid grid-cols-[110px_1fr] gap-1 border-b border-gray-100 pb-2">
+                  <dt className="text-gray-500 font-medium">Product</dt>
+                  <dd className="font-semibold">{row.product?.name ?? "—"}</dd>
+                </div>
+                <div className="grid grid-cols-[110px_1fr] gap-1 border-b border-gray-100 pb-2">
+                  <dt className="text-gray-500 font-medium">Style</dt>
+                  <dd>{row.styleCode ?? row.styleCodeMaster?.styleCode ?? "—"}</dd>
+                </div>
+              </dl>
+              {productImageUrl ? (
+                <figure className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+                  <img
+                    src={productImageUrl}
+                    alt={row.product?.name ? `${row.product.name} product image` : "Product image"}
+                    className="w-full max-h-[420px] object-contain bg-white"
+                  />
+                </figure>
+              ) : (
+                <div
+                  className="flex flex-col items-center justify-center py-16 border border-dashed border-gray-300 rounded-lg bg-gray-50 text-center px-4"
+                  role="status"
+                  aria-label="No product image available"
+                >
+                  <i className="ri-image-line text-3xl text-gray-300 mb-2" aria-hidden />
+                  <p className="text-[11px] font-semibold text-gray-500">No product image</p>
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    Add an image in Catalog → Items for this product.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

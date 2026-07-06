@@ -41,6 +41,8 @@ export default function WarehouseClientStoreProfileFields({ value, onChange }: P
             ['storeLandlineNo', 'Store landline'],
             ['smNameAndContact', 'SM name & contact'],
             ['storeMailId', 'Store mail'],
+            ['abmNameAndContact', 'ABM name & contact'],
+            ['abmMailId', 'ABM mail'],
           ] as const
         ).map(([key, label]) => (
           <div key={key} className="col-span-12 sm:col-span-6">

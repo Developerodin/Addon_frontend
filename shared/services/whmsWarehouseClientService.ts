@@ -67,6 +67,8 @@ export interface WarehouseClientStoreProfile {
   storeLandlineNo?: string;
   smNameAndContact?: string;
   storeMailId?: string;
+  abmNameAndContact?: string;
+  abmMailId?: string;
 }
 
 export interface WarehouseClient {

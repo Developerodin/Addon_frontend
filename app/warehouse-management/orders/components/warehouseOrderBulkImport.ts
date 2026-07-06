@@ -106,9 +106,6 @@ export function downloadWarehouseOrdersBulkTemplate(clients: WarehouseClient[] =
       pairType: 'single',
       styleCode: 'SC-001',
       quantity: 10,
-      type: '',
-      colour: '',
-      pattern: '',
     },
     {
       clientId: '',
@@ -120,9 +117,6 @@ export function downloadWarehouseOrdersBulkTemplate(clients: WarehouseClient[] =
       pairType: 'single',
       styleCode: 'SC-002',
       quantity: 5,
-      type: '',
-      colour: '',
-      pattern: '',
     },
     {
       clientId: '',
@@ -134,9 +128,6 @@ export function downloadWarehouseOrdersBulkTemplate(clients: WarehouseClient[] =
       pairType: 'multi',
       styleCode: 'MP-001',
       quantity: 20,
-      type: 'Cotton',
-      colour: 'Green',
-      pattern: 'Check',
     },
   ];
 
@@ -150,7 +141,11 @@ export function downloadWarehouseOrdersBulkTemplate(clients: WarehouseClient[] =
     { Field: 'pairType', Description: "'single' or 'multi'" },
     { Field: 'styleCode', Description: 'Style code string (backend resolves ID)' },
     { Field: 'quantity', Description: 'Numeric quantity (min 1)' },
-    { Field: 'type', Description: 'Multi-pair only: material/type' },
+    {
+      Field: 'type / colour / pattern',
+      Description:
+        'Optional — auto-filled from catalogue (style-code brand + linked article attributes). Include only to override.',
+    },
     { Field: 'GROUPING', Description: 'Rows with clientType filled start a new order. Following rows without clientType are line items.' },
   ];
 
@@ -248,10 +243,21 @@ export function parseWarehouseOrdersBulkImportFile(buf: ArrayBuffer): {
     }
 
     if (pt === 'multi' || pt === 'multipair' || pt === 'multi-pair') {
-      const item: BulkImportMultiPairItem = { styleCode: sc, type, colour, pattern, quantity: qty };
+      const item: BulkImportMultiPairItem = {
+        styleCode: sc,
+        quantity: qty,
+        ...(type ? { type } : {}),
+        ...(colour ? { colour } : {}),
+        ...(pattern ? { pattern } : {}),
+      };
       current.styleCodeMultiPair = [...(current.styleCodeMultiPair || []), item];
     } else {
-      const item: BulkImportSinglePairItem = { styleCode: sc, colour, pattern, quantity: qty };
+      const item: BulkImportSinglePairItem = {
+        styleCode: sc,
+        quantity: qty,
+        ...(colour ? { colour } : {}),
+        ...(pattern ? { pattern } : {}),
+      };
       current.styleCodeSinglePair = [...(current.styleCodeSinglePair || []), item];
     }
   });

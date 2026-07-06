@@ -10,8 +10,7 @@ import {
   styleCodePairsService,
   StyleCodePair,
 } from "@/shared/services/styleCodePairsService"
-
-const getPairId = (row: StyleCodePair) => (row as { id?: string }).id ?? (row as { _id?: string })._id ?? ""
+import { downloadStyleCodePairsWorkbook, getPairId } from "./utils/styleCodePairsExport"
 
 const formatMoney = (value?: number) => {
   if (value === undefined || value === null) return "-"
@@ -80,6 +79,7 @@ const StyleCodePairsPage = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [isImporting, setIsImporting] = useState(false)
   const [isBomImporting, setIsBomImporting] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
   const [isDeletingAll, setIsDeletingAll] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
   const bomImportInputRef = useRef<HTMLInputElement>(null)
@@ -343,6 +343,47 @@ const StyleCodePairsPage = () => {
 
   const handleBomImportClick = () => bomImportInputRef.current?.click()
 
+  /**
+   * Export all pairs matching current search/status filters to Excel.
+   */
+  const handleExport = async () => {
+    setIsExporting(true)
+    try {
+      const exportLimit = 100
+      let allRows: StyleCodePair[] = []
+      let currentPage = 1
+      let totalToFetch = 1
+
+      do {
+        const resp = await styleCodePairsService.list({
+          search: search || undefined,
+          status: status || undefined,
+          sortBy: "pairStyleCode:asc",
+          limit: exportLimit,
+          page: currentPage,
+        })
+        const results = resp.results || []
+        allRows = allRows.concat(results)
+        totalToFetch = resp.totalResults ?? allRows.length
+        if (results.length < exportLimit || allRows.length >= totalToFetch) break
+        currentPage += 1
+      } while (allRows.length < totalToFetch)
+
+      if (allRows.length === 0) {
+        toast.error("No style code pairs to export")
+        return
+      }
+
+      downloadStyleCodePairsWorkbook(allRows)
+      toast.success(`Exported ${allRows.length} pair(s)`)
+    } catch (error) {
+      console.error("Export failed", error)
+      toast.error("Export failed")
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   const handleBomImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     e.target.value = ""
@@ -398,13 +439,15 @@ const StyleCodePairsPage = () => {
       <Toaster position="top-right" />
 
       <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0 relative">
-        {(isImporting || isBomImporting) && (
+        {(isImporting || isBomImporting || isExporting) && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/90 rounded">
             <div className="animate-spin rounded-full h-8 w-8 border-2 border-purple-200 border-t-purple-600 mb-3" />
             <p className="text-[11px] font-bold text-gray-700">
-              {isBomImporting ? "Importing BOM…" : "Importing Excel…"}
+              {isExporting ? "Exporting data…" : isBomImporting ? "Importing BOM…" : "Importing Excel…"}
             </p>
-            <p className="text-[10px] text-gray-500 mt-1">Uploading and processing</p>
+            <p className="text-[10px] text-gray-500 mt-1">
+              {isExporting ? "Preparing Excel file" : "Uploading and processing"}
+            </p>
           </div>
         )}
         <div className="p-[10px]">
@@ -450,6 +493,20 @@ const StyleCodePairsPage = () => {
                   </option>
                 ))}
               </select>
+              <button
+                type="button"
+                onClick={() => void handleExport()}
+                disabled={isExporting || isImporting || isBomImporting}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 text-white text-[11px] font-bold rounded hover:bg-sky-700 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                aria-label="Export style code pairs"
+              >
+                {isExporting ? (
+                  <i className="ri-loader-4-line text-xs animate-spin" />
+                ) : (
+                  <i className="ri-file-download-line text-xs" />
+                )}
+                Export
+              </button>
               <button
                 type="button"
                 onClick={handleDownloadTemplate}

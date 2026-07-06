@@ -454,17 +454,14 @@ const PickPackPage = () => {
 
   return (
     <div className="main-content">
-      <Seo title="Pick List & Pack List Automation" />
+      <Seo title="Pick&Pack" />
 
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12">
           {/* Page Header */}
           <div className="box !bg-transparent border-0 shadow-none">
             <div className="box-header">
-              <h1 className="box-title text-2xl font-semibold">Pick List & Pack List Automation</h1>
-              <p className="text-gray-600 mt-2">
-                Automate picking and packing flow efficiently with optimized paths and QR scanning.
-              </p>
+              <h1 className="box-title text-2xl font-semibold">Pick&Pack</h1>
             </div>
           </div>
 

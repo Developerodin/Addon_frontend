@@ -31,7 +31,20 @@ const STORE_PROFILE_KEYS: (keyof WarehouseClientStoreProfile)[] = [
   'storeLandlineNo',
   'smNameAndContact',
   'storeMailId',
+  'abmNameAndContact',
+  'abmMailId',
 ];
+
+/** Excel headers that are system-managed — never sent to the create/import API. */
+const IMPORT_IGNORED_HEADER_KEYS = new Set([
+  'createdat',
+  'updatedat',
+  'createddate',
+  'updateddate',
+  'clientid',
+  'id',
+  '_id',
+]);
 
 const TRADE_ROOT_KEYS = [
   'type',
@@ -90,9 +103,24 @@ function parseOpeningDate(v: unknown): string | null | undefined {
 function rowToKeyMap(row: Record<string, unknown>): Map<string, unknown> {
   const m = new Map<string, unknown>();
   Object.entries(row).forEach(([k, v]) => {
-    m.set(warehouseClientImportHeaderKey(k), v);
+    const hk = warehouseClientImportHeaderKey(k);
+    if (IMPORT_IGNORED_HEADER_KEYS.has(hk)) return;
+    m.set(hk, v);
   });
   return m;
+}
+
+/**
+ * Strip system-managed columns from a raw Excel row before sp_* nested parsing.
+ * @param row - Raw sheet row
+ */
+function stripIgnoredImportColumns(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  Object.entries(row).forEach(([k, v]) => {
+    if (IMPORT_IGNORED_HEADER_KEYS.has(warehouseClientImportHeaderKey(k))) return;
+    out[k] = v;
+  });
+  return out;
 }
 
 /** Sample Excel for Store rows — columns map to API (store fields roll into `storeProfile`). */
@@ -110,12 +138,13 @@ export function downloadWarehouseClientStoreTemplate(): void {
     state: 'MH',
     brand: 'MyBrand',
     brandSub: 'SubLine',
-    openingDate: '2024-01-15',
     address: 'Street 1',
     gst: '27AAAAA0000A1Z5',
     storeLandlineNo: '022-12345678',
     smNameAndContact: 'Name / 9876543210',
     storeMailId: 'store@example.com',
+    abmNameAndContact: 'ABM Name / 9876500000',
+    abmMailId: 'abm@example.com',
   };
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet([headers]);
@@ -125,7 +154,9 @@ export function downloadWarehouseClientStoreTemplate(): void {
     [''],
     ['Required: type = Store. Columns type, status, remarks, slNo are optional root fields.'],
     ['All other columns map into storeProfile. Do not add extra columns (API rejects unknown keys).'],
-    ['openingDate: use YYYY-MM-DD or Excel date.'],
+    ['Optional storeProfile fields include smNameAndContact, storeMailId, abmNameAndContact, abmMailId.'],
+    ['openingDate is optional — set via Add/Edit form only (YYYY-MM-DD). Not in this template.'],
+    ['Do not add createdAt, updatedAt, or clientId — those are system-managed.'],
   ]);
   XLSX.utils.book_append_sheet(wb, inst, 'Instructions');
   XLSX.writeFile(wb, STORE_TEMPLATE);
@@ -173,6 +204,7 @@ export function downloadWarehouseClientTradeTemplate(): void {
     ['type: Trade | Departmental | Ecom (required per row).'],
     ['Optional nested store profile: columns prefixed sp_ map to storeProfile (e.g. sp_billCode, sp_city).'],
     ['Root city, state, address are separate from sp_city, sp_state, sp_address.'],
+    ['Do not add createdAt, updatedAt, created date, or clientId — timestamps and ids are set by the system.'],
   ]);
   XLSX.utils.book_append_sheet(wb, inst, 'Instructions');
   XLSX.writeFile(wb, TRADE_TEMPLATE);
@@ -310,7 +342,7 @@ export function parseWarehouseClientTradeImportFile(buf: ArrayBuffer): {
     });
 
     const storeProfile: WarehouseClientStoreProfile = {};
-    Object.keys(row).forEach((rawCol) => {
+    Object.keys(stripIgnoredImportColumns(row)).forEach((rawCol) => {
       const trimmed = String(rawCol).trim();
       if (!/^sp_/i.test(trimmed)) return;
       const inner = trimmed.replace(/^sp_/i, '');

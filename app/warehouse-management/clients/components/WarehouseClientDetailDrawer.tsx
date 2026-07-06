@@ -153,6 +153,8 @@ export default function WarehouseClientDetailDrawer({ clientId, open, onClose }:
                 <Field label="Store landline" value={sp?.storeLandlineNo} />
                 <Field label="SM name & contact" value={sp?.smNameAndContact} />
                 <Field label="Store mail" value={sp?.storeMailId} />
+                <Field label="ABM name & contact" value={sp?.abmNameAndContact} />
+                <Field label="ABM mail" value={sp?.abmMailId} />
                 <Field label="Address" value={sp?.address?.trim() || '—'} wide />
               </div>
               <div className="pt-2 border-t border-gray-100 space-y-2">
@@ -220,6 +222,8 @@ export default function WarehouseClientDetailDrawer({ clientId, open, onClose }:
                     <Field label="Store landline" value={sp.storeLandlineNo} />
                     <Field label="SM name & contact" value={sp.smNameAndContact} />
                     <Field label="Store mail" value={sp.storeMailId} />
+                    <Field label="ABM name & contact" value={sp.abmNameAndContact} />
+                    <Field label="ABM mail" value={sp.abmMailId} />
                     <Field label="Address" value={sp.address?.trim() || '—'} wide />
                   </div>
                 </>
