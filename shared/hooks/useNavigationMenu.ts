@@ -72,6 +72,56 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
     path === '/vendor-po/grn' ||
     path === '/vendor-po/purchase-management/po-return';
 
+  /** Maps WHMS sidebar labels to flat navigation permission keys. */
+  const getWhmsPermissionKey = (path: string, displayTitle: string): string => {
+    const pathKeyMap: Record<string, string> = {
+      '/warehouse-management/orders': 'Orders',
+      '/warehouse-management/clients': 'Clients',
+      '/warehouse-management/pick-pack': 'Pick&Pack',
+      '/warehouse-management/scanning': 'Scanning',
+      '/warehouse-management/billing': 'Billing',
+      '/warehouse-management/dispatch': 'Dispatch',
+      '/warehouse-management/inward': 'Inward',
+      '/warehouse-management/stock': 'Stock',
+      '/warehouse-management/layout': 'Layout',
+      '/warehouse-management/returns': 'Returns',
+      '/warehouse-management/reports': 'Reports',
+    };
+    const base = path.split('?')[0];
+    return pathKeyMap[base] || displayTitle;
+  };
+
+  /** Whether the user can access a WHMS leaf route. */
+  const whmsPathAllowed = (path: string): boolean => {
+    const base = path.split('?')[0];
+    if (!base.startsWith('/warehouse-management/')) return false;
+    const permissionKey = getWhmsPermissionKey(base, '');
+    return hasSubPermission('/warehouse-management', permissionKey);
+  };
+
+  /** Whether a WHMS sidebar group should render (any child permitted). */
+  const hasWhmsGroupPermission = (groupPath: string): boolean => {
+    if (groupPath === '/warehouse-management/order-management') {
+      return whmsPathAllowed('/warehouse-management/orders') || whmsPathAllowed('/warehouse-management/clients');
+    }
+    if (groupPath === '/warehouse-management/fulfilment-flow') {
+      return (
+        whmsPathAllowed('/warehouse-management/pick-pack') ||
+        whmsPathAllowed('/warehouse-management/scanning') ||
+        whmsPathAllowed('/warehouse-management/billing') ||
+        whmsPathAllowed('/warehouse-management/dispatch')
+      );
+    }
+    if (groupPath === '/warehouse-management/stock-inward') {
+      return (
+        whmsPathAllowed('/warehouse-management/inward') ||
+        whmsPathAllowed('/warehouse-management/stock') ||
+        whmsPathAllowed('/warehouse-management/layout')
+      );
+    }
+    return false;
+  };
+
   const hasVendorPOPurchaseManagementChildPermission = (path: string): boolean => {
     if (path === '/vendor-po/vendor-list') return hasSubPermission('/vendor-po', 'Vendor List');
     if (path === '/vendor-po/grn') return hasSubPermission('/vendor-po', 'GRN');
@@ -157,6 +207,15 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
             if (child.path === '/vendor-po/purchase-management' && !hasVendorPOPurchaseManagementPermission()) {
               return false;
             }
+            if (
+              child.path === '/warehouse-management/order-management' ||
+              child.path === '/warehouse-management/fulfilment-flow' ||
+              child.path === '/warehouse-management/stock-inward'
+            ) {
+              if (!hasWhmsGroupPermission(child.path)) {
+                return false;
+              }
+            }
             
             // Check if this is the Analytics & reports submenu
             if (child.path === '/yarn-management/dashboard') {
@@ -202,6 +261,9 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                 }
                 if (nestedChild.path === '/yarn-management/purchase-order-received') {
                   return hasSubPermission('/yarn-management/purchase-management', 'Purchase Order Recevied');
+                }
+                if (nestedChild.path.startsWith('/warehouse-management/')) {
+                  return whmsPathAllowed(nestedChild.path);
                 }
               }
               return false;
@@ -266,8 +328,7 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               return hasSubPermission('/production', childName);
             }
             if (child.path.startsWith('/warehouse-management/')) {
-              const childName = child.title;
-              return hasSubPermission('/warehouse-management', childName);
+              return whmsPathAllowed(child.path);
             }
             if (child.path.startsWith('/vendor-po/')) {
               if (child.path === '/vendor-po/purchase-management') {
@@ -327,6 +388,9 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                   if (nestedChild.path === '/yarn-management/purchase-order-received') {
                     return hasSubPermission('/yarn-management/purchase-management', 'Purchase Order Recevied');
                   }
+                  if (nestedChild.path.startsWith('/warehouse-management/')) {
+                    return whmsPathAllowed(nestedChild.path);
+                  }
                 }
                 return false;
               });
@@ -382,6 +446,15 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
             if (child.path === '/vendor-po/purchase-management' && !hasVendorPOPurchaseManagementPermission()) {
               return false;
             }
+            if (
+              child.path === '/warehouse-management/order-management' ||
+              child.path === '/warehouse-management/fulfilment-flow' ||
+              child.path === '/warehouse-management/stock-inward'
+            ) {
+              if (!hasWhmsGroupPermission(child.path)) {
+                return false;
+              }
+            }
 
             // Check if nested submenu has any visible children
             const hasVisibleChildren = child.children.some(nestedChild => {
@@ -420,6 +493,9 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                 }
                 if (nestedChild.path === '/yarn-management/purchase-order-received') {
                   return hasSubPermission('/yarn-management/purchase-management', 'Purchase Order Recevied');
+                }
+                if (nestedChild.path.startsWith('/warehouse-management/')) {
+                  return whmsPathAllowed(nestedChild.path);
                 }
               }
               return false;
@@ -491,8 +567,7 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               return hasSubPermission('/production', childName);
             }
             if (child.path.startsWith('/warehouse-management/')) {
-              const childName = child.title;
-              return hasSubPermission('/warehouse-management', childName);
+              return whmsPathAllowed(child.path);
             }
             if (child.path.startsWith('/vendor-po/')) {
               if (child.path === '/vendor-po/purchase-management') {
@@ -549,6 +624,9 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
                   }
                   if (nestedChild.path === '/yarn-management/purchase-order-received') {
                     return hasSubPermission('/yarn-management/purchase-management', 'Purchase Order Recevied');
+                  }
+                  if (nestedChild.path.startsWith('/warehouse-management/')) {
+                    return whmsPathAllowed(nestedChild.path);
                   }
                 }
                 return false;

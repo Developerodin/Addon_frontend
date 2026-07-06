@@ -27,6 +27,7 @@ const PickListDashboard: React.FC<PickListDashboardProps> = ({
   onSetPickerName,
   onDeletePickItem,
   onDeletePickOrder,
+  onAlert,
   onFilterChange,
   onPageChange,
   onRefresh,
@@ -178,6 +179,8 @@ const PickListDashboard: React.FC<PickListDashboardProps> = ({
             onSetPickerName={onSetPickerName}
             onDeleteItem={onDeletePickItem}
             onDeleteOrder={onDeletePickOrder}
+            onRefresh={onRefresh}
+            onAlert={onAlert}
           />
         )}
       </div>

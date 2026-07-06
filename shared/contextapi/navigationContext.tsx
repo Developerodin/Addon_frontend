@@ -84,6 +84,10 @@ interface NavigationPermissions {
     'Inward': boolean;
     'Clients': boolean;
     'Pick&Pack': boolean;
+    'Scanning': boolean;
+    'Billing': boolean;
+    'Dispatch': boolean;
+    'Returns': boolean;
     'Layout': boolean;
     'Stock': boolean;
     'Reports': boolean;
@@ -286,6 +290,10 @@ const defaultPermissions: NavigationPermissions = {
     'Inward': false,
     'Clients': false,
     'Pick&Pack': false,
+    'Scanning': false,
+    'Billing': false,
+    'Dispatch': false,
+    'Returns': false,
     'Layout': false,
     'Stock': false,
     'Reports': false,

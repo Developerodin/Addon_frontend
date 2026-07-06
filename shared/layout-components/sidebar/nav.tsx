@@ -44,6 +44,9 @@ const LayoutIcon = <i className="ri ri-layout-grid-line side-menu__icon" style={
 const StockIcon = <i className="ri ri-stack-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const ReportsIcon = <i className="ri ri-file-chart-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const InwardIcon = <i className="ri ri-inbox-unarchive-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const ScanningIcon = <i className="ri ri-qr-scan-2-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const BillingIcon = <i className="ri ri-bill-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const WhmsReturnIcon = <i className="ri ri-arrow-go-back-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const ClientsIcon = <i className="ri ri-contacts-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const VendorPOIcon = <i className="ri ri-truck-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const VendorListIcon = <i className="ri ri-list-unordered side-menu__icon" style={{ marginTop: "-10px" }}></i>;
@@ -746,51 +749,113 @@ const BaseMenuItems: any = [
     children: [
       {
         icon: OrdersIcon,
-        path: "/warehouse-management/orders",
-        type: "link",
+        title: "Order Management",
+        type: "sub",
         active: false,
         selected: false,
-        title: "Orders",
+        path: "/warehouse-management/order-management",
+        children: [
+          {
+            icon: OrdersIcon,
+            path: "/warehouse-management/orders",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "Orders",
+          },
+          {
+            icon: ClientsIcon,
+            path: "/warehouse-management/clients",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "Clients",
+          },
+        ],
       },
       {
-        icon: InwardIcon,
-        path: "/warehouse-management/inward",
-        type: "link",
+        icon: ProcessIcon,
+        title: "Fulfilment Flow",
+        type: "sub",
         active: false,
         selected: false,
-        title: "Inward",
-      },
-      {
-        icon: ClientsIcon,
-        path: "/warehouse-management/clients",
-        type: "link",
-        active: false,
-        selected: false,
-        title: "Clients",
-      },
-      {
-        icon: PickPackIcon,
-        path: "/warehouse-management/pick-pack",
-        type: "link",
-        active: false,
-        selected: false,
-        title: "Pick&Pack",
-      },
-      {
-        icon: LayoutIcon,
-        path: "/warehouse-management/layout",
-        type: "link",
-        active: false,
-        selected: false,
-        title: "Layout",
+        path: "/warehouse-management/fulfilment-flow",
+        children: [
+          {
+            icon: PickPackIcon,
+            path: "/warehouse-management/pick-pack",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "Pick & Pack",
+          },
+          {
+            icon: ScanningIcon,
+            path: "/warehouse-management/scanning",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "Scanning",
+          },
+          {
+            icon: BillingIcon,
+            path: "/warehouse-management/billing",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "Billing",
+          },
+          {
+            icon: DispatchIcon,
+            path: "/warehouse-management/dispatch",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "Dispatch",
+          },
+        ],
       },
       {
         icon: StockIcon,
-        path: "/warehouse-management/stock",
+        title: "Stock & Inward",
+        type: "sub",
+        active: false,
+        selected: false,
+        path: "/warehouse-management/stock-inward",
+        children: [
+          {
+            icon: InwardIcon,
+            path: "/warehouse-management/inward",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "Inward",
+          },
+          {
+            icon: StockIcon,
+            path: "/warehouse-management/stock",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "Stock",
+          },
+          {
+            icon: LayoutIcon,
+            path: "/warehouse-management/layout",
+            type: "link",
+            active: false,
+            selected: false,
+            title: "Warehouse Layout",
+          },
+        ],
+      },
+      {
+        icon: WhmsReturnIcon,
+        path: "/warehouse-management/returns",
         type: "link",
         active: false,
         selected: false,
-        title: "Stock",
+        title: "Returns",
       },
       {
         icon: ReportsIcon,

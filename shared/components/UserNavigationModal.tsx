@@ -322,30 +322,65 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
               <button
                 type="button"
                 className="text-xs text-primary hover:text-primary-dark"
-                onClick={() => handleSelectAll('Warehouse Management', ['Orders', 'Inward', 'Clients', 'Pick&Pack', 'Layout', 'Stock', 'Reports'])}
+                onClick={() =>
+                  handleSelectAll('Warehouse Management', [
+                    'Orders',
+                    'Clients',
+                    'Pick&Pack',
+                    'Scanning',
+                    'Billing',
+                    'Dispatch',
+                    'Inward',
+                    'Stock',
+                    'Layout',
+                    'Returns',
+                    'Reports',
+                  ])
+                }
               >
                 Toggle All
               </button>
             </div>
-            <div className="space-y-2 ml-4">
+            <div className="space-y-4 ml-4">
               {[
-                { key: 'Orders', label: 'Orders' },
-                { key: 'Inward', label: 'Inward' },
-                { key: 'Clients', label: 'Clients' },
-                { key: 'Pick&Pack', label: 'Pick&Pack' },
-                { key: 'Layout', label: 'Layout' },
-                { key: 'Stock', label: 'Stock' },
-                { key: 'Reports', label: 'Reports' }
-              ].map(subsection => (
-                <label key={subsection.key} className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={(navigation['Warehouse Management'] as any)?.[subsection.key] === true}
-                    onChange={(e) => handleNavigationChange('Warehouse Management', subsection.key, e.target.checked)}
-                    className="rounded border-gray-300 text-primary focus:ring-primary"
-                  />
-                  <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">{subsection.label}</span>
-                </label>
+                { group: 'Order Management', items: [
+                  { key: 'Orders', label: 'Orders' },
+                  { key: 'Clients', label: 'Clients' },
+                ]},
+                { group: 'Fulfilment Flow', items: [
+                  { key: 'Pick&Pack', label: 'Pick & Pack' },
+                  { key: 'Scanning', label: 'Scanning' },
+                  { key: 'Billing', label: 'Billing' },
+                  { key: 'Dispatch', label: 'Dispatch' },
+                ]},
+                { group: 'Stock & Inward', items: [
+                  { key: 'Inward', label: 'Inward' },
+                  { key: 'Stock', label: 'Stock' },
+                  { key: 'Layout', label: 'Warehouse Layout' },
+                ]},
+                { group: 'Returns & Reports', items: [
+                  { key: 'Returns', label: 'Returns' },
+                  { key: 'Reports', label: 'Reports' },
+                ]},
+              ].map((section) => (
+                <div key={section.group}>
+                  <h4 className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-2">{section.group}</h4>
+                  <div className="space-y-2 ml-4">
+                    {section.items.map((subsection) => (
+                      <label key={subsection.key} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={(navigation['Warehouse Management'] as any)?.[subsection.key] === true}
+                          onChange={(e) =>
+                            handleNavigationChange('Warehouse Management', subsection.key, e.target.checked)
+                          }
+                          className="rounded border-gray-300 text-primary focus:ring-primary"
+                        />
+                        <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">{subsection.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </div>

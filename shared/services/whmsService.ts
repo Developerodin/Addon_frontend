@@ -514,7 +514,7 @@ export interface WhmsPickListEntry {
   asst?: string;
   sapStock?: number;
   status?: string;
-  rackLocation?: WhmsRackLocation;
+  rackLocation?: { zone: string; row: string; column: string; bin: string };
   zone?: string;
   row?: string;
   column?: string;
@@ -603,124 +603,6 @@ export const whmsPickListApi = {
     request<void>(`/pick-list/${pickListId}`, { method: 'DELETE' }),
 };
 
-// --- 7. Pick & Pack ---
-export interface WhmsRackLocation {
-  zone: string;
-  row: string;
-  column: string;
-  bin: string;
-}
-
-export interface WhmsPickItem {
-  id: string;
-  sku: string;
-  name: string;
-  imageUrl?: string;
-  pathIndex: number;
-  rackLocation: WhmsRackLocation;
-  requiredQty: number;
-  pickedQty: number;
-  unit: string;
-  status: string;
-  linkedOrderIds: string[];
-  batchId?: string;
-}
-
-export interface WhmsPickList {
-  id: string;
-  pickBatchId: string;
-  status: string;
-  items: WhmsPickItem[];
-  assignedTo?: string;
-  startedAt?: string;
-  completedAt?: string;
-  createdAt: string;
-  updatedAt?: string;
-}
-
-export interface WhmsPackItem {
-  id: string;
-  sku: string;
-  name: string;
-  pickedQty: number;
-  packedQty: number;
-  status: string;
-  itemBarcode?: string;
-}
-
-export interface WhmsPackOrder {
-  orderId: string;
-  orderNumber: string;
-  customerName: string;
-  status: string;
-  priority: string;
-  items: WhmsPackItem[];
-}
-
-export interface WhmsPackCarton {
-  id: string;
-  cartonBarcode?: string;
-  createdAt: string;
-}
-
-export interface WhmsPackBatch {
-  id: string;
-  orderIds: string[];
-  status: string;
-  orders: WhmsPackOrder[];
-  cartons: WhmsPackCarton[];
-  createdAt: string;
-}
-
-export const whmsPickPack = {
-  pickList: {
-    get: (params?: { batchId?: string }) =>
-      request<WhmsPickList>(`/pick-pack/pick-list${qs(params || {})}`),
-    generate: (body: { orderIds: string[]; batchId?: string }) =>
-      request<WhmsPickList>('/pick-pack/pick-list', { method: 'POST', body: JSON.stringify(body) }),
-    updateItem: (listId: string, itemId: string, body: { pickedQty?: number; status?: string }) =>
-      request<WhmsPickList>(`/pick-pack/pick-list/${listId}/items/${itemId}`, { method: 'PATCH', body: JSON.stringify(body) }),
-    confirmPick: (body: { itemId: string; pickedQty?: number }) =>
-      request<WhmsPickList>('/pick-pack/pick-list/confirm-pick', { method: 'PATCH', body: JSON.stringify(body) }),
-    skip: (body: { itemId: string }) =>
-      request<WhmsPickList>('/pick-pack/pick-list/skip', { method: 'POST', body: JSON.stringify(body) }),
-    scan: (body: { skuOrBarcode: string; rackLocation?: WhmsRackLocation }) =>
-      request<{ match: boolean; item?: WhmsPickItem; message?: string }>('/pick-pack/scan/pick', { method: 'POST', body: JSON.stringify(body) }),
-  },
-  packList: {
-    get: (params?: { batchId?: string }) =>
-      request<{ batches: WhmsPackBatch[] } | WhmsPackBatch>(`/pick-pack/pack-list${qs(params || {})}`),
-    createBatch: (body: { orderIds: string[] }) =>
-      request<WhmsPackBatch>('/pick-pack/pack-list/batches', { method: 'POST', body: JSON.stringify(body) }),
-    getBatch: (batchId: string) =>
-      request<WhmsPackBatch>(`/pick-pack/pack-list/batches/${batchId}`),
-    updatePackedQty: (batchId: string, orderId: string, itemId: string, body: { packedQty: number }) =>
-      request<WhmsPackBatch>(`/pick-pack/pack-list/batches/${batchId}/orders/${orderId}/items/${itemId}`, { method: 'PATCH', body: JSON.stringify(body) }),
-    addCarton: (batchId: string) =>
-      request<WhmsPackBatch>(`/pick-pack/pack-list/batches/${batchId}/cartons`, { method: 'POST' }),
-    updateCarton: (batchId: string, cartonId: string, body: { cartonBarcode?: string }) =>
-      request<WhmsPackBatch>(`/pick-pack/pack-list/batches/${batchId}/cartons/${cartonId}`, { method: 'PATCH', body: JSON.stringify(body) }),
-    completeBatch: (batchId: string) =>
-      request<WhmsPackBatch>(`/pick-pack/pack-list/batches/${batchId}/complete`, { method: 'POST' }),
-  },
-  barcode: {
-    generate: (body: { batchId: string; orderId?: string; itemIds?: string[]; types?: string[]; quantity?: number }) =>
-      request<{ generated: Array<{ type: string; id: string; barcode: string }> }>('/pick-pack/barcode/generate', { method: 'POST', body: JSON.stringify(body) }),
-  },
-  reports: {
-    damageMissing: {
-      create: (body: { orderId: string; orderNumber?: string; sku: string; itemName?: string; type: 'damage' | 'missing'; quantity: number; reason?: string; notes?: string }) =>
-        request<unknown>('/pick-pack/reports/damage-missing', { method: 'POST', body: JSON.stringify(body) }),
-      list: (params?: Record<string, string | number>) =>
-        request<WhmsPaginated<unknown>>(`/pick-pack/reports/damage-missing${qs(params || {})}`),
-    },
-  },
-  scan: {
-    pack: (body: { barcode: string; batchId: string; orderId?: string }) =>
-      request<{ match: boolean; item?: WhmsPackItem }>('/pick-pack/scan/pack', { method: 'POST', body: JSON.stringify(body) }),
-  },
-};
-
 export default {
   orders: whmsOrders,
   inward: whmsInward,
@@ -729,6 +611,5 @@ export default {
   approvals: whmsApprovals,
   consolidation: whmsConsolidation,
   gapReport: whmsGapReport,
-  pickPack: whmsPickPack,
   pickList: whmsPickListApi,
 };

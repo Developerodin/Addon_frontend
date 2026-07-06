@@ -13,6 +13,7 @@ import {
 import { whmsWarehouseClients } from "@/shared/services/whmsWarehouseClientService";
 import WarehouseOrdersTable from "./components/WarehouseOrdersTable";
 import WarehouseOrderDetailDrawer from "./components/WarehouseOrderDetailDrawer";
+import OrderFlowModal from "./components/OrderFlowModal";
 import {
   downloadWarehouseOrdersBulkTemplate,
   fetchAllWarehouseClientsForReference,
@@ -41,6 +42,7 @@ export default function WarehouseOrdersPage() {
   const [rows, setRows] = useState<WarehouseOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [flowOrderId, setFlowOrderId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
@@ -314,6 +316,7 @@ export default function WarehouseOrdersPage() {
             loading={loading}
             onView={(id) => setDetailId(id)}
             onDelete={handleDelete}
+            onFlow={(id) => setFlowOrderId(id)}
           />
         </div>
 
@@ -345,6 +348,13 @@ export default function WarehouseOrdersPage() {
       </div>
 
       <WarehouseOrderDetailDrawer orderId={detailId} open={detailId !== null} onClose={() => setDetailId(null)} />
+      {flowOrderId && (
+        <OrderFlowModal
+          orderId={flowOrderId}
+          onClose={() => setFlowOrderId(null)}
+          onChanged={() => void fetchRows()}
+        />
+      )}
     </>
   );
 }

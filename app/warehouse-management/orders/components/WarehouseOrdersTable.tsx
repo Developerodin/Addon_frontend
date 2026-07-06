@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   normalizeWarehouseOrderStatus,
   warehouseOrderStatusLabel,
+  warehouseOrderFlowStatusLabel,
   type WarehouseOrder,
 } from "@/shared/services/whmsWarehouseOrderService";
 
@@ -61,11 +62,35 @@ function totalQty(o: WarehouseOrder): number {
   return a + b;
 }
 
+function flowPill(flowStatus?: string) {
+  if (!flowStatus) return <span className="text-[10px] text-gray-400">—</span>;
+  const s = String(flowStatus);
+  const cls = s === "cancelled"
+    ? "bg-red-100 text-red-800"
+    : s.startsWith("dispatched") || s === "delivered" || s === "partial-dispatched" || s === "ready-for-pickup"
+      ? "bg-teal-100 text-teal-800"
+      : s === "billed" || s === "ready-to-dispatch" || s === "sent-to-billing"
+        ? "bg-emerald-100 text-emerald-800"
+        : s.includes("scanning")
+          ? "bg-indigo-100 text-indigo-800"
+          : s.includes("barcode") || s === "packing-done"
+            ? "bg-violet-100 text-violet-800"
+            : s.includes("picking")
+              ? "bg-amber-100 text-amber-800"
+              : "bg-sky-100 text-sky-800";
+  return (
+    <span className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded tracking-tight ${cls}`}>
+      {warehouseOrderFlowStatusLabel(s)}
+    </span>
+  );
+}
+
 type Props = {
   rows: WarehouseOrder[];
   loading: boolean;
   onView: (id: string) => void;
   onDelete: (id: string) => void;
+  onFlow?: (id: string) => void;
 };
 
 export default function WarehouseOrdersTable({
@@ -73,6 +98,7 @@ export default function WarehouseOrdersTable({
   loading,
   onView,
   onDelete,
+  onFlow,
 }: Props) {
   if (loading) {
     return (
@@ -110,6 +136,7 @@ export default function WarehouseOrdersTable({
           <th className={th}>Single rows</th>
           <th className={th}>Multi rows</th>
           <th className={th}>Status</th>
+          <th className={th}>Flow Stage</th>
           <th className={thLast}>Actions</th>
         </tr>
       </thead>
@@ -125,8 +152,19 @@ export default function WarehouseOrdersTable({
             <td className={td}>{o.styleCodeSinglePair?.length ?? 0}</td>
             <td className={td}>{o.styleCodeMultiPair?.length ?? 0}</td>
             <td className={`${td} border border-gray-200`}>{statusPill(o.status)}</td>
+            <td className={`${td} border border-gray-200`}>{flowPill(o.flowStatus as string)}</td>
             <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
               <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                {onFlow && (
+                  <button
+                    type="button"
+                    onClick={() => onFlow(o.id)}
+                    className="w-7 h-7 flex items-center justify-center bg-violet-50 text-violet-500 border border-violet-100 rounded hover:bg-violet-100 transition-colors"
+                    title="Flow stage / dispatch"
+                  >
+                    <i className="ri-route-line text-xs" />
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => onView(o.id)}

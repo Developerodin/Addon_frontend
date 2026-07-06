@@ -146,6 +146,8 @@ export interface PickListOrderGroup {
   clientName: string;
   clientType?: string;
   pickerName?: string;
+  /** Effective fulfilment stage (from API or derived from order.status). */
+  flowStatus?: string;
   order?: Record<string, unknown>;
   items: PickListOrderItem[];
   totalQuantity: number;

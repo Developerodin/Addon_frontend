@@ -36,7 +36,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (res.status === 204) return undefined as T;
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error((err as { message?: string }).message || `Request failed: ${res.status}`);
+    throw new Error(parseWhmsApiErrorMessage(err, res.status));
   }
   return res.json();
 }
@@ -103,6 +103,127 @@ export function warehouseOrderStatusLabel(raw?: string | null): string {
   return WAREHOUSE_ORDER_STATUS_LABELS.draft;
 }
 
+/** Granular fulfilment pipeline stages (API values, kebab-case). */
+export const WAREHOUSE_ORDER_FLOW_STATUSES = [
+  'order-created',
+  'picking',
+  'picking-done',
+  'barcode-in-progress',
+  'packing-done',
+  'sent-to-scanning',
+  'scanning-in-progress',
+  'scanning-done',
+  'sent-to-billing',
+  'billed',
+  'ready-to-dispatch',
+  'dispatched',
+  'partial-dispatched',
+  'ready-for-pickup',
+  'delivered',
+  'cancelled',
+] as const;
+
+export type WarehouseOrderFlowStatus = (typeof WAREHOUSE_ORDER_FLOW_STATUSES)[number];
+
+export const WAREHOUSE_ORDER_FLOW_STATUS_LABELS: Record<WarehouseOrderFlowStatus, string> = {
+  'order-created': 'Order Created',
+  picking: 'Picking',
+  'picking-done': 'Picking Done',
+  'barcode-in-progress': 'Barcode & Qty Update',
+  'packing-done': 'Packing Done',
+  'sent-to-scanning': 'Sent to Scanning',
+  'scanning-in-progress': 'Scanning In Progress',
+  'scanning-done': 'Scanning Done',
+  'sent-to-billing': 'Sent to Billing',
+  billed: 'Billed',
+  'ready-to-dispatch': 'Ready to Dispatch',
+  dispatched: 'Dispatched',
+  'partial-dispatched': 'Partial Dispatch',
+  'ready-for-pickup': 'Ready for Pickup',
+  delivered: 'Delivered',
+  cancelled: 'Cancelled',
+};
+
+export function warehouseOrderFlowStatusLabel(raw?: string | null): string {
+  const v = String(raw ?? '').trim().toLowerCase();
+  if ((WAREHOUSE_ORDER_FLOW_STATUSES as readonly string[]).includes(v)) {
+    return WAREHOUSE_ORDER_FLOW_STATUS_LABELS[v as WarehouseOrderFlowStatus];
+  }
+  return raw ? String(raw).trim() : WAREHOUSE_ORDER_FLOW_STATUS_LABELS['order-created'];
+}
+
+/**
+ * Map legacy coarse warehouse order status to a flow stage (mirrors backend
+ * `flowStatusForCoarseStatus` for pre-migration docs missing `flowStatus`).
+ */
+export function flowStatusFromCoarseStatus(raw?: string | null): WarehouseOrderFlowStatus {
+  const v = String(raw ?? 'draft')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-');
+  switch (v) {
+    case 'draft':
+      return 'order-created';
+    case 'pending':
+    case 'in-progress':
+      return 'picking';
+    case 'packed':
+      return 'packing-done';
+    case 'dispatched':
+      return 'dispatched';
+    case 'cancelled':
+      return 'cancelled';
+    default:
+      return 'order-created';
+  }
+}
+
+/**
+ * Resolve the effective flow stage from `flowStatus` or legacy coarse `status`.
+ */
+export function effectiveWarehouseOrderFlowStatus(
+  order?: { flowStatus?: string | null; status?: string | null } | null,
+): WarehouseOrderFlowStatus {
+  const direct = String(order?.flowStatus ?? '')
+    .trim()
+    .toLowerCase();
+  if ((WAREHOUSE_ORDER_FLOW_STATUSES as readonly string[]).includes(direct)) {
+    return direct as WarehouseOrderFlowStatus;
+  }
+  return flowStatusFromCoarseStatus(order?.status);
+}
+
+/**
+ * Extract a user-facing message from a WHMS API error response body.
+ */
+export function parseWhmsApiErrorMessage(body: unknown, status: number): string {
+  if (body && typeof body === 'object' && 'message' in body) {
+    const message = (body as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim()) return message.trim();
+  }
+  return `Request failed (${status})`;
+}
+
+export interface WarehouseOrderFlowHistoryEntry {
+  from?: string;
+  to: string;
+  byUserId?: string | null;
+  byName?: string;
+  remarks?: string;
+  at?: string;
+}
+
+export interface WarehouseOrderDispatchDetails {
+  courierName?: string;
+  trackingNumber?: string;
+  vehicleDetails?: string;
+  dispatchDate?: string;
+  boxCount?: number;
+  shippingRemarks?: string;
+  dispatchType?: string;
+  deliveredDate?: string;
+}
+
 export interface WarehouseOrderStyleCodeSinglePairRow {
   styleCodeId: string;
   styleCode?: string;
@@ -134,6 +255,11 @@ export interface WarehouseOrder {
   date?: string;
   /** API value: kebab-case; may include legacy values normalized in UI. */
   status?: WarehouseOrderStatus | string;
+  /** Granular pipeline stage; source of truth for the fulfilment flow. */
+  flowStatus?: WarehouseOrderFlowStatus | string;
+  flowHistory?: WarehouseOrderFlowHistoryEntry[];
+  dispatch?: WarehouseOrderDispatchDetails;
+  invoiceId?: string | null;
   styleCodeSinglePair?: WarehouseOrderStyleCodeSinglePairRow[];
   styleCodeMultiPair?: WarehouseOrderStyleCodeMultiPairRow[];
   meta?: Record<string, unknown>;
@@ -173,6 +299,8 @@ export type WarehouseOrdersListParams = {
   /** Prefix match filter (optional). */
   addonOrderId?: string;
   status?: WarehouseOrderStatus;
+  flowStatus?: WarehouseOrderFlowStatus;
+  flowStatusIn?: string;
   clientType?: WarehouseClientType;
   clientId?: string;
   styleCodeId?: string;
@@ -237,5 +365,18 @@ export const whmsWarehouseOrders = {
   delete: (orderId: string) => request<void>(`/warehouse-orders/${orderId}`, { method: 'DELETE' }),
   bulkImport: (payload: BulkImportPayload) =>
     request<BulkImportSummary>('/warehouse-orders/bulk-import', { method: 'POST', body: JSON.stringify(payload) }),
+  transitionFlowStatus: (orderId: string, flowStatus: WarehouseOrderFlowStatus, remarks?: string) =>
+    request<{ order: WarehouseOrder; allowedNext: WarehouseOrderFlowStatus[] }>(
+      `/warehouse-orders/${orderId}/flow-status`,
+      { method: 'PATCH', body: JSON.stringify({ flowStatus, ...(remarks ? { remarks } : {}) }) }
+    ),
+  getFlowHistory: (orderId: string) =>
+    request<{
+      orderId: string;
+      orderNumber?: string;
+      flowStatus: string;
+      status?: string;
+      history: WarehouseOrderFlowHistoryEntry[];
+    }>(`/warehouse-orders/${orderId}/flow-history`),
 };
 

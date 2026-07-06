@@ -92,16 +92,28 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
     { key: 'Blend', label: 'Blend' }
   ]
 
-  const warehouseSections = [
+  const warehouseOrderSections = [
     { key: 'Orders', label: 'Orders' },
-    { key: 'Inward', label: 'Inward' },
     { key: 'Clients', label: 'Clients' },
-    { key: 'Pick&Pack', label: 'Pick&Pack' },
-    { key: 'Layout', label: 'Layout' },
-    { key: 'Stock', label: 'Stock' },
-    { key: 'Reports', label: 'Reports' }
   ]
 
+  const warehouseFulfilmentSections = [
+    { key: 'Pick&Pack', label: 'Pick & Pack' },
+    { key: 'Scanning', label: 'Scanning' },
+    { key: 'Billing', label: 'Billing' },
+    { key: 'Dispatch', label: 'Dispatch' },
+  ]
+
+  const warehouseStockSections = [
+    { key: 'Inward', label: 'Inward' },
+    { key: 'Stock', label: 'Stock' },
+    { key: 'Layout', label: 'Warehouse Layout' },
+  ]
+
+  const warehouseOtherSections = [
+    { key: 'Returns', label: 'Returns' },
+    { key: 'Reports', label: 'Reports' },
+  ]
   const vendorPOSections = [
     { key: 'Vendor List', label: 'Vendor List' },
     { key: 'Vendor PO Raise', label: 'Vendor PO Raise' },
@@ -267,18 +279,71 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
 
         <div>
           <h4 className="text-md font-medium text-gray-900 mb-3">Warehouse Management</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-4">
-            {warehouseSections.map((subsection) => (
-              <label key={subsection.key} className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={(navigation['Warehouse Management'] as any)?.[subsection.key] === true}
-                  onChange={(e) => onChange('Warehouse Management', subsection.key, null, e.target.checked)}
-                  className="rounded border-gray-300 text-primary focus:ring-primary"
-                />
-                <span className="ml-2 text-sm text-gray-700">{subsection.label}</span>
-              </label>
-            ))}
+          <div className="space-y-4 ml-4">
+            <div>
+              <h5 className="text-sm font-medium text-gray-800 mb-2">Order Management</h5>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-4">
+                {warehouseOrderSections.map((subsection) => (
+                  <label key={subsection.key} className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={(navigation['Warehouse Management'] as any)?.[subsection.key] === true}
+                      onChange={(e) => onChange('Warehouse Management', subsection.key, null, e.target.checked)}
+                      className="rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">{subsection.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h5 className="text-sm font-medium text-gray-800 mb-2">Fulfilment Flow</h5>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-4">
+                {warehouseFulfilmentSections.map((subsection) => (
+                  <label key={subsection.key} className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={(navigation['Warehouse Management'] as any)?.[subsection.key] === true}
+                      onChange={(e) => onChange('Warehouse Management', subsection.key, null, e.target.checked)}
+                      className="rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">{subsection.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h5 className="text-sm font-medium text-gray-800 mb-2">Stock & Inward</h5>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-4">
+                {warehouseStockSections.map((subsection) => (
+                  <label key={subsection.key} className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={(navigation['Warehouse Management'] as any)?.[subsection.key] === true}
+                      onChange={(e) => onChange('Warehouse Management', subsection.key, null, e.target.checked)}
+                      className="rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">{subsection.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h5 className="text-sm font-medium text-gray-800 mb-2">Returns & Reports</h5>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-4">
+                {warehouseOtherSections.map((subsection) => (
+                  <label key={subsection.key} className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={(navigation['Warehouse Management'] as any)?.[subsection.key] === true}
+                      onChange={(e) => onChange('Warehouse Management', subsection.key, null, e.target.checked)}
+                      className="rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">{subsection.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 

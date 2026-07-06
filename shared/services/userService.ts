@@ -81,6 +81,10 @@ export interface NavigationPermissions {
     Inward: boolean;
     Clients: boolean;
     'Pick&Pack': boolean;
+    Scanning: boolean;
+    Billing: boolean;
+    Dispatch: boolean;
+    Returns: boolean;
     Layout: boolean;
     Stock: boolean;
     Reports: boolean;

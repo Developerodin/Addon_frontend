@@ -2,10 +2,9 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
-import { toast } from "react-hot-toast";
+import { toast, Toaster } from "react-hot-toast";
 import PickListDashboard from "./components/PickListDashboard";
-import PackListDashboard from "./components/PackListDashboard";
-import type { PackBatch, PickItem, PackItem, PackOrder, PackOrderStatus, PackList, PickListOrderWiseResponse } from "./types";
+import type { PickListOrderWiseResponse } from "./types";
 import { pickPackApi } from "./pickPackApi";
 import type { PickListFilters, PickListPagination } from "./pickPackApi";
 
@@ -67,120 +66,6 @@ const PickPackPage = () => {
   }, []);
 
   const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
-
-  const computePackItemStatus = (pickedQty: number, packedQty: number): PackItem["status"] => {
-    if (packedQty <= 0) return "pending";
-    if (packedQty < pickedQty) return "partial";
-    return "packed";
-  };
-
-  const computeOrderStatus = (items: PackItem[]): PackOrderStatus => {
-    const allPacked = items.every((i) => i.pickedQty > 0 && i.packedQty >= i.pickedQty);
-    const anyPacked = items.some((i) => i.packedQty > 0);
-    return allPacked ? "packed" : anyPacked ? "packing" : "ready";
-  };
-
-  const computeBatchStatus = (orders: PackOrder[]): PackBatch["status"] => {
-    const allPacked = orders.every((o) => o.status === "packed" || o.status === "dispatch-ready");
-    const anyPacking = orders.some((o) => o.status === "packing");
-    const anyReady = orders.some((o) => o.status === "ready");
-    if (allPacked) return "packed";
-    if (anyPacking) return "packing";
-    if (anyReady) return "ready";
-    return "ready";
-  };
-
-  const ensureAutoPackBatch = (current: PackBatch[]): { batches: PackBatch[]; autoIdx: number } => {
-    const idx = current.findIndex((b) => b.id === "PACK-BATCH-AUTO-001");
-    if (idx >= 0) return { batches: current, autoIdx: idx };
-    const now = new Date().toISOString();
-    const auto: PackBatch = {
-      id: "PACK-BATCH-AUTO-001",
-      orderIds: [],
-      status: "ready",
-      orders: [],
-      cartons: [{ id: "CTN-AUTO-01", cartonBarcode: undefined, createdAt: now }],
-      createdAt: now,
-    };
-    return { batches: [auto, ...current], autoIdx: 0 };
-  };
-
-  const movePickedItemToPackQueue = (pickedItem: PickItem) => {
-    setPackList((prev) => {
-      if (!prev) return prev;
-      let batches = prev.batches.slice();
-      const ensured = ensureAutoPackBatch(batches);
-      batches = ensured.batches.slice();
-      const b = { ...batches[ensured.autoIdx] };
-
-      const nextOrders = b.orders.slice();
-      const nextOrderIds = new Set(b.orderIds);
-
-      pickedItem.linkedOrderIds.forEach((orderId) => {
-        nextOrderIds.add(orderId);
-        const orderIdx = nextOrders.findIndex((o) => o.orderId === orderId);
-        if (orderIdx === -1) {
-          const newOrder: PackOrder = {
-            orderId,
-            orderNumber: orderId,
-            customerName: "—",
-            priority: "medium",
-            status: "ready",
-            items: [
-              {
-                id: `auto-${orderId}-${pickedItem.sku}`,
-                sku: pickedItem.sku,
-                name: pickedItem.name,
-                pickedQty: 1,
-                packedQty: 0,
-                status: "pending",
-                itemBarcode: undefined,
-              },
-            ],
-          };
-          nextOrders.push(newOrder);
-        } else {
-          const ord = nextOrders[orderIdx];
-          const items = ord.items.slice();
-          const itemIdx = items.findIndex((i) => i.sku === pickedItem.sku);
-          if (itemIdx === -1) {
-            items.push({
-              id: `auto-${orderId}-${pickedItem.sku}`,
-              sku: pickedItem.sku,
-              name: pickedItem.name,
-              pickedQty: 1,
-              packedQty: 0,
-              status: "pending",
-              itemBarcode: undefined,
-            });
-          } else {
-            const it = items[itemIdx];
-            items[itemIdx] = {
-              ...it,
-              pickedQty: it.pickedQty + 1,
-              status: computePackItemStatus(it.pickedQty + 1, it.packedQty),
-            };
-          }
-          const updatedOrder: PackOrder = { ...ord, items };
-          updatedOrder.status = computeOrderStatus(updatedOrder.items);
-          nextOrders[orderIdx] = updatedOrder;
-        }
-      });
-
-      const normalizedOrders = nextOrders.map((o) => ({ ...o, status: computeOrderStatus(o.items) }));
-      const updatedBatch: PackBatch = {
-        ...b,
-        orderIds: Array.from(nextOrderIds),
-        orders: normalizedOrders,
-        status: computeBatchStatus(normalizedOrders),
-      };
-
-      const nextBatches = batches.slice();
-      nextBatches[ensured.autoIdx] = updatedBatch;
-
-      return { ...prev, batches: nextBatches };
-    });
-  };
 
   // ── Pick action: save pickup quantity (PATCH /v1/whms/pick-list/:id) ──
 
@@ -252,8 +137,8 @@ const PickPackPage = () => {
 
       // Stock is updated on the backend; refetch so the "Stock" column shows latest values.
       await loadPickList(pickFilters);
-    } catch {
-      notify("Failed to save pickup quantity", "error");
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Failed to save pickup quantity", "error");
     }
   };
 
@@ -322,138 +207,9 @@ const PickPackPage = () => {
     [loadPickList, pickFilters],
   );
 
-  // ── Pack actions (unchanged) ───────────────────────────────────────────
-
-  const setPackedQty = async (batchId: string, orderId: string, itemId: string, packedQty: number) => {
-    setPackList((prev) => {
-      if (!prev) return prev;
-      const batches = prev.batches.map((b) => {
-        if (b.id !== batchId) return b;
-        const orders = b.orders.map((o) => {
-          if (o.orderId !== orderId) return o;
-          const items = o.items.map((it) => {
-            if (it.id !== itemId) return it;
-            const nextPacked = clamp(packedQty, 0, it.pickedQty);
-            return { ...it, packedQty: nextPacked, status: computePackItemStatus(it.pickedQty, nextPacked) };
-          });
-          const status = computeOrderStatus(items);
-          return { ...o, items, status };
-        });
-        const status = computeBatchStatus(orders);
-        return { ...b, orders, status };
-      });
-      return { ...prev, batches };
-    });
-
-    await pickPackApi.setPackedQty({ batchId, orderId, itemId, packedQty });
-  };
-
-  const generateCarton = async (batchId: string) => {
-    const updatedBatch = await pickPackApi.generateCarton(batchId);
-    if (updatedBatch) {
-      setPackList((prev) => {
-        if (!prev) return prev;
-        const batches = prev.batches.map((b) => (b.id === batchId ? updatedBatch : b));
-        return { ...prev, batches };
-      });
-      notify("Carton added", "success");
-    } else {
-      const now = new Date().toISOString();
-      setPackList((prev) => {
-        if (!prev) return prev;
-        const batches = prev.batches.map((b) => {
-          if (b.id !== batchId) return b;
-          const nextId = `CTN-${batchId.split("-").pop() || "X"}-${String((b.cartons?.length || 0) + 1).padStart(2, "0")}`;
-          return { ...b, cartons: [...(b.cartons || []), { id: nextId, cartonBarcode: undefined, createdAt: now }] };
-        });
-        return { ...prev, batches };
-      });
-      notify("Carton added", "success");
-    }
-  };
-
-  const completePacking = async (batchId: string) => {
-    await pickPackApi.completeBatch(batchId);
-    setPackList((prev) => {
-      if (!prev) return prev;
-      const batches = prev.batches.map((b) => {
-        if (b.id !== batchId) return b;
-        const orders = b.orders.map((o) => {
-          const items = o.items.map((it) => ({
-            ...it,
-            packedQty: it.pickedQty,
-            status: "packed" as const,
-          }));
-          return { ...o, items, status: "packed" as const };
-        });
-        return { ...b, orders, status: "packed" as const };
-      });
-      return { ...prev, batches };
-    });
-    notify("Packing completed", "success");
-  };
-
-  const generateBarcodesForOrder = async (args: {
-    batchId: string;
-    orderId: string;
-    itemIds: string[];
-    request: { types: Array<"item" | "carton" | "order">; quantity: number };
-  }) => {
-    const res = await pickPackApi.generateBarcodes({
-      batchId: args.batchId,
-      orderId: args.orderId,
-      itemIds: args.itemIds,
-      request: args.request,
-    });
-
-    const itemBarcodes = (res.generated ?? []).filter((g) => g.type === "item");
-    if (itemBarcodes.length > 0) {
-      setPackList((prev) => {
-        if (!prev) return prev;
-        const batches = prev.batches.map((b) => {
-          if (b.id !== args.batchId) return b;
-          const orders = b.orders.map((o) => {
-            if (o.orderId !== args.orderId) return o;
-            const items = o.items.map((it) => {
-              const found = itemBarcodes.find((x) => x.id === it.id);
-              if (found) return { ...it, itemBarcode: found.barcode };
-              if (args.request.types.includes("item") && !it.itemBarcode && args.itemIds.includes(it.id)) {
-                return { ...it, itemBarcode: `ITM-${o.orderNumber}-${it.sku}` };
-              }
-              return it;
-            });
-            return { ...o, items };
-          });
-          return { ...b, orders };
-        });
-        return { ...prev, batches };
-      });
-    } else {
-      setPackList((prev) => {
-        if (!prev) return prev;
-        const batches = prev.batches.map((b) => {
-          if (b.id !== args.batchId) return b;
-          const orders = b.orders.map((o) => {
-            if (o.orderId !== args.orderId) return o;
-            const items = o.items.map((it) => {
-              if (!args.itemIds.includes(it.id)) return it;
-              if (args.request.types.includes("item") && !it.itemBarcode) {
-                return { ...it, itemBarcode: `ITM-${o.orderNumber}-${it.sku}` };
-              }
-              return it;
-            });
-            return { ...o, items };
-          });
-          return { ...b, orders };
-        });
-        return { ...prev, batches };
-      });
-    }
-    notify("Barcodes generated", "success");
-  };
-
   return (
     <div className="main-content">
+      <Toaster position="top-right" toastOptions={{ duration: 6000 }} />
       <Seo title="Pick&Pack" />
 
       <div className="grid grid-cols-12 gap-6">
@@ -486,6 +242,7 @@ const PickPackPage = () => {
                   onFilterChange={handlePickFilterChange}
                   onPageChange={handlePickPageChange}
                   onRefresh={handleRefreshPickList}
+                  onAlert={(msg) => notify(msg, "error")}
                   pagination={pickPagination}
                   isLoading={pickLoading}
                 />
