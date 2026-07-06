@@ -197,6 +197,42 @@ export function VendorFloorUpcomingContainersTab({
   const rowKey = (row: UpcomingLineRow, idx: number) =>
     `${row.container._id ?? row.container.barcode}-${idx}`;
 
+  /** Export filtered upcoming container lines as CSV (Excel-compatible). */
+  const handleExportExcel = () => {
+    if (filteredRows.length === 0) return;
+    const header = [
+      "Container",
+      "Barcode",
+      "VPO",
+      "Product",
+      "Ref",
+      "Qty",
+      "Status",
+      "Floor",
+    ];
+    const lines = filteredRows.map((row) => [
+      row.container.containerName ?? "",
+      row.container.barcode ?? "",
+      row.vpoNumber,
+      row.productLabel,
+      row.refCode,
+      String(row.qty),
+      row.container.status ?? "",
+      floorName,
+    ]);
+    const csv = [header, ...lines]
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const safeFloor = floorName.trim().toLowerCase().replace(/\s+/g, "_");
+    a.download = `vendor_upcoming_${safeFloor || "floor"}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <>
       <div className="p-[10px] flex flex-wrap items-center justify-between gap-3 border-b border-gray-100">
@@ -253,6 +289,18 @@ export function VendorFloorUpcomingContainersTab({
           >
             <i className="ri-refresh-line text-xs" aria-hidden="true" />
             Refresh
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={filteredRows.length === 0}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-gray-300 text-[10px] font-bold rounded hover:bg-gray-50 disabled:opacity-50"
+            title="Download filtered rows as CSV"
+            aria-label="Export upcoming containers to Excel"
+          >
+            <i className="ri-file-excel-2-line text-xs text-emerald-600" aria-hidden="true" />
+            Download Excel
           </button>
         </div>
       </div>

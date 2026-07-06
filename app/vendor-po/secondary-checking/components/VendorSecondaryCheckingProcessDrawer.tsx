@@ -22,6 +22,10 @@ import {
 /** Form state: floor qty (container scan happens after save in a separate modal). */
 export type VendorSecondaryCheckingProcessData = Partial<QualityFloorQuantity>;
 
+type GrnIssueFeedback =
+  | { type: "error"; message: string }
+  | { type: "success"; message: string };
+
 type Props = {
   open: boolean;
   flow: VendorProductionFlow | null;
@@ -57,12 +61,17 @@ export function VendorSecondaryCheckingProcessDrawer({
 }: Props) {
   const [linkedGrn, setLinkedGrn] = useState<VendorGrn | null>(null);
   const [issuingGrn, setIssuingGrn] = useState(false);
+  const [grnIssueFeedback, setGrnIssueFeedback] = useState<GrnIssueFeedback | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!open || !flow?.id) {
       setLinkedGrn(null);
+      setGrnIssueFeedback(null);
       return;
     }
+    setGrnIssueFeedback(null);
     let cancelled = false;
     void vendorGrnService.getActiveForFlow(flow.id).then((grn) => {
       if (!cancelled) setLinkedGrn(grn);
@@ -130,15 +139,21 @@ export function VendorSecondaryCheckingProcessDrawer({
       if (!ok) return;
     }
     setIssuingGrn(true);
+    setGrnIssueFeedback(null);
     try {
       const grn = await vendorGrnService.issueFromFlow(flow.id, {
         allowIncomplete: scIncomplete,
       });
       setLinkedGrn(grn);
-      toast.success(`GRN ${grn.grnNumber} issued`);
+      const successMsg = `GRN ${grn.grnNumber} issued successfully`;
+      setGrnIssueFeedback({ type: "success", message: successMsg });
+      toast.success(successMsg, { duration: 6000 });
       onGrnIssued?.(grn);
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to issue GRN");
+      const message =
+        err instanceof Error ? err.message : "Failed to issue GRN. Please try again.";
+      setGrnIssueFeedback({ type: "error", message });
+      toast.error(message, { duration: 8000 });
     } finally {
       setIssuingGrn(false);
     }
@@ -190,6 +205,44 @@ export function VendorSecondaryCheckingProcessDrawer({
                 saved). Save sends <strong>setSplitTotals</strong> to the server. M1 saves
                 open the container staging modal; M2/M3/VM4-only saves post immediately.
               </p>
+
+              {grnIssueFeedback && (
+                <div
+                  role="alert"
+                  className={`mx-3 mb-2 rounded border px-3 py-2 text-[11px] ${
+                    grnIssueFeedback.type === "error"
+                      ? "border-red-300 bg-red-50 text-red-900"
+                      : "border-emerald-300 bg-emerald-50 text-emerald-900"
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    <i
+                      className={
+                        grnIssueFeedback.type === "error"
+                          ? "ri-error-warning-line text-red-600 shrink-0 mt-0.5"
+                          : "ri-checkbox-circle-line text-emerald-600 shrink-0 mt-0.5"
+                      }
+                      aria-hidden="true"
+                    />
+                    <div className="min-w-0">
+                      <p className="font-bold">
+                        {grnIssueFeedback.type === "error"
+                          ? "GRN issue failed"
+                          : "GRN issued"}
+                      </p>
+                      <p className="mt-0.5 break-words">{grnIssueFeedback.message}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setGrnIssueFeedback(null)}
+                      className="ml-auto shrink-0 text-gray-500 hover:text-gray-700"
+                      aria-label="Dismiss GRN message"
+                    >
+                      <i className="ri-close-line" aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {linkedGrn && (
                 <div className="mx-3 mb-2 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px]">

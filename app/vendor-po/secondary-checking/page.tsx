@@ -407,6 +407,9 @@ const SecondaryCheckingPage = () => {
           processDrawerFetching ||
           !(processDrawerSaveEval?.ok ?? false)
         }
+        onGrnIssued={() => {
+          void loadFlows({ silent: true });
+        }}
       />
       <VendorSecondaryCheckingM1StagingModal
         open={m1StagingModalOpen}

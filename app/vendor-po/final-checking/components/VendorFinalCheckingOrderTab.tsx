@@ -185,7 +185,10 @@ export function VendorFinalCheckingOrderTab({
                               QC In
                             </th>
                             <th className="px-1.5 py-2 text-right text-[10px] font-bold uppercase border border-gray-200">
-                              Pending
+                              Pending scan
+                            </th>
+                            <th className="px-1.5 py-2 text-right text-[10px] font-bold uppercase border border-gray-200">
+                              Remaining
                             </th>
                             <th className="px-1.5 py-2 text-left text-[10px] font-bold uppercase border border-gray-200">
                               M1/M2/M3/M4
@@ -235,6 +238,17 @@ export function VendorFinalCheckingOrderTab({
                                   ) : (
                                     <span className="text-[11px] text-gray-400">0</span>
                                   )}
+                                </td>
+                                <td className="px-1.5 py-2.5 text-right font-bold text-[12px] border border-gray-200">
+                                  <span
+                                    className={
+                                      (fc.remaining ?? 0) > 0
+                                        ? "text-amber-800"
+                                        : "text-gray-400 font-medium"
+                                    }
+                                  >
+                                    {(fc.remaining ?? 0).toLocaleString()}
+                                  </span>
                                 </td>
                                 <td className="px-1.5 py-2.5 border border-gray-200">
                                   <div className="flex gap-1.5 flex-wrap">

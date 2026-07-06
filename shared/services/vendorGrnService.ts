@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/shared/data/utilities/api';
+import { parseApiResponseError } from '@/shared/utils/parseApiResponseError';
 import Cookies from 'js-cookie';
 
 export type VendorGrnStatus = 'active' | 'superseded' | 'voided';
@@ -129,7 +130,7 @@ class VendorGrnService {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.message || `Request failed (${res.status})`);
+      throw new Error(parseApiResponseError(err, res.status));
     }
     return res.json() as Promise<T>;
   }

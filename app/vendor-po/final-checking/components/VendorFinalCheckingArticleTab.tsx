@@ -60,6 +60,54 @@ export function VendorFinalCheckingArticleTab({
     return articleRows.slice(start, start + itemsPerPage);
   }, [articleRows, currentPage, itemsPerPage]);
 
+  /** Export filtered article rows as CSV (Excel-compatible). */
+  const handleExportExcel = () => {
+    if (articleRows.length === 0) return;
+    const header = [
+      "Batch Ref",
+      "Product",
+      "VPO",
+      "Vendor",
+      "Vendor Code",
+      "QC In",
+      "Pending Scan",
+      "Remaining",
+      "M1",
+      "M2",
+      "M3",
+      "M4",
+      "Confirmation",
+    ];
+    const lines = articleRows.map((row) => {
+      const fc = row.flow.floorQuantities.finalChecking;
+      return [
+        row.flow.referenceCode || "",
+        row.productName,
+        row.vpoNumber,
+        row.vendorName,
+        row.vendorCode,
+        String(fc.received ?? 0),
+        String(fc.pendingFromBoxes ?? 0),
+        String(fc.remaining ?? 0),
+        String(fc.m1Quantity ?? 0),
+        String(fc.m2Quantity ?? 0),
+        String(fc.m3Quantity ?? 0),
+        String(fc.m4Quantity ?? 0),
+        row.flow.finalQualityConfirmed ? "CONFIRMED" : "PENDING",
+      ];
+    });
+    const csv = [header, ...lines]
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "vendor_final_checking_articles.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
@@ -108,6 +156,17 @@ export function VendorFinalCheckingArticleTab({
             <option value={25}>25</option>
             <option value={50}>50</option>
           </select>
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={articleRows.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 disabled:opacity-50"
+            title="Download filtered rows as CSV"
+            aria-label="Export final checking articles to Excel"
+          >
+            <i className="ri-file-excel-2-line text-xs text-emerald-600" aria-hidden="true" />
+            Download Excel
+          </button>
         </div>
       </div>
 
@@ -125,7 +184,10 @@ export function VendorFinalCheckingArticleTab({
                 QC In
               </th>
               <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                Pending
+                Pending scan
+              </th>
+              <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                Remaining
               </th>
               <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
                 M1/M2/M3/M4
@@ -145,7 +207,7 @@ export function VendorFinalCheckingArticleTab({
             {paginatedRows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={9}
                   className="px-1.5 py-20 text-center text-gray-400 text-xs font-bold uppercase tracking-widest border border-gray-200"
                 >
                   No QC tasks found
@@ -190,6 +252,15 @@ export function VendorFinalCheckingArticleTab({
                       ) : (
                         <span className="text-[11px] text-gray-400">0</span>
                       )}
+                    </td>
+                    <td className="px-1.5 py-2.5 text-right font-bold text-[12px] border border-gray-200">
+                      <span
+                        className={
+                          (fc.remaining ?? 0) > 0 ? "text-amber-800" : "text-gray-400 font-medium"
+                        }
+                      >
+                        {(fc.remaining ?? 0).toLocaleString()}
+                      </span>
                     </td>
                     <td className="px-1.5 py-2.5 border border-gray-200">
                       <div className="flex gap-1.5 flex-wrap">
