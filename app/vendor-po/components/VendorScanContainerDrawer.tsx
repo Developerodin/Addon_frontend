@@ -8,6 +8,8 @@ import {
   type ContainerMaster,
 } from "@/shared/services/containersMasterService";
 import { VendorDispatchReceivePanel } from "./VendorDispatchReceivePanel";
+import { VendorContainerScanLinesPanel } from "./VendorContainerScanLinesPanel";
+import { isVendorPipelineContainer } from "../utils/vendorContainerItems";
 
 function normalizeFloor(f: string | undefined): string {
   return (f ?? "").replace(/\s+/g, "").toLowerCase();
@@ -89,7 +91,7 @@ export function VendorScanContainerDrawer({
     setLoading(true);
     setScanned(null);
     try {
-      const container = await containersMasterService.getByBarcode(b);
+      const container = await containersMasterService.getByBarcodeWithArticles(b);
       setScanned(container);
 
       if (
@@ -219,6 +221,10 @@ export function VendorScanContainerDrawer({
                   {scanned.quantity ?? "—"}
                 </div>
               </div>
+
+              {isVendorPipelineContainer(scanned) && (
+                <VendorContainerScanLinesPanel container={scanned} />
+              )}
 
               {hasActiveItems(scanned) ? (
                 <>

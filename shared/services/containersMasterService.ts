@@ -22,7 +22,18 @@ export interface ContainerActiveItem {
   quantity: number;
   /** Set when container was staged from vendor pipeline — used for dispatch accept `vendorReceive`. */
   vendorProductionFlowId?: string;
-  vendorProductionFlow?: string | { _id?: string; id?: string };
+  vendorProductionFlow?: string | {
+    _id?: string;
+    id?: string;
+    referenceCode?: string;
+    vendor?: {
+      header?: { vendorName?: string; vendorCode?: string };
+      vendorName?: string;
+      vendorCode?: string;
+    };
+    vendorPurchaseOrder?: { vpoNumber?: string; vendorName?: string } | string;
+    product?: { name?: string; vendorCode?: string; factoryCode?: string };
+  };
 }
 
 /** Normalized row for PATCH / merge helpers */
