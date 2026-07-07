@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "react-hot-toast";
 import JsBarcode from "jsbarcode";
 import type { PickListOrderGroup, PickListOrderItem } from "../types";
@@ -98,12 +98,47 @@ function formatAddonOrderLabel(addonOrderId?: string): string | null {
   return `Addon: ${id}`;
 }
 
+/** DOM id for a pick-line quantity input (used for Enter-to-save focus chain). */
+export function pickQtyInputId(itemId: string): string {
+  return `pick-qty-${itemId}`;
+}
+
+/**
+ * Focus and select the pickup-qty input for a pick line.
+ * @param itemId - Pick list row id
+ */
+export function focusPickQtyInput(itemId: string): void {
+  requestAnimationFrame(() => {
+    const el = document.getElementById(pickQtyInputId(itemId)) as HTMLInputElement | null;
+    if (!el || el.disabled) return;
+    el.focus();
+    el.select();
+  });
+}
+
+/**
+ * Next pick line after the current one that still accepts quantity entry.
+ * Uses list order (not live status) so focus advances immediately after save.
+ * @param items - Order pick lines in display order
+ * @param currentItemId - Line just saved or skipped
+ */
+export function findNextEditablePickItem(
+  items: PickListOrderItem[],
+  currentItemId: string,
+): PickListOrderItem | undefined {
+  const idx = items.findIndex((i) => i.id === currentItemId);
+  if (idx < 0) return undefined;
+  const candidates = [...items.slice(idx + 1), ...items.slice(0, idx)];
+  return candidates.find((row) => row.status !== "picked");
+}
+
 function ItemRow({
   item,
   index,
   orderNumber,
   saveError,
   onSave,
+  onAdvanceFocus,
   onDeleteItem,
 }: {
   item: PickListOrderItem;
@@ -111,6 +146,7 @@ function ItemRow({
   orderNumber: string;
   saveError?: string;
   onSave: (itemId: string, pickupQty: number) => Promise<void>;
+  onAdvanceFocus?: (itemId: string) => void;
   onDeleteItem?: (itemId: string) => Promise<void>;
 }) {
   const [qty, setQty] = useState<number>(item.pickupQuantity);
@@ -126,16 +162,31 @@ function ItemRow({
     setQty(item.pickupQuantity);
   }, [item.pickupQuantity]);
 
-  const handleSave = async () => {
-    if (disabled || !dirty) return;
+  const handleSave = async (): Promise<boolean> => {
+    if (disabled || !dirty || saving) return false;
     setSaving(true);
     try {
       await onSave(item.id, qty);
+      return true;
     } catch {
       setQty(item.pickupQuantity);
+      return false;
     } finally {
       setSaving(false);
     }
+  };
+
+  /** Save on Enter when changed; always advance focus to the next editable row. */
+  const handleQtyKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (dirty && !disabled) {
+      const ok = await handleSave();
+      if (ok) onAdvanceFocus?.(item.id);
+      return;
+    }
+    onAdvanceFocus?.(item.id);
   };
 
   const handleDeleteLine = async () => {
@@ -178,14 +229,18 @@ function ItemRow({
           {typeof item.availableStock === "number" ? item.availableStock : "NO STOCK"}
         </span>
       </td>
-      <td className="px-2 py-2 border border-gray-200 w-28">
+      <td className="px-2 py-2 border border-gray-200 w-28" onClick={(e) => e.stopPropagation()}>
         <input
+          id={pickQtyInputId(item.id)}
           type="number"
           min={0}
           max={item.quantity}
           value={qty}
           disabled={disabled}
+          aria-label={`Pickup quantity for ${item.styleCode || item.skuCode}`}
           onChange={(e) => setQty(Math.max(0, Number(e.target.value)))}
+          onKeyDown={(e) => void handleQtyKeyDown(e)}
+          onClick={(e) => e.stopPropagation()}
           className={`w-full bg-white border rounded px-2 py-1 text-[12px] font-bold text-center outline-none transition-colors
             ${disabled ? "border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed" : ""}
             ${dirty && !disabled ? "border-purple-400 ring-1 ring-purple-200 text-purple-700" : "border-gray-200 text-gray-800"}
@@ -200,7 +255,12 @@ function ItemRow({
           <button
             type="button"
             disabled={disabled || !dirty || saving}
-            onClick={handleSave}
+            onClick={(e) => {
+              e.stopPropagation();
+              void handleSave().then((ok) => {
+                if (ok) onAdvanceFocus?.(item.id);
+              });
+            }}
             className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[10px] font-bold uppercase tracking-wide transition-colors shadow-sm
               ${disabled || !dirty
                 ? "bg-gray-100 text-gray-400 cursor-not-allowed"
@@ -328,6 +388,23 @@ function OrderGroupRow({
   const [pickerSaving, setPickerSaving] = useState(false);
   const [stageBusy, setStageBusy] = useState(false);
   const [stageError, setStageError] = useState<string | null>(null);
+  const wasExpandedRef = useRef(expanded);
+
+  const advancePickFocus = useCallback(
+    (currentItemId: string) => {
+      const next = findNextEditablePickItem(group.items, currentItemId);
+      if (next) focusPickQtyInput(next.id);
+    },
+    [group.items],
+  );
+
+  useEffect(() => {
+    if (expanded && !wasExpandedRef.current) {
+      const first = group.items.find((row) => row.status !== "picked");
+      if (first) focusPickQtyInput(first.id);
+    }
+    wasExpandedRef.current = expanded;
+  }, [expanded, group.items]);
 
   const flowStatus = effectiveWarehouseOrderFlowStatus({
     flowStatus:
@@ -658,6 +735,7 @@ function OrderGroupRow({
           orderNumber={group.orderNumber}
           saveError={pickItemErrors?.[item.id]}
           onSave={onSave}
+          onAdvanceFocus={advancePickFocus}
           onDeleteItem={onDeleteItem}
         />
       ))}

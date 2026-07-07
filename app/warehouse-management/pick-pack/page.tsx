@@ -27,8 +27,8 @@ const PickPackPage = () => {
     }
   };
 
-  const loadPickList = useCallback(async (filters?: PickListFilters) => {
-    setPickLoading(true);
+  const loadPickList = useCallback(async (filters?: PickListFilters, options?: { silent?: boolean }) => {
+    if (!options?.silent) setPickLoading(true);
     const owResult = await pickPackApi.fetchPickListOrderWise(filters);
     if (owResult) {
       setPickOrderWise(owResult);
@@ -42,7 +42,7 @@ const PickPackPage = () => {
       setPickOrderWise(null);
       setPickPagination(null);
     }
-    setPickLoading(false);
+    if (!options?.silent) setPickLoading(false);
   }, []);
 
   useEffect(() => {
@@ -144,8 +144,8 @@ const PickPackPage = () => {
         notify(`Pickup quantity reset: ${item.skuCode}`, "info");
       }
 
-      // Stock is updated on the backend; refetch so the "Stock" column shows latest values.
-      await loadPickList(pickFilters);
+      // Refresh stock in the background without collapsing expanded pick rows.
+      await loadPickList(pickFilters, { silent: true });
     } catch (err) {
       const raw = err instanceof Error ? err.message : "Failed to save pickup quantity";
       const message = formatPickSaveErrorMessage(raw, item.styleCode || item.skuCode);

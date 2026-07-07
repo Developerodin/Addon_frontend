@@ -32,6 +32,16 @@ export function formatPickerLabel(pickerName?: string): string {
 }
 
 /**
+ * Addon order ID line for print/export when set on the warehouse order.
+ * @param addonOrderId - External / customer reference from warehouse order
+ */
+export function formatAddonOrderLine(addonOrderId?: string): string | null {
+  const id = (addonOrderId ?? "").trim();
+  if (!id) return null;
+  return id;
+}
+
+/**
  * Stock cell text + whether the line has no usable stock.
  * @param item - Pick list line
  */
@@ -100,6 +110,7 @@ const escHtml = (value: string) =>
 export function downloadOrderExcel(group: PickListOrderGroup) {
   const clientLine = formatClientLabel({ clientName: group.clientName, clientType: group.clientType });
   const pickerLine = formatPickerLabel(group.pickerName);
+  const addonOrderLine = formatAddonOrderLine(group.addonOrderId);
   const headers = ["Pair / Article", "Style Code", "Color", "Size", "Qty", "Stock", "Pickup Qty"] as const;
   const skuGroups = groupPickItemsBySku(group.items);
   const dataRows: (string | number)[][] = [];
@@ -121,6 +132,7 @@ export function downloadOrderExcel(group: PickListOrderGroup) {
   }
 
   const aoa: (string | number)[][] = [[`Pick List – ${group.orderNumber}`]];
+  if (addonOrderLine) aoa.push([`Addon order ID: ${addonOrderLine}`]);
   if (clientLine) aoa.push([`Client: ${clientLine}`]);
   aoa.push([`Picker: ${pickerLine}`]);
   const noStockCount = countNoStockPickLines(group.items);
@@ -134,6 +146,10 @@ export function downloadOrderExcel(group: PickListOrderGroup) {
   const colCount = headers.length;
   const merges: Range[] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: colCount - 1 } }];
   let mergeRow = 1;
+  if (addonOrderLine) {
+    merges.push({ s: { r: mergeRow, c: 0 }, e: { r: mergeRow, c: colCount - 1 } });
+    mergeRow += 1;
+  }
   if (clientLine) {
     merges.push({ s: { r: mergeRow, c: 0 }, e: { r: mergeRow, c: colCount - 1 } });
     mergeRow += 1;
@@ -158,7 +174,11 @@ export function downloadOrderExcel(group: PickListOrderGroup) {
 export function printOrderPickList(group: PickListOrderGroup) {
   const clientLine = formatClientLabel({ clientName: group.clientName, clientType: group.clientType });
   const pickerLine = formatPickerLabel(group.pickerName);
+  const addonOrderLine = formatAddonOrderLine(group.addonOrderId);
   const noStockCount = countNoStockPickLines(group.items);
+  const addonBlock = addonOrderLine
+    ? `<div class="meta-line"><strong>Addon order ID:</strong> ${escHtml(addonOrderLine)}</div>`
+    : "";
   const clientBlock = clientLine ? `<div class="meta-line"><strong>Client:</strong> ${escHtml(clientLine)}</div>` : "";
   const pickerBlock = `<div class="meta-line"><strong>Picker:</strong> ${escHtml(pickerLine)}</div>`;
   const stockWarningBlock =
@@ -227,6 +247,7 @@ export function printOrderPickList(group: PickListOrderGroup) {
 </head><body>
   <h2>Pick List – ${escHtml(group.orderNumber)}</h2>
   <div class="meta-block">
+    ${addonBlock}
     ${clientBlock}
     ${pickerBlock}
   </div>
