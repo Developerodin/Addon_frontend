@@ -7,6 +7,7 @@ import PickListDashboard from "./components/PickListDashboard";
 import type { PickListOrderWiseResponse } from "./types";
 import { pickPackApi } from "./pickPackApi";
 import type { PickListFilters, PickListPagination } from "./pickPackApi";
+import { formatPickSaveErrorMessage } from "./pickSaveErrors";
 
 const PickPackPage = () => {
   const [loading, setLoading] = useState(true);
@@ -14,6 +15,7 @@ const PickPackPage = () => {
   const [pickPagination, setPickPagination] = useState<PickListPagination | null>(null);
   const [pickFilters, setPickFilters] = useState<PickListFilters>({});
   const [pickLoading, setPickLoading] = useState(false);
+  const [pickItemErrors, setPickItemErrors] = useState<Record<string, string>>({});
 
   const notify = (message: string, kind: "success" | "error" | "warning" | "info" = "info") => {
     try {
@@ -101,6 +103,13 @@ const PickPackPage = () => {
     try {
       await pickPackApi.updatePickEntry(itemId, { pickupQuantity: nextQty });
 
+      setPickItemErrors((prev) => {
+        if (!prev[itemId]) return prev;
+        const next = { ...prev };
+        delete next[itemId];
+        return next;
+      });
+
       setPickOrderWise((prev) => {
         if (!prev) return prev;
         const results = prev.results.map((group) => {
@@ -138,7 +147,11 @@ const PickPackPage = () => {
       // Stock is updated on the backend; refetch so the "Stock" column shows latest values.
       await loadPickList(pickFilters);
     } catch (err) {
-      notify(err instanceof Error ? err.message : "Failed to save pickup quantity", "error");
+      const raw = err instanceof Error ? err.message : "Failed to save pickup quantity";
+      const message = formatPickSaveErrorMessage(raw, item.styleCode || item.skuCode);
+      setPickItemErrors((prev) => ({ ...prev, [itemId]: message }));
+      notify(message, "error");
+      throw new Error(message);
     }
   };
 
@@ -234,6 +247,7 @@ const PickPackPage = () => {
               {!loading && (
                 <PickListDashboard
                   orderWiseData={pickOrderWise}
+                  pickItemErrors={pickItemErrors}
                   onSavePickupQty={savePickupQty}
                   onSetPickerName={setPickerNameForOrder}
                   onDeletePickItem={deletePickItem}
@@ -242,7 +256,6 @@ const PickPackPage = () => {
                   onFilterChange={handlePickFilterChange}
                   onPageChange={handlePickPageChange}
                   onRefresh={handleRefreshPickList}
-                  onAlert={(msg) => notify(msg, "error")}
                   pagination={pickPagination}
                   isLoading={pickLoading}
                 />

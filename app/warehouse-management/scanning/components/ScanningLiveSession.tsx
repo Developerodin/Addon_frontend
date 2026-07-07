@@ -103,7 +103,7 @@ export default function ScanningLiveSession({
     }
     try {
       await whmsScanning.complete(session.id, { force, remarks });
-      toast.success("Scanning completed");
+      toast.success("Scanning completed — order is ready in Billing");
       onSessionChange(null);
       onComplete();
     } catch (err) {

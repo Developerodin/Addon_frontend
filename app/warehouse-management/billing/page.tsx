@@ -6,6 +6,7 @@ import { toast, Toaster } from "react-hot-toast";
 import {
   whmsWarehouseOrders,
   WarehouseOrder,
+  warehouseOrderFlowStatusLabel,
   type PaginatedWarehouseOrders,
 } from "@/shared/services/whmsWarehouseOrderService";
 import { whmsInvoices, WhmsInvoice } from "@/shared/services/whmsFulfilmentService";
@@ -60,7 +61,7 @@ function printInvoice(invoice: WhmsInvoice & { generatedAt?: string }) {
   win.document.close();
 }
 
-const PENDING_BILLING_BASE = { flowStatusIn: "sent-to-billing", sortBy: "createdAt:desc" };
+const PENDING_BILLING_BASE = { flowStatusIn: "scanning-done,sent-to-billing", sortBy: "createdAt:desc" };
 
 const fetchPendingOrders = (params: { flowStatusIn: string; sortBy: string; page: number; limit: number; q?: string }) =>
   whmsWarehouseOrders.list(params) as Promise<PaginatedWarehouseOrders>;
@@ -93,6 +94,19 @@ export default function BillingPage() {
     fetchFn: fetchInvoices,
     baseParams: invoiceBaseParams,
   });
+
+  const handleSendToBilling = async (order: WarehouseOrder) => {
+    setBusyId(order.id);
+    try {
+      await whmsWarehouseOrders.transitionFlowStatus(order.id, "sent-to-billing");
+      toast.success(`${order.orderNumber || order.id} sent to billing`);
+      void pending.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to send to billing");
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const handleGenerate = async (order: WarehouseOrder) => {
     setBusyId(order.id);
@@ -146,6 +160,9 @@ export default function BillingPage() {
           </button>
         </div>
         <div className="box-body">
+          <p className="text-xs text-gray-500 mb-3">
+            Scanning → Billing → Dispatch. After scan completes, generate invoice here; then ship from Dispatch.
+          </p>
           <WhmsListToolbar
             search={pending.q}
             onSearchChange={pending.setQ}
@@ -162,7 +179,9 @@ export default function BillingPage() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 opacity-50" />
             </div>
           ) : pending.results.length === 0 ? (
-            <p className="text-sm text-gray-500 py-6 text-center">No orders in Sent to Billing.</p>
+            <p className="text-sm text-gray-500 py-6 text-center">
+              No orders waiting for billing. Complete scanning first — orders land here as Scanning Done or Sent to Billing.
+            </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full border-collapse border border-gray-200">
@@ -170,24 +189,39 @@ export default function BillingPage() {
                   <tr className="bg-gray-50/30">
                     <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Order #</th>
                     <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Client</th>
+                    <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Stage</th>
                     <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Date</th>
                     <th className="px-1.5 py-3 text-right text-[11px] font-bold uppercase border border-gray-200">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {pending.results.map((order) => (
+                  {pending.results.map((order) => {
+                    const needsSendToBilling = order.flowStatus === "scanning-done";
+                    return (
                     <tr key={order.id} className="hover:bg-gray-50/50">
                       <td className="px-1.5 py-2.5 text-[12px] font-bold border border-gray-200">{order.orderNumber || order.id}</td>
                       <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">{order.clientName || "—"}</td>
+                      <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${needsSendToBilling ? "bg-amber-100 text-amber-800" : "bg-violet-100 text-violet-800"}`}>
+                          {warehouseOrderFlowStatusLabel(order.flowStatus)}
+                        </span>
+                      </td>
                       <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">{order.date ? new Date(order.date).toLocaleDateString() : "—"}</td>
                       <td className="px-1.5 py-2.5 text-right border border-gray-200 whitespace-nowrap">
                         <button type="button" onClick={() => setJourneyOrderId(order.id)} className="ti-btn ti-btn-light px-2 py-1.5 text-[10px] font-semibold mr-1">View</button>
-                        <button type="button" disabled={busyId !== null} onClick={() => void handleGenerate(order)} className="ti-btn ti-btn-primary px-3 py-2 text-[11px] font-semibold">
-                          {busyId === order.id ? <i className="ri-loader-4-line animate-spin"></i> : <i className="ri-bill-line"></i>} Generate Invoice
-                        </button>
+                        {needsSendToBilling ? (
+                          <button type="button" disabled={busyId !== null} onClick={() => void handleSendToBilling(order)} className="ti-btn ti-btn-primary px-3 py-2 text-[11px] font-semibold">
+                            {busyId === order.id ? <i className="ri-loader-4-line animate-spin"></i> : <i className="ri-arrow-right-line"></i>} Send to Billing
+                          </button>
+                        ) : (
+                          <button type="button" disabled={busyId !== null} onClick={() => void handleGenerate(order)} className="ti-btn ti-btn-primary px-3 py-2 text-[11px] font-semibold">
+                            {busyId === order.id ? <i className="ri-loader-4-line animate-spin"></i> : <i className="ri-bill-line"></i>} Generate Invoice
+                          </button>
+                        )}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

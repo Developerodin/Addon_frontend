@@ -83,6 +83,7 @@ const ProductListPage = () => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [totalResults, setTotalResults] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [styleCodeSearch, setStyleCodeSearch] = useState('');
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [selectAll, setSelectAll] = useState(false);
   const [importProgress, setImportProgress] = useState<number | null>(null);
@@ -103,7 +104,7 @@ const ProductListPage = () => {
   useEffect(() => {
     fetchProducts();
     fetchCategories();
-  }, [currentPage, itemsPerPage, searchQuery]);
+  }, [currentPage, itemsPerPage, searchQuery, styleCodeSearch]);
 
   // Fetch style codes once for resolving IDs in modal/export
   useEffect(() => {
@@ -121,7 +122,13 @@ const ProductListPage = () => {
   const fetchProducts = async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get(`${API_ENDPOINTS.products}?page=${currentPage}&limit=${itemsPerPage}&search=${encodeURIComponent(searchQuery)}`);
+      const params = new URLSearchParams({
+        page: String(currentPage),
+        limit: String(itemsPerPage),
+      });
+      if (searchQuery.trim()) params.set('search', searchQuery.trim());
+      if (styleCodeSearch.trim()) params.set('styleCode', styleCodeSearch.trim());
+      const response = await axios.get(`${API_ENDPOINTS.products}?${params.toString()}`);
       const data = response.data as ProductsResponse;
       
       // Debug: Log the first product to see its structure
@@ -2483,6 +2490,42 @@ const ProductListPage = () => {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              {/* Search by style code */}
+              <div className="relative flex items-center gap-1">
+                <div className="relative">
+                  <input
+                    type="text"
+                    className="bg-white border border-gray-200 pl-8 pr-8 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-52 min-w-[140px] placeholder:text-gray-400 transition-all font-medium"
+                    placeholder="Search by style code..."
+                    value={styleCodeSearch}
+                    onChange={(e) => {
+                      setStyleCodeSearch(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    aria-label="Search products by style code"
+                  />
+                  <i className="ri-barcode-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs" aria-hidden="true"></i>
+                  {styleCodeSearch.trim() ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStyleCodeSearch('');
+                        setCurrentPage(1);
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
+                      aria-label="Clear style code search"
+                    >
+                      <i className="ri-close-line"></i>
+                    </button>
+                  ) : null}
+                </div>
+                {styleCodeSearch.trim() ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-100 whitespace-nowrap">
+                    Style: {styleCodeSearch.trim()}
+                  </span>
+                ) : null}
+              </div>
+
               {/* Search */}
               <div className="relative">
                 <input

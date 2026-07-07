@@ -98,18 +98,20 @@ export interface ListProductsResponse {
 }
 
 /**
- * GET /v1/products?page=&limit=&search=
+ * GET /v1/products?page=&limit=&search=&styleCode=
  * Paginated catalog list (aligned with `app/catalog/items/page.tsx`).
  */
 export async function listProducts(params: {
   page?: number;
   limit?: number;
   search?: string;
+  styleCode?: string;
 }): Promise<ListProductsResponse> {
   const sp = new URLSearchParams();
   sp.set('page', String(params.page ?? 1));
   sp.set('limit', String(params.limit ?? 10));
   if (params.search?.trim()) sp.set('search', params.search.trim());
+  if (params.styleCode?.trim()) sp.set('styleCode', params.styleCode.trim());
   const url = `${API_BASE_URL}/products?${sp.toString()}`;
   return request<ListProductsResponse>(url, { method: 'GET' });
 }
@@ -334,11 +336,25 @@ export async function fetchAttributeValueLookup(): Promise<Record<string, string
 
 /**
  * Given a style-code ID/string, find the linked article and return resolved Colour + Pattern.
+ * Uses WHMS catalogue-attrs API (direct Product.styleCodes lookup) with legacy search fallback.
  */
 export async function resolveArticleColourPattern(
   styleCodeId: string,
   styleCodeStr: string
 ): Promise<{ colour: string; pattern: string }> {
+  if (styleCodeId?.trim()) {
+    try {
+      const { whmsWarehouseOrders } = await import('@/shared/services/whmsWarehouseOrderService');
+      const attrs = await whmsWarehouseOrders.getCatalogueAttrs([styleCodeId]);
+      const fromWhms = attrs[styleCodeId];
+      if (fromWhms?.colour || fromWhms?.pattern) {
+        return { colour: fromWhms.colour || '', pattern: fromWhms.pattern || '' };
+      }
+    } catch {
+      /* fall through to legacy lookup */
+    }
+  }
+
   console.log('[resolveArticleColourPattern] START — styleCodeId:', styleCodeId, 'styleCodeStr:', styleCodeStr);
   const product = await findProductByStyleCodeId(styleCodeId, styleCodeStr);
   if (!product?.attributes) {

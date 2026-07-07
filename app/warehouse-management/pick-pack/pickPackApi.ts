@@ -158,12 +158,8 @@ export const pickPackApi = {
     pickListId: string,
     body: WhmsPickListEntryPatchBody,
   ): Promise<PickItem | null> {
-    try {
-      const entry = await whmsPickListApi.update(pickListId, body);
-      return entry ? mapPickListEntry(entry) : null;
-    } catch {
-      return null;
-    }
+    const entry = await whmsPickListApi.update(pickListId, body);
+    return entry ? mapPickListEntry(entry) : null;
   },
 
   async deletePickEntry(pickListId: string): Promise<void> {

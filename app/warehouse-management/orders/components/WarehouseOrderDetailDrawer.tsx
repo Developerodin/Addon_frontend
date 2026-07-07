@@ -183,11 +183,11 @@ export default function WarehouseOrderDetailDrawer({ orderId, open, onClose }: P
                         <div className="grid grid-cols-12 gap-2">
                           <Field label="Pair style code" value={r.styleCode || "—"} />
                           <Field label="Pack" value={r.pack || "—"} />
-                          <Field label="Colour" value={r.colour || "—"} />
-                          <Field label="Type" value={r.type || "—"} />
-                          <Field label="Pattern" value={r.pattern || "—"} />
                           <Field label="Qty" value={r.quantity} />
                         </div>
+                        <p className="mt-1 text-[10px] text-gray-500 font-medium">
+                          Child colours shown in Pick &amp; Pack.
+                        </p>
                       </div>
                     ))}
                   </div>

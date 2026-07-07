@@ -354,6 +354,16 @@ export interface BulkImportSummary {
   processingTime?: number;
 }
 
+/** Catalogue colour/pattern and row diagnostics resolved from styleCodeId. */
+export interface CatalogueAttrsEntry {
+  colour: string;
+  pattern: string;
+  styleCode?: string;
+  styleCodeExists?: boolean;
+  hasLinkedProduct?: boolean;
+  availableStock?: number;
+}
+
 export const whmsWarehouseOrders = {
   list: (params: WarehouseOrdersListParams = {}) =>
     request<PaginatedWarehouseOrders>(`/warehouse-orders${qs(params as Record<string, unknown>)}`),
@@ -365,6 +375,14 @@ export const whmsWarehouseOrders = {
   delete: (orderId: string) => request<void>(`/warehouse-orders/${orderId}`, { method: 'DELETE' }),
   bulkImport: (payload: BulkImportPayload) =>
     request<BulkImportSummary>('/warehouse-orders/bulk-import', { method: 'POST', body: JSON.stringify(payload) }),
+  /** Batch-resolve colour/pattern from product catalogue by styleCodeId. */
+  getCatalogueAttrs: (styleCodeIds: string[]) => {
+    const ids = styleCodeIds.map((id) => id.trim()).filter(Boolean);
+    if (!ids.length) return Promise.resolve({} as Record<string, CatalogueAttrsEntry>);
+    return request<{ attrs: Record<string, CatalogueAttrsEntry> }>(
+      `/warehouse-orders/catalogue-attrs?styleCodeIds=${encodeURIComponent(ids.join(','))}`,
+    ).then((res) => res.attrs ?? {});
+  },
   transitionFlowStatus: (orderId: string, flowStatus: WarehouseOrderFlowStatus, remarks?: string) =>
     request<{ order: WarehouseOrder; allowedNext: WarehouseOrderFlowStatus[] }>(
       `/warehouse-orders/${orderId}/flow-status`,

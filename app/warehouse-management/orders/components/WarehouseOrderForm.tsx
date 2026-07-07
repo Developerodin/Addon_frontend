@@ -11,11 +11,13 @@ import type {
   WarehouseOrderStatus,
   WarehouseOrderStyleCodeMultiPairRow,
   WarehouseOrderStyleCodeSinglePairRow,
+  CatalogueAttrsEntry,
 } from "@/shared/services/whmsWarehouseOrderService";
 import {
   WAREHOUSE_ORDER_STATUSES,
   WAREHOUSE_ORDER_STATUS_LABELS,
   normalizeWarehouseOrderStatus,
+  whmsWarehouseOrders,
 } from "@/shared/services/whmsWarehouseOrderService";
 import { styleCodeService } from "@/shared/services/styleCodeService";
 import StyleCodePairSelectModal from "./StyleCodePairSelectModal";
@@ -24,8 +26,17 @@ import {
   mapStyleCodePairToMultiRow,
   mapStyleCodeToSingleRow,
   fetchArticleAttrsForStyleCode,
+  hydrateSingleRowsFromCatalog,
 } from "./warehouseOrderCatalogMaps";
 import { validateWarehouseOrderBeforeSubmit } from "./warehouseOrderSubmitValidation";
+import {
+  diagnoseMultiPairRow,
+  diagnoseSinglePairRow,
+  type WarehouseOrderRowDiagnostics,
+} from "./warehouseOrderRowValidation";
+import WarehouseOrderRowIssuePanel, {
+  warehouseOrderFieldClass,
+} from "./WarehouseOrderRowIssuePanel";
 
 const inputClass =
   "w-full bg-white border border-gray-200 rounded px-3 py-1.5 text-[11px] font-medium text-gray-800 focus:ring-0 focus:border-purple-300 placeholder:text-gray-400";
@@ -135,16 +146,82 @@ export default function WarehouseOrderForm({
   const [s, setS] = useState<FormState>(initial);
   const [styleCodeModalIdx, setStyleCodeModalIdx] = useState<number | null>(null);
   const [pairModalIdx, setPairModalIdx] = useState<number | null>(null);
+  const [singleCatalogueById, setSingleCatalogueById] = useState<
+    Record<string, CatalogueAttrsEntry>
+  >({});
 
   useEffect(() => {
     setS(initial);
   }, [initial]);
 
+  /** On edit load, backfill colour/pattern from catalogue when order doc has blanks. */
+  useEffect(() => {
+    if (mode !== "edit" || !initialOrder?.id) return;
+    let cancelled = false;
+
+    const needsSingleHydrate = initial.single.some(
+      (r) => r.styleCodeId && (!r.colour?.trim() || !r.pattern?.trim()),
+    );
+    if (!needsSingleHydrate) return;
+
+    void (async () => {
+      const single = await hydrateSingleRowsFromCatalog(initial.single);
+      if (cancelled) return;
+      setS((prev) => ({
+        ...prev,
+        single,
+      }));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, initialOrder?.id, initial.single, initial.multi]);
+
+  /** Load catalogue diagnostics (product link, stock) for single-pair styleCodeIds. */
+  useEffect(() => {
+    const ids = [...new Set(s.single.map((r) => r.styleCodeId).filter(Boolean))];
+    if (!ids.length) {
+      setSingleCatalogueById({});
+      return;
+    }
+
+    let cancelled = false;
+    void whmsWarehouseOrders.getCatalogueAttrs(ids).then((attrs) => {
+      if (!cancelled) setSingleCatalogueById(attrs);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [s.single]);
+
+  const singleRowDiagnostics = useMemo(
+    () =>
+      s.single.map((row) =>
+        diagnoseSinglePairRow(row, row.styleCodeId ? singleCatalogueById[row.styleCodeId] : undefined),
+      ),
+    [s.single, singleCatalogueById],
+  );
+
+  const multiRowDiagnostics = useMemo(
+    () => s.multi.map((row) => diagnoseMultiPairRow(row)),
+    [s.multi],
+  );
+
+  const rowHasError = (diagnostics: WarehouseOrderRowDiagnostics) =>
+    diagnostics.issues.some((i) => i.severity === "error");
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const single = pruneRows(s.single);
-    const multi = pruneRows(s.multi);
+    const multi = pruneRows(s.multi).map((row) => ({
+      ...row,
+      colour: "",
+      type: "",
+      pattern: "",
+    }));
 
     if (!validateWarehouseOrderBeforeSubmit(mode, s.clientId, single, multi)) return;
 
@@ -264,8 +341,16 @@ export default function WarehouseOrderForm({
           </div>
         </div>
 
-        {s.single.map((r, idx) => (
-          <div key={`single-${idx}`} className="border border-gray-200 rounded p-3 bg-white">
+        {s.single.map((r, idx) => {
+          const diagnostics = singleRowDiagnostics[idx];
+          const hasRowError = rowHasError(diagnostics);
+          return (
+          <div
+            key={`single-${idx}`}
+            className={`border rounded p-3 bg-white ${
+              hasRowError ? "border-red-300 ring-1 ring-red-100" : "border-gray-200"
+            }`}
+          >
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <span className="text-[11px] font-bold text-gray-700">Row {idx + 1}</span>
               <div className="flex items-center gap-2">
@@ -288,7 +373,12 @@ export default function WarehouseOrderForm({
               </div>
             </div>
             <div className="grid grid-cols-12 gap-2">
-              {!r.styleCodeId ? (
+              {!r.styleCodeId && r.styleCode?.trim() ? (
+                <p className="col-span-12 text-[10px] text-red-700 font-medium">
+                  Style code text is present but not linked — use{" "}
+                  <span className="font-bold">Pick style code</span>.
+                </p>
+              ) : !r.styleCodeId ? (
                 <p className="col-span-12 text-[10px] text-amber-700 font-medium">
                   Use <span className="font-bold">Pick style code</span> — the catalog link fills this row (ids are stored automatically).
                 </p>
@@ -305,8 +395,12 @@ export default function WarehouseOrderForm({
                 <div key={k} className="col-span-12 sm:col-span-4">
                   <label className={labelClass}>{label}</label>
                   <input
-                    className={`${inputClass} ${k === "styleCode" ? "cursor-pointer" : ""}`}
+                    className={`${inputClass} ${warehouseOrderFieldClass(k, diagnostics)} ${k === "styleCode" ? "cursor-pointer" : ""}`}
                     value={(r as Record<string, string | number>)[k] ?? ""}
+                    aria-invalid={diagnostics?.invalidFields.has(k) ? true : undefined}
+                    aria-describedby={
+                      diagnostics?.invalidFields.has(k) ? `single-row-${idx}-${k}-issue` : undefined
+                    }
                     onClick={
                       k === "styleCode" ? () => setStyleCodeModalIdx(idx) : undefined
                     }
@@ -345,9 +439,11 @@ export default function WarehouseOrderForm({
                   required
                 />
               </div>
+              <WarehouseOrderRowIssuePanel diagnostics={diagnostics} />
             </div>
           </div>
-        ))}
+        );
+        })}
       </div>
 
       <div className="border-t border-gray-100 pt-4 space-y-3">
@@ -378,8 +474,16 @@ export default function WarehouseOrderForm({
           </div>
         </div>
 
-        {s.multi.map((r, idx) => (
-          <div key={`multi-${idx}`} className="border border-gray-200 rounded p-3 bg-white">
+        {s.multi.map((r, idx) => {
+          const diagnostics = multiRowDiagnostics[idx];
+          const hasRowError = rowHasError(diagnostics);
+          return (
+          <div
+            key={`multi-${idx}`}
+            className={`border rounded p-3 bg-white ${
+              hasRowError ? "border-red-300 ring-1 ring-red-100" : "border-gray-200"
+            }`}
+          >
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <span className="text-[11px] font-bold text-gray-700">Row {idx + 1}</span>
               <div className="flex items-center gap-2">
@@ -406,28 +510,34 @@ export default function WarehouseOrderForm({
                 <p className="col-span-12 text-[10px] text-amber-700 font-medium">
                   Use <span className="font-bold">Pick pair</span> — ids are stored automatically.
                 </p>
-              ) : null}
+              ) : (
+                <p className="col-span-12 text-[10px] text-gray-500 font-medium">
+                  Colour, type and pattern are per child style code — see Pick &amp; Pack after save.
+                </p>
+              )}
               {(
                 [
                   ["styleCode", "Pair style code"],
                   ["pack", "Pack"],
-                  ["colour", "Colour"],
-                  ["type", "Type"],
-                  ["pattern", "Pattern"],
                 ] as const
               ).map(([k, label]) => (
                 <div key={k} className="col-span-12 sm:col-span-4">
                   <label className={labelClass}>{label}</label>
                   <input
-                    className={inputClass}
+                    className={`${inputClass} ${warehouseOrderFieldClass(k, diagnostics)}`}
                     value={(r as Record<string, string | number>)[k] ?? ""}
-                    onChange={(e) =>
-                      setS((p) => ({
-                        ...p,
-                        multi: p.multi.map((row, i) =>
-                          i === idx ? { ...row, [k]: e.target.value } : row,
-                        ),
-                      }))
+                    aria-invalid={diagnostics?.invalidFields.has(k) ? true : undefined}
+                    readOnly={k === "styleCode"}
+                    onChange={
+                      k === "styleCode"
+                        ? undefined
+                        : (e) =>
+                            setS((p) => ({
+                              ...p,
+                              multi: p.multi.map((row, i) =>
+                                i === idx ? { ...row, [k]: e.target.value } : row,
+                              ),
+                            }))
                     }
                   />
                 </div>
@@ -451,9 +561,11 @@ export default function WarehouseOrderForm({
                   required
                 />
               </div>
+              <WarehouseOrderRowIssuePanel diagnostics={diagnostics} />
             </div>
           </div>
-        ))}
+        );
+        })}
       </div>
 
       <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
@@ -499,15 +611,9 @@ export default function WarehouseOrderForm({
           }));
           setStyleCodeModalIdx(null);
 
-          console.log('[WarehouseOrderForm] fetching article attrs for styleCode:', fullSc.styleCode, 'id:', fullSc.id);
           fetchArticleAttrsForStyleCode(fullSc.id, fullSc.styleCode).then(
             (attrs) => {
-              console.log('[WarehouseOrderForm] article attrs resolved:', attrs);
-              if (!attrs.colour && !attrs.pattern) {
-                console.log('[WarehouseOrderForm] no colour/pattern to populate');
-                return;
-              }
-              console.log('[WarehouseOrderForm] auto-populating row', idx, '— colour:', attrs.colour, 'pattern:', attrs.pattern);
+              if (!attrs.colour && !attrs.pattern) return;
               setS((p) => ({
                 ...p,
                 single: p.single.map((row, i) =>

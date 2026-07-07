@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
 import JsBarcode from "jsbarcode";
 import type { PickListOrderGroup, PickListOrderItem } from "../types";
@@ -102,13 +102,15 @@ function ItemRow({
   item,
   index,
   orderNumber,
+  saveError,
   onSave,
   onDeleteItem,
 }: {
   item: PickListOrderItem;
   index: number;
   orderNumber: string;
-  onSave: (itemId: string, pickupQty: number) => void;
+  saveError?: string;
+  onSave: (itemId: string, pickupQty: number) => Promise<void>;
   onDeleteItem?: (itemId: string) => Promise<void>;
 }) {
   const [qty, setQty] = useState<number>(item.pickupQuantity);
@@ -117,12 +119,20 @@ function ItemRow({
 
   const dirty = qty !== item.pickupQuantity;
   const disabled = item.status === "picked";
+  const noStock =
+    typeof item.availableStock !== "number" || item.availableStock <= 0;
+
+  useEffect(() => {
+    setQty(item.pickupQuantity);
+  }, [item.pickupQuantity]);
 
   const handleSave = async () => {
     if (disabled || !dirty) return;
     setSaving(true);
     try {
-      onSave(item.id, qty);
+      await onSave(item.id, qty);
+    } catch {
+      setQty(item.pickupQuantity);
     } finally {
       setSaving(false);
     }
@@ -140,7 +150,8 @@ function ItemRow({
   };
 
   return (
-    <tr className="hover:bg-gray-50/50 transition-colors group">
+    <>
+    <tr className={`hover:bg-gray-50/50 transition-colors group ${saveError ? "bg-red-50/40" : ""}`}>
       <td className="px-2 py-2 text-[11px] font-medium text-gray-500 border border-gray-200 text-center w-10">
         {index + 1}
       </td>
@@ -160,8 +171,11 @@ function ItemRow({
         {item.quantity}
       </td>
       <td className="px-2 py-2 border border-gray-200 text-center w-24">
-        <span className="text-[12px] font-bold text-gray-900">
-          {typeof item.availableStock === "number" ? item.availableStock : "—"}
+        <span
+          className={`text-[12px] font-bold ${noStock ? "text-red-600 uppercase" : "text-gray-900"}`}
+          title={noStock ? "No warehouse stock for this style code" : undefined}
+        >
+          {typeof item.availableStock === "number" ? item.availableStock : "NO STOCK"}
         </span>
       </td>
       <td className="px-2 py-2 border border-gray-200 w-28">
@@ -222,6 +236,17 @@ function ItemRow({
         </div>
       </td>
     </tr>
+    {saveError ? (
+      <tr className="bg-red-50/60">
+        <td colSpan={10} className="px-3 py-2 border border-red-200">
+          <p role="alert" aria-live="polite" className="text-[10px] font-semibold text-red-800 leading-snug">
+            <i className="ri-error-warning-fill mr-1" aria-hidden />
+            {saveError}
+          </p>
+        </td>
+      </tr>
+    ) : null}
+    </>
   );
 }
 
@@ -282,18 +307,20 @@ function OrderGroupRow({
   onDeleteOrder,
   onRefresh,
   onAlert,
+  pickItemErrors,
 }: {
   group: PickListOrderGroup;
   index: number;
   expanded: boolean;
   showDetailColumns: boolean;
   onToggleExpand: () => void;
-  onSave: (itemId: string, pickupQty: number) => void;
+  onSave: (itemId: string, pickupQty: number) => Promise<void>;
   onSetPickerName?: (orderId: string, pickerName: string) => Promise<void>;
   onDeleteItem?: (itemId: string) => Promise<void>;
   onDeleteOrder?: (orderId: string, orderNumber: string) => Promise<void>;
   onRefresh?: () => void;
   onAlert?: (message: string) => void;
+  pickItemErrors?: Record<string, string>;
 }) {
   const [deletingOrder, setDeletingOrder] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -629,6 +656,7 @@ function OrderGroupRow({
           item={item}
           index={idx}
           orderNumber={group.orderNumber}
+          saveError={pickItemErrors?.[item.id]}
           onSave={onSave}
           onDeleteItem={onDeleteItem}
         />
@@ -639,6 +667,7 @@ function OrderGroupRow({
 
 export default function PickTable({
   orderGroups,
+  pickItemErrors,
   onSave,
   onSetPickerName,
   onDeleteItem,
@@ -647,7 +676,8 @@ export default function PickTable({
   onAlert,
 }: {
   orderGroups: PickListOrderGroup[];
-  onSave: (itemId: string, pickupQty: number) => void;
+  pickItemErrors?: Record<string, string>;
+  onSave: (itemId: string, pickupQty: number) => Promise<void>;
   onSetPickerName?: (orderId: string, pickerName: string) => Promise<void>;
   onDeleteItem?: (itemId: string) => Promise<void>;
   onDeleteOrder?: (orderId: string, orderNumber: string) => Promise<void>;
@@ -739,6 +769,7 @@ export default function PickTable({
               onDeleteOrder={onDeleteOrder}
               onRefresh={onRefresh}
               onAlert={onAlert}
+              pickItemErrors={pickItemErrors}
             />
           ))}
         </tbody>
