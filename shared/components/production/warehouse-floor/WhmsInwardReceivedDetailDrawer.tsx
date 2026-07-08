@@ -7,7 +7,8 @@ import {
   type WhmsInwardReceiveRow,
   type WhmsWarehouseInventoryDTO,
 } from "@/shared/services/whmsService";
-import { inwardReceiveDisplayStyleCode, isMongoObjectIdString } from "./inwardReceiveStyleCodeResolve";
+import { getProductByCode } from "@/shared/services/productService";
+import { inwardReceiveDisplayStyleCode, isMongoObjectIdString, type InwardReceiveStyleCodeMaps } from "./inwardReceiveStyleCodeResolve";
 import { isOnHoldStatus, statusBadgeClass } from "./inwardReceiveTableUtils";
 
 type DrawerTab = "details" | "image";
@@ -25,11 +26,21 @@ function inventoryProductImageUrl(row: WhmsWarehouseInventoryDTO | null): string
   return "";
 }
 
+/**
+ * Reads catalog product image URL (Product.image on factory code).
+ * @param product - Product from GET /products/by-code
+ */
+function catalogProductImageUrl(product: { image?: unknown } | null | undefined): string {
+  if (!product) return "";
+  const image = product.image;
+  return typeof image === "string" && image.trim() ? image.trim() : "";
+}
+
 export interface WhmsInwardReceivedDetailDrawerProps {
   detailId: string | null;
   detailRow: WhmsInwardReceiveRow | null;
-  /** StyleCode ObjectId → master code; same map as the list tab. */
-  styleCodeIdToMaster: Record<string, string>;
+  /** StyleCode ObjectId → master code + brand fallback; same map as the list tab. */
+  styleCodeMaps: InwardReceiveStyleCodeMaps;
   detailLoading: boolean;
   savingId: string | null;
   onClose: () => void;
@@ -40,7 +51,7 @@ export interface WhmsInwardReceivedDetailDrawerProps {
 export default function WhmsInwardReceivedDetailDrawer({
   detailId,
   detailRow,
-  styleCodeIdToMaster,
+  styleCodeMaps,
   detailLoading,
   savingId,
   onClose,
@@ -49,39 +60,66 @@ export default function WhmsInwardReceivedDetailDrawer({
 }: WhmsInwardReceivedDetailDrawerProps) {
   const [tab, setTab] = useState<DrawerTab>("details");
   const [imageRow, setImageRow] = useState<WhmsWarehouseInventoryDTO | null>(null);
+  const [catalogImageUrl, setCatalogImageUrl] = useState("");
+  const [catalogProductName, setCatalogProductName] = useState("");
   const [imageLoading, setImageLoading] = useState(false);
 
   useEffect(() => {
     setTab("details");
     setImageRow(null);
+    setCatalogImageUrl("");
+    setCatalogProductName("");
   }, [detailId]);
 
   const displayStyleCode = detailRow
-    ? inwardReceiveDisplayStyleCode(detailRow, styleCodeIdToMaster)
+    ? inwardReceiveDisplayStyleCode(detailRow, styleCodeMaps)
     : "";
 
   /**
-   * Load linked warehouse inventory (product image) when the image tab is opened.
+   * Load product image: warehouse inventory by style code, then catalog product by factory code.
+   * Inward lines often have no warehouse inventory row until accepted qty is posted to stock.
    */
   useEffect(() => {
-    if (tab !== "image" || !detailRow || !displayStyleCode || displayStyleCode === "—") {
+    if (tab !== "image" || !detailRow) {
       setImageRow(null);
+      setCatalogImageUrl("");
+      setCatalogProductName("");
       return undefined;
     }
 
     let cancelled = false;
     setImageLoading(true);
-    void whmsWarehouseInventory
-      .getByStyleCode(displayStyleCode)
-      .then((row) => {
-        if (!cancelled) setImageRow(row);
-      })
-      .catch(() => {
-        if (!cancelled) setImageRow(null);
-      })
-      .finally(() => {
-        if (!cancelled) setImageLoading(false);
-      });
+    setImageRow(null);
+    setCatalogImageUrl("");
+    setCatalogProductName("");
+
+    void (async () => {
+      let inventoryRow: WhmsWarehouseInventoryDTO | null = null;
+
+      if (displayStyleCode && displayStyleCode !== "—") {
+        try {
+          inventoryRow = await whmsWarehouseInventory.getByStyleCode(displayStyleCode);
+        } catch {
+          inventoryRow = null;
+        }
+      }
+
+      let catalogImage = "";
+      let catalogName = "";
+      const factoryCode = detailRow.articleNumber?.trim();
+      if (factoryCode) {
+        const product = await getProductByCode(factoryCode);
+        catalogImage = catalogProductImageUrl(product);
+        catalogName = typeof product?.name === "string" ? product.name.trim() : "";
+      }
+
+      if (cancelled) return;
+
+      setImageRow(inventoryRow);
+      setCatalogImageUrl(catalogImage);
+      setCatalogProductName(catalogName);
+      setImageLoading(false);
+    })();
 
     return () => {
       cancelled = true;
@@ -92,8 +130,8 @@ export default function WhmsInwardReceivedDetailDrawer({
 
   const onHold = Boolean(detailRow && isOnHoldStatus(String(detailRow.status)));
   const busy = detailRow ? savingId === detailRow.id : false;
-  const productImageUrl = inventoryProductImageUrl(imageRow);
-  const productName = imageRow?.product?.name ?? detailRow?.articleNumber ?? "—";
+  const productImageUrl = inventoryProductImageUrl(imageRow) || catalogImageUrl;
+  const productName = imageRow?.product?.name ?? catalogProductName ?? detailRow?.articleNumber ?? "—";
 
   return (
     <>
@@ -259,7 +297,7 @@ export default function WhmsInwardReceivedDetailDrawer({
                       <i className="ri-image-line text-3xl text-gray-300 mb-2" aria-hidden />
                       <p className="text-[11px] font-semibold text-gray-500">No product image</p>
                       <p className="text-[10px] text-gray-400 mt-1">
-                        Add an image in Catalog → Items for this product.
+                        No image on this product in Catalog → Items, and no warehouse inventory row yet for this style.
                       </p>
                     </div>
                   )}

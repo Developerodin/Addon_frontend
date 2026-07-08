@@ -199,6 +199,7 @@ export interface ProductByCode {
   factoryCode?: string;
   styleCodes?: Array<{ id?: string; styleCode?: string; brand?: string }>;
   category?: { name?: string };
+  image?: string;
   processes?: unknown[];
   [key: string]: unknown;
 }

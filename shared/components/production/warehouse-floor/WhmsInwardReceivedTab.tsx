@@ -17,7 +17,8 @@ import {
   inwardReceiveDisplayStyleCode,
   inwardReceivePatchStyleCode,
   isMongoObjectIdString,
-  resolveInwardReceiveStyleCodeMasterMap,
+  resolveInwardReceiveStyleCodeMaps,
+  type InwardReceiveStyleCodeMaps,
 } from "./inwardReceiveStyleCodeResolve";
 import WarehouseScanContainerDrawer from "./WarehouseScanContainerDrawer";
 import WhmsInwardVendorBagScanDrawer from "./WhmsInwardVendorBagScanDrawer";
@@ -59,8 +60,11 @@ export default function WhmsInwardReceivedTab({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editQty, setEditQty] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
-  /** StyleCode ObjectId → master `styleCode` string (from product / vendor APIs). */
-  const [styleCodeIdToMaster, setStyleCodeIdToMaster] = useState<Record<string, string>>({});
+  /** StyleCode ObjectId → master `styleCode` string + brand fallback from product catalog. */
+  const [styleCodeMaps, setStyleCodeMaps] = useState<InwardReceiveStyleCodeMaps>({
+    idToMaster: {},
+    brandFallbackByArticle: {},
+  });
 
   const beginEdit = (r: WhmsInwardReceiveRow) => {
     setEditingId(r.id);
@@ -84,7 +88,7 @@ export default function WhmsInwardReceivedTab({
     }
     const fq = factoryQty(row);
     const statusToSend = autoStatusFromQuantities(fq, rq);
-    const patchStyle = inwardReceivePatchStyleCode(row, styleCodeIdToMaster);
+    const patchStyle = inwardReceivePatchStyleCode(row, styleCodeMaps);
     if (row.styleCode?.trim() && isMongoObjectIdString(row.styleCode) && !patchStyle) {
       toast.error("Could not resolve style code for this line. Check product style links and refresh.");
       return;
@@ -102,7 +106,7 @@ export default function WhmsInwardReceivedTab({
       cancelEdit();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Update failed";
-      toast.error(humanizeInwardReceiveStyleError(msg, row, styleCodeIdToMaster));
+      toast.error(humanizeInwardReceiveStyleError(msg, row, styleCodeMaps));
     } finally {
       setSavingId(null);
     }
@@ -110,7 +114,7 @@ export default function WhmsInwardReceivedTab({
 
   /** On-hold row: set status from action buttons (Accept / Reject). */
   const patchHoldStatus = async (r: WhmsInwardReceiveRow, status: typeof InwardReceiveStatus.ACCEPTED | typeof InwardReceiveStatus.REJECTED) => {
-    const patchStyle = status === InwardReceiveStatus.ACCEPTED ? inwardReceivePatchStyleCode(r, styleCodeIdToMaster) : undefined;
+    const patchStyle = status === InwardReceiveStatus.ACCEPTED ? inwardReceivePatchStyleCode(r, styleCodeMaps) : undefined;
     if (status === InwardReceiveStatus.ACCEPTED && r.styleCode?.trim() && isMongoObjectIdString(r.styleCode) && !patchStyle) {
       toast.error("Could not resolve style code for this line. Check product style links and refresh.");
       return;
@@ -126,7 +130,7 @@ export default function WhmsInwardReceivedTab({
       toast.success(status === InwardReceiveStatus.ACCEPTED ? "Accepted" : "Rejected");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Update failed";
-      toast.error(humanizeInwardReceiveStyleError(msg, r, styleCodeIdToMaster));
+      toast.error(humanizeInwardReceiveStyleError(msg, r, styleCodeMaps));
     } finally {
       setSavingId(null);
     }
@@ -144,15 +148,15 @@ export default function WhmsInwardReceivedTab({
       setTotalPages(Math.max(1, data.totalPages ?? 1));
       setTotalResults(data.totalResults ?? nextRows.length ?? 0);
       try {
-        const resolved = await resolveInwardReceiveStyleCodeMasterMap(nextRows);
-        setStyleCodeIdToMaster(resolved);
+        const resolved = await resolveInwardReceiveStyleCodeMaps(nextRows);
+        setStyleCodeMaps(resolved);
       } catch {
-        setStyleCodeIdToMaster({});
+        setStyleCodeMaps({ idToMaster: {}, brandFallbackByArticle: {} });
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to load inward receive");
       setRows([]);
-      setStyleCodeIdToMaster({});
+      setStyleCodeMaps({ idToMaster: {}, brandFallbackByArticle: {} });
     } finally {
       setLoading(false);
     }
@@ -170,7 +174,7 @@ export default function WhmsInwardReceivedTab({
         r.articleNumber,
         r.vendorCode,
         r.styleCode,
-        inwardReceiveDisplayStyleCode(r, styleCodeIdToMaster),
+        inwardReceiveDisplayStyleCode(r, styleCodeMaps),
         r.brand,
         r.status,
         r.inwardSource,
@@ -181,7 +185,7 @@ export default function WhmsInwardReceivedTab({
         .toLowerCase();
       return blob.includes(q);
     });
-  }, [rows, search, styleCodeIdToMaster]);
+  }, [rows, search, styleCodeMaps]);
 
   const openDetail = async (id: string) => {
     setDetailId(id);
@@ -191,9 +195,12 @@ export default function WhmsInwardReceivedTab({
       const one = await whmsInwardReceive.get(id);
       setDetailRow(one);
       try {
-        const extra = await resolveInwardReceiveStyleCodeMasterMap([one]);
-        if (Object.keys(extra).length > 0) {
-          setStyleCodeIdToMaster((prev) => ({ ...prev, ...extra }));
+        const extra = await resolveInwardReceiveStyleCodeMaps([one]);
+        if (Object.keys(extra.idToMaster).length > 0 || Object.keys(extra.brandFallbackByArticle).length > 0) {
+          setStyleCodeMaps((prev) => ({
+            idToMaster: { ...prev.idToMaster, ...extra.idToMaster },
+            brandFallbackByArticle: { ...prev.brandFallbackByArticle, ...extra.brandFallbackByArticle },
+          }));
         }
       } catch {
         /* keep list-derived map */
@@ -297,11 +304,11 @@ export default function WhmsInwardReceivedTab({
                         className="px-2 py-1.5 border-r border-gray-300 max-w-[120px] truncate font-medium text-gray-900"
                         title={
                           isMongoObjectIdString(r.styleCode)
-                            ? `${inwardReceiveDisplayStyleCode(r, styleCodeIdToMaster)} · id ${r.styleCode}`
-                            : inwardReceiveDisplayStyleCode(r, styleCodeIdToMaster)
+                            ? `${inwardReceiveDisplayStyleCode(r, styleCodeMaps)} · id ${r.styleCode}`
+                            : inwardReceiveDisplayStyleCode(r, styleCodeMaps)
                         }
                       >
-                        {inwardReceiveDisplayStyleCode(r, styleCodeIdToMaster)}
+                        {inwardReceiveDisplayStyleCode(r, styleCodeMaps)}
                       </td>
                       <td className="px-2 py-1.5 border-r border-gray-300 max-w-[100px] truncate text-gray-800" title={r.brand}>
                         {r.brand || "—"}
@@ -453,7 +460,7 @@ export default function WhmsInwardReceivedTab({
       <WhmsInwardReceivedDetailDrawer
         detailId={detailId}
         detailRow={detailRow}
-        styleCodeIdToMaster={styleCodeIdToMaster}
+        styleCodeMaps={styleCodeMaps}
         detailLoading={detailLoading}
         savingId={savingId}
         onClose={() => {
