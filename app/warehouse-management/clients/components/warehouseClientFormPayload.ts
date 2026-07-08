@@ -5,6 +5,7 @@ import type {
   WarehouseClientStoreProfile,
   WarehouseClientType,
 } from '@/shared/services/whmsWarehouseClientService';
+import { sanitizeWarehouseClientFieldValue, UPPERCASE_TEXT_FIELDS } from './warehouseClientFieldRules';
 
 /** Drop empty strings / null / undefined so PATCH/POST payloads stay clean. */
 function pruneRoot(
@@ -16,7 +17,7 @@ function pruneRoot(
     const v = data[k];
     if (v === undefined || v === null) return;
     if (typeof v === 'string' && v.trim() === '') return;
-    out[k] = typeof v === 'string' ? v.trim() : v;
+    out[k] = typeof v === 'string' ? sanitizeWarehouseClientFieldValue(k, v) : v;
   });
   return out;
 }
@@ -27,7 +28,8 @@ function pruneStoreProfile(sp: WarehouseClientStoreProfile): WarehouseClientStor
     ([k, v]) => {
       if (v === undefined || v === null) return;
       if (typeof v === 'string' && v.trim() === '') return;
-      (out as Record<string, unknown>)[k] = typeof v === 'string' ? v.trim() : v;
+      (out as Record<string, unknown>)[k] =
+        typeof v === 'string' ? sanitizeWarehouseClientFieldValue(k as string, v) : v;
     },
   );
   return out;
@@ -126,6 +128,10 @@ export function clientToFormState(client: WarehouseClient): {
       return;
     }
     const v = client[k as keyof WarehouseClient];
+    if (typeof v === 'string' && UPPERCASE_TEXT_FIELDS.has(k as string)) {
+      root[k as string] = sanitizeWarehouseClientFieldValue(k as string, v);
+      return;
+    }
     root[k as string] = v ?? '';
   });
   root.slNo = client.slNo != null ? String(client.slNo) : '';

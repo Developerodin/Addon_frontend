@@ -2,6 +2,13 @@
 
 import React from 'react';
 import type { WarehouseClientStoreProfile } from '@/shared/services/whmsWarehouseClientService';
+import {
+  normalizeWarehouseClientInput,
+  validateWarehouseClientField,
+  UPPERCASE_STORE_PROFILE_FIELDS,
+} from './warehouseClientFieldRules';
+
+const STORE_UPPERCASE_KEYS = UPPERCASE_STORE_PROFILE_FIELDS;
 
 const inputClass =
   'w-full bg-white border border-gray-200 rounded px-3 py-1.5 text-[11px] font-medium text-gray-800 focus:ring-0 focus:border-purple-300 placeholder:text-gray-400';
@@ -16,8 +23,20 @@ type Props = {
  * Store-only fields (WHMS warehouse client). Shown when type === Store.
  */
 export default function WarehouseClientStoreProfileFields({ value, onChange }: Props) {
+  const [fieldErrors, setFieldErrors] = React.useState<Partial<Record<keyof WarehouseClientStoreProfile, string>>>({});
+
   const set = (key: keyof WarehouseClientStoreProfile, v: string) => {
-    onChange({ ...value, [key]: v });
+    const next = STORE_UPPERCASE_KEYS.has(key) ? normalizeWarehouseClientInput(key, v) : v;
+    onChange({ ...value, [key]: next });
+    if (key === 'city' || key === 'state') {
+      const err = validateWarehouseClientField(key, next);
+      setFieldErrors((prev) => {
+        const copy = { ...prev };
+        if (err) copy[key] = err;
+        else delete copy[key];
+        return copy;
+      });
+    }
   };
 
   return (
@@ -44,17 +63,43 @@ export default function WarehouseClientStoreProfileFields({ value, onChange }: P
             ['abmNameAndContact', 'ABM name & contact'],
             ['abmMailId', 'ABM mail'],
           ] as const
-        ).map(([key, label]) => (
+        ).map(([key, label]) => {
+          const isUpper = STORE_UPPERCASE_KEYS.has(key);
+          const err = fieldErrors[key as keyof WarehouseClientStoreProfile];
+          return (
           <div key={key} className="col-span-12 sm:col-span-6">
-            <label className={labelClass}>{label}</label>
+            <label className={labelClass} htmlFor={`wh-store-${key}`}>
+              {label}
+            </label>
             <input
+              id={`wh-store-${key}`}
               type="text"
-              className={inputClass}
+              className={`${inputClass}${isUpper ? ' uppercase' : ''}${err ? ' border-red-300 focus:border-red-400' : ''}`}
+              maxLength={key === 'city' ? 100 : key === 'state' ? 50 : undefined}
+              aria-invalid={err ? true : undefined}
+              aria-describedby={err ? `wh-store-${key}-error` : undefined}
               value={value[key] ?? ''}
               onChange={(e) => set(key, e.target.value)}
+              onBlur={() => {
+                if (key !== 'city' && key !== 'state') return;
+                const raw = value[key] ?? '';
+                const msg = validateWarehouseClientField(key, raw);
+                setFieldErrors((prev) => {
+                  const copy = { ...prev };
+                  if (msg) copy[key] = msg;
+                  else delete copy[key];
+                  return copy;
+                });
+              }}
             />
+            {err ? (
+              <p id={`wh-store-${key}-error`} className="mt-1 text-[10px] font-medium text-red-600" role="alert">
+                {err}
+              </p>
+            ) : null}
           </div>
-        ))}
+        );
+        })}
         <div className="col-span-12 sm:col-span-6">
           <label className={labelClass}>Opening date</label>
           <input

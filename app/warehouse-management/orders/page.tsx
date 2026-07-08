@@ -9,6 +9,7 @@ import {
   normalizeWarehouseOrderStatus,
   type WarehouseOrder,
   type WarehouseOrderStatus,
+  type WarehouseClientType,
 } from "@/shared/services/whmsWarehouseOrderService";
 import { whmsWarehouseClients } from "@/shared/services/whmsWarehouseClientService";
 import WarehouseOrdersTable from "./components/WarehouseOrdersTable";
@@ -30,8 +31,17 @@ const STATUS_TABS: Array<{ id: "all" | WarehouseOrderStatus; label: string }> = 
   { id: "cancelled", label: "Cancelled" },
 ];
 
+const CLIENT_TYPE_OPTIONS: Array<{ id: "" | WarehouseClientType; label: string }> = [
+  { id: "", label: "All client types" },
+  { id: "Store", label: "Store" },
+  { id: "Trade", label: "Trade" },
+  { id: "Departmental", label: "Departmental" },
+  { id: "Ecom", label: "Ecom" },
+];
+
 export default function WarehouseOrdersPage() {
   const [statusTab, setStatusTab] = useState<"all" | WarehouseOrderStatus>("all");
+  const [clientTypeFilter, setClientTypeFilter] = useState<"" | WarehouseClientType>("");
   const [q, setQ] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -69,19 +79,20 @@ export default function WarehouseOrdersPage() {
     }, 400);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusTab, q, dateFrom, dateTo, page, limit]);
+  }, [statusTab, clientTypeFilter, q, dateFrom, dateTo, page, limit]);
 
   const fetchRows = async () => {
     setLoading(true);
     try {
       const res = await whmsWarehouseOrders.list({
         ...(statusTab !== "all" ? { status: statusTab } : {}),
+        ...(clientTypeFilter ? { clientType: clientTypeFilter } : {}),
         ...(q.trim() ? { q: q.trim() } : {}),
         ...(dateFrom ? { dateFrom } : {}),
         ...(dateTo ? { dateTo } : {}),
         page,
         limit,
-        sortBy: "date:desc",
+        sortBy: "createdAt:desc",
       });
       setRows(res.results || []);
       setTotalPages(res.totalPages || 1);
@@ -196,6 +207,24 @@ export default function WarehouseOrdersPage() {
                   }}
                 />
                 <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
+              </div>
+              <div className="relative group">
+                <select
+                  value={clientTypeFilter}
+                  onChange={(e) => {
+                    setClientTypeFilter(e.target.value as "" | WarehouseClientType);
+                    setPage(1);
+                  }}
+                  className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5 pr-8 focus:ring-0 focus:border-gray-300 appearance-none cursor-pointer min-w-[130px]"
+                  aria-label="Filter by client type"
+                >
+                  {CLIENT_TYPE_OPTIONS.map(({ id, label }) => (
+                    <option key={id || "all"} value={id}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <i className="ri-arrow-down-s-line absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none" />
               </div>
               <input
                 type="date"

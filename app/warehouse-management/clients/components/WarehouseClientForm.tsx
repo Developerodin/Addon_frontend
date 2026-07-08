@@ -16,6 +16,12 @@ import {
   buildUpdatePayload,
   clientToFormState,
 } from './warehouseClientFormPayload';
+import {
+  UPPERCASE_TEXT_FIELDS,
+  normalizeWarehouseClientInput,
+  validateWarehouseClientField,
+  validateWarehouseClientRoot,
+} from './warehouseClientFieldRules';
 
 const inputClass =
   'w-full bg-white border border-gray-200 rounded px-3 py-1.5 text-[11px] font-medium text-gray-800 focus:ring-0 focus:border-purple-300 placeholder:text-gray-400';
@@ -75,6 +81,7 @@ export default function WarehouseClientForm({
 
   const [root, setRoot] = useState<Record<string, unknown>>(initial.root);
   const [storeProfile, setStoreProfile] = useState<WarehouseClientStoreProfile>(initial.storeProfile);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setRoot(initial.root);
@@ -84,11 +91,36 @@ export default function WarehouseClientForm({
   const type = (root.type as WarehouseClientType) || 'Trade';
 
   const setField = (key: string, value: string) => {
-    setRoot((prev) => ({ ...prev, [key]: value }));
+    const next = normalizeWarehouseClientInput(key, value);
+    setRoot((prev) => ({ ...prev, [key]: next }));
+    const err = validateWarehouseClientField(key, next);
+    setFieldErrors((prev) => {
+      const copy = { ...prev };
+      if (err) copy[key] = err;
+      else delete copy[key];
+      return copy;
+    });
+  };
+
+  const handleFieldBlur = (key: string) => {
+    const raw = root[key];
+    if (typeof raw !== 'string') return;
+    const err = validateWarehouseClientField(key, raw);
+    setFieldErrors((prev) => {
+      const copy = { ...prev };
+      if (err) copy[key] = err;
+      else delete copy[key];
+      return copy;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const errors = validateWarehouseClientRoot(root);
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      return;
+    }
     if (mode === 'create') {
       await onSubmit(buildCreatePayload(type, root, storeProfile));
     } else {
@@ -146,18 +178,36 @@ export default function WarehouseClientForm({
           </div>
         ) : (
           <>
-            {TEXT_FIELDS.map(({ key, label, wide }) => (
-              <div key={key} className={wide ? 'col-span-12' : 'col-span-12 sm:col-span-6'}>
-                <label className={labelClass}>{label}</label>
-                <input
-                  type="text"
-                  className={inputClass}
-                  inputMode={key === 'slNo' ? 'numeric' : undefined}
-                  value={(root[key] as string) ?? ''}
-                  onChange={(e) => setField(key, e.target.value)}
-                />
-              </div>
-            ))}
+            {TEXT_FIELDS.map(({ key, label, wide }) => {
+              const isUpper = UPPERCASE_TEXT_FIELDS.has(key);
+              const err = fieldErrors[key];
+              return (
+                <div key={key} className={wide ? 'col-span-12' : 'col-span-12 sm:col-span-6'}>
+                  <label className={labelClass} htmlFor={`wh-client-${key}`}>
+                    {label}
+                  </label>
+                  <input
+                    id={`wh-client-${key}`}
+                    type="text"
+                    className={`${inputClass}${isUpper ? ' uppercase' : ''}${err ? ' border-red-300 focus:border-red-400' : ''}`}
+                    inputMode={key === 'slNo' ? 'numeric' : undefined}
+                    maxLength={
+                      key === 'gstin' ? 15 : key === 'city' ? 100 : key === 'state' ? 50 : key === 'parentKeyCode' ? 50 : undefined
+                    }
+                    aria-invalid={err ? true : undefined}
+                    aria-describedby={err ? `wh-client-${key}-error` : undefined}
+                    value={(root[key] as string) ?? ''}
+                    onChange={(e) => setField(key, e.target.value)}
+                    onBlur={() => handleFieldBlur(key)}
+                  />
+                  {err ? (
+                    <p id={`wh-client-${key}-error`} className="mt-1 text-[10px] font-medium text-red-600" role="alert">
+                      {err}
+                    </p>
+                  ) : null}
+                </div>
+              );
+            })}
             <div className="col-span-12">
               <label className={labelClass}>Address</label>
               <textarea

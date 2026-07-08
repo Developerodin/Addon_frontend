@@ -146,7 +146,6 @@ export default function WarehouseClientsTable({
         <tr className="bg-gray-50/30">
           <th className={thFirst}>Retailer</th>
           <th className={th}>Parent key</th>
-          <th className={th}>Type</th>
           <th className={th}>City</th>
           <th className={th}>State</th>
           <th className={th}>Contact</th>
@@ -160,7 +159,6 @@ export default function WarehouseClientsTable({
           <tr key={c.id} className="hover:bg-gray-50/50 transition-colors group">
             <td className={tdBold}>{c.retailerName?.trim() || "—"}</td>
             <td className={td}>{c.parentKeyCode?.trim() || "—"}</td>
-            <td className={td}>{c.type}</td>
             <td className={td}>{c.city?.trim() || "—"}</td>
             <td className={td}>{c.state?.trim() || "—"}</td>
             <td className={td}>{c.contactPerson?.trim() || "—"}</td>

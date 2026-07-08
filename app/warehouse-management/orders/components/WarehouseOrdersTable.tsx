@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import Link from "next/link";
 import {
   normalizeWarehouseOrderStatus,
@@ -8,6 +8,7 @@ import {
   warehouseOrderFlowStatusLabel,
   type WarehouseOrder,
 } from "@/shared/services/whmsWarehouseOrderService";
+import { groupWarehouseOrdersByDate } from "./warehouseOrderDateGrouping";
 
 const th =
   "px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200";
@@ -41,15 +42,6 @@ function statusPill(status?: string) {
       {warehouseOrderStatusLabel(s)}
     </span>
   );
-}
-
-function safeDate(d?: string) {
-  if (!d) return "—";
-  try {
-    return new Date(d).toLocaleDateString();
-  } catch {
-    return "—";
-  }
 }
 
 function totalQty(o: WarehouseOrder): number {
@@ -93,6 +85,8 @@ type Props = {
   onFlow?: (id: string) => void;
 };
 
+const COLUMN_COUNT = 10;
+
 export default function WarehouseOrdersTable({
   rows,
   loading,
@@ -100,6 +94,8 @@ export default function WarehouseOrdersTable({
   onDelete,
   onFlow,
 }: Props) {
+  const groupedRows = useMemo(() => groupWarehouseOrdersByDate(rows), [rows]);
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
@@ -129,7 +125,6 @@ export default function WarehouseOrdersTable({
         <tr className="bg-gray-50/30">
           <th className={thFirst}>Order #</th>
           <th className={th}>Addon order ID</th>
-          <th className={th}>Date</th>
           <th className={th}>Client</th>
           <th className={th}>Client type</th>
           <th className={th}>Qty</th>
@@ -141,56 +136,69 @@ export default function WarehouseOrdersTable({
         </tr>
       </thead>
       <tbody>
-        {rows.map((o) => (
-          <tr key={o.id} className="hover:bg-gray-50/50 transition-colors group">
-            <td className={tdBold}>{o.orderNumber?.trim() || o.id}</td>
-            <td className={td}>{o.addonOrderId?.trim() || "—"}</td>
-            <td className={td}>{safeDate(o.date)}</td>
-            <td className={td}>{o.clientName?.trim() || "—"}</td>
-            <td className={td}>{o.clientType}</td>
-            <td className={td}>{totalQty(o)}</td>
-            <td className={td}>{o.styleCodeSinglePair?.length ?? 0}</td>
-            <td className={td}>{o.styleCodeMultiPair?.length ?? 0}</td>
-            <td className={`${td} border border-gray-200`}>{statusPill(o.status)}</td>
-            <td className={`${td} border border-gray-200`}>{flowPill(o.flowStatus as string)}</td>
-            <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
-              <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                {onFlow && (
-                  <button
-                    type="button"
-                    onClick={() => onFlow(o.id)}
-                    className="w-7 h-7 flex items-center justify-center bg-violet-50 text-violet-500 border border-violet-100 rounded hover:bg-violet-100 transition-colors"
-                    title="Flow stage / dispatch"
-                  >
-                    <i className="ri-route-line text-xs" />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => onView(o.id)}
-                  className="w-7 h-7 flex items-center justify-center bg-sky-50 text-sky-500 border border-sky-100 rounded hover:bg-sky-100 transition-colors"
-                  title="View"
-                >
-                  <i className="ri-eye-line text-xs" />
-                </button>
-                <Link
-                  href={`/warehouse-management/orders/edit/${o.id}`}
-                  className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100 transition-colors"
-                  title="Edit"
-                >
-                  <i className="ri-pencil-line text-xs" />
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => onDelete(o.id)}
-                  className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 border border-red-100 rounded hover:bg-red-100 transition-colors"
-                  title="Delete"
-                >
-                  <i className="ri-delete-bin-line text-xs" />
-                </button>
-              </div>
-            </td>
-          </tr>
+        {groupedRows.map(({ dateKey, label, orders }) => (
+          <React.Fragment key={dateKey}>
+            <tr className="bg-gray-100/80">
+              <td
+                colSpan={COLUMN_COUNT}
+                className="px-3 py-2 text-[11px] font-bold text-gray-700 border border-gray-200"
+              >
+                <i className="ri-calendar-line mr-1.5 text-purple-600" aria-hidden="true" />
+                <span>{label}</span>
+                <span className="ml-2 text-[10px] font-semibold text-gray-500">({orders.length})</span>
+              </td>
+            </tr>
+            {orders.map((o) => (
+              <tr key={o.id} className="hover:bg-gray-50/50 transition-colors group">
+                <td className={tdBold}>{o.orderNumber?.trim() || o.id}</td>
+                <td className={td}>{o.addonOrderId?.trim() || "—"}</td>
+                <td className={td}>{o.clientName?.trim() || "—"}</td>
+                <td className={td}>{o.clientType}</td>
+                <td className={td}>{totalQty(o)}</td>
+                <td className={td}>{o.styleCodeSinglePair?.length ?? 0}</td>
+                <td className={td}>{o.styleCodeMultiPair?.length ?? 0}</td>
+                <td className={`${td} border border-gray-200`}>{statusPill(o.status)}</td>
+                <td className={`${td} border border-gray-200`}>{flowPill(o.flowStatus as string)}</td>
+                <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
+                  <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                    {onFlow && (
+                      <button
+                        type="button"
+                        onClick={() => onFlow(o.id)}
+                        className="w-7 h-7 flex items-center justify-center bg-violet-50 text-violet-500 border border-violet-100 rounded hover:bg-violet-100 transition-colors"
+                        title="Flow stage / dispatch"
+                      >
+                        <i className="ri-route-line text-xs" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => onView(o.id)}
+                      className="w-7 h-7 flex items-center justify-center bg-sky-50 text-sky-500 border border-sky-100 rounded hover:bg-sky-100 transition-colors"
+                      title="View"
+                    >
+                      <i className="ri-eye-line text-xs" />
+                    </button>
+                    <Link
+                      href={`/warehouse-management/orders/edit/${o.id}`}
+                      className="w-7 h-7 flex items-center justify-center bg-emerald-50 text-emerald-400 border border-emerald-100 rounded hover:bg-emerald-100 transition-colors"
+                      title="Edit"
+                    >
+                      <i className="ri-pencil-line text-xs" />
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => onDelete(o.id)}
+                      className="w-7 h-7 flex items-center justify-center bg-red-50 text-red-400 border border-red-100 rounded hover:bg-red-100 transition-colors"
+                      title="Delete"
+                    >
+                      <i className="ri-delete-bin-line text-xs" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </React.Fragment>
         ))}
       </tbody>
     </table>
