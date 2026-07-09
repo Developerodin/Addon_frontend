@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import type { WarehouseClient, WarehouseClientType } from '@/shared/services/whmsWarehouseClientService';
+import { STORE_EXPORT_COLUMNS, TRADE_EXPORT_COLUMNS } from './warehouseClientFieldConfig';
 
 const EXPORT_FILENAME = 'warehouse-clients-export.xlsx';
 
@@ -15,66 +16,41 @@ function formatOpeningDate(raw?: string | null): string {
   }
 }
 
-/** Flatten a Store client to import-compatible columns + id. */
-function storeClientToRow(c: WarehouseClient): Record<string, string | number> {
-  const sp = c.storeProfile ?? {};
-  return {
-    clientId: c.id,
-    type: c.type,
-    slNo: c.slNo ?? '',
-    status: c.status ?? '',
-    remarks: c.remarks ?? '',
-    billCode: sp.billCode ?? '',
-    sapCode: sp.sapCode ?? '',
-    retekCode: sp.retekCode ?? '',
-    classification: sp.classification ?? '',
-    city: sp.city ?? '',
-    state: sp.state ?? '',
-    brand: sp.brand ?? '',
-    brandSub: sp.brandSub ?? '',
-    openingDate: formatOpeningDate(sp.openingDate),
-    address: sp.address ?? '',
-    gst: sp.gst ?? '',
-    storeLandlineNo: sp.storeLandlineNo ?? '',
-    smNameAndContact: sp.smNameAndContact ?? '',
-    storeMailId: sp.storeMailId ?? '',
-    abmNameAndContact: sp.abmNameAndContact ?? '',
-    abmMailId: sp.abmMailId ?? '',
-  };
+function formatCreationDate(raw?: string | null): string {
+  if (!raw) return '';
+  try {
+    return new Date(raw).toISOString().slice(0, 10);
+  } catch {
+    return String(raw);
+  }
 }
 
-/** Flatten Trade / Departmental / Ecom client to import-compatible columns + id. */
-function tradeClientToRow(c: WarehouseClient): Record<string, string | number> {
+/** Flatten a Store client to Akshay Excel columns. */
+function storeClientToRow(c: WarehouseClient): Record<string, string | number> {
   const sp = c.storeProfile ?? {};
-  return {
-    clientId: c.id,
-    type: c.type,
-    slNo: c.slNo ?? '',
-    status: c.status ?? '',
-    remarks: c.remarks ?? '',
-    distributorName: c.distributorName ?? '',
-    parentKeyCode: c.parentKeyCode ?? '',
-    retailerName: c.retailerName ?? '',
-    contactPerson: c.contactPerson ?? '',
-    mobilePhone: c.mobilePhone ?? '',
-    address: c.address ?? '',
-    locality: c.locality ?? '',
-    city: c.city ?? '',
-    zipCode: c.zipCode ?? '',
-    state: c.state ?? '',
-    gstin: c.gstin ?? '',
-    email: c.email ?? '',
-    phone1: c.phone1 ?? '',
-    rsm: c.rsm ?? '',
-    asm: c.asm ?? '',
-    se: c.se ?? '',
-    dso: c.dso ?? '',
-    outlet: c.outlet ?? '',
-    sp_billCode: sp.billCode ?? '',
-    sp_sapCode: sp.sapCode ?? '',
-    sp_city: sp.city ?? '',
-    sp_state: sp.state ?? '',
-  };
+  const row: Record<string, string | number> = {};
+  STORE_EXPORT_COLUMNS.forEach(({ header, key }) => {
+    if (key === 'slNo') row[header] = c.slNo ?? '';
+    else if (key === 'status') row[header] = c.status ?? '';
+    else if (key === 'type') row[header] = c.type;
+    else if (key === 'openingDate') row[header] = formatOpeningDate(sp.openingDate);
+    else row[header] = (sp as Record<string, unknown>)[key]?.toString() ?? '';
+  });
+  return row;
+}
+
+/** Flatten Trade / Departmental / Ecom client to Akshay Excel columns. */
+function tradeClientToRow(c: WarehouseClient): Record<string, string | number> {
+  const row: Record<string, string | number> = {};
+  TRADE_EXPORT_COLUMNS.forEach(({ header, key }) => {
+    if (key === 'slNo') row[header] = c.slNo ?? '';
+    else if (key === 'status') row[header] = c.status ?? '';
+    else if (key === 'createdAt') row[header] = formatCreationDate(c.createdAt);
+    else if (key === 'type') row[header] = c.type;
+    else if (key === 'clientId') row[header] = c.id;
+    else row[header] = (c as Record<string, unknown>)[key]?.toString() ?? '';
+  });
+  return row;
 }
 
 /**
@@ -89,7 +65,9 @@ export function buildWarehouseClientsExportWorkbook(
   const storeRows = (byType.Store ?? []).map(storeClientToRow);
   XLSX.utils.book_append_sheet(
     wb,
-    XLSX.utils.json_to_sheet(storeRows.length ? storeRows : [{ clientId: '', type: 'Store' }]),
+    XLSX.utils.json_to_sheet(
+      storeRows.length ? storeRows : [Object.fromEntries(STORE_EXPORT_COLUMNS.map((c) => [c.header, '']))],
+    ),
     'Store',
   );
 
@@ -97,7 +75,9 @@ export function buildWarehouseClientsExportWorkbook(
     const rows = (byType[type] ?? []).map(tradeClientToRow);
     XLSX.utils.book_append_sheet(
       wb,
-      XLSX.utils.json_to_sheet(rows.length ? rows : [{ clientId: '', type }]),
+      XLSX.utils.json_to_sheet(
+        rows.length ? rows : [Object.fromEntries(TRADE_EXPORT_COLUMNS.map((c) => [c.header, '']))],
+      ),
       type,
     );
   });
@@ -105,9 +85,8 @@ export function buildWarehouseClientsExportWorkbook(
   const inst = XLSX.utils.aoa_to_sheet([
     ['Warehouse clients export'],
     [''],
-    ['clientId is for reference only — ignored on bulk import (system assigns ids).'],
-    ['createdAt / updatedAt are not included; timestamps are set by the system on create.'],
-    ['Re-import: use Store sheet format with Import Store; Trade/Dept/Ecom sheets with Import Trade.'],
+    ['Headers match Akshay Excel templates. Client ID is for reference only — ignored on import.'],
+    ['Re-import: Store sheet with Import Store; Trade/Dept/Ecom sheets with Import Trade.'],
   ]);
   XLSX.utils.book_append_sheet(wb, inst, 'Instructions');
 

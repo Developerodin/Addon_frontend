@@ -45,8 +45,6 @@ export function warehouseClientDisplayName(c: WarehouseClient | null | undefined
   }
   const name =
     c.retailerName?.trim() ||
-    c.distributorName?.trim() ||
-    c.outlet?.trim() ||
     c.parentKeyCode?.trim() ||
     "";
   return name || "—";

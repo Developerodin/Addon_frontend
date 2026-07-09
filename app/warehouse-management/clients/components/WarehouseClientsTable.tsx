@@ -31,6 +31,16 @@ function openingLabel(sp: WarehouseClient["storeProfile"]): string {
   }
 }
 
+function smDisplay(sp: WarehouseClient["storeProfile"]): string {
+  if (!sp) return "—";
+  const name = sp.smName?.trim();
+  const contact = sp.smContact?.trim();
+  if (name && contact) return `${name} / ${contact}`;
+  if (name) return name;
+  if (contact) return contact;
+  return sp.smNameAndContact?.trim() || "—";
+}
+
 type Props = {
   activeTypeTab: WarehouseClientType;
   rows: WarehouseClient[];
@@ -96,18 +106,19 @@ export default function WarehouseClientsTable({
 
   if (activeTypeTab === "Store") {
     return (
-      <table className="w-full border-collapse border border-gray-200 min-w-[960px]">
+      <table className="w-full border-collapse border border-gray-200 min-w-[1080px]">
         <thead>
           <tr className="bg-gray-50/30">
             <th className={thFirst}>Bill code</th>
-            <th className={th}>SAP</th>
-            <th className={th}>Retek</th>
+            <th className={th}>SAP code</th>
+            <th className={th}>Retek code</th>
             <th className={th}>Class.</th>
             <th className={th}>Brand</th>
             <th className={th}>City</th>
+            <th className={th}>Pincode</th>
             <th className={th}>State</th>
-            <th className={th}>SM contact</th>
-            <th className={th}>Store mail</th>
+            <th className={th}>SM</th>
+            <th className={th}>Store email</th>
             <th className={th}>Opening</th>
             <th className={th}>Status</th>
             <th className={thLast}>Actions</th>
@@ -124,8 +135,9 @@ export default function WarehouseClientsTable({
                 <td className={td}>{sp?.classification?.trim() || "—"}</td>
                 <td className={td}>{brandLabel(sp)}</td>
                 <td className={td}>{sp?.city?.trim() || "—"}</td>
+                <td className={td}>{sp?.pincode?.trim() || "—"}</td>
                 <td className={td}>{sp?.state?.trim() || "—"}</td>
-                <td className={td}>{sp?.smNameAndContact?.trim() || "—"}</td>
+                <td className={td}>{smDisplay(sp)}</td>
                 <td className={`${td} max-w-[140px] truncate`} title={sp?.storeMailId ?? ""}>
                   {sp?.storeMailId?.trim() || "—"}
                 </td>
@@ -144,12 +156,13 @@ export default function WarehouseClientsTable({
     <table className="w-full border-collapse border border-gray-200">
       <thead>
         <tr className="bg-gray-50/30">
-          <th className={thFirst}>Retailer</th>
-          <th className={th}>Parent key</th>
+          <th className={thFirst}>Party name</th>
+          <th className={th}>SAP code</th>
           <th className={th}>City</th>
+          <th className={th}>Pincode</th>
           <th className={th}>State</th>
           <th className={th}>Contact</th>
-          <th className={th}>Mobile</th>
+          <th className={th}>Contact number</th>
           <th className={th}>Status</th>
           <th className={thLast}>Actions</th>
         </tr>
@@ -160,6 +173,7 @@ export default function WarehouseClientsTable({
             <td className={tdBold}>{c.retailerName?.trim() || "—"}</td>
             <td className={td}>{c.parentKeyCode?.trim() || "—"}</td>
             <td className={td}>{c.city?.trim() || "—"}</td>
+            <td className={td}>{c.zipCode?.trim() || "—"}</td>
             <td className={td}>{c.state?.trim() || "—"}</td>
             <td className={td}>{c.contactPerson?.trim() || "—"}</td>
             <td className={td}>{c.mobilePhone?.trim() || "—"}</td>

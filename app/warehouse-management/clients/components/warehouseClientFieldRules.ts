@@ -15,11 +15,6 @@ export const UPPERCASE_TEXT_FIELDS = new Set([
   'gstin',
   'city',
   'state',
-  'rsm',
-  'asm',
-  'se',
-  'dso',
-  'outlet',
 ]);
 
 /**
@@ -71,14 +66,8 @@ export function validateWarehouseClientField(key: string, value: string): string
   }
 
   if (key === 'parentKeyCode') {
-    if (v.length > 50) return 'Parent key code must be at most 50 characters';
-    if (!/^[A-Za-z0-9-]+$/.test(v)) return 'Parent key code may contain letters, numbers and hyphens only';
-    return null;
-  }
-
-  if (['rsm', 'asm', 'se', 'dso', 'outlet'].includes(key)) {
-    if (v.length > 80) return 'Must be at most 80 characters';
-    if (!/^[A-Za-z0-9\s.-]+$/.test(v)) return 'Letters, numbers, spaces, dots and hyphens only';
+    if (v.length > 50) return 'SAP code must be at most 50 characters';
+    if (!/^[A-Za-z0-9-]+$/.test(v)) return 'SAP code may contain letters, numbers and hyphens only';
     return null;
   }
 

@@ -10,6 +10,7 @@ import type {
 } from '@/shared/services/whmsWarehouseClientService';
 
 import WarehouseClientStoreProfileFields from './WarehouseClientStoreProfileFields';
+import { TRADE_ROOT_FIELDS } from './warehouseClientFieldConfig';
 import {
   WAREHOUSE_CLIENT_TYPES,
   buildCreatePayload,
@@ -40,27 +41,6 @@ type Props = {
   isSubmitting?: boolean;
 };
 
-const TEXT_FIELDS: { key: string; label: string; wide?: boolean }[] = [
-  { key: 'retailerName', label: 'Retailer name' },
-  { key: 'distributorName', label: 'Distributor name' },
-  { key: 'parentKeyCode', label: 'Parent key code' },
-  { key: 'contactPerson', label: 'Contact person' },
-  { key: 'mobilePhone', label: 'Mobile' },
-  { key: 'phone1', label: 'Phone' },
-  { key: 'email', label: 'Email' },
-  { key: 'gstin', label: 'GSTIN' },
-  { key: 'locality', label: 'Locality' },
-  { key: 'city', label: 'City' },
-  { key: 'zipCode', label: 'ZIP' },
-  { key: 'state', label: 'State' },
-  { key: 'outlet', label: 'Outlet' },
-  { key: 'rsm', label: 'RSM' },
-  { key: 'asm', label: 'ASM' },
-  { key: 'se', label: 'SE' },
-  { key: 'dso', label: 'DSO' },
-  { key: 'slNo', label: 'Sl. no.' },
-];
-
 export default function WarehouseClientForm({
   mode,
   initialClient,
@@ -71,11 +51,12 @@ export default function WarehouseClientForm({
   const initial = useMemo(() => {
     if (initialClient) return clientToFormState(initialClient);
     const root: Record<string, unknown> = { type: 'Trade' as WarehouseClientType, status: 'active' };
-    TEXT_FIELDS.forEach(({ key }) => {
+    TRADE_ROOT_FIELDS.forEach(({ key }) => {
       if (!(key in root)) root[key] = '';
     });
     root.address = '';
     root.remarks = '';
+    root.slNo = '';
     return { root, storeProfile: {} as WarehouseClientStoreProfile };
   }, [initialClient]);
 
@@ -135,7 +116,7 @@ export default function WarehouseClientForm({
       <div className="grid grid-cols-12 gap-3">
         <div className="col-span-12 sm:col-span-6">
           <label className={labelClass}>
-            Type <span className="text-red-500">*</span>
+            {isStore ? 'Channel' : 'Channel'} <span className="text-red-500">*</span>
           </label>
           <div className="relative">
             <select
@@ -169,20 +150,43 @@ export default function WarehouseClientForm({
         </div>
 
         {isStore ? (
-          <div className="col-span-12">
-            <p className="text-[11px] text-gray-500 mb-2">
-              Store clients use only the fields below (bill code, SAP, brand, etc.). No distributor / contact / GST
-              fields are sent for this type.
-            </p>
-            <WarehouseClientStoreProfileFields value={storeProfile} onChange={setStoreProfile} />
-          </div>
+          <>
+            <div className="col-span-12 sm:col-span-6">
+              <label className={labelClass} htmlFor="wh-client-slNo">
+                Sr. no.
+              </label>
+              <input
+                id="wh-client-slNo"
+                type="text"
+                className={inputClass}
+                inputMode="numeric"
+                value={(root.slNo as string) ?? ''}
+                onChange={(e) => setField('slNo', e.target.value)}
+              />
+            </div>
+            <div className="col-span-12">
+              <p className="text-[11px] text-gray-500 mb-2">
+                Store clients use only the fields below. No trade / contact root fields are sent for this type.
+              </p>
+              <WarehouseClientStoreProfileFields value={storeProfile} onChange={setStoreProfile} />
+            </div>
+            <div className="col-span-12">
+              <label className={labelClass}>Remarks</label>
+              <textarea
+                className={`${inputClass} min-h-[56px]`}
+                rows={2}
+                value={(root.remarks as string) ?? ''}
+                onChange={(e) => setField('remarks', e.target.value)}
+              />
+            </div>
+          </>
         ) : (
           <>
-            {TEXT_FIELDS.map(({ key, label, wide }) => {
+            {TRADE_ROOT_FIELDS.map(({ key, label }) => {
               const isUpper = UPPERCASE_TEXT_FIELDS.has(key);
               const err = fieldErrors[key];
               return (
-                <div key={key} className={wide ? 'col-span-12' : 'col-span-12 sm:col-span-6'}>
+                <div key={key} className="col-span-12 sm:col-span-6">
                   <label className={labelClass} htmlFor={`wh-client-${key}`}>
                     {label}
                   </label>

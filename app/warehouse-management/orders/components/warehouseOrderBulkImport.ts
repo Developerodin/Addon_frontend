@@ -87,7 +87,7 @@ export function warehouseClientReferenceLabel(c: WarehouseClient): string {
       'Store'
     );
   }
-  return c.retailerName?.trim() || c.distributorName?.trim() || c.outlet?.trim() || 'Client';
+  return c.retailerName?.trim() || c.parentKeyCode?.trim() || 'Client';
 }
 
 /**

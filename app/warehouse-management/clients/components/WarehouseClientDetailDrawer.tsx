@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import { whmsWarehouseClients, type WarehouseClient } from '@/shared/services/whmsWarehouseClientService';
+import { STORE_PROFILE_FIELDS, TRADE_ROOT_FIELDS } from './warehouseClientFieldConfig';
 
 function Field({
   label,
@@ -62,7 +63,7 @@ export default function WarehouseClientDetailDrawer({ clientId, open, onClose }:
     return () => {
       cancelled = true;
     };
-  }, [open, clientId]);
+  }, [open, clientId, onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -137,28 +138,18 @@ export default function WarehouseClientDetailDrawer({ clientId, open, onClose }:
                 <h4 className="text-[11px] font-bold text-gray-800 uppercase tracking-wide">Store profile</h4>
               </div>
               <div className="grid grid-cols-12 gap-2">
-                <Field label="Bill code" value={sp?.billCode} />
-                <Field label="SAP code" value={sp?.sapCode} />
-                <Field label="Retek code" value={sp?.retekCode} />
-                <Field label="Classification" value={sp?.classification} />
-                <Field label="Brand" value={sp?.brand} />
-                <Field label="Brand sub" value={sp?.brandSub} />
-                <Field label="City" value={sp?.city} />
-                <Field label="State" value={sp?.state} />
+                {STORE_PROFILE_FIELDS.map(({ key, label }) => (
+                  <Field key={key} label={label} value={sp?.[key]?.toString().trim() || '—'} />
+                ))}
                 <Field
                   label="Opening date"
                   value={sp?.openingDate ? new Date(sp.openingDate).toLocaleString() : '—'}
                 />
-                <Field label="GST" value={sp?.gst} />
-                <Field label="Store landline" value={sp?.storeLandlineNo} />
-                <Field label="SM name & contact" value={sp?.smNameAndContact} />
-                <Field label="Store mail" value={sp?.storeMailId} />
-                <Field label="ABM name & contact" value={sp?.abmNameAndContact} />
-                <Field label="ABM mail" value={sp?.abmMailId} />
                 <Field label="Address" value={sp?.address?.trim() || '—'} wide />
               </div>
               <div className="pt-2 border-t border-gray-100 space-y-2">
-                <Field label="Type" value={client.type} />
+                <Field label="Channel" value={client.type} />
+                <Field label="Sr. no." value={client.slNo ?? '—'} />
                 <Field label="Remarks" value={client.remarks?.trim() || '—'} wide />
                 <div className="text-[10px] text-gray-400 font-medium px-1">
                   {client.createdAt && (
@@ -177,57 +168,22 @@ export default function WarehouseClientDetailDrawer({ clientId, open, onClose }:
                 <h4 className="text-[11px] font-bold text-gray-800 uppercase tracking-wide">General</h4>
               </div>
               <div className="grid grid-cols-12 gap-2">
-                <Field label="Type" value={client.type} />
-                <Field label="Sl. no." value={client.slNo ?? '—'} />
-                <Field label="Retailer" value={client.retailerName} />
-                <Field label="Distributor" value={client.distributorName} />
-                <Field label="Parent key code" value={client.parentKeyCode} />
-                <Field label="Outlet" value={client.outlet} />
-                <Field label="Contact" value={client.contactPerson} />
-                <Field label="Mobile" value={client.mobilePhone} />
-                <Field label="Phone" value={client.phone1} />
-                <Field label="Email" value={client.email} />
-                <Field label="GSTIN" value={client.gstin} />
-                <Field label="Locality" value={client.locality} />
-                <Field label="City" value={client.city} />
-                <Field label="ZIP" value={client.zipCode} />
-                <Field label="State" value={client.state} />
-                <Field label="RSM" value={client.rsm} />
-                <Field label="ASM" value={client.asm} />
-                <Field label="SE" value={client.se} />
-                <Field label="DSO" value={client.dso} />
+                <Field label="Channel" value={client.type} />
+                <Field label="Sr. no." value={client.slNo ?? '—'} />
+                {TRADE_ROOT_FIELDS.filter((f) => f.key !== 'slNo').map(({ key, label }) => (
+                  <Field
+                    key={key}
+                    label={label}
+                    value={(client as Record<string, unknown>)[key]?.toString().trim() || '—'}
+                  />
+                ))}
                 <Field label="Address" value={client.address?.trim() || '—'} wide />
                 <Field label="Remarks" value={client.remarks?.trim() || '—'} wide />
+                <Field
+                  label="Creation date"
+                  value={client.createdAt ? new Date(client.createdAt).toLocaleString() : '—'}
+                />
               </div>
-              {sp && Object.keys(sp).length > 0 && (
-                <>
-                  <div className="flex items-center gap-2 pt-2">
-                    <div className="w-[3px] h-4 bg-purple-600 rounded-full" />
-                    <h4 className="text-[11px] font-bold text-gray-800 uppercase tracking-wide">Store profile</h4>
-                  </div>
-                  <div className="grid grid-cols-12 gap-2">
-                    <Field label="Bill code" value={sp.billCode} />
-                    <Field label="SAP code" value={sp.sapCode} />
-                    <Field label="Retek code" value={sp.retekCode} />
-                    <Field label="Classification" value={sp.classification} />
-                    <Field label="City" value={sp.city} />
-                    <Field label="State" value={sp.state} />
-                    <Field label="Brand" value={sp.brand} />
-                    <Field label="Brand sub" value={sp.brandSub} />
-                    <Field
-                      label="Opening date"
-                      value={sp.openingDate ? new Date(sp.openingDate).toLocaleString() : '—'}
-                    />
-                    <Field label="GST" value={sp.gst} />
-                    <Field label="Store landline" value={sp.storeLandlineNo} />
-                    <Field label="SM name & contact" value={sp.smNameAndContact} />
-                    <Field label="Store mail" value={sp.storeMailId} />
-                    <Field label="ABM name & contact" value={sp.abmNameAndContact} />
-                    <Field label="ABM mail" value={sp.abmMailId} />
-                    <Field label="Address" value={sp.address?.trim() || '—'} wide />
-                  </div>
-                </>
-              )}
               <div className="text-[10px] text-gray-400 font-medium pt-2 border-t border-gray-100">
                 {client.createdAt && (
                   <span className="me-3">Created {new Date(client.createdAt).toLocaleString()}</span>

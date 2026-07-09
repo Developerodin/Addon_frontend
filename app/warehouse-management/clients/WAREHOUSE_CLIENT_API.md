@@ -39,7 +39,7 @@ Authentication: JWT **`Authorization: Bearer <token>`**
 | `city` | Case-insensitive partial match |
 | `state` | Case-insensitive partial match |
 | `parentKeyCode` | Case-insensitive partial match |
-| `search` | Matches retailerName, distributorName, parentKeyCode, gstin, contactPerson, outlet |
+| `search` | Matches retailerName, parentKeyCode, gstin, contactPerson, plus storeProfile fields |
 
 **Response**
 
@@ -103,25 +103,19 @@ Mongoose returns `id` (string) instead of `_id`. Timestamps: `createdAt`, `updat
 |--------|------|--------|
 | `id` | string | |
 | `slNo` | number \| null | Serial / row number from imports |
-| `distributorName` | string | |
-| `parentKeyCode` | string | ParentKey - Code |
-| `retailerName` | string | |
+| `parentKeyCode` | string | SAP code |
+| `retailerName` | string | Party name |
 | `type` | string | `Store` \| `Trade` \| `Departmental` \| `Ecom` |
 | `contactPerson` | string | |
-| `mobilePhone` | string | |
+| `mobilePhone` | string | Contact number |
 | `address` | string | |
 | `locality` | string | |
 | `city` | string | |
-| `zipCode` | string | |
+| `zipCode` | string | Pincode |
 | `state` | string | |
 | `gstin` | string | |
-| `email` | string | E-Mail |
-| `phone1` | string | |
-| `rsm` | string | |
-| `asm` | string | |
-| `se` | string | |
-| `dso` | string | |
-| `outlet` | string | |
+| `email` | string | E-mail |
+| `phone1` | string | Contact number 1 |
 | `status` | string | `active` \| `inactive` |
 | `remarks` | string | |
 | `storeProfile` | object \| omitted | Only for **Store**; see below |
@@ -139,13 +133,20 @@ Mongoose returns `id` (string) instead of `_id`. Timestamps: `createdAt`, `updat
 | `city` | string |
 | `state` | string |
 | `brand` | string |
-| `brandSub` | string | Brand - Sub |
+| `brandSub` | string | Sub brand |
 | `openingDate` | string (ISO) \| null |
 | `address` | string |
-| `gst` | string |
+| `pincode` | string | |
+| `gst` | string | GSTIN |
 | `storeLandlineNo` | string |
-| `smNameAndContact` | string | SM Name & Contact No. |
-| `storeMailId` | string |
+| `smName` | string | Store manager name |
+| `smContact` | string | Store manager contact |
+| `smNameAndContact` | string | Legacy combined |
+| `storeMailId` | string | Store email |
+| `abmName` | string | |
+| `abmContact` | string | |
+| `abmNameAndContact` | string | Legacy combined |
+| `abmMailId` | string | ABM email |
 
 ---
 

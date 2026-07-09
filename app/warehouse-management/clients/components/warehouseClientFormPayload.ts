@@ -5,6 +5,10 @@ import type {
   WarehouseClientStoreProfile,
   WarehouseClientType,
 } from '@/shared/services/whmsWarehouseClientService';
+import {
+  expandStoreProfileSplitFields,
+  syncStoreProfileCombinedFields,
+} from './warehouseClientFieldConfig';
 import { sanitizeWarehouseClientFieldValue, UPPERCASE_TEXT_FIELDS } from './warehouseClientFieldRules';
 
 /** Drop empty strings / null / undefined so PATCH/POST payloads stay clean. */
@@ -23,8 +27,9 @@ function pruneRoot(
 }
 
 function pruneStoreProfile(sp: WarehouseClientStoreProfile): WarehouseClientStoreProfile {
+  const synced = syncStoreProfileCombinedFields(sp);
   const out: WarehouseClientStoreProfile = {};
-  (Object.entries(sp) as [keyof WarehouseClientStoreProfile, string | null | undefined][]).forEach(
+  (Object.entries(synced) as [keyof WarehouseClientStoreProfile, string | null | undefined][]).forEach(
     ([k, v]) => {
       if (v === undefined || v === null) return;
       if (typeof v === 'string' && v.trim() === '') return;
@@ -36,7 +41,6 @@ function pruneStoreProfile(sp: WarehouseClientStoreProfile): WarehouseClientStor
 }
 
 const ROOT_KEYS: (keyof WarehouseClient)[] = [
-  'distributorName',
   'parentKeyCode',
   'retailerName',
   'type',
@@ -50,11 +54,6 @@ const ROOT_KEYS: (keyof WarehouseClient)[] = [
   'gstin',
   'email',
   'phone1',
-  'rsm',
-  'asm',
-  'se',
-  'dso',
-  'outlet',
   'status',
   'remarks',
 ];
@@ -66,7 +65,7 @@ function attachSlNo(pruned: Record<string, unknown>, root: Record<string, unknow
   if (!Number.isNaN(n)) pruned.slNo = n;
 }
 
-/** Store clients: API only needs `type`, optional `status`, and `storeProfile` — no other root fields. */
+/** Store clients: API needs `type`, optional `status`/`remarks`/`slNo`, and `storeProfile`. */
 function buildStorePayload(
   root: Record<string, unknown>,
   storeProfile: WarehouseClientStoreProfile,
@@ -80,6 +79,11 @@ function buildStorePayload(
   if (st === 'active' || st === 'inactive') {
     pruned.status = st;
   }
+  const rm = root.remarks;
+  if (typeof rm === 'string' && rm.trim() !== '') {
+    pruned.remarks = rm.trim();
+  }
+  attachSlNo(pruned, root);
   const sp = pruneStoreProfile(storeProfile);
   if (Object.keys(sp).length > 0) {
     pruned.storeProfile = sp;
@@ -135,9 +139,11 @@ export function clientToFormState(client: WarehouseClient): {
     root[k as string] = v ?? '';
   });
   root.slNo = client.slNo != null ? String(client.slNo) : '';
+  root.type = client.type;
+  root.status = client.status ?? 'active';
   return {
     root,
-    storeProfile: { ...(client.storeProfile || {}) },
+    storeProfile: expandStoreProfileSplitFields({ ...(client.storeProfile || {}) }),
   };
 }
 

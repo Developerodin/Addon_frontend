@@ -63,10 +63,17 @@ export interface WarehouseClientStoreProfile {
   brandSub?: string;
   openingDate?: string | null;
   address?: string;
+  pincode?: string;
   gst?: string;
   storeLandlineNo?: string;
+  smName?: string;
+  smContact?: string;
+  /** Legacy combined — synced from smName + smContact */
   smNameAndContact?: string;
   storeMailId?: string;
+  abmName?: string;
+  abmContact?: string;
+  /** Legacy combined — synced from abmName + abmContact */
   abmNameAndContact?: string;
   abmMailId?: string;
 }
@@ -74,7 +81,6 @@ export interface WarehouseClientStoreProfile {
 export interface WarehouseClient {
   id: string;
   slNo?: number | null;
-  distributorName?: string;
   parentKeyCode?: string;
   retailerName?: string;
   type: WarehouseClientType;
@@ -88,11 +94,6 @@ export interface WarehouseClient {
   gstin?: string;
   email?: string;
   phone1?: string;
-  rsm?: string;
-  asm?: string;
-  se?: string;
-  dso?: string;
-  outlet?: string;
   status?: 'active' | 'inactive';
   remarks?: string;
   storeProfile?: WarehouseClientStoreProfile;
