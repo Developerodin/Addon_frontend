@@ -309,6 +309,8 @@ export type WarehouseOrdersListParams = {
   dateTo?: string;
   createdFrom?: string;
   createdTo?: string;
+  /** Filter by meta.source e.g. `addonweb` */
+  source?: string;
   sortBy?: string;
   page?: number;
   limit?: number;

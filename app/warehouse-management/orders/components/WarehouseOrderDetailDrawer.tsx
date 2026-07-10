@@ -8,6 +8,7 @@ import {
   warehouseOrderStatusLabel,
   type WarehouseOrder,
 } from "@/shared/services/whmsWarehouseOrderService";
+import WebsiteSyncPanel from "./WebsiteSyncPanel";
 
 function Field({
   label,
@@ -81,6 +82,17 @@ export default function WarehouseOrderDetailDrawer({ orderId, open, onClose }: P
   if (!open) return null;
 
   const title = order?.orderNumber?.trim() || orderId || "Order";
+  const isWebsiteOrder = order?.meta && (order.meta as Record<string, unknown>).source === "addonweb";
+
+  const reloadOrder = async () => {
+    if (!orderId) return;
+    try {
+      const data = await whmsWarehouseOrders.get(orderId);
+      setOrder(data);
+    } catch {
+      /* ignore refresh errors */
+    }
+  };
 
   return (
     <>
@@ -130,6 +142,10 @@ export default function WarehouseOrderDetailDrawer({ orderId, open, onClose }: P
                 <Field label="Client type" value={order.clientType} />
                 <Field label="Client name" value={order.clientName || "—"} />
               </div>
+
+              {isWebsiteOrder && (
+                <WebsiteSyncPanel order={order} onSynced={() => void reloadOrder()} />
+              )}
 
               <div className="border-t border-gray-100 pt-3">
                 <div className="flex items-center gap-2 mb-2">

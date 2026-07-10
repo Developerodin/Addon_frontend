@@ -44,6 +44,28 @@ function statusPill(status?: string) {
   );
 }
 
+function isWebsiteOrder(o: WarehouseOrder): boolean {
+  return (o.meta as Record<string, unknown> | undefined)?.source === "addonweb";
+}
+
+function websiteSyncIcon(o: WarehouseOrder) {
+  if (!isWebsiteOrder(o)) return null;
+  const err = String((o.meta as Record<string, unknown> | undefined)?.lastWebsitePushError || "").trim();
+  if (err) {
+    return (
+      <i
+        className="ri-error-warning-fill text-red-500 text-xs"
+        title={err}
+        aria-label="Website sync failed"
+      />
+    );
+  }
+  if ((o.meta as Record<string, unknown> | undefined)?.lastWebsitePushAt) {
+    return <i className="ri-checkbox-circle-fill text-emerald-500 text-xs" title="Synced" aria-label="Website synced" />;
+  }
+  return <i className="ri-time-line text-amber-500 text-xs" title="Pending sync" aria-label="Website sync pending" />;
+}
+
 function totalQty(o: WarehouseOrder): number {
   const a =
     o.styleCodeSinglePair?.reduce((s, r) => s + (Number(r.quantity) || 0), 0) ??
@@ -150,7 +172,17 @@ export default function WarehouseOrdersTable({
             </tr>
             {orders.map((o) => (
               <tr key={o.id} className="hover:bg-gray-50/50 transition-colors group">
-                <td className={tdBold}>{o.orderNumber?.trim() || o.id}</td>
+                <td className={tdBold}>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span>{o.orderNumber?.trim() || o.id}</span>
+                    {isWebsiteOrder(o) && (
+                      <span className="inline-flex items-center px-1 py-0.5 rounded text-[8px] font-bold bg-sky-100 text-sky-800 uppercase tracking-tight">
+                        Web
+                      </span>
+                    )}
+                    {websiteSyncIcon(o)}
+                  </div>
+                </td>
                 <td className={td}>{o.addonOrderId?.trim() || "—"}</td>
                 <td className={td}>{o.clientName?.trim() || "—"}</td>
                 <td className={td}>{o.clientType}</td>

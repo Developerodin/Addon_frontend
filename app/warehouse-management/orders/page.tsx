@@ -55,7 +55,10 @@ export default function WarehouseOrdersPage() {
   const [flowOrderId, setFlowOrderId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
+  const [websiteTradeOnly, setWebsiteTradeOnly] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
+  const knownWebOrderIdsRef = useRef<Set<string>>(new Set());
+  const pollInitializedRef = useRef(false);
 
   const stats = useMemo(() => {
     const by: Record<WarehouseOrderStatus, number> = {
@@ -79,14 +82,26 @@ export default function WarehouseOrdersPage() {
     }, 400);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusTab, clientTypeFilter, q, dateFrom, dateTo, page, limit]);
+  }, [statusTab, clientTypeFilter, websiteTradeOnly, q, dateFrom, dateTo, page, limit]);
 
-  const fetchRows = async () => {
-    setLoading(true);
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const poll = () => {
+      if (document.visibilityState !== "visible") return;
+      void fetchRows({ silent: true });
+    };
+    const id = window.setInterval(poll, 30000);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusTab, clientTypeFilter, websiteTradeOnly, q, dateFrom, dateTo, page, limit]);
+
+  const fetchRows = async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       const res = await whmsWarehouseOrders.list({
         ...(statusTab !== "all" ? { status: statusTab } : {}),
         ...(clientTypeFilter ? { clientType: clientTypeFilter } : {}),
+        ...(websiteTradeOnly ? { clientType: "Trade", source: "addonweb" } : {}),
         ...(q.trim() ? { q: q.trim() } : {}),
         ...(dateFrom ? { dateFrom } : {}),
         ...(dateTo ? { dateTo } : {}),
@@ -97,6 +112,23 @@ export default function WarehouseOrdersPage() {
       setRows(res.results || []);
       setTotalPages(res.totalPages || 1);
       setTotalResults(res.totalResults || 0);
+
+      const webOrders = (res.results || []).filter(
+        (r) => r.meta && (r.meta as Record<string, unknown>).source === "addonweb",
+      );
+      if (pollInitializedRef.current) {
+        const newOnes = webOrders.filter((r) => !knownWebOrderIdsRef.current.has(r.id));
+        if (newOnes.length > 0) {
+          toast.success(
+            newOnes.length === 1
+              ? `New website order: ${newOnes[0].addonOrderId || newOnes[0].orderNumber}`
+              : `${newOnes.length} new website orders`,
+          );
+        }
+      } else {
+        pollInitializedRef.current = true;
+      }
+      knownWebOrderIdsRef.current = new Set(webOrders.map((r) => r.id));
     } catch (e) {
       console.error(e);
       toast.error(e instanceof Error ? e.message : "Failed to load warehouse orders");
@@ -104,7 +136,7 @@ export default function WarehouseOrdersPage() {
       setTotalPages(1);
       setTotalResults(0);
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   };
 
@@ -259,6 +291,23 @@ export default function WarehouseOrdersPage() {
                 </select>
                 <i className="ri-arrow-down-s-line absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none" />
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setWebsiteTradeOnly((v) => !v);
+                  setPage(1);
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border transition-colors shadow-sm ${
+                  websiteTradeOnly
+                    ? "bg-sky-600 text-white border-sky-600 hover:bg-sky-700"
+                    : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                }`}
+                aria-pressed={websiteTradeOnly}
+                aria-label="Filter website Trade orders"
+              >
+                <i className="ri-global-line text-xs" aria-hidden />
+                Website Trade
+              </button>
               <button
                 type="button"
                 onClick={() => void downloadTemplate()}
