@@ -12,6 +12,13 @@ import {
   type WarehouseOrder,
 } from "@/shared/services/whmsWarehouseOrderService";
 import WarehouseOrderForm from "../../components/WarehouseOrderForm";
+import WebsiteSyncPanel from "../../components/WebsiteSyncPanel";
+
+function isWebsiteOrder(order: WarehouseOrder): boolean {
+  const meta = (order.meta || {}) as Record<string, unknown>;
+  if (meta.source === "addonweb") return true;
+  return /^WEB-\d+$/i.test(String(order.addonOrderId || "").trim());
+}
 
 export default function EditWarehouseOrderPage() {
   const router = useRouter();
@@ -44,9 +51,19 @@ export default function EditWarehouseOrderPage() {
   const onSubmit = async (body: CreateWarehouseOrderBody | UpdateWarehouseOrderBody) => {
     setSubmitting(true);
     try {
-      await whmsWarehouseOrders.update(orderId, body as UpdateWarehouseOrderBody);
-      toast.success("Order updated");
-      router.push("/warehouse-management/orders");
+      const updated = await whmsWarehouseOrders.update(orderId, body as UpdateWarehouseOrderBody);
+      const syncErr = String(
+        ((updated.meta || {}) as Record<string, unknown>).lastWebsitePushError || "",
+      ).trim();
+      if (isWebsiteOrder(updated) && syncErr) {
+        toast.error(`Order saved but website sync failed: ${syncErr}`);
+      } else if (isWebsiteOrder(updated) && body.status === "cancelled") {
+        toast.success("Order cancelled and website notified");
+      } else {
+        toast.success("Order updated");
+      }
+      setOrder(updated);
+      if (!syncErr) router.push("/warehouse-management/orders");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Update failed");
     } finally {
@@ -86,6 +103,11 @@ export default function EditWarehouseOrderPage() {
           </div>
         </div>
         <div className="p-[10px] sm:p-4">
+          {isWebsiteOrder(order) && (
+            <div className="mb-4">
+              <WebsiteSyncPanel order={order} onSynced={() => void whmsWarehouseOrders.get(orderId).then(setOrder)} />
+            </div>
+          )}
           <WarehouseOrderForm
             mode="edit"
             initialOrder={order}
