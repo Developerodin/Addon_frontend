@@ -8,6 +8,7 @@ import {
   warehouseOrderFlowStatusLabel,
   type WarehouseOrder,
 } from "@/shared/services/whmsWarehouseOrderService";
+import { clientEditHref } from "@/app/warehouse-management/clients/components/tradeClientCompleteness";
 import { groupWarehouseOrdersByDate } from "./warehouseOrderDateGrouping";
 
 const th =
@@ -42,6 +43,11 @@ function statusPill(status?: string) {
       {warehouseOrderStatusLabel(s)}
     </span>
   );
+}
+
+function hasIncompleteClient(o: WarehouseOrder): boolean {
+  const meta = o.meta as Record<string, unknown> | undefined;
+  return Array.isArray(meta?.clientIncompleteFields) && meta.clientIncompleteFields.length > 0;
 }
 
 function isWebsiteOrder(o: WarehouseOrder): boolean {
@@ -184,7 +190,23 @@ export default function WarehouseOrdersTable({
                   </div>
                 </td>
                 <td className={td}>{o.addonOrderId?.trim() || "—"}</td>
-                <td className={td}>{o.clientName?.trim() || "—"}</td>
+                <td className={td}>
+                  {o.clientId ? (
+                    <Link
+                      href={clientEditHref(o.clientId, o.id)}
+                      className="text-purple-700 hover:text-purple-900 hover:underline"
+                    >
+                      {o.clientName?.trim() || "—"}
+                    </Link>
+                  ) : (
+                    o.clientName?.trim() || "—"
+                  )}
+                  {hasIncompleteClient(o) && (
+                    <span className="ml-1.5 inline-flex items-center px-1 py-0.5 rounded text-[8px] font-bold bg-amber-100 text-amber-800 uppercase tracking-tight">
+                      Incomplete client
+                    </span>
+                  )}
+                </td>
                 <td className={td}>{o.clientType}</td>
                 <td className={td}>{totalQty(o)}</td>
                 <td className={td}>{o.styleCodeSinglePair?.length ?? 0}</td>

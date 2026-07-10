@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast, Toaster } from "react-hot-toast";
 import {
@@ -40,6 +41,7 @@ const CLIENT_TYPE_OPTIONS: Array<{ id: "" | WarehouseClientType; label: string }
 ];
 
 export default function WarehouseOrdersPage() {
+  const searchParams = useSearchParams();
   const [statusTab, setStatusTab] = useState<"all" | WarehouseOrderStatus>("all");
   const [clientTypeFilter, setClientTypeFilter] = useState<"" | WarehouseClientType>("");
   const [q, setQ] = useState("");
@@ -59,6 +61,11 @@ export default function WarehouseOrdersPage() {
   const importRef = useRef<HTMLInputElement>(null);
   const knownWebOrderIdsRef = useRef<Set<string>>(new Set());
   const pollInitializedRef = useRef(false);
+
+  useEffect(() => {
+    const viewId = searchParams.get("view")?.trim();
+    if (viewId) setDetailId(viewId);
+  }, [searchParams]);
 
   const stats = useMemo(() => {
     const by: Record<WarehouseOrderStatus, number> = {
@@ -118,12 +125,20 @@ export default function WarehouseOrdersPage() {
       );
       if (pollInitializedRef.current) {
         const newOnes = webOrders.filter((r) => !knownWebOrderIdsRef.current.has(r.id));
-        if (newOnes.length > 0) {
-          toast.success(
-            newOnes.length === 1
-              ? `New website order: ${newOnes[0].addonOrderId || newOnes[0].orderNumber}`
-              : `${newOnes.length} new website orders`,
-          );
+        for (const order of newOnes) {
+          const meta = (order.meta || {}) as Record<string, unknown>;
+          const addonRef = order.addonOrderId || order.orderNumber || order.id;
+          if (meta.clientCreated) {
+            toast("New website order — Trade client auto-created. Complete client profile.", {
+              icon: "⚠️",
+            });
+          } else if (Array.isArray(meta.syncErrors) && meta.syncErrors.length > 0) {
+            toast(`Website order ${addonRef} ingested as draft — style mapping errors`, { icon: "⚠️" });
+          } else if (Array.isArray(meta.clientIncompleteFields) && meta.clientIncompleteFields.length > 0) {
+            toast(`Website order ${addonRef} — client profile incomplete`, { icon: "⚠️" });
+          } else {
+            toast.success(`New website order: ${addonRef}`);
+          }
         }
       } else {
         pollInitializedRef.current = true;

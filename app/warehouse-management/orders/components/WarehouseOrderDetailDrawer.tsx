@@ -9,6 +9,10 @@ import {
   type WarehouseOrder,
 } from "@/shared/services/whmsWarehouseOrderService";
 import WebsiteSyncPanel from "./WebsiteSyncPanel";
+import {
+  clientEditHref,
+  tradeFieldLabels,
+} from "@/app/warehouse-management/clients/components/tradeClientCompleteness";
 
 function Field({
   label,
@@ -83,6 +87,11 @@ export default function WarehouseOrderDetailDrawer({ orderId, open, onClose }: P
 
   const title = order?.orderNumber?.trim() || orderId || "Order";
   const isWebsiteOrder = order?.meta && (order.meta as Record<string, unknown>).source === "addonweb";
+  const orderMeta = (order?.meta || {}) as Record<string, unknown>;
+  const clientIncomplete = Array.isArray(orderMeta.clientIncompleteFields)
+    ? (orderMeta.clientIncompleteFields as string[])
+    : [];
+  const clientIdForEdit = String(orderMeta.warehouseClientId || order?.clientId || "").trim();
 
   const reloadOrder = async () => {
     if (!orderId) return;
@@ -142,6 +151,29 @@ export default function WarehouseOrderDetailDrawer({ orderId, open, onClose }: P
                 <Field label="Client type" value={order.clientType} />
                 <Field label="Client name" value={order.clientName || "—"} />
               </div>
+
+              {isWebsiteOrder && clientIncomplete.length > 0 && clientIdForEdit && (
+                <div
+                  className="border border-amber-200 bg-amber-50 rounded-lg p-3 flex flex-wrap items-center justify-between gap-2"
+                  role="alert"
+                  aria-label="Incomplete client profile"
+                >
+                  <div>
+                    <p className="text-[11px] font-bold text-amber-900">Client profile incomplete</p>
+                    <p className="text-[10px] text-amber-800 mt-0.5">
+                      Missing: {tradeFieldLabels(clientIncomplete).join(", ")}
+                    </p>
+                  </div>
+                  <Link
+                    href={clientEditHref(clientIdForEdit, order!.id)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-amber-600 text-white text-[10px] font-bold rounded hover:bg-amber-700"
+                    onClick={onClose}
+                  >
+                    <i className="ri-user-settings-line text-xs" aria-hidden />
+                    Edit client
+                  </Link>
+                </div>
+              )}
 
               {isWebsiteOrder && (
                 <WebsiteSyncPanel order={order} onSynced={() => void reloadOrder()} />

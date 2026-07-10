@@ -1,11 +1,16 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { toast } from "react-hot-toast";
 import {
   whmsWebsiteOrderSync,
   type WarehouseOrder,
 } from "@/shared/services/whmsWebsiteOrderSyncService";
+import {
+  clientEditHref,
+  tradeFieldLabels,
+} from "@/app/warehouse-management/clients/components/tradeClientCompleteness";
 
 type Props = {
   order: WarehouseOrder;
@@ -19,6 +24,11 @@ export default function WebsiteSyncPanel({ order, onSynced }: Props) {
   const [pushing, setPushing] = useState(false);
   const meta = (order.meta || {}) as Record<string, unknown>;
   const syncErrors = Array.isArray(meta.syncErrors) ? meta.syncErrors : [];
+  const clientIncomplete = Array.isArray(meta.clientIncompleteFields)
+    ? (meta.clientIncompleteFields as string[])
+    : [];
+  const clientCreated = Boolean(meta.clientCreated);
+  const clientId = String(meta.warehouseClientId || order.clientId || "").trim();
   const lastPushAt = meta.lastWebsitePushAt
     ? new Date(String(meta.lastWebsitePushAt)).toLocaleString()
     : "—";
@@ -82,6 +92,36 @@ export default function WebsiteSyncPanel({ order, onSynced }: Props) {
           </div>
           <div className="text-[12px] font-medium text-gray-800">{lastPushAt}</div>
         </div>
+
+        <div className="col-span-12 border border-violet-100 rounded px-3 py-2 bg-violet-50/50">
+          <div className="text-[10px] font-bold text-violet-800 uppercase tracking-wide mb-1">
+            Client sync
+          </div>
+          <div className="text-[11px] text-gray-700 space-y-1">
+            <p>
+              Auto-created:{" "}
+              <span className="font-semibold">{clientCreated ? "Yes" : "No (existing client)"}</span>
+            </p>
+            {clientIncomplete.length > 0 ? (
+              <p className="text-amber-800">
+                Missing: {tradeFieldLabels(clientIncomplete).join(", ")}
+              </p>
+            ) : (
+              <p className="text-emerald-700 font-medium">Client profile complete</p>
+            )}
+          </div>
+          {clientId && clientIncomplete.length > 0 && (
+            <Link
+              href={clientEditHref(clientId, order.id)}
+              className="inline-flex items-center gap-1 mt-2 px-2.5 py-1 bg-amber-600 text-white text-[10px] font-bold rounded hover:bg-amber-700"
+              aria-label="Complete client profile"
+            >
+              <i className="ri-user-settings-line text-xs" aria-hidden />
+              Complete client profile
+            </Link>
+          )}
+        </div>
+
         <div className="col-span-12 border border-gray-200 rounded px-3 py-2 bg-white">
           <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-0.5">
             Last sync error

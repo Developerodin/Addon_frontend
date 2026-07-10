@@ -59,6 +59,8 @@ export default function WarehouseManagementClientsPage() {
   const [filterStatus, setFilterStatus] = useState<string>("");
   const [filterCity, setFilterCity] = useState("");
   const [filterState, setFilterState] = useState("");
+  const [filterWebsiteOnly, setFilterWebsiteOnly] = useState(false);
+  const [filterIncomplete, setFilterIncomplete] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
@@ -104,6 +106,8 @@ export default function WarehouseManagementClientsPage() {
     filterStatus,
     filterCity,
     filterState,
+    filterWebsiteOnly,
+    filterIncomplete,
     hasPermission,
   ]);
 
@@ -117,6 +121,8 @@ export default function WarehouseManagementClientsPage() {
         status: filterStatus || undefined,
         city: filterCity.trim() || undefined,
         state: filterState.trim() || undefined,
+        ...(filterWebsiteOnly ? { source: "addonweb" } : {}),
+        ...(filterIncomplete ? { incomplete: "1" } : {}),
         sortBy: "createdAt:desc",
       };
       const res = await whmsWarehouseClients.listByType(activeTypeTab, common);
@@ -298,6 +304,44 @@ export default function WarehouseManagementClientsPage() {
                   setCurrentPage(1);
                 }}
               />
+              {activeTypeTab === "Trade" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterWebsiteOnly((v) => !v);
+                      setCurrentPage(1);
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border transition-colors shadow-sm ${
+                      filterWebsiteOnly
+                        ? "bg-sky-600 text-white border-sky-600 hover:bg-sky-700"
+                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                    }`}
+                    aria-pressed={filterWebsiteOnly}
+                    aria-label="Filter clients from website"
+                  >
+                    <i className="ri-global-line text-xs" aria-hidden />
+                    From website
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterIncomplete((v) => !v);
+                      setCurrentPage(1);
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border transition-colors shadow-sm ${
+                      filterIncomplete
+                        ? "bg-amber-600 text-white border-amber-600 hover:bg-amber-700"
+                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                    }`}
+                    aria-pressed={filterIncomplete}
+                    aria-label="Filter clients with incomplete profile"
+                  >
+                    <i className="ri-error-warning-line text-xs" aria-hidden />
+                    Incomplete profile
+                  </button>
+                </>
+              )}
               <div className="relative group">
                 <select
                   value={itemsPerPage}

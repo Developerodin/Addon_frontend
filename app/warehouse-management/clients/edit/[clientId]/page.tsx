@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Seo from "@/shared/layout-components/seo/seo";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
@@ -17,6 +17,8 @@ import WarehouseClientForm from "../../components/WarehouseClientForm";
 export default function EditWarehouseClientPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
+  const fromOrderId = searchParams.get("fromOrder")?.trim() || "";
   const clientId = (params?.clientId as string) || "";
   const { hasSubPermission } = useNavigation();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -79,7 +81,7 @@ export default function EditWarehouseClientPage() {
     try {
       await whmsWarehouseClients.update(clientId, body as UpdateWarehouseClientBody);
       toast.success("Client updated");
-      router.push("/warehouse-management/clients");
+      router.push(fromOrderId ? `/warehouse-management/orders?view=${encodeURIComponent(fromOrderId)}` : "/warehouse-management/clients");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Update failed");
     } finally {
@@ -99,6 +101,14 @@ export default function EditWarehouseClientPage() {
             <h1 className="text-sm font-bold text-gray-800">Edit warehouse client</h1>
           </div>
           <div className="flex flex-wrap gap-2">
+            {fromOrderId && (
+              <Link
+                href={`/warehouse-management/orders?view=${encodeURIComponent(fromOrderId)}`}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-800 border border-amber-100 text-[11px] font-bold rounded hover:bg-amber-100 shadow-sm"
+              >
+                <i className="ri-arrow-left-line text-xs" /> Back to order
+              </Link>
+            )}
             <Link
               href={`/warehouse-management/clients?view=${encodeURIComponent(clientId)}`}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 text-sky-600 border border-sky-100 text-[11px] font-bold rounded hover:bg-sky-100 shadow-sm"

@@ -3,6 +3,10 @@
 import React from "react";
 import Link from "next/link";
 import type { WarehouseClient, WarehouseClientType } from "@/shared/services/whmsWarehouseClientService";
+import {
+  getIncompleteTradeFields,
+  isWebAutoCreatedClient,
+} from "./tradeClientCompleteness";
 
 const th = "px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200";
 const thFirst = "pl-[10px] pr-1 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200";
@@ -168,9 +172,26 @@ export default function WarehouseClientsTable({
         </tr>
       </thead>
       <tbody>
-        {rows.map((c) => (
+        {rows.map((c) => {
+          const incomplete = getIncompleteTradeFields(c);
+          const fromWeb = isWebAutoCreatedClient(c);
+          return (
           <tr key={c.id} className="hover:bg-gray-50/50 transition-colors group">
-            <td className={tdBold}>{c.retailerName?.trim() || "—"}</td>
+            <td className={tdBold}>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span>{c.retailerName?.trim() || "—"}</span>
+                {fromWeb && (
+                  <span className="inline-flex items-center px-1 py-0.5 rounded text-[8px] font-bold bg-sky-100 text-sky-800 uppercase tracking-tight">
+                    Web
+                  </span>
+                )}
+                {incomplete.length > 0 && (
+                  <span className="inline-flex items-center px-1 py-0.5 rounded text-[8px] font-bold bg-amber-100 text-amber-800 uppercase tracking-tight">
+                    Incomplete
+                  </span>
+                )}
+              </div>
+            </td>
             <td className={td}>{c.parentKeyCode?.trim() || "—"}</td>
             <td className={td}>{c.city?.trim() || "—"}</td>
             <td className={td}>{c.zipCode?.trim() || "—"}</td>
@@ -180,7 +201,8 @@ export default function WarehouseClientsTable({
             <td className={`${td} border border-gray-200`}>{statusCell(c)}</td>
             <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">{actions(c)}</td>
           </tr>
-        ))}
+        );
+        })}
       </tbody>
     </table>
   );

@@ -96,6 +96,7 @@ export interface WarehouseClient {
   phone1?: string;
   status?: 'active' | 'inactive';
   remarks?: string;
+  meta?: Record<string, unknown>;
   storeProfile?: WarehouseClientStoreProfile;
   createdAt?: string;
   updatedAt?: string;
