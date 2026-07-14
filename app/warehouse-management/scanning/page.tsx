@@ -10,6 +10,7 @@ import {
   type PaginatedWarehouseOrders,
 } from "@/shared/services/whmsWarehouseOrderService";
 import { whmsScanning, ScanSession } from "@/shared/services/whmsFulfilmentService";
+import { whmsPickListBatches } from "@/shared/services/whmsPickListBatchService";
 import { useWhmsPaginatedList } from "@/shared/hooks/useWhmsPaginatedList";
 import {
   WhmsListPagination,
@@ -38,6 +39,7 @@ export default function ScanningPage() {
   const [busy, setBusy] = useState(false);
   const [journeyOrderId, setJourneyOrderId] = useState<string | null>(null);
   const [scannerByOrder, setScannerByOrder] = useState<Record<string, string>>({});
+  const [batchByOrder, setBatchByOrder] = useState<Record<string, string>>({});
 
   const activeList = useWhmsPaginatedList<WarehouseOrder, { flowStatusIn: string; sortBy: string }>({
     fetchFn: fetchActiveOrders,
@@ -68,6 +70,25 @@ export default function ScanningPage() {
       }
     })();
   }, [tab, session, activeList.loading, activeList.page, activeList.totalResults]);
+
+  React.useEffect(() => {
+    if (tab !== "active" || !activeList.results.length) return;
+    void (async () => {
+      const map: Record<string, string> = {};
+      await Promise.all(
+        activeList.results.map(async (order) => {
+          if (!order.activeBatchId) return;
+          try {
+            const info = await whmsPickListBatches.forOrder(order.id);
+            if (info?.type === "combined") map[order.id] = info.batchNumber;
+          } catch {
+            /* ignore */
+          }
+        }),
+      );
+      setBatchByOrder(map);
+    })();
+  }, [tab, activeList.results]);
 
   const openSession = async (order: WarehouseOrder) => {
     setBusy(true);
@@ -172,6 +193,7 @@ export default function ScanningPage() {
                     <tr className="bg-gray-50/30">
                       <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Order #</th>
                       <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Client</th>
+                      <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Batch</th>
                       <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Stage</th>
                       <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Scanner</th>
                       <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Date</th>
@@ -183,6 +205,15 @@ export default function ScanningPage() {
                       <tr key={order.id} className="hover:bg-gray-50/50">
                         <td className="px-1.5 py-2.5 text-[12px] font-bold border border-gray-200">{order.orderNumber || order.id}</td>
                         <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">{order.clientName || "—"}</td>
+                        <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">
+                          {batchByOrder[order.id] ? (
+                            <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-violet-100 text-violet-800 uppercase">
+                              {batchByOrder[order.id]}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
                         <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">{warehouseOrderFlowStatusLabel(order.flowStatus as string)}</td>
                         <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">
                           {order.flowStatus === "scanning-in-progress" ? scannerByOrder[order.id] || "In progress" : "—"}

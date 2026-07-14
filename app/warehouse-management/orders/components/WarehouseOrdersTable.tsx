@@ -6,10 +6,12 @@ import {
   normalizeWarehouseOrderStatus,
   warehouseOrderStatusLabel,
   warehouseOrderFlowStatusLabel,
+  effectiveWarehouseOrderFlowStatus,
   type WarehouseOrder,
 } from "@/shared/services/whmsWarehouseOrderService";
 import { clientEditHref } from "@/app/warehouse-management/clients/components/tradeClientCompleteness";
 import { groupWarehouseOrdersByDate } from "./warehouseOrderDateGrouping";
+import { isOrderSelectableForPickBatch } from "./GeneratePickListModal";
 
 const th =
   "px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200";
@@ -108,21 +110,45 @@ function flowPill(flowStatus?: string) {
 type Props = {
   rows: WarehouseOrder[];
   loading: boolean;
+  selectedIds: Set<string>;
+  onSelectionChange: (ids: Set<string>) => void;
   onView: (id: string) => void;
   onDelete: (id: string) => void;
   onFlow?: (id: string) => void;
 };
 
-const COLUMN_COUNT = 10;
+const COLUMN_COUNT = 11;
 
 export default function WarehouseOrdersTable({
   rows,
   loading,
+  selectedIds,
+  onSelectionChange,
   onView,
   onDelete,
   onFlow,
 }: Props) {
   const groupedRows = useMemo(() => groupWarehouseOrdersByDate(rows), [rows]);
+
+  const selectableRows = useMemo(() => rows.filter(isOrderSelectableForPickBatch), [rows]);
+  const allSelectableSelected =
+    selectableRows.length > 0 && selectableRows.every((r) => selectedIds.has(r.id));
+
+  const toggleRow = (id: string, selectable: boolean) => {
+    if (!selectable) return;
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onSelectionChange(next);
+  };
+
+  const toggleAll = () => {
+    if (allSelectableSelected) {
+      onSelectionChange(new Set());
+      return;
+    }
+    onSelectionChange(new Set(selectableRows.map((r) => r.id)));
+  };
 
   if (loading) {
     return (
@@ -151,6 +177,16 @@ export default function WarehouseOrdersTable({
     <table className="w-full border-collapse border border-gray-200 min-w-[1100px]">
       <thead>
         <tr className="bg-gray-50/30">
+          <th className={`${thFirst} w-10`}>
+            <input
+              type="checkbox"
+              checked={allSelectableSelected}
+              onChange={toggleAll}
+              disabled={selectableRows.length === 0}
+              aria-label="Select all eligible orders"
+              className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+            />
+          </th>
           <th className={thFirst}>Order #</th>
           <th className={th}>Addon order ID</th>
           <th className={th}>Client</th>
@@ -176,8 +212,28 @@ export default function WarehouseOrdersTable({
                 <span className="ml-2 text-[10px] font-semibold text-gray-500">({orders.length})</span>
               </td>
             </tr>
-            {orders.map((o) => (
+            {orders.map((o) => {
+              const selectable = isOrderSelectableForPickBatch(o);
+              const flow = effectiveWarehouseOrderFlowStatus(o);
+              return (
               <tr key={o.id} className="hover:bg-gray-50/50 transition-colors group">
+                <td className={`${tdBold} w-10`}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(o.id)}
+                    onChange={() => toggleRow(o.id, selectable)}
+                    disabled={!selectable}
+                    title={
+                      selectable
+                        ? "Select for pick list"
+                        : flow !== "order-created"
+                          ? "Only order-created orders can be batched"
+                          : "Already in a batch"
+                    }
+                    aria-label={`Select order ${o.orderNumber || o.id}`}
+                    className="rounded border-gray-300 text-purple-600 focus:ring-purple-500 disabled:opacity-40"
+                  />
+                </td>
                 <td className={tdBold}>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span>{o.orderNumber?.trim() || o.id}</span>
@@ -251,7 +307,8 @@ export default function WarehouseOrdersTable({
                   </div>
                 </td>
               </tr>
-            ))}
+            );
+            })}
           </React.Fragment>
         ))}
       </tbody>

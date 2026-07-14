@@ -160,6 +160,7 @@ export interface ScanSession {
   id: string;
   orderId: string | { id?: string; orderNumber?: string };
   orderNumber?: string;
+  batchId?: string | null;
   status: 'open' | 'completed' | 'cancelled';
   items: ScanSessionItem[];
   summary: ScanSessionSummary;
@@ -168,6 +169,8 @@ export interface ScanSession {
   completedAt?: string;
   mismatchOverride?: boolean;
   overrideRemarks?: string;
+  closedWithShortQty?: boolean;
+  shortCloseRemarks?: string;
   createdAt?: string;
 }
 
@@ -350,7 +353,10 @@ export const whmsScanning = {
       method: 'PATCH',
       body: JSON.stringify({ scannedQty }),
     }),
-  complete: (sessionId: string, opts: { force?: boolean; remarks?: string } = {}) =>
+  complete: (
+    sessionId: string,
+    opts: { force?: boolean; closeWithShortQty?: boolean; remarks?: string } = {},
+  ) =>
     request<ScanSession>(`/scanning/sessions/${sessionId}/complete`, {
       method: 'POST',
       body: JSON.stringify(opts),

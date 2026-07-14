@@ -260,6 +260,7 @@ export interface WarehouseOrder {
   flowHistory?: WarehouseOrderFlowHistoryEntry[];
   dispatch?: WarehouseOrderDispatchDetails;
   invoiceId?: string | null;
+  activeBatchId?: string | null;
   styleCodeSinglePair?: WarehouseOrderStyleCodeSinglePairRow[];
   styleCodeMultiPair?: WarehouseOrderStyleCodeMultiPairRow[];
   meta?: Record<string, unknown>;

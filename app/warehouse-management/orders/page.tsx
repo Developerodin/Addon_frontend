@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast, Toaster } from "react-hot-toast";
@@ -16,6 +17,8 @@ import { whmsWarehouseClients } from "@/shared/services/whmsWarehouseClientServi
 import WarehouseOrdersTable from "./components/WarehouseOrdersTable";
 import WarehouseOrderDetailDrawer from "./components/WarehouseOrderDetailDrawer";
 import OrderFlowModal from "./components/OrderFlowModal";
+import GeneratePickListModal from "./components/GeneratePickListModal";
+import { whmsPickListBatches } from "@/shared/services/whmsPickListBatchService";
 import {
   downloadWarehouseOrdersBulkTemplate,
   fetchAllWarehouseClientsForReference,
@@ -41,6 +44,7 @@ const CLIENT_TYPE_OPTIONS: Array<{ id: "" | WarehouseClientType; label: string }
 ];
 
 export default function WarehouseOrdersPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [statusTab, setStatusTab] = useState<"all" | WarehouseOrderStatus>("all");
   const [clientTypeFilter, setClientTypeFilter] = useState<"" | WarehouseClientType>("");
@@ -58,6 +62,9 @@ export default function WarehouseOrdersPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
   const [websiteTradeOnly, setWebsiteTradeOnly] = useState(false);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
+  const [pickListModalOpen, setPickListModalOpen] = useState(false);
+  const [creatingPickList, setCreatingPickList] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
   const knownWebOrderIdsRef = useRef<Set<string>>(new Set());
   const pollInitializedRef = useRef(false);
@@ -152,6 +159,31 @@ export default function WarehouseOrdersPage() {
       setTotalResults(0);
     } finally {
       if (!opts?.silent) setLoading(false);
+    }
+  };
+
+  const selectedOrders = useMemo(
+    () => rows.filter((r) => selectedOrderIds.has(r.id)),
+    [rows, selectedOrderIds],
+  );
+
+  const handleGeneratePickList = async () => {
+    if (!selectedOrders.length) return;
+    setCreatingPickList(true);
+    try {
+      const batch = await whmsPickListBatches.create(selectedOrders.map((o) => o.id));
+      toast.success(
+        batch.type === "combined"
+          ? `Combined pick list ${batch.batchNumber} created`
+          : `Pick list ${batch.batchNumber} created`,
+      );
+      setPickListModalOpen(false);
+      setSelectedOrderIds(new Set());
+      router.push(`/warehouse-management/pick-pack/${batch.id}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to generate pick list");
+    } finally {
+      setCreatingPickList(false);
     }
   };
 
@@ -325,6 +357,20 @@ export default function WarehouseOrdersPage() {
               </button>
               <button
                 type="button"
+                onClick={() => setPickListModalOpen(true)}
+                disabled={selectedOrders.length === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 text-white text-[11px] font-bold rounded hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
+                aria-label="Generate pick list for selected orders"
+              >
+                <i className="ri-list-check-2 text-xs" aria-hidden />
+                {selectedOrders.length > 1
+                  ? `Combine & Pick List (${selectedOrders.length})`
+                  : selectedOrders.length === 1
+                    ? "Generate Pick List"
+                    : "Generate Pick List"}
+              </button>
+              <button
+                type="button"
                 onClick={() => void downloadTemplate()}
                 disabled={isDownloadingTemplate}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-[11px] font-bold rounded hover:bg-gray-50 disabled:opacity-50 transition-colors shadow-sm"
@@ -407,6 +453,8 @@ export default function WarehouseOrdersPage() {
           <WarehouseOrdersTable
             rows={rows}
             loading={loading}
+            selectedIds={selectedOrderIds}
+            onSelectionChange={setSelectedOrderIds}
             onView={(id) => setDetailId(id)}
             onDelete={handleDelete}
             onFlow={(id) => setFlowOrderId(id)}
@@ -448,6 +496,13 @@ export default function WarehouseOrdersPage() {
           onChanged={() => void fetchRows()}
         />
       )}
+      <GeneratePickListModal
+        open={pickListModalOpen}
+        orders={selectedOrders}
+        busy={creatingPickList}
+        onConfirm={() => void handleGeneratePickList()}
+        onClose={() => setPickListModalOpen(false)}
+      />
     </>
   );
 }
