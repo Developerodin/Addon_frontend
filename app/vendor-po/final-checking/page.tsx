@@ -6,8 +6,7 @@ import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import vendorProductionFlowService, {
   mergeProductionFlowPreservePopulatedRefs,
-  type VendorTransferItem,
-  VendorProductionFlow,
+  type VendorProductionFlow,
 } from "@/shared/services/vendorProductionFlowService";
 import { VendorFinalCheckingProcessDrawer } from "./components/VendorFinalCheckingProcessDrawer";
 import {
@@ -41,9 +40,6 @@ const FinalCheckingPage = () => {
     useState<VendorProductionFlow | null>(null);
   const [finalStagingPatch, setFinalStagingPatch] =
     useState<PendingFinalCheckingStagingPatch | null>(null);
-  const [finalStagingTransferItems, setFinalStagingTransferItems] = useState<
-    VendorTransferItem[]
-  >([]);
 
   const loadFlows = useCallback(async () => {
     setLoading(true);
@@ -72,7 +68,6 @@ const FinalCheckingPage = () => {
     setFinalStagingOpen(false);
     setFinalStagingFlow(null);
     setFinalStagingPatch(null);
-    setFinalStagingTransferItems([]);
     setSelectedFlow(flow);
     setIsProcessing(true);
   };
@@ -104,11 +99,9 @@ const FinalCheckingPage = () => {
     (ctx: {
       flow: VendorProductionFlow;
       patch: PendingFinalCheckingStagingPatch;
-      transferItems: VendorTransferItem[];
     }) => {
       setFinalStagingFlow(ctx.flow);
       setFinalStagingPatch(ctx.patch);
-      setFinalStagingTransferItems(ctx.transferItems);
       setIsProcessing(false);
       queueMicrotask(() => setFinalStagingOpen(true));
     },
@@ -119,7 +112,6 @@ const FinalCheckingPage = () => {
     setFinalStagingOpen(false);
     setFinalStagingFlow(null);
     setFinalStagingPatch(null);
-    setFinalStagingTransferItems([]);
   }, []);
 
   const handleContainerAccepted = useCallback(async () => {
@@ -270,7 +262,6 @@ const FinalCheckingPage = () => {
         open={finalStagingOpen}
         baselineFlow={finalStagingFlow}
         pendingPatch={finalStagingPatch}
-        transferItems={finalStagingTransferItems}
         onClose={closeFinalStagingModal}
         onFloorUpdated={mergeFinalFlowInState}
       />

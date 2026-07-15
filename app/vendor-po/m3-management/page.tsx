@@ -21,7 +21,7 @@ type M3Tab = "orders" | "flow-view" | "logs";
  * Vendor M3 Management — track M3 quantity and ledger across vendor QC floors.
  */
 export default function VendorM3ManagementPage() {
-  const [activeTab, setActiveTab] = useState<M3Tab>("flow-view");
+  const [activeTab, setActiveTab] = useState<M3Tab>("orders");
   const [rows, setRows] = useState<VendorM3FlowRow[]>([]);
   const [stats, setStats] = useState<VendorM3Statistics | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -34,6 +34,16 @@ export default function VendorM3ManagementPage() {
   const [detailSummary, setDetailSummary] = useState<VendorM3FlowSummary | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
+
+  const floorM3Totals = React.useMemo(() => {
+    let secondaryChecking = 0;
+    let finalChecking = 0;
+    for (const row of rows) {
+      secondaryChecking += row.m3Snapshot.byFloor.secondaryChecking;
+      finalChecking += row.m3Snapshot.byFloor.finalChecking;
+    }
+    return { secondaryChecking, finalChecking };
+  }, [rows]);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -97,15 +107,16 @@ export default function VendorM3ManagementPage() {
             <div>
               <h1 className="text-sm font-bold text-gray-900">Vendor M3 Management</h1>
               <p className="text-[10px] text-gray-500">
-                Track minor defects (M3) by VPO and reference — entries by floor &amp; outward ledger
+                Track minor defects (M3) per QC floor (Secondary Checking vs Final Checking) — outward ledger
               </p>
             </div>
           </header>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
             {[
               { label: "Flows", value: stats?.flowCount ?? "—", accent: "border-gray-300" },
-              { label: "M3 on hand", value: stats?.totalOnHand ?? "—", accent: "border-orange-200 bg-orange-50" },
+              { label: "SC M3", value: floorM3Totals.secondaryChecking, accent: "border-orange-200 bg-orange-50" },
+              { label: "FC M3", value: floorM3Totals.finalChecking, accent: "border-orange-200 bg-orange-50" },
               { label: "Outwarded", value: stats?.totalOutwarded ?? "—", accent: "border-orange-200 bg-orange-50" },
               { label: "Available", value: stats?.totalAvailable ?? "—", accent: "border-orange-300 bg-orange-50" },
             ].map((tile) => (

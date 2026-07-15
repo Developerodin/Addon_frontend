@@ -7,7 +7,6 @@ import vendorProductionFlowService, {
   type RepairStatus,
   type TransferredDataRow,
   type VendorProductionFlow,
-  type VendorTransferItem,
 } from "@/shared/services/vendorProductionFlowService";
 import {
   containersMasterService,
@@ -17,6 +16,7 @@ import {
 } from "@/shared/services/containersMasterService";
 import { containerRef } from "../../secondary-checking/utils/m1Staging";
 import { formatTransferredRowLabel } from "../../utils/transferredStyleRows";
+import { getVendorFinalCheckingRemaining } from "../finalCheckingRemaining";
 import { VendorStagingBatchHeader } from "../../components/VendorFlowBatchLabels";
 
 const Z_BACK = 100;
@@ -24,7 +24,7 @@ const Z_PANEL = 110;
 
 /**
  * Draft payload from the drawer for **Save & stage**. The modal sends one
- * `PATCH …/floors/finalChecking` with counts + **full** `transferredData` lines for the move
+ * `PATCH …/floors/finalChecking` with counts + **delta** `transferredData` lines for the move
  * + `existingContainerBarcode` (no separate `PATCH …/transfer`, no container accept — that is Dispatch).
  */
 export type PendingFinalCheckingStagingPatch = {
@@ -43,8 +43,6 @@ type Props = {
   open: boolean;
   baselineFlow: VendorProductionFlow | null;
   pendingPatch: PendingFinalCheckingStagingPatch | null;
-  /** Style-wise lines for `PATCH …/floors/finalChecking` `transferredData`; sum must match staged qty. */
-  transferItems: VendorTransferItem[];
   onClose: () => void;
   onFloorUpdated: (updated: VendorProductionFlow) => void;
 };
@@ -59,7 +57,6 @@ export function VendorFinalCheckingDispatchStagingModal({
   open,
   baselineFlow,
   pendingPatch,
-  transferItems,
   onClose,
   onFloorUpdated,
 }: Props) {
@@ -81,7 +78,7 @@ export function VendorFinalCheckingDispatchStagingModal({
   useEffect(() => {
     if (!open || !baselineFlow || !pendingPatch) return;
     reset();
-  }, [open, baselineFlow?.id, pendingPatch, transferItems, reset]);
+  }, [open, baselineFlow?.id, pendingPatch, reset]);
 
   const close = () => {
     reset();
@@ -136,21 +133,19 @@ export function VendorFinalCheckingDispatchStagingModal({
       toast.error("Missing container reference");
       return;
     }
-    const qty = transferItems.reduce((s, i) => s + Math.max(0, Number(i.transferred) || 0), 0);
+    const transferredData: TransferredDataRow[] = (pendingPatch.transferredData ?? []).filter(
+      (r) => (Number(r.transferred) || 0) > 0,
+    );
+    const qty = transferredData.reduce(
+      (s, r) => s + Math.max(0, Number(r.transferred) || 0),
+      0,
+    );
     if (qty <= 0) {
       toast.error("No quantity to transfer — reopen from Final QC.");
       return;
     }
     setSubmitLoading(true);
     try {
-      const transferredData: TransferredDataRow[] = transferItems
-        .filter((i) => (Number(i.transferred) || 0) > 0)
-        .map((i) => ({
-          transferred: Math.max(0, Number(i.transferred) || 0),
-          styleCode: i.styleCode?.trim(),
-          brand: i.brand?.trim(),
-        }));
-
       const sumLines = transferredData.reduce((s, r) => s + (Number(r.transferred) || 0), 0);
       if (sumLines !== qty || sumLines <= 0) {
         toast.error("Style lines must match total quantity to stage.");
@@ -189,9 +184,12 @@ export function VendorFinalCheckingDispatchStagingModal({
   if (!open || !baselineFlow || !pendingPatch) return null;
 
   const articles = scannedContainer ? getContainerArticles(scannedContainer) : [];
-  const lines = transferItems.filter((r) => (Number(r.transferred) || 0) > 0);
+  const lines = (pendingPatch.transferredData ?? []).filter(
+    (r) => (Number(r.transferred) || 0) > 0,
+  );
   const totalQty = lines.reduce((s, r) => s + (Number(r.transferred) || 0), 0);
   const fc = baselineFlow.floorQuantities.finalChecking;
+  const fcRemaining = getVendorFinalCheckingRemaining(fc);
 
   return (
     <>
@@ -263,7 +261,7 @@ export function VendorFinalCheckingDispatchStagingModal({
               <span>
                 Remaining:{" "}
                 <strong className="text-amber-900">
-                  {(fc.remaining ?? 0).toLocaleString()}
+                  {fcRemaining.toLocaleString()}
                 </strong>
               </span>
               <span>

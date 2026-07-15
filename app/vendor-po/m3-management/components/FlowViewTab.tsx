@@ -14,7 +14,7 @@ export interface FlowViewTabProps {
 }
 
 /**
- * Flow-wise vendor M3 table with combined totals (SC + FC).
+ * Flow-wise vendor M3 table with per-floor SC / FC columns (not merged into one bucket).
  */
 export default function FlowViewTab({
   rows,
@@ -74,30 +74,34 @@ export default function FlowViewTab({
       </div>
 
       <div className="border border-gray-300 rounded overflow-hidden overflow-x-auto">
-        <table className="w-full border-collapse border border-gray-300 text-[10px] table-fixed min-w-[640px]">
+        <table className="w-full border-collapse border border-gray-300 text-[10px] table-fixed min-w-[820px]">
           <thead className="bg-gray-100">
             <tr>
               <th className="border border-gray-300 px-1 py-1 text-left w-[120px]">VPO</th>
               <th className="border border-gray-300 px-1 py-1 text-left w-[120px]">Reference</th>
               <th className="border border-gray-300 px-1 py-1 text-left w-[110px]">Vendor Code</th>
-              <th className="border border-gray-300 px-1 py-1 text-right bg-orange-50 text-orange-800 w-[90px]">
-                Combined M3
+              <th className="border border-gray-300 px-1 py-1 text-right bg-orange-50 text-orange-800 w-[72px]">
+                SC M3
               </th>
-              <th className="border border-gray-300 px-1 py-1 text-right w-[80px]">Outward</th>
-              <th className="border border-gray-300 px-1 py-1 text-right w-[80px]">Available</th>
+              <th className="border border-gray-300 px-1 py-1 text-right bg-orange-50 text-orange-800 w-[72px]">
+                FC M3
+              </th>
+              <th className="border border-gray-300 px-1 py-1 text-right w-[72px]">On hand</th>
+              <th className="border border-gray-300 px-1 py-1 text-right w-[72px]">Outward</th>
+              <th className="border border-gray-300 px-1 py-1 text-right w-[72px]">Available</th>
               <th className="border border-gray-300 px-1 py-1 text-center w-[100px]">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white">
             {isLoading ? (
               <tr>
-                <td colSpan={7} className="border border-gray-300 px-2 py-6 text-center text-gray-500">
+                <td colSpan={9} className="border border-gray-300 px-2 py-6 text-center text-gray-500">
                   Loading…
                 </td>
               </tr>
             ) : paged.length === 0 ? (
               <tr>
-                <td colSpan={7} className="border border-gray-300 px-2 py-6 text-center text-gray-500">
+                <td colSpan={9} className="border border-gray-300 px-2 py-6 text-center text-gray-500">
                   No flows with M3 activity
                 </td>
               </tr>
@@ -111,8 +115,12 @@ export default function FlowViewTab({
                     <td className="border border-gray-300 px-1 py-1 font-semibold">{row.referenceCode || "—"}</td>
                     <td className="border border-gray-300 px-1 py-1">{row.productVendorCode || "—"}</td>
                     <td className="border border-gray-300 px-1 py-1 text-right bg-orange-50/50 font-bold text-orange-900">
-                      {s.onHand}
+                      {s.byFloor.secondaryChecking}
                     </td>
+                    <td className="border border-gray-300 px-1 py-1 text-right bg-orange-50/50 font-bold text-orange-900">
+                      {s.byFloor.finalChecking}
+                    </td>
+                    <td className="border border-gray-300 px-1 py-1 text-right">{s.onHand}</td>
                     <td className="border border-gray-300 px-1 py-1 text-right text-orange-700">{s.outwardTotal}</td>
                     <td className="border border-gray-300 px-1 py-1 text-right text-orange-800 font-bold">{s.availableForOutward}</td>
                     <td className="border border-gray-300 px-1 py-1 text-center">
@@ -171,7 +179,7 @@ export default function FlowViewTab({
       )}
 
       <p className="text-[10px] text-gray-500 mt-2">
-        Combined M3 = sum across Secondary Checking and Final Checking. Use VPO tab for per-floor breakdown.
+        SC M3 and FC M3 are tracked per floor. On hand = SC + FC (ledger total for outward only).
       </p>
     </div>
   );

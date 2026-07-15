@@ -61,7 +61,7 @@ export default function M3FlowDetailDrawer({
                     </tr>
                   ))}
                   <tr className="font-bold bg-gray-50">
-                    <td className="border border-gray-300 px-2 py-1">On hand</td>
+                    <td className="border border-gray-300 px-2 py-1">Total on hand (outward ledger)</td>
                     <td className="border border-gray-300 px-2 py-1 text-right">{snap?.onHand ?? 0}</td>
                   </tr>
                   <tr>

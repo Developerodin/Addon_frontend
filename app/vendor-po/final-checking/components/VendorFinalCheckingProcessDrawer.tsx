@@ -8,13 +8,13 @@ import { VendorFloorBatchSummary } from "../../components/VendorFloorBatchSummar
 import vendorProductionFlowService, {
   type FinalCheckingFloorQuantity,
   type VendorProductionFlow,
-  type VendorTransferItem,
 } from "@/shared/services/vendorProductionFlowService";
 import { getStyleCodesByVendorCode, type StyleCodeByVendorRow } from "@/shared/services/productService";
 import { resolveVendorCodeForStyleLookup } from "../../branding/brandingFloorUtils";
 import {
   styleOptionId,
-  toVendorTransferItems,
+  sumDeltaTransferredRows,
+  sumRecordedTransferredRows,
   type TransferredStyleRowDraft,
 } from "../../utils/transferredStyleRows";
 import { FinalCheckingInboundReceived } from "./FinalCheckingInboundReceived";
@@ -30,6 +30,7 @@ import {
   buildFinalCheckingTransferredDeltaDraft,
   finalCheckingTransferredBaselineDraft,
 } from "../finalCheckingTransferredDelta";
+import { getVendorFinalCheckingRemaining } from "../finalCheckingRemaining";
 import type { PendingFinalCheckingStagingPatch } from "./VendorFinalCheckingDispatchStagingModal";
 
 function m1AvailableToTransfer(fc: FinalCheckingFloorQuantity): number {
@@ -45,8 +46,6 @@ type Props = {
   onStagingRequested: (ctx: {
     flow: VendorProductionFlow;
     patch: PendingFinalCheckingStagingPatch;
-    /** Resolved style codes + brands for `PATCH …/floors/finalChecking` `transferredData`. */
-    transferItems: VendorTransferItem[];
   }) => void;
 };
 
@@ -76,7 +75,7 @@ export function VendorFinalCheckingProcessDrawer({
 
   const finalLive = flow?.floorQuantities.finalChecking;
   const receivedQty = finalLive?.received ?? 0;
-  const remainingQty = finalLive?.remaining ?? 0;
+  const remainingQty = getVendorFinalCheckingRemaining(finalLive);
   const receivedData = finalLive?.receivedData ?? [];
   const inboundBrandAggregates = useMemo(
     () => aggregateInboundByBrand(receivedData, flow),
@@ -84,11 +83,10 @@ export function VendorFinalCheckingProcessDrawer({
   );
   /** Pool for M1 style rows: cannot exceed QC received from containers. */
   const transferCap = Math.max(0, receivedQty);
-  const totalTransferred = useMemo(
-    () => rows.reduce((sum, r) => sum + Math.max(0, Number(r.transferred) || 0), 0),
-    [rows],
-  );
-  const m1Quantity = totalTransferred;
+  const recordedM1Total = useMemo(() => sumRecordedTransferredRows(rows), [rows]);
+  const deltaM1Total = useMemo(() => sumDeltaTransferredRows(rows), [rows]);
+  /** Projected line total after this save (recorded + new editable rows). */
+  const projectedM1Total = recordedM1Total + deltaM1Total;
 
   const m1Avail = useMemo(() => (finalLive ? m1AvailableToTransfer(finalLive) : 0), [finalLive]);
 
@@ -196,7 +194,8 @@ export function VendorFinalCheckingProcessDrawer({
     const fcPersist = f.floorQuantities.finalChecking;
     const delta = buildFinalCheckingTransferredDeltaDraft(rows, transferredBaselineRef.current);
     const base: PendingFinalCheckingStagingPatch = {
-      m1Quantity: Math.max(0, Number(m1Quantity) || 0),
+      /** Server merges adds — send only the new qty this session, not recorded lines. */
+      m1Quantity: Math.max(0, Number(deltaM1Total) || 0),
       m2Quantity: Math.max(0, Number(m2Quantity) || 0),
       m3Quantity: Math.max(0, Number(m3Quantity) || 0),
       m4Quantity: Math.max(0, Number(m4Quantity) || 0),
@@ -266,22 +265,25 @@ export function VendorFinalCheckingProcessDrawer({
       toast.error(inboundCheck.message);
       return;
     }
-    if (totalTransferred > transferCap) {
+    if (projectedM1Total > transferCap) {
       toast.error(
         `M1 row total cannot exceed inbound received (${transferCap.toLocaleString()}).`,
       );
       return;
     }
-    const items = toVendorTransferItems(rows, styleOptions);
-    const sum = items.reduce((s, i) => s + i.transferred, 0);
-    if (sum <= 0) {
+    const patch = buildFloorPatchBody(flow);
+    const deltaSum =
+      patch.transferredData?.reduce(
+        (s, r) => s + Math.max(0, Number(r.transferred) || 0),
+        0,
+      ) ?? 0;
+    if (deltaSum <= 0) {
       toast.error("Enter M1 style line quantities > 0 before staging on a container.");
       return;
     }
     onStagingRequested({
       flow,
-      patch: buildFloorPatchBody(flow),
-      transferItems: items,
+      patch,
     });
   };
 
@@ -334,10 +336,16 @@ export function VendorFinalCheckingProcessDrawer({
               <>
                 Received: <strong>{receivedQty.toLocaleString()}</strong> · Remaining:{" "}
                 <strong>{remainingQty.toLocaleString()}</strong> · M1 cap:{" "}
-                <strong className="text-purple-700">{transferCap.toLocaleString()}</strong> (received) · M1 row sum:{" "}
-                <strong className={totalTransferred > transferCap ? "text-red-600" : "text-emerald-700"}>
-                  {totalTransferred.toLocaleString()}
+                <strong className="text-purple-700">{transferCap.toLocaleString()}</strong> (received) · M1 projected:{" "}
+                <strong className={projectedM1Total > transferCap ? "text-red-600" : "text-emerald-700"}>
+                  {projectedM1Total.toLocaleString()}
                 </strong>
+                {deltaM1Total > 0 ? (
+                  <>
+                    {" "}
+                    (+<strong>{deltaM1Total.toLocaleString()}</strong> this session)
+                  </>
+                ) : null}
               </>
             }
           />
@@ -476,13 +484,13 @@ export function VendorFinalCheckingProcessDrawer({
             className={CRM.btnSecondary}
             disabled={
               saving ||
-              totalTransferred > transferCap ||
-              totalTransferred <= 0
+              projectedM1Total > transferCap ||
+              deltaM1Total <= 0
             }
             title={
-              totalTransferred > transferCap
+              projectedM1Total > transferCap
                 ? "M1 row total cannot exceed inbound received"
-                : totalTransferred <= 0
+                : deltaM1Total <= 0
                   ? "Only needed to transfer M1 forward — enter M1 style quantities first"
                   : "Transfer M1 to Dispatch (asks for a container)"
             }

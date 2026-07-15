@@ -51,7 +51,14 @@ export default function M3OutwardDrawer({
             <p><span className="font-semibold">VPO:</span> {row.vpoNumber || "—"}</p>
             <p><span className="font-semibold">Reference:</span> {row.referenceCode || "—"}</p>
             <p>
-              <span className="font-semibold">Available:</span>{" "}
+              <span className="font-semibold">SC M3:</span>{" "}
+              <span className="text-orange-800 font-bold">{row.m3Snapshot.byFloor.secondaryChecking}</span>
+              {" · "}
+              <span className="font-semibold">FC M3:</span>{" "}
+              <span className="text-orange-800 font-bold">{row.m3Snapshot.byFloor.finalChecking}</span>
+            </p>
+            <p>
+              <span className="font-semibold">Available to outward:</span>{" "}
               <span className="text-orange-800 font-bold">{maxQty}</span>
             </p>
           </div>

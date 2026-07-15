@@ -116,6 +116,55 @@ export function VendorSecondaryCheckingUpcomingTab({
 
   const boxId = (box: VendorBox) => box.id || box._id || box.boxId || "";
 
+  /** Resolve product name from a vendor box row. */
+  const resolveProductName = (box: VendorBox): string =>
+    box.productName ||
+    (typeof box.productId === "object"
+      ? (box.productId as { name?: string })?.name
+      : undefined) ||
+    "";
+
+  /** Resolve vendor code from a vendor box row. */
+  const resolveVendorCode = (box: VendorBox): string =>
+    (typeof box.productId === "object"
+      ? (box.productId as { vendorCode?: string })?.vendorCode?.trim()
+      : undefined) || "no vendor code";
+
+  /** Export loaded upcoming boxes as CSV (Excel-compatible). */
+  const handleExportExcel = () => {
+    if (boxes.length === 0) return;
+    const header = [
+      "Box ID",
+      "Barcode",
+      "VPO",
+      "Product",
+      "Vendor Code",
+      "Lot",
+      "Units",
+      "Created",
+    ];
+    const lines = boxes.map((box) => [
+      box.boxId || "",
+      box.barcode || "",
+      box.vpoNumber || "",
+      resolveProductName(box),
+      resolveVendorCode(box),
+      box.lotNumber || "",
+      String(box.numberOfUnits ?? 0),
+      box.createdAt ? new Date(box.createdAt).toLocaleDateString() : "",
+    ]);
+    const csv = [header, ...lines]
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "vendor_secondary_checking_upcoming_boxes.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <>
       <div className="p-[10px] flex flex-wrap items-center justify-between gap-3 border-b border-gray-100">
@@ -189,6 +238,18 @@ export function VendorSecondaryCheckingUpcomingTab({
           >
             <i className="ri-refresh-line text-xs" aria-hidden="true" />
             Refresh
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={boxes.length === 0}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-gray-300 text-[10px] font-bold rounded hover:bg-gray-50 disabled:opacity-50"
+            title="Download loaded rows as CSV"
+            aria-label="Export upcoming boxes to Excel"
+          >
+            <i className="ri-file-excel-2-line text-xs text-emerald-600" aria-hidden="true" />
+            Download Excel
           </button>
         </div>
       </div>

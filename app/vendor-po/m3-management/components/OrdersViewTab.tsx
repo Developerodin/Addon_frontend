@@ -197,7 +197,7 @@ export default function OrdersViewTab({
       </div>
 
       <p className="text-[10px] text-gray-500 mt-2">
-        M3 is tracked on Secondary Checking and Final Checking only. Click a VPO to expand per-reference breakdown.
+        SC M3 and FC M3 are separate floor buckets — not merged. On hand = SC + FC for outward ledger. Click a VPO to expand.
       </p>
     </div>
   );

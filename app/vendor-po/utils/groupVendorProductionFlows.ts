@@ -5,6 +5,7 @@ import type {
   VendorProductionFlow,
 } from "@/shared/services/vendorProductionFlowService";
 import { getDispatchTransferableRemaining } from "../dispatch/dispatchTransferUtils";
+import { getVendorFinalCheckingRemaining } from "../final-checking/finalCheckingRemaining";
 
 /** Flat article row with order context. */
 export interface VendorFlowArticleRow {
@@ -320,7 +321,7 @@ export function isActiveFinalCheckingFlow(flow: VendorProductionFlow): boolean {
   if (!fc) return false;
   return (
     (fc.received ?? 0) > 0 ||
-    (fc.remaining ?? 0) > 0 ||
+    getVendorFinalCheckingRemaining(fc) > 0 ||
     (fc.pendingFromBoxes ?? 0) > 0
   );
 }
@@ -341,7 +342,7 @@ export function filterActiveFinalCheckingFlows(
  */
 export function hasFinalCheckingWorkRemaining(flow: VendorProductionFlow): boolean {
   const fc = flow.floorQuantities?.finalChecking;
-  return (fc?.remaining ?? 0) > 0 || (fc?.pendingFromBoxes ?? 0) > 0;
+  return getVendorFinalCheckingRemaining(fc) > 0 || (fc?.pendingFromBoxes ?? 0) > 0;
 }
 
 /**
@@ -404,7 +405,7 @@ export function sumFinalCheckingQuantities(
       repairStatus: "NOT_REQUIRED",
     };
     totals.received += fc.received ?? 0;
-    totals.remaining += fc.remaining ?? 0;
+    totals.remaining += getVendorFinalCheckingRemaining(fc);
     totals.pendingFromBoxes += fc.pendingFromBoxes ?? 0;
     totals.m1 += fc.m1Quantity ?? 0;
     totals.m2 += fc.m2Quantity ?? 0;

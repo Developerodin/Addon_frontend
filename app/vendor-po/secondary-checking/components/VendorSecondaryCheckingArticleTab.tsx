@@ -11,6 +11,30 @@ import {
 import { resolveLotExpectedQty } from "../utils/resolveScReconciliation";
 import { VendorSecondaryCheckingQtyBadges } from "./VendorSecondaryCheckingQtyBadges";
 
+/**
+ * Escape a cell value for CSV export.
+ * @param value - Raw cell value
+ */
+function csvCell(value: string | number): string {
+  return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+/**
+ * Trigger a CSV download in the browser (Excel-compatible).
+ * @param filename - Download filename
+ * @param rows - CSV rows including header
+ */
+function downloadCsv(filename: string, rows: (string | number)[][]): void {
+  const csv = rows.map((r) => r.map(csvCell).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export type VendorSecondaryCheckingArticleTabProps = {
   flows: VendorProductionFlow[];
   loading?: boolean;
@@ -64,6 +88,50 @@ export function VendorSecondaryCheckingArticleTab({
     return articleRows.slice(start, start + itemsPerPage);
   }, [articleRows, currentPage, itemsPerPage]);
 
+  /** Export filtered article rows as CSV (Excel-compatible). */
+  const handleExportExcel = () => {
+    if (articleRows.length === 0) return;
+    const header = [
+      "Product",
+      "VPO",
+      "Vendor",
+      "Vendor Code",
+      "Ref / Lot",
+      "Batch From Boxes",
+      "Lot Expected",
+      "Boxes Not Scanned",
+      "Scan Accepted",
+      "Unclassified",
+      "M1",
+      "M2",
+      "M3",
+      "VM4",
+      "Status",
+    ];
+    const lines = articleRows.map((row) => {
+      const sc = row.flow.floorQuantities.secondaryChecking;
+      const lotExpected = resolveLotExpectedQty(row.flow);
+      return [
+        row.productName,
+        row.vpoNumber,
+        row.vendorName,
+        row.vendorCode,
+        row.flow.referenceCode || "",
+        String(row.flow.plannedQuantity ?? 0),
+        lotExpected > 0 ? String(lotExpected) : "",
+        String(sc.pendingFromBoxes ?? 0),
+        String(sc.received ?? 0),
+        String(sc.remaining ?? 0),
+        String(sc.m1Quantity ?? 0),
+        String(sc.m2Quantity ?? 0),
+        String(sc.m3Quantity ?? 0),
+        String(sc.vm4Quantity ?? sc.m4Quantity ?? 0),
+        sc.completed > 0 ? "Completed" : "Pending",
+      ];
+    });
+    downloadCsv("vendor_secondary_checking_articles.csv", [header, ...lines]);
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
@@ -110,6 +178,17 @@ export function VendorSecondaryCheckingArticleTab({
             <option value={25}>25</option>
             <option value={50}>50</option>
           </select>
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={articleRows.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 disabled:opacity-50"
+            title="Download filtered rows as CSV"
+            aria-label="Export secondary checking articles to Excel"
+          >
+            <i className="ri-file-excel-2-line text-xs text-emerald-600" aria-hidden="true" />
+            Download Excel
+          </button>
         </div>
       </div>
 

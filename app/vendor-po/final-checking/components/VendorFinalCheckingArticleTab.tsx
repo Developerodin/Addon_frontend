@@ -8,6 +8,7 @@ import {
   getFlowId,
 } from "../../utils/groupVendorProductionFlows";
 import { aggregateInboundByBrand, styleBrandKey } from "../finalCheckingInboundAggregates";
+import { getVendorFinalCheckingRemaining } from "../finalCheckingRemaining";
 import { brandLabelForStyleId } from "../../utils/transferredStyleRows";
 
 export type VendorFinalCheckingArticleTabProps = {
@@ -84,6 +85,7 @@ export function VendorFinalCheckingArticleTab({
     ];
     const lines = articleRows.map((row) => {
       const fc = row.flow.floorQuantities.finalChecking;
+      const remaining = getVendorFinalCheckingRemaining(fc);
       return [
         row.flow.referenceCode || "",
         row.productName,
@@ -92,7 +94,7 @@ export function VendorFinalCheckingArticleTab({
         row.vendorCode,
         String(fc.received ?? 0),
         String(fc.pendingFromBoxes ?? 0),
-        String(fc.remaining ?? 0),
+        String(remaining),
         String(fc.m1Quantity ?? 0),
         String(fc.m2Quantity ?? 0),
         String(fc.m3Quantity ?? 0),
@@ -220,6 +222,7 @@ export function VendorFinalCheckingArticleTab({
             ) : (
               paginatedRows.map((row) => {
                 const fc = row.flow.floorQuantities.finalChecking;
+                const remaining = getVendorFinalCheckingRemaining(fc);
                 return (
                   <tr
                     key={getFlowId(row.flow)}
@@ -260,10 +263,10 @@ export function VendorFinalCheckingArticleTab({
                     <td className="px-1.5 py-2.5 text-right font-bold text-[12px] border border-gray-200">
                       <span
                         className={
-                          (fc.remaining ?? 0) > 0 ? "text-amber-800" : "text-gray-400 font-medium"
+                          remaining > 0 ? "text-amber-800" : "text-gray-400 font-medium"
                         }
                       >
-                        {(fc.remaining ?? 0).toLocaleString()}
+                        {remaining.toLocaleString()}
                       </span>
                     </td>
                     <td className="px-1.5 py-2.5 border border-gray-200">

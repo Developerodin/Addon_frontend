@@ -207,6 +207,7 @@ type FlowWithTracking = VendorProductionFlow & {
 
 /**
  * Compute M3 snapshot from a vendor production flow document.
+ * `onHand` sums SC + FC for outward ledger only — display per-floor values separately.
  * @param flow - Vendor production flow
  */
 export function computeVendorM3Snapshot(flow: FlowWithTracking): VendorM3Snapshot {

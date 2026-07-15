@@ -10,6 +10,7 @@ import {
   groupFlowsByOrder,
   sumFinalCheckingQuantities,
 } from "../../utils/groupVendorProductionFlows";
+import { getVendorFinalCheckingRemaining } from "../finalCheckingRemaining";
 
 export type VendorFinalCheckingOrderTabProps = {
   flows: VendorProductionFlow[];
@@ -207,6 +208,7 @@ export function VendorFinalCheckingOrderTab({
                         <tbody>
                           {group.flows.map((flow) => {
                             const fc = flow.floorQuantities.finalChecking;
+                            const remaining = getVendorFinalCheckingRemaining(fc);
                             const productName =
                               typeof flow.product === "object"
                                 ? flow.product?.name
@@ -242,12 +244,12 @@ export function VendorFinalCheckingOrderTab({
                                 <td className="px-1.5 py-2.5 text-right font-bold text-[12px] border border-gray-200">
                                   <span
                                     className={
-                                      (fc.remaining ?? 0) > 0
+                                      remaining > 0
                                         ? "text-amber-800"
                                         : "text-gray-400 font-medium"
                                     }
                                   >
-                                    {(fc.remaining ?? 0).toLocaleString()}
+                                    {remaining.toLocaleString()}
                                   </span>
                                 </td>
                                 <td className="px-1.5 py-2.5 border border-gray-200">

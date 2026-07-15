@@ -406,6 +406,14 @@ export function getFinalCheckingRowQtyCap(
   const inboundByBrand = inboundCapByBrandKey(aggregates);
   const brandCap = inboundByBrand.get(brandKey) ?? 0;
 
+  const recordedOnBrand = rows.reduce((sum, r) => {
+    if (!r.fromServer) return sum;
+    const rsid = r.styleCodeId.trim();
+    if (!rsid) return sum;
+    if (styleBrandKey(rsid, r.brand) !== brandKey) return sum;
+    return sum + Math.max(0, Number(r.transferred) || 0);
+  }, 0);
+
   const otherOnBrand = rows.reduce((sum, r, i) => {
     if (i === rowIndex || r.fromServer) return sum;
     const rsid = r.styleCodeId.trim();
@@ -414,7 +422,7 @@ export function getFinalCheckingRowQtyCap(
     return sum + Math.max(0, Number(r.transferred) || 0);
   }, 0);
 
-  return Math.max(0, brandCap - otherOnBrand);
+  return Math.max(0, brandCap - recordedOnBrand - otherOnBrand);
 }
 
 /**
