@@ -18,7 +18,7 @@ import { VendorStagingBatchHeader } from "../../components/VendorFlowBatchLabels
 const Z_BACK = 100;
 const Z_PANEL = 110;
 
-/** Payload for PATCH .../floors/secondaryChecking (absolute qty fields user set, optional repair / auto-transfer). */
+/** Payload for PATCH .../floors/secondaryChecking (incremental qty deltas + optional repair / auto-transfer). */
 export type PendingSecondaryCheckingPatch = SecondaryCheckingFloorPatchBody;
 
 type Step = "form" | "success";
@@ -27,7 +27,7 @@ type Props = {
   open: boolean;
   baselineFlow: VendorProductionFlow | null;
   pendingPatch: PendingSecondaryCheckingPatch | null;
-  /** Resolved totals after this save (for display); pendingPatch carries entered absolutes + repair. */
+  /** Resolved totals after this save (saved + deltas); pendingPatch carries incremental qty + repair. */
   displayTotals: { m1: number; m2: number; m3: number; vm4: number } | null;
   /** When true, Save requires an empty container and runs transfer after PATCH. */
   requireContainerScan: boolean;

@@ -2,9 +2,22 @@
 
 import React, { useMemo } from "react";
 import { CRM } from "../../vendor-list/crmUiClasses";
-import type { ReceivedDataRow } from "@/shared/services/vendorProductionFlowService";
+import type { ReceivedDataRow, VendorProductionFlow } from "@/shared/services/vendorProductionFlowService";
 import type { StyleCodeByVendorRow } from "@/shared/services/productService";
 import { brandLabelForStyleId } from "../../utils/transferredStyleRows";
+import { enrichReceivedDataForDisplay } from "../finalCheckingInboundAggregates";
+
+type InboundChannel = "Heat Transfer" | "Embroidery" | "Unspecified";
+
+/**
+ * Resolve inbound channel label for a received line.
+ * @param row - Received data line from API
+ */
+function inboundChannel(row: ReceivedDataRow): InboundChannel {
+  const bt = String(row.brandingType ?? "").trim();
+  if (bt === "Heat Transfer" || bt === "Embroidery") return bt;
+  return "Unspecified";
+}
 
 /**
  * Human label for inbound received row — brand only.
@@ -26,23 +39,35 @@ type Props = {
   receivedData: ReceivedDataRow[];
   styleOptions: StyleCodeByVendorRow[];
   sectionIndex: string;
+  /** Flow context for legacy HT inference on receivedData without brandingType. */
+  flow?: VendorProductionFlow | null;
 };
 
-/** Read-only list of `receivedData` lines from branding (API: group by style id for labels). */
-export function FinalCheckingInboundReceived({ receivedData, styleOptions, sectionIndex }: Props) {
+/** Read-only inbound summary grouped by branding channel (HT vs Embroidery). */
+export function FinalCheckingInboundReceived({ receivedData, styleOptions, sectionIndex, flow }: Props) {
   if (!receivedData.length) return null;
 
-  const summary = useMemo(() => {
-    const byKey = new Map<
-      string,
-      { key: string; styleCodeId: string; brand: string; lines: number; transferredSum: number }
-    >();
+  const { byChannel, totalQty } = useMemo(() => {
+    const enriched = enrichReceivedDataForDisplay(receivedData, flow);
+    type RowAgg = {
+      key: string;
+      styleCodeId: string;
+      brand: string;
+      channel: InboundChannel;
+      lines: number;
+      transferredSum: number;
+      label: string;
+    };
 
-    for (const row of receivedData) {
+    const map = new Map<string, RowAgg>();
+
+    for (const row of enriched) {
       const styleCodeId = String(row.styleCode ?? "").trim();
-      const key = styleCodeId || "__unassigned__";
-      const existing = byKey.get(key);
+      const brand = String(row.brand ?? "").trim();
+      const channel = inboundChannel(row);
+      const key = `${styleCodeId}\u0000${brand}\u0000${channel}`;
       const transferred = Math.max(0, Number(row.transferred) || 0);
+      const existing = map.get(key);
 
       if (existing) {
         existing.lines += 1;
@@ -50,38 +75,66 @@ export function FinalCheckingInboundReceived({ receivedData, styleOptions, secti
         continue;
       }
 
-      byKey.set(key, {
+      map.set(key, {
         key,
         styleCodeId,
-        brand: String(row.brand ?? "").trim(),
+        brand,
+        channel,
         lines: 1,
         transferredSum: transferred,
+        label: labelReceivedRow(row, styleOptions),
       });
     }
 
-    const rows = Array.from(byKey.values()).map((r) => ({
-      ...r,
-      label: labelReceivedRow(
-        { styleCode: r.styleCodeId, brand: r.brand },
-        styleOptions,
-      ),
-    }));
-
-    rows.sort((a, b) => {
-      if (a.styleCodeId === "" && b.styleCodeId !== "") return 1;
-      if (a.styleCodeId !== "" && b.styleCodeId === "") return -1;
+    const rows = Array.from(map.values()).sort((a, b) => {
+      const channelOrder = (c: InboundChannel) =>
+        c === "Heat Transfer" ? 0 : c === "Embroidery" ? 1 : 2;
+      const d = channelOrder(a.channel) - channelOrder(b.channel);
+      if (d !== 0) return d;
       return b.transferredSum - a.transferredSum;
     });
 
-    return rows;
-  }, [receivedData, styleOptions]);
+    const channelTotals = {
+      ht: rows
+        .filter((r) => r.channel === "Heat Transfer")
+        .reduce((s, r) => s + r.transferredSum, 0),
+      emb: rows
+        .filter((r) => r.channel === "Embroidery")
+        .reduce((s, r) => s + r.transferredSum, 0),
+      other: rows
+        .filter((r) => r.channel === "Unspecified")
+        .reduce((s, r) => s + r.transferredSum, 0),
+    };
+
+    return {
+      byChannel: { rows, channelTotals },
+      totalQty: rows.reduce((s, r) => s + r.transferredSum, 0),
+    };
+  }, [receivedData, styleOptions, flow]);
 
   return (
     <div className={CRM.drawerSection}>
       <div className={CRM.drawerSectionHead}>
-        {sectionIndex}. Inbound from branding (receivedData)
+        {sectionIndex}. Inbound received (by channel)
       </div>
       <div className="p-3 space-y-3">
+        <div className="flex flex-wrap gap-2 text-[10px] font-bold">
+          <span className="px-2 py-1 rounded bg-sky-50 text-sky-800 border border-sky-100">
+            Heat Transfer: {byChannel.channelTotals.ht.toLocaleString()}
+          </span>
+          <span className="px-2 py-1 rounded bg-violet-50 text-violet-800 border border-violet-100">
+            Embroidery: {byChannel.channelTotals.emb.toLocaleString()}
+          </span>
+          {byChannel.channelTotals.other > 0 ? (
+            <span className="px-2 py-1 rounded bg-gray-50 text-gray-600 border border-gray-100">
+              Unspecified: {byChannel.channelTotals.other.toLocaleString()}
+            </span>
+          ) : null}
+          <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-800 border border-emerald-100">
+            Total: {totalQty.toLocaleString()}
+          </span>
+        </div>
+
         <div className="border border-gray-100 rounded bg-gray-50/60 overflow-hidden">
           <div className="px-2 py-1.5 text-[10px] font-bold text-gray-700 bg-white border-b border-gray-100">
             Brand-wise inbound summary
@@ -90,14 +143,16 @@ export function FinalCheckingInboundReceived({ receivedData, styleOptions, secti
             <thead>
               <tr className="text-left text-[10px] uppercase text-gray-500 border-b border-gray-100">
                 <th className="px-2 py-1.5">Brand</th>
+                <th className="px-2 py-1.5">Channel</th>
                 <th className="px-2 py-1.5 text-right">Qty</th>
                 <th className="px-2 py-1.5 text-right">Lines</th>
               </tr>
             </thead>
             <tbody>
-              {summary.map((r) => (
+              {byChannel.rows.map((r) => (
                 <tr key={r.key} className="border-b border-gray-50 last:border-0">
                   <td className="px-2 py-1.5 font-medium text-gray-800">{r.label}</td>
+                  <td className="px-2 py-1.5 text-gray-600">{r.channel}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums font-bold">
                     {r.transferredSum.toLocaleString()}
                   </td>

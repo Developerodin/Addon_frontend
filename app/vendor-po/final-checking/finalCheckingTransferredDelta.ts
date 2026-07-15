@@ -1,6 +1,7 @@
 import type {
   FinalCheckingFloorQuantity,
   TransferredDataRow,
+  VendorProductionFlow,
 } from "@/shared/services/vendorProductionFlowService";
 import {
   initialFinalCheckingStyleRows,
@@ -9,8 +10,8 @@ import {
 } from "./finalCheckingInboundAggregates";
 import type { TransferredStyleRowDraft } from "../utils/transferredStyleRows";
 
-/** Per (styleCodeId, brand) totals using draft row keys — stable across style catalog load. */
-function draftQtyByKey(rows: TransferredStyleRowDraft[]): Map<string, number> {
+/** Per (styleCodeId, brand) totals — stable across style catalog load. */
+function draftQtyByBrandKey(rows: TransferredStyleRowDraft[]): Map<string, number> {
   const m = new Map<string, number>();
   for (const r of rows) {
     const sid = r.styleCodeId.trim();
@@ -24,18 +25,19 @@ function draftQtyByKey(rows: TransferredStyleRowDraft[]): Map<string, number> {
 /** Snapshot when the drawer opens — do not re-send unchanged `transferredData` (server merges adds). */
 export function finalCheckingTransferredBaselineDraft(
   fc: FinalCheckingFloorQuantity,
+  flow?: VendorProductionFlow | null,
 ): Map<string, number> {
-  return draftQtyByKey(initialFinalCheckingStyleRows(fc));
+  return draftQtyByBrandKey(initialFinalCheckingStyleRows(fc, flow));
 }
 
 /**
- * Delta lines for `PATCH .../floors/finalChecking`. Only changed buckets vs drawer-open snapshot.
+ * Delta lines for `PATCH .../floors/finalChecking`. Only changed brand buckets vs drawer-open snapshot.
  */
 export function buildFinalCheckingTransferredDeltaDraft(
   rows: TransferredStyleRowDraft[],
   baseline: Map<string, number>,
 ): TransferredDataRow[] {
-  const current = draftQtyByKey(rows);
+  const current = draftQtyByBrandKey(rows);
   const keys = new Set<string>([
     ...Array.from(current.keys()),
     ...Array.from(baseline.keys()),
@@ -47,7 +49,11 @@ export function buildFinalCheckingTransferredDeltaDraft(
     if (d === 0) return;
     const { styleCode, brand } = parseStyleBrandKey(k);
     if (!styleCode) return;
-    out.push({ transferred: d, styleCode, brand });
+    out.push({
+      transferred: d,
+      styleCode,
+      brand,
+    });
   });
 
   return out;

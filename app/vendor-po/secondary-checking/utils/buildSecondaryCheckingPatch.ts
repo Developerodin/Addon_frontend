@@ -5,11 +5,11 @@ import type {
 import type { VendorSecondaryCheckingProcessData } from "../components/VendorSecondaryCheckingProcessDrawer";
 
 /**
- * Backend PATCH .../floors/secondaryChecking with `setSplitTotals: true`: send **absolute**
- * m1/m2/m3/vm4 totals. Blank fields in the drawer = keep current server value.
+ * Backend PATCH .../floors/secondaryChecking without `setSplitTotals`: `m1Quantity` etc. are
+ * converted to `*Delta` and **added** to stored totals. Send only fields the operator entered
+ * for this container/session.
  */
 export type SecondaryCheckingFloorPatchBody = {
-  setSplitTotals?: boolean;
   m1Quantity?: number;
   m2Quantity?: number;
   m3Quantity?: number;
@@ -36,12 +36,15 @@ function numOr0(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-/** User-entered total from the drawer; blank / NaN → keep `current`. */
-function totalFromForm(raw: unknown, current: number): number {
-  if (raw === undefined || raw === null) return current;
-  if (typeof raw === "number" && !Number.isFinite(raw)) return current;
+/**
+ * User-entered qty for this container entry; blank / invalid → not sent.
+ * @param raw - Form field value
+ */
+function deltaFromForm(raw: unknown): number | null {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw === "number" && !Number.isFinite(raw)) return null;
   const n = Math.round(Number(raw));
-  if (!Number.isFinite(n) || n < 0) return current;
+  if (!Number.isFinite(n) || n < 0) return null;
   return n;
 }
 
@@ -49,6 +52,10 @@ function savedVm4(sc: QualityFloorQuantity): number {
   return Math.max(0, Math.round(numOr0(sc.vm4Quantity ?? (sc as { m4Quantity?: number }).m4Quantity)));
 }
 
+/**
+ * Builds an incremental PATCH body for secondary checking. Entered M1–VM4 values accumulate
+ * across containers; only touched fields are sent.
+ */
 export function buildSecondaryCheckingFloorPatch(
   currentSc: QualityFloorQuantity,
   processingData: VendorSecondaryCheckingProcessData,
@@ -62,22 +69,10 @@ export function buildSecondaryCheckingFloorPatch(
   const currentM3 = Math.max(0, Math.round(numOr0(currentSc.m3Quantity)));
   const currentVm4 = savedVm4(currentSc);
 
-  const m1 =
-    processingData.m1Quantity !== undefined && processingData.m1Quantity !== null
-      ? totalFromForm(processingData.m1Quantity, currentM1)
-      : currentM1;
-  const m2 =
-    processingData.m2Quantity !== undefined && processingData.m2Quantity !== null
-      ? totalFromForm(processingData.m2Quantity, currentM2)
-      : currentM2;
-  const m3 =
-    processingData.m3Quantity !== undefined && processingData.m3Quantity !== null
-      ? totalFromForm(processingData.m3Quantity, currentM3)
-      : currentM3;
-  const vm4 =
-    processingData.vm4Quantity !== undefined && processingData.vm4Quantity !== null
-      ? totalFromForm(processingData.vm4Quantity, currentVm4)
-      : currentVm4;
+  const m1Delta = deltaFromForm(processingData.m1Quantity);
+  const m2Delta = deltaFromForm(processingData.m2Quantity);
+  const m3Delta = deltaFromForm(processingData.m3Quantity);
+  const vm4Delta = deltaFromForm(processingData.vm4Quantity);
 
   const repairStatus: RepairStatus =
     (processingData.repairStatus as RepairStatus | undefined) ??
@@ -86,19 +81,11 @@ export function buildSecondaryCheckingFloorPatch(
   const remarks = processingData.repairRemarks ?? "";
 
   const body: SecondaryCheckingFloorPatchBody = {};
-  const qtyTouched =
-    (processingData.m1Quantity !== undefined && processingData.m1Quantity !== null) ||
-    (processingData.m2Quantity !== undefined && processingData.m2Quantity !== null) ||
-    (processingData.m3Quantity !== undefined && processingData.m3Quantity !== null) ||
-    (processingData.vm4Quantity !== undefined && processingData.vm4Quantity !== null);
 
-  if (qtyTouched) {
-    body.setSplitTotals = true;
-    body.m1Quantity = m1;
-    body.m2Quantity = m2;
-    body.m3Quantity = m3;
-    body.vm4Quantity = vm4;
-  }
+  if (m1Delta !== null && m1Delta > 0) body.m1Quantity = m1Delta;
+  if (m2Delta !== null && m2Delta > 0) body.m2Quantity = m2Delta;
+  if (m3Delta !== null && m3Delta > 0) body.m3Quantity = m3Delta;
+  if (vm4Delta !== null && vm4Delta > 0) body.vm4Quantity = vm4Delta;
 
   const repairChanged =
     repairStatus !== currentSc.repairStatus ||
@@ -111,9 +98,16 @@ export function buildSecondaryCheckingFloorPatch(
 
   const noop = Object.keys(body).length === 0;
 
+  const displayTotals = {
+    m1: currentM1 + (body.m1Quantity ?? 0),
+    m2: currentM2 + (body.m2Quantity ?? 0),
+    m3: currentM3 + (body.m3Quantity ?? 0),
+    vm4: currentVm4 + (body.vm4Quantity ?? 0),
+  };
+
   return {
     body,
-    displayTotals: { m1, m2, m3, vm4 },
+    displayTotals,
     noop,
   };
 }

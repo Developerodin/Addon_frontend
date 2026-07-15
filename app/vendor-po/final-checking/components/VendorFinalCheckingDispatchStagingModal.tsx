@@ -163,6 +163,7 @@ export function VendorFinalCheckingDispatchStagingModal({
         {
           m1Quantity: pendingPatch.m1Quantity,
           m2Quantity: pendingPatch.m2Quantity,
+          m3Quantity: pendingPatch.m3Quantity,
           m4Quantity: pendingPatch.m4Quantity,
           repairStatus: pendingPatch.repairStatus,
           repairRemarks: pendingPatch.repairRemarks,

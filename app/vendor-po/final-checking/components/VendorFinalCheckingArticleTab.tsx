@@ -2,12 +2,13 @@
 
 import React, { useMemo } from "react";
 import type { VendorProductionFlow } from "@/shared/services/vendorProductionFlowService";
-import { formatTransferredRowLabel } from "../../utils/transferredStyleRows";
 import {
   filterFinalCheckingFlowsForView,
   flattenFlowsToArticles,
   getFlowId,
 } from "../../utils/groupVendorProductionFlows";
+import { aggregateInboundByBrand, styleBrandKey } from "../finalCheckingInboundAggregates";
+import { brandLabelForStyleId } from "../../utils/transferredStyleRows";
 
 export type VendorFinalCheckingArticleTabProps = {
   flows: VendorProductionFlow[];
@@ -20,6 +21,8 @@ export type VendorFinalCheckingArticleTabProps = {
   setCurrentPage: (v: number | ((p: number) => number)) => void;
   onProcess: (flow: VendorProductionFlow) => void;
   showAllArticles?: boolean;
+  /** Style catalog for inbound channel labels (optional). */
+  styleOptions?: import("@/shared/services/productService").StyleCodeByVendorRow[];
 };
 
 /**
@@ -36,6 +39,7 @@ export function VendorFinalCheckingArticleTab({
   setCurrentPage,
   onProcess,
   showAllArticles = false,
+  styleOptions = [],
 }: VendorFinalCheckingArticleTabProps) {
   const articleRows = useMemo(() => {
     const pool = filterFinalCheckingFlowsForView(flows, showAllArticles);
@@ -281,22 +285,43 @@ export function VendorFinalCheckingArticleTab({
                     <td className="px-1.5 py-2.5 border border-gray-200">
                       <div className="text-[10px] flex flex-wrap gap-1 max-w-[220px]">
                         {fc.transferredData?.length ? (
-                          fc.transferredData.map((t, i) => (
-                            <span
-                              key={i}
-                              className="bg-gray-50 border border-gray-100 px-1 py-0.5 rounded"
-                            >
-                              {formatTransferredRowLabel(t)}
-                            </span>
-                          ))
+                          (() => {
+                            const byBrand = new Map<
+                              string,
+                              { styleCodeId: string; brand: string; transferred: number }
+                            >();
+                            for (const t of fc.transferredData) {
+                              const styleCodeId = String(t.styleCode ?? "").trim();
+                              const brand = String(t.brand ?? "").trim();
+                              const qty = Math.max(0, Number(t.transferred) || 0);
+                              if (!styleCodeId) continue;
+                              const key = styleBrandKey(styleCodeId, brand);
+                              const prev = byBrand.get(key);
+                              if (prev) {
+                                prev.transferred += qty;
+                              } else {
+                                byBrand.set(key, { styleCodeId, brand, transferred: qty });
+                              }
+                            }
+                            return Array.from(byBrand.values()).map((line) => (
+                              <span
+                                key={styleBrandKey(line.styleCodeId, line.brand)}
+                                className="bg-gray-50 border border-gray-100 px-1 py-0.5 rounded"
+                              >
+                                {brandLabelForStyleId(styleOptions, line.styleCodeId, line.brand)} ·{" "}
+                                {line.transferred.toLocaleString()}
+                              </span>
+                            ));
+                          })()
                         ) : fc.receivedData?.length ? (
-                          fc.receivedData.map((t, i) => (
+                          aggregateInboundByBrand(fc.receivedData, row.flow).map((a) => (
                             <span
-                              key={i}
+                              key={a.key}
                               className="bg-emerald-50/80 border border-emerald-100 px-1 py-0.5 rounded"
                               title="Inbound from container (receivedData)"
                             >
-                              {formatTransferredRowLabel(t)}
+                              {brandLabelForStyleId(styleOptions, a.styleCodeId, a.brand)} ·{" "}
+                              {a.receivedSum.toLocaleString()}
                             </span>
                           ))
                         ) : (

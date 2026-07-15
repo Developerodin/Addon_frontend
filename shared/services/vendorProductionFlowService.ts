@@ -19,12 +19,16 @@ export interface ReceivedDataRow {
   transferred?: number;
   styleCode?: string;
   brand?: string;
+  /** Heat Transfer (branding → FC) vs Embroidery (re-boarding → FC). */
+  brandingType?: VendorBrandingType;
 }
 
 export interface TransferredDataRow {
   transferred: number;
   styleCode?: string;
   brand?: string;
+  /** Per-line branding method on Branding floor — drives routing to Re-Boarding vs Final Checking. */
+  brandingType?: VendorBrandingType;
 }
 
 export interface BaseFloorQuantity {

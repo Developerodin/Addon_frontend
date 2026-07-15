@@ -2,7 +2,10 @@
 
 import React, { useMemo } from "react";
 import type { VendorProductionFlow } from "@/shared/services/vendorProductionFlowService";
-import { formatTransferredRowLabel } from "../../utils/transferredStyleRows";
+import {
+  enrichBrandingTransferredDataForDisplay,
+  formatTransferredRowLabel,
+} from "../../utils/transferredStyleRows";
 import {
   filterBrandingFlowsForView,
   flattenFlowsToArticles,
@@ -165,7 +168,10 @@ export function VendorBrandingArticleTab({
                     <td className={CRM.td}>
                       <div className="text-[10px] flex flex-wrap gap-1">
                         {br.transferredData?.length ? (
-                          br.transferredData.map((t, i) => (
+                          enrichBrandingTransferredDataForDisplay(
+                            br.transferredData,
+                            row.flow,
+                          ).map((t, i) => (
                             <span
                               key={i}
                               className="bg-gray-50 border border-gray-100 px-1 py-0.5 rounded"

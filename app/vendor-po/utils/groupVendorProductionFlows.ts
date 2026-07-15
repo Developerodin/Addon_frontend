@@ -218,6 +218,70 @@ export function filterBrandingFlowsForView(
 }
 
 /**
+ * Whether re-boarding still has transferable / incomplete quantity on this floor.
+ * @param flow - Vendor production flow document
+ */
+export function hasReBoardingWorkRemaining(flow: VendorProductionFlow): boolean {
+  const rb = flow.floorQuantities?.reBoarding;
+  return (rb?.remaining ?? 0) > 0;
+}
+
+/**
+ * Whether this flow has any re-boarding floor history (received or forwarded).
+ * @param flow - Vendor production flow document
+ */
+export function hasReBoardingFloorHistory(flow: VendorProductionFlow): boolean {
+  const rb = flow.floorQuantities?.reBoarding;
+  if (!rb) return false;
+  return (rb.received ?? 0) > 0 || (rb.transferred ?? 0) > 0;
+}
+
+/**
+ * Filters flows for re-boarding floor UI: open work only, or full history when showAll.
+ * @param flows - Flows from list API
+ * @param showAll - When true, include completed batches (0 remaining)
+ */
+export function filterReBoardingFlowsForView(
+  flows: VendorProductionFlow[],
+  showAll: boolean,
+): VendorProductionFlow[] {
+  if (showAll) return flows.filter(hasReBoardingFloorHistory);
+  return flows.filter(
+    (f) => hasReBoardingFloorHistory(f) && hasReBoardingWorkRemaining(f),
+  );
+}
+
+/**
+ * Sums re-boarding quantities across flows.
+ * @param flows - Flows to aggregate
+ */
+export function sumReBoardingQuantities(
+  flows: VendorProductionFlow[],
+): BrandingQuantityTotals {
+  const totals: BrandingQuantityTotals = {
+    received: 0,
+    completed: 0,
+    remaining: 0,
+    transferred: 0,
+  };
+
+  for (const flow of flows) {
+    const rb: BrandingFloorQuantity = flow.floorQuantities?.reBoarding ?? {
+      received: 0,
+      completed: 0,
+      remaining: 0,
+      transferred: 0,
+    };
+    totals.received += rb.received ?? 0;
+    totals.completed += rb.completed ?? 0;
+    totals.remaining += rb.remaining ?? 0;
+    totals.transferred += rb.transferred ?? 0;
+  }
+
+  return totals;
+}
+
+/**
  * Sums branding quantities across flows.
  * @param flows - Flows to aggregate
  */

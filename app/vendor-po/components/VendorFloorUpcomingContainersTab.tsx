@@ -126,7 +126,7 @@ export function VendorFloorUpcomingContainersTab({
     try {
       const data = await containersMasterService.getByFloorWithArticles(
         floorName.trim(),
-        { status: "ACTIVE", contentDomain: "vendor" },
+        { status: "Active", contentDomain: "vendor" },
       );
       const vendorContainers = (data.containers ?? []).filter(
         isVendorPipelineContainer,

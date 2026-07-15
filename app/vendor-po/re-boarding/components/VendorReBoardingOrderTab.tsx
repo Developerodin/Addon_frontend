@@ -4,11 +4,11 @@ import React, { useMemo, useState } from "react";
 import type { VendorProductionFlow } from "@/shared/services/vendorProductionFlowService";
 import { formatTransferredRowLabel } from "../../utils/transferredStyleRows";
 import {
-  filterBrandingFlowsForView,
+  filterReBoardingFlowsForView,
   getArticleVendorCode,
   getFlowId,
   groupFlowsByOrder,
-  sumBrandingQuantities,
+  sumReBoardingQuantities,
 } from "../../utils/groupVendorProductionFlows";
 import { CRM } from "../../vendor-list/crmUiClasses";
 
@@ -43,8 +43,8 @@ export function VendorReBoardingOrderTab({
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
 
   const orderGroups = useMemo(() => {
-    const pool = filterBrandingFlowsForView(flows, showAll);
-    const groups = groupFlowsByOrder(pool, sumBrandingQuantities);
+    const pool = filterReBoardingFlowsForView(flows, showAll);
+    const groups = groupFlowsByOrder(pool, sumReBoardingQuantities);
     const q = searchQuery.trim().toLowerCase();
     if (!q) return groups;
 
@@ -125,7 +125,7 @@ export function VendorReBoardingOrderTab({
       <div className="min-h-[300px]">
         {paginatedGroups.length === 0 ? (
           <div className={`${CRM.emptyWrap} py-20 text-center`}>
-            No branding orders found
+            No re-boarding orders found
           </div>
         ) : (
           <div className="divide-y divide-gray-100">

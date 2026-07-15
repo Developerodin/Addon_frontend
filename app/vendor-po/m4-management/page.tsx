@@ -39,7 +39,7 @@ export default function VendorM4ManagementPage() {
     setIsLoading(true);
     try {
       const [flowsRes, statsRes] = await Promise.all([
-        vendorM2M3M4ManagementService.getM4Flows({ limit: 2000 }),
+        vendorM2M3M4ManagementService.getM4Flows({ limit: 1000 }),
         vendorM2M3M4ManagementService.getM4Statistics(),
       ]);
       setRows(flowsRes.results ?? []);

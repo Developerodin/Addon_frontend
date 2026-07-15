@@ -1,6 +1,6 @@
 import type { VendorProductionFlow } from "@/shared/services/vendorProductionFlowService";
 
-/** Optional draft M1–M3/VM4 totals while the process drawer form is being edited. */
+/** Optional draft M1–M3/VM4 deltas while the process drawer form is being edited. */
 export type ScDraftTotals = {
   m1?: number;
   m2?: number;
@@ -88,11 +88,12 @@ export function resolveScReconciliation(
   draftTotals?: ScDraftTotals,
 ): ScReconciliation {
   const sc = flow.floorQuantities.secondaryChecking;
+  /** Draft form values are per-container deltas — preview saved + entered. */
   const resolveDraft = (key: "m1" | "m2" | "m3" | "vm4", saved: number) => {
     const raw = draftTotals?.[key];
     if (raw === undefined || raw === null) return saved;
     const n = Math.round(Number(raw));
-    return Number.isFinite(n) && n >= 0 ? n : saved;
+    return Number.isFinite(n) && n >= 0 ? saved + n : saved;
   };
   const m1 = resolveDraft("m1", sc.m1Quantity ?? 0);
   const m2 = resolveDraft("m2", sc.m2Quantity ?? 0);

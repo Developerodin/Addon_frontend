@@ -2,7 +2,10 @@
 
 import React, { useMemo, useState } from "react";
 import type { VendorProductionFlow } from "@/shared/services/vendorProductionFlowService";
-import { formatTransferredRowLabel } from "../../utils/transferredStyleRows";
+import {
+  enrichBrandingTransferredDataForDisplay,
+  formatTransferredRowLabel,
+} from "../../utils/transferredStyleRows";
 import {
   filterBrandingFlowsForView,
   getArticleVendorCode,
@@ -212,7 +215,10 @@ export function VendorBrandingOrderTab({
                                 <td className={CRM.td}>
                                   <div className="text-[10px] flex flex-wrap gap-1">
                                     {br.transferredData?.length ? (
-                                      br.transferredData.map((row, i) => (
+                                      enrichBrandingTransferredDataForDisplay(
+                                        br.transferredData,
+                                        flow,
+                                      ).map((row, i) => (
                                         <span
                                           key={i}
                                           className="bg-gray-50 border border-gray-100 px-1 py-0.5 rounded"

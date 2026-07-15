@@ -13,7 +13,7 @@ import {
   type ContainerMaster,
 } from "@/shared/services/containersMasterService";
 import { containerRef } from "../../secondary-checking/utils/m1Staging";
-import { formatTransferredRowLabel } from "../../utils/transferredStyleRows";
+import { formatTransferredRowLabel, resolveBrandingStageTargetLabel } from "../../utils/transferredStyleRows";
 import { VendorStagingBatchHeader } from "../../components/VendorFlowBatchLabels";
 
 const Z_BACK = 100;
@@ -53,9 +53,11 @@ export function VendorBrandingStagingModal({
   const [submitLoading, setSubmitLoading] = useState(false);
   const [successBarcode, setSuccessBarcode] = useState<string | undefined>();
 
-  /** Embroidery routes Branding → Re-Boarding; Heat Transfer (and unset) → Final Checking. */
-  const destinationLabel =
-    baselineFlow?.brandingType === "Embroidery" ? "Re-Boarding" : "Final Checking";
+  /** Destination from delta lines' per-row branding type (not flow-level). */
+  const destinationLabel = resolveBrandingStageTargetLabel(
+    pendingPatch?.transferredData ?? [],
+    baselineFlow?.brandingType,
+  );
 
   const reset = useCallback(() => {
     setStep("form");

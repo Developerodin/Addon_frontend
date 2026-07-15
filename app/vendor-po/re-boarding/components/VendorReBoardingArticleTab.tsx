@@ -4,7 +4,7 @@ import React, { useMemo } from "react";
 import type { VendorProductionFlow } from "@/shared/services/vendorProductionFlowService";
 import { formatTransferredRowLabel } from "../../utils/transferredStyleRows";
 import {
-  filterBrandingFlowsForView,
+  filterReBoardingFlowsForView,
   flattenFlowsToArticles,
   getFlowId,
 } from "../../utils/groupVendorProductionFlows";
@@ -39,7 +39,7 @@ export function VendorReBoardingArticleTab({
   showAllArticles = false,
 }: VendorReBoardingArticleTabProps) {
   const articleRows = useMemo(() => {
-    const pool = filterBrandingFlowsForView(flows, showAllArticles);
+    const pool = filterReBoardingFlowsForView(flows, showAllArticles);
     const rows = flattenFlowsToArticles(pool);
     const q = searchQuery.trim().toLowerCase();
     const searched = !q
@@ -123,7 +123,7 @@ export function VendorReBoardingArticleTab({
             {paginatedRows.length === 0 ? (
               <tr>
                 <td colSpan={8} className={`${CRM.emptyWrap} py-20 text-center`}>
-                  No branding tasks found
+                  No re-boarding tasks found
                 </td>
               </tr>
             ) : (

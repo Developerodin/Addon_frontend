@@ -201,9 +201,10 @@ export function VendorSecondaryCheckingProcessDrawer({
           <>
             <div className={CRM.drawerBodyScroll}>
               <p className={CRM.drawerHint}>
-                Enter <strong>absolute totals</strong> for M1 / M2 / M3 / VM4 (blank = keep
-                saved). Save sends <strong>setSplitTotals</strong> to the server. M1 saves
-                open the container staging modal; M2/M3/VM4-only saves post immediately.
+                Enter <strong>qty for this container</strong> in M1 / M2 / M3 / VM4 (blank = skip;
+                values <strong>add</strong> to saved totals). Save sends incremental quantities to
+                the server. M1 saves open the container staging modal; M2/M3/VM4-only saves post
+                immediately.
               </p>
 
               {grnIssueFeedback && (
@@ -409,13 +410,13 @@ export function VendorSecondaryCheckingProcessDrawer({
                 )}
                 <div className="p-3 pt-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div>
-                    <label className={CRM.label}>M1 total (good)</label>
+                    <label className={CRM.label}>M1 qty (this entry)</label>
                     <input
                       type="number"
                       min={0}
-                      aria-label="M1 total good"
+                      aria-label="M1 quantity for this container entry"
                       className={`${CRM.input} border-emerald-200 focus:border-emerald-500`}
-                      placeholder="Total M1 for batch"
+                      placeholder="Qty to add to M1"
                       value={
                         processingData.m1Quantity === undefined ||
                         processingData.m1Quantity === null
@@ -434,13 +435,13 @@ export function VendorSecondaryCheckingProcessDrawer({
                     />
                   </div>
                   <div>
-                    <label className={CRM.label}>M2 total (repair)</label>
+                    <label className={CRM.label}>M2 qty (this entry)</label>
                     <input
                       type="number"
                       min={0}
-                      aria-label="M2 total repair"
+                      aria-label="M2 quantity for this container entry"
                       className={`${CRM.input} border-amber-200 focus:border-amber-500`}
-                      placeholder="Total M2 for batch"
+                      placeholder="Qty to add to M2"
                       value={
                         processingData.m2Quantity === undefined ||
                         processingData.m2Quantity === null
@@ -459,13 +460,13 @@ export function VendorSecondaryCheckingProcessDrawer({
                     />
                   </div>
                   <div>
-                    <label className={CRM.label}>M3 total</label>
+                    <label className={CRM.label}>M3 qty (this entry)</label>
                     <input
                       type="number"
                       min={0}
-                      aria-label="M3 total"
+                      aria-label="M3 quantity for this container entry"
                       className={`${CRM.input} border-violet-200 focus:border-violet-500`}
-                      placeholder="Total M3 for batch"
+                      placeholder="Qty to add to M3"
                       value={
                         processingData.m3Quantity === undefined ||
                         processingData.m3Quantity === null
@@ -484,13 +485,13 @@ export function VendorSecondaryCheckingProcessDrawer({
                     />
                   </div>
                   <div>
-                    <label className={CRM.label}>VM4 total (vendor return)</label>
+                    <label className={CRM.label}>VM4 qty (this entry)</label>
                     <input
                       type="number"
                       min={0}
-                      aria-label="VM4 total vendor return"
+                      aria-label="VM4 quantity for this container entry"
                       className={`${CRM.input} border-red-200 focus:border-red-500`}
-                      placeholder="Total VM4 for batch"
+                      placeholder="Qty to add to VM4"
                       value={
                         processingData.vm4Quantity === undefined ||
                         processingData.vm4Quantity === null

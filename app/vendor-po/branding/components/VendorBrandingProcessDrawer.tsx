@@ -19,9 +19,13 @@ import {
   brandLabelForStyleId,
   buildBrandSelectOptions,
   isMeaningfulEditableTransferredRow,
+  resolveBrandingStageTargetLabel,
   rowsFromTransferredApi,
   styleOptionId,
   toVendorTransferItems,
+  getEditableRowQtyCap,
+  getEditableRowQtyError,
+  validateTransferredBreakdown,
   type TransferredStyleRowDraft,
 } from "../../utils/transferredStyleRows";
 import type { PendingBrandingStagingPatch } from "./VendorBrandingStagingModal";
@@ -52,36 +56,10 @@ export function VendorBrandingProcessDrawer({
   const [styleOptions, setStyleOptions] = useState<StyleCodeByVendorRow[]>([]);
   const [loadingStyles, setLoadingStyles] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [brandingTypeSaving, setBrandingTypeSaving] = useState(false);
   const [vendorCodeResolved, setVendorCodeResolved] = useState<string | null>(
     null,
   );
-  const brandingType = flow?.brandingType;
-  /** Embroidery articles pass through Re-Boarding before Final Checking; Heat Transfer skips it. */
-  const stageTargetLabel =
-    brandingType === "Embroidery" ? "Re-Boarding" : "Final Checking";
-
-  const handleBrandingTypeChange = useCallback(
-    async (value: VendorBrandingType) => {
-      if (!flow || value === flow.brandingType) return;
-      setBrandingTypeSaving(true);
-      try {
-        const updated = await vendorProductionFlowService.updateBrandingType(
-          flow.id,
-          value,
-        );
-        toast.success(`Branding type set to ${value}`);
-        onSaved(updated);
-      } catch (e: unknown) {
-        const msg =
-          e instanceof Error ? e.message : "Could not update branding type";
-        toast.error(msg);
-      } finally {
-        setBrandingTypeSaving(false);
-      }
-    },
-    [flow, onSaved],
-  );
+  const flowBrandingFallback = flow?.brandingType;
   /** Render drawer in `document.body` so layout `overflow` / stacking contexts cannot block clicks. */
   const [portalEl, setPortalEl] = useState<HTMLElement | null>(null);
   useEffect(() => {
@@ -93,25 +71,22 @@ export function VendorBrandingProcessDrawer({
     flow?.floorQuantities.branding.transferred ?? 0;
   /** Server-derived `completed` — shown in summary only; line cap follows received (API: lineSum ≤ received). */
   const completedFromServer = flow?.floorQuantities.branding.completed ?? 0;
-  const lineSumMax = useMemo(() => Math.max(0, receivedQty), [receivedQty]);
-  const totalTransferred = useMemo(
-    () =>
-      rows.reduce((sum, r) => sum + Math.max(0, Number(r.transferred) || 0), 0),
-    [rows],
+  const breakdownValidation = useMemo(
+    () => validateTransferredBreakdown(rows, receivedQty, remainingQty),
+    [rows, receivedQty, remainingQty],
   );
+  const {
+    recordedTotal,
+    deltaTotal,
+    projectedLineTotal,
+    receivedCap: lineSumMax,
+    remainingCap: deltaQtyMax,
+    deltaOverRemaining,
+    projectedOverReceived,
+    isValid: breakdownValid,
+  } = breakdownValidation;
   /** Qty on new (editable) lines only — staging requires this > 0. */
-  const newRowsTransferredTotal = useMemo(
-    () =>
-      rows
-        .filter(
-          (r) => !r.fromServer && isMeaningfulEditableTransferredRow(r),
-        )
-        .reduce(
-          (sum, r) => sum + Math.max(0, Number(r.transferred) || 0),
-          0,
-        ),
-    [rows],
-  );
+  const newRowsTransferredTotal = deltaTotal;
 
   useEffect(() => {
     if (!open || !flow) return;
@@ -151,10 +126,43 @@ export function VendorBrandingProcessDrawer({
 
   /** PATCH body: new rows with qty &gt; 0 only; server merges into stored breakdown. */
   const deltaTransferredPayload = useMemo(
-    () => brandingDeltaTransferredRows(rows, styleOptions),
-    [rows, styleOptions],
+    () => brandingDeltaTransferredRows(rows, styleOptions, flowBrandingFallback),
+    [rows, styleOptions, flowBrandingFallback],
   );
-  const lineSumOverReceived = totalTransferred > lineSumMax;
+
+  /** Destination for the current delta batch — derived from per-line branding type. */
+  const stageTargetLabel = useMemo(
+    () =>
+      resolveBrandingStageTargetLabel(
+        deltaTransferredPayload,
+        flowBrandingFallback,
+      ),
+    [deltaTransferredPayload, flowBrandingFallback],
+  );
+
+  const deltaBrandingTypes = useMemo(() => {
+    const types = new Set<VendorBrandingType>();
+    for (const row of deltaTransferredPayload) {
+      const qty = Math.max(0, Number(row.transferred) || 0);
+      if (qty <= 0) continue;
+      const bt = row.brandingType ?? flowBrandingFallback;
+      if (bt) types.add(bt);
+    }
+    return types;
+  }, [deltaTransferredPayload, flowBrandingFallback]);
+
+  const deltaMissingBrandingType = useMemo(
+    () =>
+      deltaTransferredPayload.some(
+        (row) =>
+          (Number(row.transferred) || 0) > 0 &&
+          !row.brandingType &&
+          !flowBrandingFallback,
+      ),
+    [deltaTransferredPayload, flowBrandingFallback],
+  );
+
+  const stagingBrandingTypeMismatch = deltaBrandingTypes.size > 1;
   const brandSelectOptions = useMemo(
     () => buildBrandSelectOptions(styleOptions),
     [styleOptions],
@@ -213,7 +221,12 @@ export function VendorBrandingProcessDrawer({
   const addRow = () => {
     setRows((prev) => [
       ...prev,
-      { styleCodeId: "", brand: "", transferred: 0 },
+      {
+        styleCodeId: "",
+        brand: "",
+        transferred: 0,
+        ...(flowBrandingFallback ? { brandingType: flowBrandingFallback } : {}),
+      },
     ]);
   };
 
@@ -230,15 +243,32 @@ export function VendorBrandingProcessDrawer({
       toast.error("Batch not loaded — close and open Process again.");
       return;
     }
-    if (lineSumOverReceived) {
+    if (deltaOverRemaining) {
       toast.error(
-        `Line total cannot exceed received (${lineSumMax.toLocaleString()}). Reduce quantities.`,
+        `New qty (${deltaTotal.toLocaleString()}) exceeds remaining (${deltaQtyMax.toLocaleString()}). Reduce new row quantities.`,
+      );
+      return;
+    }
+    if (projectedOverReceived) {
+      toast.error(
+        `Recorded (${recordedTotal.toLocaleString()}) + new (${deltaTotal.toLocaleString()}) = ${projectedLineTotal.toLocaleString()} exceeds received (${lineSumMax.toLocaleString()}).`,
       );
       return;
     }
     if (!deltaTransferredPayload.length) {
       toast.error(
         "Add a new row with quantity > 0 — Save sends delta lines only; recorded rows are not re-posted.",
+      );
+      return;
+    }
+    if (
+      deltaTransferredPayload.some(
+        (row) => (Number(row.transferred) || 0) > 0 && !row.brandingType,
+      ) &&
+      !flowBrandingFallback
+    ) {
+      toast.error(
+        "Select branding type (Heat Transfer or Embroidery) on each new line before saving.",
       );
       return;
     }
@@ -268,13 +298,27 @@ export function VendorBrandingProcessDrawer({
       toast.error("Batch not loaded — close and open Process again.");
       return;
     }
-    if (!brandingType) {
-      toast.error("Select branding type (Heat Transfer or Embroidery) before staging.");
+    if (deltaMissingBrandingType) {
+      toast.error(
+        "Select branding type (Heat Transfer or Embroidery) on each new line before staging.",
+      );
       return;
     }
-    if (lineSumOverReceived) {
+    if (stagingBrandingTypeMismatch) {
       toast.error(
-        `Line total cannot exceed received (${lineSumMax.toLocaleString()}). Reduce quantities.`,
+        "Stage one branding type at a time — Heat Transfer and Embroidery must be staged in separate batches.",
+      );
+      return;
+    }
+    if (deltaOverRemaining) {
+      toast.error(
+        `New qty (${deltaTotal.toLocaleString()}) exceeds remaining (${deltaQtyMax.toLocaleString()}). Reduce new row quantities before staging.`,
+      );
+      return;
+    }
+    if (projectedOverReceived) {
+      toast.error(
+        `Recorded (${recordedTotal.toLocaleString()}) + new (${deltaTotal.toLocaleString()}) = ${projectedLineTotal.toLocaleString()} exceeds received (${lineSumMax.toLocaleString()}).`,
       );
       return;
     }
@@ -338,51 +382,20 @@ export function VendorBrandingProcessDrawer({
           <p className={CRM.drawerHint}>
             <strong>Save</strong> sends <strong>delta</strong>{" "}
             <code className="text-[10px]">transferredData</code> (new rows with qty &gt; 0 only); the
-            server merges by style + brand and sets{" "}
+            server merges by style + brand + branding type and sets{" "}
             <code className="text-[10px]">completed</code> / counters — do not send those scalars.
             Recorded lines are <strong>read-only</strong>; use <strong>Row</strong> for new qty.{" "}
             <strong>Save &amp; stage to {stageTargetLabel}</strong> opens the container modal: the same PATCH
             adds <code className="text-[10px]">existingContainerBarcode</code> +{" "}
             <code className="text-[10px]">autoTransferToNextFloor</code> with that delta.{" "}
-            <strong className="text-amber-800">Select branding type first</strong> — Embroidery stages to
-            Re-Boarding; Heat Transfer stages to Final Checking.{" "}
+            <strong className="text-amber-800">Set branding type on each row</strong> — Embroidery stages to
+            Re-Boarding; Heat Transfer stages to Final Checking. Same brand can appear on multiple rows with
+            different types.{" "}
             <span className="text-gray-600">
               <code className="text-[10px]">receivedData[].transferred</code> = inbound line qty, not
               floor outbound <code className="text-[10px]">transferred</code>.
             </span>
           </p>
-          <div className="px-3 pt-1 pb-2">
-            <label className={CRM.label} htmlFor="vendor-branding-type">
-              Branding type
-            </label>
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                id="vendor-branding-type"
-                className={CRM.select}
-                value={brandingType ?? ""}
-                onChange={(e) =>
-                  void handleBrandingTypeChange(
-                    e.target.value as VendorBrandingType,
-                  )
-                }
-                disabled={brandingTypeSaving || saving}
-                aria-label="Branding type"
-              >
-                <option value="" disabled>
-                  Select branding type…
-                </option>
-                <option value="Heat Transfer">Heat Transfer</option>
-                <option value="Embroidery">Embroidery</option>
-              </select>
-              <span className="text-[10px] text-gray-500">
-                {brandingType === "Embroidery"
-                  ? "Routes: Branding → Re-Boarding → Final Checking"
-                  : brandingType === "Heat Transfer"
-                    ? "Routes: Branding → Final Checking"
-                    : "Choose how this article is branded — it sets the next floor."}
-              </span>
-            </div>
-          </div>
           <VendorFloorBatchSummary
             flow={flow}
             footerInfo={
@@ -406,15 +419,32 @@ export function VendorBrandingProcessDrawer({
                     completedFromServer - scalarTransferredOut,
                   ).toLocaleString()}
                 </strong>{" "}
-                · Breakdown line total:{" "}
+                · Breakdown: recorded{" "}
+                <strong>{recordedTotal.toLocaleString()}</strong> + new{" "}
                 <strong
                   className={
-                    lineSumOverReceived ? "text-red-600" : "text-emerald-700"
+                    !breakdownValid ? "text-red-600" : "text-emerald-700"
                   }
                 >
-                  {totalTransferred.toLocaleString()}
+                  {deltaTotal.toLocaleString()}
                 </strong>{" "}
-                (max line sum = received {lineSumMax.toLocaleString()})
+                ={" "}
+                <strong
+                  className={
+                    projectedOverReceived ? "text-red-600" : "text-emerald-700"
+                  }
+                >
+                  {projectedLineTotal.toLocaleString()}
+                </strong>{" "}
+                / received {lineSumMax.toLocaleString()}
+                {deltaOverRemaining ? (
+                  <>
+                    {" "}
+                    · <span className="text-red-600">
+                      New qty exceeds remaining ({deltaQtyMax.toLocaleString()})
+                    </span>
+                  </>
+                ) : null}
               </>
             }
           />
@@ -446,10 +476,29 @@ export function VendorBrandingProcessDrawer({
               </button>
             </div>
             <div className="p-3 space-y-3">
-              {rows.map((row, index) => (
+              {rows.map((row, index) => {
+                const qtyError = !row.fromServer
+                  ? getEditableRowQtyError(
+                      rows,
+                      index,
+                      receivedQty,
+                      remainingQty,
+                    )
+                  : null;
+                const qtyCap = !row.fromServer
+                  ? getEditableRowQtyCap(
+                      rows,
+                      index,
+                      receivedQty,
+                      remainingQty,
+                    )
+                  : 0;
+                const qtyInputId = `branding-transferred-qty-${index}`;
+
+                return (
                 <div
                   key={index}
-                  className={`grid grid-cols-1 sm:grid-cols-[1fr_minmax(0,120px)_auto] gap-2 items-end border rounded-lg p-2 ${
+                  className={`grid grid-cols-1 sm:grid-cols-[1fr_minmax(0,140px)_minmax(0,120px)_auto] gap-2 items-end border rounded-lg p-2 ${
                     row.fromServer
                       ? "border-gray-200 bg-gray-100/90"
                       : "border-gray-100 bg-gray-50/80"
@@ -486,36 +535,104 @@ export function VendorBrandingProcessDrawer({
                     )}
                   </div>
                   <div>
-                    <label className={CRM.label}>Qty</label>
+                    <label className={CRM.label}>Branding type</label>
+                    {row.fromServer ? (
+                      <p className="text-[11px] font-medium text-gray-800 py-2 px-1">
+                        {row.brandingType ?? flowBrandingFallback ?? "—"}
+                      </p>
+                    ) : (
+                      <select
+                        className={CRM.select}
+                        value={row.brandingType ?? ""}
+                        onChange={(e) =>
+                          updateRow(index, {
+                            brandingType: e.target.value
+                              ? (e.target.value as VendorBrandingType)
+                              : undefined,
+                          })
+                        }
+                        disabled={saving}
+                        aria-label="Branding type for this row"
+                      >
+                        <option value="">Select type…</option>
+                        <option value="Heat Transfer">Heat Transfer</option>
+                        <option value="Embroidery">Embroidery</option>
+                      </select>
+                    )}
+                  </div>
+                  <div>
+                    <label className={CRM.label} htmlFor={qtyInputId}>
+                      Qty
+                    </label>
                     <input
+                      id={qtyInputId}
                       type="number"
                       min={0}
-                      max={lineSumMax}
-                      className={CRM.input}
+                      max={qtyCap}
+                      className={`${CRM.input}${
+                        qtyError
+                          ? " border-red-400 focus:border-red-500 focus:ring-red-200"
+                          : ""
+                      }`}
                       value={row.transferred}
-                      onChange={(e) =>
-                        updateRow(index, {
-                          transferred: Number(e.target.value),
-                        })
-                      }
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === "") {
+                          updateRow(index, { transferred: 0 });
+                          return;
+                        }
+                        const n = Number(v);
+                        if (!Number.isFinite(n)) return;
+                        updateRow(index, { transferred: n });
+                      }}
+                      onBlur={(e) => {
+                        const raw = Number(e.target.value);
+                        if (!Number.isFinite(raw)) return;
+                        const cap = getEditableRowQtyCap(
+                          rows,
+                          index,
+                          receivedQty,
+                          remainingQty,
+                        );
+                        if (raw > cap) {
+                          updateRow(index, { transferred: cap });
+                        } else if (raw < 0) {
+                          updateRow(index, { transferred: 0 });
+                        }
+                      }}
                       disabled={saving || row.fromServer}
-                    />
-                  </div>
-                  <div className="flex justify-end sm:justify-center pb-0.5">
-                    <button
-                      type="button"
-                      className={CRM.iconDanger}
-                      onClick={() => removeRow(index)}
-                      disabled={
-                        saving || rows.length <= 1 || Boolean(row.fromServer)
+                      aria-invalid={qtyError ? true : undefined}
+                      aria-describedby={
+                        qtyError ? `${qtyInputId}-error` : undefined
                       }
-                      title="Remove row"
-                    >
-                      <i className="ri-delete-bin-line" />
-                    </button>
+                    />
+                    {qtyError ? (
+                      <p
+                        id={`${qtyInputId}-error`}
+                        role="alert"
+                        className="mt-0.5 text-[10px] font-medium text-red-600"
+                      >
+                        {qtyError}
+                      </p>
+                    ) : null}
                   </div>
+                  {!row.fromServer && (
+                    <div className="flex justify-end sm:justify-center pb-0.5">
+                      <button
+                        type="button"
+                        className={CRM.iconDanger}
+                        onClick={() => removeRow(index)}
+                        disabled={saving || rows.length <= 1}
+                        title="Remove row"
+                        aria-label="Remove row"
+                      >
+                        <i className="ri-delete-bin-line" />
+                      </button>
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -541,15 +658,17 @@ export function VendorBrandingProcessDrawer({
             className={CRM.btnSecondary}
             disabled={
               saving ||
-              lineSumOverReceived ||
+              !breakdownValid ||
               deltaTransferredPayload.length === 0
             }
             title={
-              lineSumOverReceived
-                ? "Line total cannot exceed received"
-                : deltaTransferredPayload.length === 0
-                  ? "Add a new row with quantity > 0 (delta payload)"
-                  : undefined
+              deltaOverRemaining
+                ? `New qty exceeds remaining (${deltaQtyMax.toLocaleString()})`
+                : projectedOverReceived
+                  ? "Recorded + new exceeds received"
+                  : deltaTransferredPayload.length === 0
+                    ? "Add a new row with quantity > 0 (delta payload)"
+                    : undefined
             }
           >
             {saving ? (
@@ -570,20 +689,25 @@ export function VendorBrandingProcessDrawer({
             className={CRM.btnPrimary}
             disabled={
               saving ||
-              !brandingType ||
-              lineSumOverReceived ||
+              deltaMissingBrandingType ||
+              stagingBrandingTypeMismatch ||
+              !breakdownValid ||
               newRowsTransferredTotal <= 0 ||
               deltaTransferredPayload.length === 0
             }
             title={
-              !brandingType
-                ? "Select branding type first"
-                : lineSumOverReceived
-                ? "Line total cannot exceed received"
-                : newRowsTransferredTotal <= 0 ||
-                    deltaTransferredPayload.length === 0
-                  ? "Add a new row with quantity > 0 to stage"
-                  : undefined
+              deltaMissingBrandingType
+                ? "Select branding type on each new line"
+                : stagingBrandingTypeMismatch
+                  ? "Stage one branding type at a time"
+                  : deltaOverRemaining
+                    ? `New qty exceeds remaining (${deltaQtyMax.toLocaleString()})`
+                    : projectedOverReceived
+                      ? "Recorded + new exceeds received"
+                      : newRowsTransferredTotal <= 0 ||
+                          deltaTransferredPayload.length === 0
+                        ? "Add a new row with quantity > 0 to stage"
+                        : undefined
             }
           >
             <i className="ri-inbox-archive-line text-xs" /> Save &amp; stage to{" "}

@@ -20,8 +20,11 @@ import {
 import { FinalCheckingInboundReceived } from "./FinalCheckingInboundReceived";
 import { FinalCheckingStyleTransferSection } from "./FinalCheckingStyleTransferSection";
 import {
-  allowedStyleCodeIdsFromInbound,
+  aggregateInboundByBrand,
+  buildInboundBrandOptions,
   initialFinalCheckingStyleRows,
+  parseStyleBrandKey,
+  validateRowsAgainstInbound,
 } from "../finalCheckingInboundAggregates";
 import {
   buildFinalCheckingTransferredDeltaDraft,
@@ -75,9 +78,9 @@ export function VendorFinalCheckingProcessDrawer({
   const receivedQty = finalLive?.received ?? 0;
   const remainingQty = finalLive?.remaining ?? 0;
   const receivedData = finalLive?.receivedData ?? [];
-  const allowedStyleCodeIds = useMemo(
-    () => allowedStyleCodeIdsFromInbound(receivedData),
-    [receivedData],
+  const inboundBrandAggregates = useMemo(
+    () => aggregateInboundByBrand(receivedData, flow),
+    [receivedData, flow],
   );
   /** Pool for M1 style rows: cannot exceed QC received from containers. */
   const transferCap = Math.max(0, receivedQty);
@@ -96,8 +99,8 @@ export function VendorFinalCheckingProcessDrawer({
     setM2Quantity(0);
     setM3Quantity(0);
     setM4Quantity(0);
-    setRows(initialFinalCheckingStyleRows(fc));
-    transferredBaselineRef.current = finalCheckingTransferredBaselineDraft(fc);
+    setRows(initialFinalCheckingStyleRows(fc, flow));
+    transferredBaselineRef.current = finalCheckingTransferredBaselineDraft(fc, flow);
   }, [open, flow?.id]);
 
   const loadStyles = useCallback(async () => {
@@ -156,15 +159,26 @@ export function VendorFinalCheckingProcessDrawer({
     });
   };
 
-  const onStyleSelect = (index: number, styleId: string) => {
-    if (!styleId) {
-      updateRow(index, { styleCodeId: "", brand: "" });
+  const onInboundBrandSelect = (index: number, optionKey: string) => {
+    if (!optionKey) {
+      updateRow(index, { styleCodeId: "", brand: "", brandingType: undefined });
       return;
     }
-    const opt = styleOptions.find((o) => styleOptionId(o) === styleId);
+    const opt = buildInboundBrandOptions(inboundBrandAggregates).find((o) => o.key === optionKey);
+    if (!opt) {
+      const parsed = parseStyleBrandKey(optionKey);
+      if (!parsed.styleCode) return;
+      updateRow(index, {
+        styleCodeId: parsed.styleCode,
+        brand: parsed.brand,
+        brandingType: undefined,
+      });
+      return;
+    }
     updateRow(index, {
-      styleCodeId: styleId,
-      brand: (opt?.brand ?? "").trim(),
+      styleCodeId: opt.styleCodeId,
+      brand: opt.brand,
+      brandingType: undefined,
     });
   };
 
@@ -173,6 +187,8 @@ export function VendorFinalCheckingProcessDrawer({
   };
 
   const removeRow = (index: number) => {
+    const row = rows[index];
+    if (row?.fromServer) return;
     setRows((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
   };
 
@@ -245,6 +261,11 @@ export function VendorFinalCheckingProcessDrawer({
   const handleSaveAndStage = () => {
     if (!flow) return;
     if (!assertNoNegativeStyleDelta()) return;
+    const inboundCheck = validateRowsAgainstInbound(rows, inboundBrandAggregates);
+    if (!inboundCheck.ok) {
+      toast.error(inboundCheck.message);
+      return;
+    }
     if (totalTransferred > transferCap) {
       toast.error(
         `M1 row total cannot exceed inbound received (${transferCap.toLocaleString()}).`,
@@ -332,6 +353,7 @@ export function VendorFinalCheckingProcessDrawer({
             sectionIndex={sec.inbound}
             receivedData={receivedData}
             styleOptions={styleOptions}
+            flow={flow}
           />
 
           <div className={CRM.drawerSection}>
@@ -410,15 +432,13 @@ export function VendorFinalCheckingProcessDrawer({
             sectionIndex={sec.transfer}
             rows={rows}
             styleOptions={styleOptions}
-            allowedStyleCodeIds={
-              allowedStyleCodeIds.size > 0 ? allowedStyleCodeIds : undefined
-            }
+            inboundBrandAggregates={inboundBrandAggregates}
             loadingStyles={loadingStyles}
             saving={saving}
             transferLoading={false}
             onAddRow={addRow}
             onRemoveRow={removeRow}
-            onStyleSelect={onStyleSelect}
+            onInboundBrandSelect={onInboundBrandSelect}
             onQtyChange={(index, value) => updateRow(index, { transferred: value })}
           />
         </div>

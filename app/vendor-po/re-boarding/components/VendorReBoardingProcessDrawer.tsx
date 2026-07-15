@@ -21,6 +21,9 @@ import {
   rowsFromTransferredApi,
   styleOptionId,
   toVendorTransferItems,
+  getEditableRowQtyCap,
+  getEditableRowQtyError,
+  validateTransferredBreakdown,
   type TransferredStyleRowDraft,
 } from "../../utils/transferredStyleRows";
 import type { PendingReBoardingStagingPatch } from "./VendorReBoardingStagingModal";
@@ -67,25 +70,22 @@ export function VendorReBoardingProcessDrawer({
     flow?.floorQuantities.reBoarding.transferred ?? 0;
   /** Server-derived `completed` — shown in summary only; line cap follows received (API: lineSum ≤ received). */
   const completedFromServer = flow?.floorQuantities.reBoarding.completed ?? 0;
-  const lineSumMax = useMemo(() => Math.max(0, receivedQty), [receivedQty]);
-  const totalTransferred = useMemo(
-    () =>
-      rows.reduce((sum, r) => sum + Math.max(0, Number(r.transferred) || 0), 0),
-    [rows],
+  const breakdownValidation = useMemo(
+    () => validateTransferredBreakdown(rows, receivedQty, remainingQty),
+    [rows, receivedQty, remainingQty],
   );
+  const {
+    recordedTotal,
+    deltaTotal,
+    projectedLineTotal,
+    receivedCap: lineSumMax,
+    remainingCap: deltaQtyMax,
+    deltaOverRemaining,
+    projectedOverReceived,
+    isValid: breakdownValid,
+  } = breakdownValidation;
   /** Qty on new (editable) lines only — staging requires this > 0. */
-  const newRowsTransferredTotal = useMemo(
-    () =>
-      rows
-        .filter(
-          (r) => !r.fromServer && isMeaningfulEditableTransferredRow(r),
-        )
-        .reduce(
-          (sum, r) => sum + Math.max(0, Number(r.transferred) || 0),
-          0,
-        ),
-    [rows],
-  );
+  const newRowsTransferredTotal = deltaTotal;
 
   useEffect(() => {
     if (!open || !flow) return;
@@ -128,7 +128,6 @@ export function VendorReBoardingProcessDrawer({
     () => brandingDeltaTransferredRows(rows, styleOptions),
     [rows, styleOptions],
   );
-  const lineSumOverReceived = totalTransferred > lineSumMax;
   const brandSelectOptions = useMemo(
     () => buildBrandSelectOptions(styleOptions),
     [styleOptions],
@@ -204,9 +203,15 @@ export function VendorReBoardingProcessDrawer({
       toast.error("Batch not loaded — close and open Process again.");
       return;
     }
-    if (lineSumOverReceived) {
+    if (deltaOverRemaining) {
       toast.error(
-        `Line total cannot exceed received (${lineSumMax.toLocaleString()}). Reduce quantities.`,
+        `New qty (${deltaTotal.toLocaleString()}) exceeds remaining (${deltaQtyMax.toLocaleString()}). Reduce new row quantities.`,
+      );
+      return;
+    }
+    if (projectedOverReceived) {
+      toast.error(
+        `Recorded (${recordedTotal.toLocaleString()}) + new (${deltaTotal.toLocaleString()}) = ${projectedLineTotal.toLocaleString()} exceeds received (${lineSumMax.toLocaleString()}).`,
       );
       return;
     }
@@ -242,9 +247,15 @@ export function VendorReBoardingProcessDrawer({
       toast.error("Batch not loaded — close and open Process again.");
       return;
     }
-    if (lineSumOverReceived) {
+    if (deltaOverRemaining) {
       toast.error(
-        `Line total cannot exceed received (${lineSumMax.toLocaleString()}). Reduce quantities.`,
+        `New qty (${deltaTotal.toLocaleString()}) exceeds remaining (${deltaQtyMax.toLocaleString()}). Reduce new row quantities before staging.`,
+      );
+      return;
+    }
+    if (projectedOverReceived) {
+      toast.error(
+        `Recorded (${recordedTotal.toLocaleString()}) + new (${deltaTotal.toLocaleString()}) = ${projectedLineTotal.toLocaleString()} exceeds received (${lineSumMax.toLocaleString()}).`,
       );
       return;
     }
@@ -342,15 +353,32 @@ export function VendorReBoardingProcessDrawer({
                     completedFromServer - scalarTransferredOut,
                   ).toLocaleString()}
                 </strong>{" "}
-                · Breakdown line total:{" "}
+                · Breakdown: recorded{" "}
+                <strong>{recordedTotal.toLocaleString()}</strong> + new{" "}
                 <strong
                   className={
-                    lineSumOverReceived ? "text-red-600" : "text-emerald-700"
+                    !breakdownValid ? "text-red-600" : "text-emerald-700"
                   }
                 >
-                  {totalTransferred.toLocaleString()}
+                  {deltaTotal.toLocaleString()}
                 </strong>{" "}
-                (max line sum = received {lineSumMax.toLocaleString()})
+                ={" "}
+                <strong
+                  className={
+                    projectedOverReceived ? "text-red-600" : "text-emerald-700"
+                  }
+                >
+                  {projectedLineTotal.toLocaleString()}
+                </strong>{" "}
+                / received {lineSumMax.toLocaleString()}
+                {deltaOverRemaining ? (
+                  <>
+                    {" "}
+                    · <span className="text-red-600">
+                      New qty exceeds remaining ({deltaQtyMax.toLocaleString()})
+                    </span>
+                  </>
+                ) : null}
               </>
             }
           />
@@ -382,7 +410,26 @@ export function VendorReBoardingProcessDrawer({
               </button>
             </div>
             <div className="p-3 space-y-3">
-              {rows.map((row, index) => (
+              {rows.map((row, index) => {
+                const qtyError = !row.fromServer
+                  ? getEditableRowQtyError(
+                      rows,
+                      index,
+                      receivedQty,
+                      remainingQty,
+                    )
+                  : null;
+                const qtyCap = !row.fromServer
+                  ? getEditableRowQtyCap(
+                      rows,
+                      index,
+                      receivedQty,
+                      remainingQty,
+                    )
+                  : 0;
+                const qtyInputId = `reboarding-transferred-qty-${index}`;
+
+                return (
                 <div
                   key={index}
                   className={`grid grid-cols-1 sm:grid-cols-[1fr_minmax(0,120px)_auto] gap-2 items-end border rounded-lg p-2 ${
@@ -422,36 +469,78 @@ export function VendorReBoardingProcessDrawer({
                     )}
                   </div>
                   <div>
-                    <label className={CRM.label}>Qty</label>
+                    <label className={CRM.label} htmlFor={qtyInputId}>
+                      Qty
+                    </label>
                     <input
+                      id={qtyInputId}
                       type="number"
                       min={0}
-                      max={lineSumMax}
-                      className={CRM.input}
+                      max={qtyCap}
+                      className={`${CRM.input}${
+                        qtyError
+                          ? " border-red-400 focus:border-red-500 focus:ring-red-200"
+                          : ""
+                      }`}
                       value={row.transferred}
-                      onChange={(e) =>
-                        updateRow(index, {
-                          transferred: Number(e.target.value),
-                        })
-                      }
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === "") {
+                          updateRow(index, { transferred: 0 });
+                          return;
+                        }
+                        const n = Number(v);
+                        if (!Number.isFinite(n)) return;
+                        updateRow(index, { transferred: n });
+                      }}
+                      onBlur={(e) => {
+                        const raw = Number(e.target.value);
+                        if (!Number.isFinite(raw)) return;
+                        const cap = getEditableRowQtyCap(
+                          rows,
+                          index,
+                          receivedQty,
+                          remainingQty,
+                        );
+                        if (raw > cap) {
+                          updateRow(index, { transferred: cap });
+                        } else if (raw < 0) {
+                          updateRow(index, { transferred: 0 });
+                        }
+                      }}
                       disabled={saving || row.fromServer}
-                    />
-                  </div>
-                  <div className="flex justify-end sm:justify-center pb-0.5">
-                    <button
-                      type="button"
-                      className={CRM.iconDanger}
-                      onClick={() => removeRow(index)}
-                      disabled={
-                        saving || rows.length <= 1 || Boolean(row.fromServer)
+                      aria-invalid={qtyError ? true : undefined}
+                      aria-describedby={
+                        qtyError ? `${qtyInputId}-error` : undefined
                       }
-                      title="Remove row"
-                    >
-                      <i className="ri-delete-bin-line" />
-                    </button>
+                    />
+                    {qtyError ? (
+                      <p
+                        id={`${qtyInputId}-error`}
+                        role="alert"
+                        className="mt-0.5 text-[10px] font-medium text-red-600"
+                      >
+                        {qtyError}
+                      </p>
+                    ) : null}
                   </div>
+                  {!row.fromServer && (
+                    <div className="flex justify-end sm:justify-center pb-0.5">
+                      <button
+                        type="button"
+                        className={CRM.iconDanger}
+                        onClick={() => removeRow(index)}
+                        disabled={saving || rows.length <= 1}
+                        title="Remove row"
+                        aria-label="Remove row"
+                      >
+                        <i className="ri-delete-bin-line" />
+                      </button>
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -477,15 +566,17 @@ export function VendorReBoardingProcessDrawer({
             className={CRM.btnSecondary}
             disabled={
               saving ||
-              lineSumOverReceived ||
+              !breakdownValid ||
               deltaTransferredPayload.length === 0
             }
             title={
-              lineSumOverReceived
-                ? "Line total cannot exceed received"
-                : deltaTransferredPayload.length === 0
-                  ? "Add a new row with quantity > 0 (delta payload)"
-                  : undefined
+              deltaOverRemaining
+                ? `New qty exceeds remaining (${deltaQtyMax.toLocaleString()})`
+                : projectedOverReceived
+                  ? "Recorded + new exceeds received"
+                  : deltaTransferredPayload.length === 0
+                    ? "Add a new row with quantity > 0 (delta payload)"
+                    : undefined
             }
           >
             {saving ? (
@@ -506,17 +597,19 @@ export function VendorReBoardingProcessDrawer({
             className={CRM.btnPrimary}
             disabled={
               saving ||
-              lineSumOverReceived ||
+              !breakdownValid ||
               newRowsTransferredTotal <= 0 ||
               deltaTransferredPayload.length === 0
             }
             title={
-              lineSumOverReceived
-                ? "Line total cannot exceed received"
-                : newRowsTransferredTotal <= 0 ||
-                    deltaTransferredPayload.length === 0
-                  ? "Add a new row with quantity > 0 to stage"
-                  : undefined
+              deltaOverRemaining
+                ? `New qty exceeds remaining (${deltaQtyMax.toLocaleString()})`
+                : projectedOverReceived
+                  ? "Recorded + new exceeds received"
+                  : newRowsTransferredTotal <= 0 ||
+                      deltaTransferredPayload.length === 0
+                    ? "Add a new row with quantity > 0 to stage"
+                    : undefined
             }
           >
             <i className="ri-inbox-archive-line text-xs" /> Save &amp; stage to{" "}
