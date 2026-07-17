@@ -102,6 +102,8 @@ export interface PickListBatchDetail extends PickListBatch {
     clientName?: string;
     flowStatus?: string;
   }>;
+  barcodePrintHistory?: BarcodePrintHistoryEntry[];
+  barcodePrintSummary?: BarcodePrintHistorySummary[];
 }
 
 export interface PickListBatchBarcodeLabel {
@@ -111,6 +113,40 @@ export interface PickListBatchBarcodeLabel {
   shade?: string;
   barcode: string;
   quantity: number;
+}
+
+export interface BarcodePrintHistoryLabel {
+  styleCode?: string;
+  skuCode?: string;
+  size?: string;
+  shade?: string;
+  quantity: number;
+}
+
+export interface BarcodePrintHistoryEntry {
+  id: string;
+  styleCode?: string;
+  quantity: number;
+  mode: 'all' | 'custom';
+  labels: BarcodePrintHistoryLabel[];
+  printedBy?: string | null;
+  printedByName?: string;
+  printedAt: string;
+}
+
+export interface BarcodePrintHistorySummary {
+  styleCode: string;
+  scopeLabel: string;
+  totalPrinted: number;
+  printCount: number;
+  events: BarcodePrintHistoryEntry[];
+}
+
+export interface LogBarcodePrintResult {
+  entry: BarcodePrintHistoryEntry;
+  printNumber: number;
+  totalPrintedForScope: number;
+  barcodePrintHistory: BarcodePrintHistoryEntry[];
 }
 
 export interface Paginated<T> {
@@ -141,6 +177,8 @@ export const whmsPickListBatches = {
   list(params: {
     status?: PickListBatchStatus;
     type?: PickListBatchType;
+    /** true = fully picked / sent-to-scanning; false = new or partially picked */
+    pickComplete?: boolean;
     q?: string;
     page?: number;
     limit?: number;
@@ -174,6 +212,21 @@ export const whmsPickListBatches = {
     labels: PickListBatchBarcodeLabel[];
   }> {
     return request(`/pick-list-batches/${batchId}/barcodes${qs(params || {})}`);
+  },
+
+  logBarcodePrint(
+    batchId: string,
+    payload: {
+      styleCode?: string;
+      mode: 'all' | 'custom';
+      quantity: number;
+      labels: BarcodePrintHistoryLabel[];
+    },
+  ): Promise<LogBarcodePrintResult> {
+    return request(`/pick-list-batches/${batchId}/barcodes`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   },
 
   sendToScanning(batchId: string): Promise<PickListBatch> {

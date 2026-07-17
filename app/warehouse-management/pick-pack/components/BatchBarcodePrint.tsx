@@ -6,7 +6,19 @@ import {
   whmsPickListBatches,
   type PickListBatchBarcodeLabel,
 } from "@/shared/services/whmsPickListBatchService";
-import { buildLabelsForCount, type BarcodePrintMode } from "./BatchBarcodePrintModal";
+import {
+  buildLabelsForCount,
+  countBarcodeLabels,
+  type BarcodePrintMode,
+} from "./BatchBarcodePrintModal";
+
+export interface BarcodePrintResult {
+  batchNumber: string;
+  labels: PickListBatchBarcodeLabel[];
+  quantity: number;
+  mode: BarcodePrintMode;
+  styleCode?: string;
+}
 
 /**
  * Print barcode labels (CODE128) for a batch or single style code.
@@ -16,12 +28,12 @@ import { buildLabelsForCount, type BarcodePrintMode } from "./BatchBarcodePrintM
 export function printBatchBarcodeLabels(batchNumber: string, labels: PickListBatchBarcodeLabel[]) {
   if (!labels.length) {
     toast.error("No labels to print");
-    return;
+    return false;
   }
   const win = window.open("", "_blank", "width=800,height=900");
   if (!win) {
     toast.error("Popup blocked — allow popups to print");
-    return;
+    return false;
   }
   const blocks = labels
     .map((label) => {
@@ -49,32 +61,70 @@ export function printBatchBarcodeLabels(batchNumber: string, labels: PickListBat
     </style></head><body>${blocks}
     <script>window.onload = () => window.print();</script></body></html>`);
   win.document.close();
+  return true;
 }
 
 /**
- * Fetch and print barcodes for a batch with all or custom label count.
+ * Persist a barcode print event after labels are sent to the printer.
+ * @param batchId - Pick-list batch id
+ * @param result - Print metadata and label breakdown
+ */
+export async function logBarcodePrintEvent(batchId: string, result: BarcodePrintResult) {
+  await whmsPickListBatches.logBarcodePrint(batchId, {
+    styleCode: result.styleCode || "",
+    mode: result.mode,
+    quantity: result.quantity,
+    labels: result.labels.map((label) => ({
+      styleCode: label.styleCode,
+      skuCode: label.skuCode,
+      size: label.size,
+      shade: label.shade,
+      quantity: label.quantity,
+    })),
+  });
+}
+
+/**
+ * Fetch, print, and log barcodes for a batch with all or custom label count.
  * @param batchId - Pick-list batch id
  * @param mode - Print all picked labels or a custom total
  * @param customQty - Label count when mode is custom
+ * @param styleCode - Optional style filter
  */
 export async function printBatchBarcodes(
   batchId: string,
   mode: BarcodePrintMode,
   customQty?: number,
-) {
+  styleCode?: string,
+): Promise<BarcodePrintResult | null> {
   try {
-    const payload = await whmsPickListBatches.barcodes(batchId);
+    const payload = await whmsPickListBatches.barcodes(batchId, styleCode ? { styleCode } : undefined);
     const labels =
       mode === "custom" && customQty != null
         ? buildLabelsForCount(payload.labels, customQty)
         : payload.labels;
     if (!labels.length) {
       toast.error("No labels to print");
-      return;
+      return null;
     }
-    printBatchBarcodeLabels(payload.batchNumber, labels);
+
+    const title = styleCode ? `${payload.batchNumber} — ${styleCode}` : payload.batchNumber;
+    const printed = printBatchBarcodeLabels(title, labels);
+    if (!printed) return null;
+
+    const result: BarcodePrintResult = {
+      batchNumber: payload.batchNumber,
+      labels,
+      quantity: countBarcodeLabels(labels),
+      mode,
+      styleCode,
+    };
+
+    await logBarcodePrintEvent(batchId, result);
+    return result;
   } catch (err) {
     toast.error(err instanceof Error ? err.message : "Failed to load barcodes");
+    return null;
   }
 }
 
@@ -90,21 +140,8 @@ export async function printStyleBatchBarcodes(
   styleCode: string,
   mode: BarcodePrintMode,
   customQty?: number,
-) {
-  try {
-    const payload = await whmsPickListBatches.barcodes(batchId, { styleCode });
-    let labels = payload.labels;
-    if (mode === "custom" && customQty != null) {
-      labels = buildLabelsForCount(labels, customQty);
-    }
-    if (!labels.length) {
-      toast.error("No labels to print");
-      return;
-    }
-    printBatchBarcodeLabels(`${payload.batchNumber} — ${styleCode}`, labels);
-  } catch (err) {
-    toast.error(err instanceof Error ? err.message : "Failed to load barcodes");
-  }
+): Promise<BarcodePrintResult | null> {
+  return printBatchBarcodes(batchId, mode, customQty, styleCode);
 }
 
 /** @deprecated Use printBatchBarcodes with mode argument */

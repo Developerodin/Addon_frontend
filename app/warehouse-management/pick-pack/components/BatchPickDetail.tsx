@@ -7,25 +7,17 @@ import { toast } from "react-hot-toast";
 import {
   whmsPickListBatches,
   type PickListBatchDetail,
-  type PickListBatchItem,
 } from "@/shared/services/whmsPickListBatchService";
-import { printBatchBarcodes, printStyleBatchBarcodes } from "./BatchBarcodePrint";
+import { printBatchBarcodes } from "./BatchBarcodePrint";
 import { printBatchPickList } from "./batchPickListPrint";
-import BatchBarcodePrintModal, { type BarcodePrintMode } from "./BatchBarcodePrintModal";
+import BatchBarcodePrintModal, {
+  type BarcodePrintMode,
+  type BatchBarcodeStyleOption,
+} from "./BatchBarcodePrintModal";
+import BarcodePrintHistory from "./BarcodePrintHistory";
+import BatchPickListPanel from "./BatchPickListPanel";
 
-function itemStatusBadge(status: string) {
-  const map: Record<string, string> = {
-    pending: "bg-amber-50 text-amber-700 border-amber-200",
-    partial: "bg-orange-50 text-orange-700 border-orange-200",
-    picked: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  };
-  const cls = map[status] || map.pending;
-  return (
-    <span className={`inline-flex px-2 py-0.5 rounded border text-[9px] font-bold uppercase ${cls}`}>
-      {status}
-    </span>
-  );
-}
+type BatchDetailTab = "picking" | "barcode-history";
 
 export interface BatchPickDetailProps {
   batch: PickListBatchDetail;
@@ -49,14 +41,42 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
   const [busy, setBusy] = useState(false);
   const [barcodeModalOpen, setBarcodeModalOpen] = useState(false);
   const [barcodeModalStyle, setBarcodeModalStyle] = useState<string | undefined>(undefined);
+  const [barcodeAllowStyleSelection, setBarcodeAllowStyleSelection] = useState(false);
   const [barcodePrintBusy, setBarcodePrintBusy] = useState(false);
   const [pickErrors, setPickErrors] = useState<Record<string, string>>({});
+  const [activeTab, setActiveTab] = useState<BatchDetailTab>("picking");
 
   const isEditable = batch.status === "picking";
   const totalPicked = useMemo(
     () => Object.values(draftPicks).reduce((s, n) => s + (Number(n) || 0), 0),
     [draftPicks],
   );
+
+  const styleOptions = useMemo<BatchBarcodeStyleOption[]>(
+    () =>
+      (batch.items || []).map((item) => ({
+        styleCode: item.styleCode,
+        size: item.size,
+        shade: item.shade,
+        pickedQty: Number(draftPicks[item.itemKey] ?? item.pickedQty ?? 0),
+      })),
+    [batch.items, draftPicks],
+  );
+
+  const printedQtyByStyle = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const entry of batch.barcodePrintHistory || []) {
+      if (entry.styleCode) {
+        map.set(entry.styleCode, (map.get(entry.styleCode) || 0) + Number(entry.quantity || 0));
+      } else {
+        for (const label of entry.labels || []) {
+          if (!label.styleCode) continue;
+          map.set(label.styleCode, (map.get(label.styleCode) || 0) + Number(label.quantity || 0));
+        }
+      }
+    }
+    return map;
+  }, [batch.barcodePrintHistory]);
 
   const barcodeModalMaxQty = useMemo(() => {
     if (barcodeModalStyle) {
@@ -68,17 +88,27 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
 
   const openBarcodeModal = (styleCode?: string) => {
     setBarcodeModalStyle(styleCode);
+    setBarcodeAllowStyleSelection(!styleCode);
     setBarcodeModalOpen(true);
   };
 
-  const handleBarcodePrintConfirm = async (mode: BarcodePrintMode, customQty?: number) => {
+  const handleBarcodePrintConfirm = async (
+    mode: BarcodePrintMode,
+    customQty?: number,
+    selectedStyleCode?: string,
+  ) => {
     setBarcodePrintBusy(true);
     try {
-      if (barcodeModalStyle) {
-        await printStyleBatchBarcodes(batch.id, barcodeModalStyle, mode, customQty);
-      } else {
-        await printBatchBarcodes(batch.id, mode, customQty);
-      }
+      const result = await printBatchBarcodes(batch.id, mode, customQty, selectedStyleCode);
+      if (!result) return;
+
+      const refreshed = await whmsPickListBatches.get(batch.id);
+      onBatchUpdated(refreshed);
+      toast.success(
+        `Printed ${result.quantity} barcode label${result.quantity === 1 ? "" : "s"}${
+          selectedStyleCode ? ` for ${selectedStyleCode}` : ""
+        }`,
+      );
       setBarcodeModalOpen(false);
     } finally {
       setBarcodePrintBusy(false);
@@ -195,17 +225,6 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
     }
   };
 
-  const renderAllocationBreakdown = (item: PickListBatchItem) => (
-    <ul className="text-[11px] text-gray-600 space-y-0.5 mt-2 pl-2 border-l-2 border-purple-100">
-      {(item.allocations || []).map((a) => (
-        <li key={`${a.orderId}-${a.pickListId}`}>
-          <span className="font-semibold text-gray-800">{a.orderNumber || a.orderId}</span>: req{" "}
-          {a.requiredQty}
-        </li>
-      ))}
-    </ul>
-  );
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -276,191 +295,92 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
         )}
       </div>
 
-      <div className="overflow-x-auto border border-gray-200 rounded-lg">
-        <table className="w-full min-w-[800px]">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-3 py-2 text-left text-[11px] font-bold text-gray-600 uppercase">Style code</th>
-              <th className="px-3 py-2 text-left text-[11px] font-bold text-gray-600 uppercase">Size / Shade</th>
-              <th className="px-3 py-2 text-right text-[11px] font-bold text-gray-600 uppercase">Required</th>
-              <th className="px-3 py-2 text-right text-[11px] font-bold text-gray-600 uppercase">Stock</th>
-              <th className="px-3 py-2 text-right text-[11px] font-bold text-gray-600 uppercase">Picked</th>
-              <th className="px-3 py-2 text-left text-[11px] font-bold text-gray-600 uppercase">Status</th>
-              {isEditable && (
-                <th className="px-3 py-2 text-right text-[11px] font-bold text-gray-600 uppercase">Print</th>
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {(batch.items || []).map((item) => {
-              const picked = draftPicks[item.itemKey] ?? item.pickedQty;
-              const isExpanded = expandedKey === item.itemKey;
-              const status =
-                picked <= 0 ? "pending" : picked < item.requiredQty ? "partial" : "picked";
-              return (
-                <React.Fragment key={item.itemKey}>
-                  <tr
-                    className="border-t border-gray-100 hover:bg-gray-50/50 cursor-pointer"
-                    onClick={() => setExpandedKey(isExpanded ? null : item.itemKey)}
-                  >
-                    <td className="px-3 py-2.5 font-semibold text-gray-900">{item.styleCode}</td>
-                    <td className="px-3 py-2.5 text-[12px] text-gray-600">
-                      {[item.size, item.shade].filter(Boolean).join(" · ") || "—"}
-                    </td>
-                    <td className="px-3 py-2.5 text-right font-medium">{item.requiredQty}</td>
-                    <td className="px-3 py-2.5 text-right text-gray-500">{item.availableStock ?? "—"}</td>
-                    <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
-                      {isEditable ? (
-                        <div className="inline-flex flex-col items-end gap-0.5">
-                          <input
-                            type="number"
-                            min={0}
-                            max={item.requiredQty}
-                            step={1}
-                            value={picked}
-                            onChange={(e) =>
-                              handlePickChange(
-                                item.itemKey,
-                                e.target.value,
-                                item.requiredQty,
-                                item.styleCode,
-                              )
-                            }
-                            onBlur={(e) =>
-                              handlePickChange(
-                                item.itemKey,
-                                e.target.value,
-                                item.requiredQty,
-                                item.styleCode,
-                              )
-                            }
-                            className={`w-20 border rounded px-2 py-1 text-right text-sm ${
-                              pickErrors[item.itemKey]
-                                ? "border-red-400 bg-red-50 focus:ring-red-300"
-                                : "border-gray-200"
-                            }`}
-                            aria-label={`Picked quantity for ${item.styleCode}`}
-                            aria-invalid={Boolean(pickErrors[item.itemKey])}
-                            aria-describedby={
-                              pickErrors[item.itemKey] ? `pick-error-${item.itemKey}` : undefined
-                            }
-                          />
-                          {pickErrors[item.itemKey] ? (
-                            <span
-                              id={`pick-error-${item.itemKey}`}
-                              className="text-[10px] font-semibold text-red-600 max-w-[120px] text-right"
-                            >
-                              {pickErrors[item.itemKey]}
-                            </span>
-                          ) : (
-                            <span className="text-[10px] text-gray-400">Max {item.requiredQty}</span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="font-medium">{item.pickedQty}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5">{itemStatusBadge(status)}</td>
-                    {isEditable && (
-                      <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          disabled={picked <= 0 || busy}
-                          onClick={() => openBarcodeModal(item.styleCode)}
-                          className="text-[11px] font-bold text-purple-600 hover:text-purple-800 disabled:opacity-40"
-                        >
-                          Print
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                  {isExpanded && batch.type === "combined" && (
-                    <tr className="bg-purple-50/30">
-                      <td colSpan={isEditable ? 7 : 6} className="px-3 py-2">
-                        {renderAllocationBreakdown(item)}
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </tbody>
-        </table>
+      <div
+        className="flex gap-2 border-b border-gray-100 pb-2"
+        role="tablist"
+        aria-label="Pick list batch views"
+      >
+        <button
+          type="button"
+          role="tab"
+          id="batch-tab-picking"
+          aria-selected={activeTab === "picking"}
+          aria-controls="batch-panel-picking"
+          onClick={() => setActiveTab("picking")}
+          className={`px-3 py-1.5 text-[12px] font-semibold rounded ${
+            activeTab === "picking" ? "bg-violet-100 text-violet-800" : "text-gray-600 hover:bg-gray-50"
+          }`}
+        >
+          Pick list
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="batch-tab-barcode-history"
+          aria-selected={activeTab === "barcode-history"}
+          aria-controls="batch-panel-barcode-history"
+          onClick={() => setActiveTab("barcode-history")}
+          className={`px-3 py-1.5 text-[12px] font-semibold rounded ${
+            activeTab === "barcode-history"
+              ? "bg-violet-100 text-violet-800"
+              : "text-gray-600 hover:bg-gray-50"
+          }`}
+        >
+          Barcode print history
+        </button>
       </div>
 
-      {isEditable && (
-        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
-          <button
-            type="button"
-            onClick={() => printBatchPickList(batch)}
-            disabled={busy}
-            className="px-4 py-2 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1.5"
-            aria-label="Print pick list for warehouse picking"
-          >
-            <i className="ri-printer-line" aria-hidden />
-            Print Pick List
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleSavePicks()}
-            disabled={busy}
-            className="px-4 py-2 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 disabled:opacity-50"
-          >
-            Save Picks
-          </button>
-          <button
-            type="button"
-            onClick={() => openBarcodeModal()}
-            disabled={busy || totalPicked <= 0}
-            className="px-4 py-2 bg-white border border-gray-200 text-gray-800 text-[11px] font-bold rounded hover:bg-gray-50 disabled:opacity-40 flex items-center gap-1.5"
-          >
-            <i className="ri-barcode-line" aria-hidden />
-            Print Barcodes
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleSendToScanning()}
-            disabled={busy || totalPicked <= 0}
-            className="px-4 py-2 bg-indigo-600 text-white text-[11px] font-bold rounded hover:bg-indigo-700 disabled:opacity-40"
-          >
-            Send to Scanning
-          </button>
+      <div
+        role="tabpanel"
+        id="batch-panel-picking"
+        aria-labelledby="batch-tab-picking"
+        hidden={activeTab !== "picking"}
+      >
+        {activeTab === "picking" && (
+          <BatchPickListPanel
+            batch={batch}
+            isEditable={isEditable}
+            draftPicks={draftPicks}
+            pickErrors={pickErrors}
+            expandedKey={expandedKey}
+            setExpandedKey={setExpandedKey}
+            printedQtyByStyle={printedQtyByStyle}
+            busy={busy}
+            totalPicked={totalPicked}
+            onPickChange={handlePickChange}
+            onSavePicks={() => void handleSavePicks()}
+            onSendToScanning={() => void handleSendToScanning()}
+            onOpenBarcodeModal={openBarcodeModal}
+          />
+        )}
+      </div>
 
-        </div>
-      )}
+      <div
+        role="tabpanel"
+        id="batch-panel-barcode-history"
+        aria-labelledby="batch-tab-barcode-history"
+        hidden={activeTab !== "barcode-history"}
+      >
+        {activeTab === "barcode-history" && (
+          <BarcodePrintHistory
+            history={batch.barcodePrintHistory}
+            summary={batch.barcodePrintSummary}
+          />
+        )}
+      </div>
 
       <BatchBarcodePrintModal
         open={barcodeModalOpen}
         batchNumber={batch.batchNumber}
         styleCode={barcodeModalStyle}
+        styleOptions={styleOptions}
+        allowStyleSelection={barcodeAllowStyleSelection}
         maxQty={barcodeModalMaxQty}
         busy={barcodePrintBusy}
         onClose={() => setBarcodeModalOpen(false)}
         onConfirm={handleBarcodePrintConfirm}
       />
 
-      {!isEditable && (
-        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
-          <button
-            type="button"
-            onClick={() => printBatchPickList(batch)}
-            className="px-4 py-2 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 flex items-center gap-1.5"
-            aria-label="Reprint pick list"
-          >
-            <i className="ri-printer-line" aria-hidden />
-            Print Pick List
-          </button>
-        </div>
-      )}
-
-      {batch.status === "sent-to-scanning" && (
-        <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4 text-sm text-indigo-900">
-          This pick list has been sent to scanning.{" "}
-          <Link href="/warehouse-management/scanning" className="font-bold underline">
-            Open scanning queue
-          </Link>
-        </div>
-      )}
     </div>
   );
 }

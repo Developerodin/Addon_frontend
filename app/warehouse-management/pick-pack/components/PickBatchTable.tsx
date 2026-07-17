@@ -22,15 +22,18 @@ function statusBadge(status: string) {
   );
 }
 
+export type PickBatchTableVariant = "active" | "history";
+
 export interface PickBatchTableProps {
   batches: PickListBatch[];
   loading: boolean;
+  variant?: PickBatchTableVariant;
 }
 
 /**
  * Table of pick-list batches — row click opens batch detail page.
  */
-export default function PickBatchTable({ batches, loading }: PickBatchTableProps) {
+export default function PickBatchTable({ batches, loading, variant = "active" }: PickBatchTableProps) {
   const router = useRouter();
 
   if (loading) {
@@ -48,13 +51,21 @@ export default function PickBatchTable({ batches, loading }: PickBatchTableProps
         <div className="w-12 h-12 mx-auto mb-3 bg-gray-50 rounded-full flex items-center justify-center">
           <i className="ri-inbox-line text-2xl text-gray-300" aria-hidden />
         </div>
-        <p className="text-sm font-semibold text-gray-600">No pick lists yet</p>
+        <p className="text-sm font-semibold text-gray-600">
+          {variant === "history" ? "No completed pick lists yet" : "No active pick lists"}
+        </p>
         <p className="text-xs text-gray-500 mt-1">
-          Select orders on the{" "}
-          <Link href="/warehouse-management/orders" className="text-purple-600 hover:underline">
-            Orders
-          </Link>{" "}
-          page and generate a pick list.
+          {variant === "history" ? (
+            "Fully picked batches appear here once all quantities are saved."
+          ) : (
+            <>
+              Select orders on the{" "}
+              <Link href="/warehouse-management/orders" className="text-purple-600 hover:underline">
+                Orders
+              </Link>{" "}
+              page and generate a pick list.
+            </>
+          )}
         </p>
       </div>
     );

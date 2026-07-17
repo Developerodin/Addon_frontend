@@ -7,14 +7,18 @@ import PickBatchTable from "./components/PickBatchTable";
 import {
   whmsPickListBatches,
   type PickListBatch,
+  type PickListBatchStatus,
 } from "@/shared/services/whmsPickListBatchService";
+
+type PickPackTab = "active" | "history";
 
 const PickPackPage = () => {
   const [loading, setLoading] = useState(true);
   const [batches, setBatches] = useState<PickListBatch[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<"" | "picking" | "sent-to-scanning">("");
+  const [tab, setTab] = useState<PickPackTab>("active");
+  const [statusFilter, setStatusFilter] = useState<"" | PickListBatchStatus>("");
   const [q, setQ] = useState("");
 
   const loadBatches = useCallback(async () => {
@@ -23,7 +27,8 @@ const PickPackPage = () => {
       const res = await whmsPickListBatches.list({
         page,
         limit: 20,
-        ...(statusFilter ? { status: statusFilter } : {}),
+        pickComplete: tab === "history",
+        ...(tab === "history" && statusFilter ? { status: statusFilter } : {}),
         ...(q.trim() ? { q: q.trim() } : {}),
       });
       setBatches(res.results || []);
@@ -34,12 +39,18 @@ const PickPackPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, statusFilter, q]);
+  }, [page, statusFilter, q, tab]);
 
   useEffect(() => {
     const t = setTimeout(() => void loadBatches(), 300);
     return () => clearTimeout(t);
   }, [loadBatches]);
+
+  const handleTabChange = (next: PickPackTab) => {
+    setTab(next);
+    setPage(1);
+    if (next === "active") setStatusFilter("");
+  };
 
   return (
     <div className="main-content">
@@ -63,26 +74,58 @@ const PickPackPage = () => {
                   className="border border-gray-200 rounded px-3 py-1.5 text-sm min-w-[180px]"
                   aria-label="Search pick lists"
                 />
-                <select
-                  value={statusFilter}
-                  onChange={(e) => {
-                    setStatusFilter(e.target.value as "" | "picking" | "sent-to-scanning");
-                    setPage(1);
-                  }}
-                  className="border border-gray-200 rounded px-3 py-1.5 text-sm"
-                  aria-label="Filter by status"
-                >
-                  <option value="">All statuses</option>
-                  <option value="picking">Picking</option>
-                  <option value="sent-to-scanning">Sent to scanning</option>
-                </select>
+                {tab === "history" && (
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => {
+                      setStatusFilter(e.target.value as "" | PickListBatchStatus);
+                      setPage(1);
+                    }}
+                    className="border border-gray-200 rounded px-3 py-1.5 text-sm"
+                    aria-label="Filter history by status"
+                  >
+                    <option value="">All completed</option>
+                    <option value="picking">Fully picked</option>
+                    <option value="sent-to-scanning">Sent to scanning</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                )}
               </div>
             </div>
           </div>
 
           <div className="box">
             <div className="box-body">
-              <PickBatchTable batches={batches} loading={loading} />
+              <div
+                className="flex gap-2 mb-4 border-b border-gray-100 pb-2"
+                role="tablist"
+                aria-label="Pick list views"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === "active"}
+                  onClick={() => handleTabChange("active")}
+                  className={`px-3 py-1.5 text-[12px] font-semibold rounded ${
+                    tab === "active" ? "bg-violet-100 text-violet-800" : "text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  Active
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === "history"}
+                  onClick={() => handleTabChange("history")}
+                  className={`px-3 py-1.5 text-[12px] font-semibold rounded ${
+                    tab === "history" ? "bg-violet-100 text-violet-800" : "text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  History
+                </button>
+              </div>
+
+              <PickBatchTable batches={batches} loading={loading} variant={tab} />
               {!loading && totalPages > 1 && (
                 <div className="flex justify-center gap-2 mt-4">
                   <button
