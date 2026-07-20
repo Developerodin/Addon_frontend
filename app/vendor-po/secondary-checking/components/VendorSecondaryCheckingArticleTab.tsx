@@ -96,7 +96,7 @@ export function VendorSecondaryCheckingArticleTab({
       "VPO",
       "Vendor",
       "Vendor Code",
-      "Ref / Lot",
+      "Invoice no",
       "Batch From Boxes",
       "Lot Expected",
       "Boxes Not Scanned",
@@ -206,7 +206,7 @@ export function VendorSecondaryCheckingArticleTab({
                 Vendor
               </th>
               <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase border border-gray-200">
-                Ref / Lot
+                Invoice no
               </th>
               <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase border border-gray-200">
                 Batch from boxes

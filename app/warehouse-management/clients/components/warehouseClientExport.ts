@@ -33,6 +33,7 @@ function storeClientToRow(c: WarehouseClient): Record<string, string | number> {
     if (key === 'slNo') row[header] = c.slNo ?? '';
     else if (key === 'status') row[header] = c.status ?? '';
     else if (key === 'type') row[header] = c.type;
+    else if (key === 'clientId') row[header] = c.id;
     else if (key === 'openingDate') row[header] = formatOpeningDate(sp.openingDate);
     else row[header] = (sp as Record<string, unknown>)[key]?.toString() ?? '';
   });

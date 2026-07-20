@@ -77,7 +77,7 @@ function buildDetailRows(lookup: BoxLookupResponse): DetailRow[] {
     { label: "Vendor", value: getVendorCompanyName(box) },
     { label: "Vendor code", value: getArticleVendorCodeFromBox(box) },
     { label: "Product", value: box.productName || boxField(box, "productId") },
-    { label: "Lot", value: box.lotNumber || "—" },
+    { label: "Invoice no", value: box.lotNumber || "—" },
     { label: "Units", value: String(box.numberOfUnits ?? 0) },
     {
       label: "SC Status",

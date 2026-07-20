@@ -3,7 +3,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from "react"
 import { toast } from "react-hot-toast";
 import { VendorPOFormData, VendorPOLineItem, VendorPOArticle } from "../types";
 import { newVendorPOLineItem } from "./vendorPoFormLineDefaults";
-import VendorPOFormHeaderSection from "./VendorPOFormHeaderSection";
+import VendorPOFormHeaderSection, { type VendorOption } from "./VendorPOFormHeaderSection";
 import VendorPOLineItemsTable from "./VendorPOLineItemsTable";
 import VendorPOOrderTotalsSection from "./VendorPOOrderTotalsSection";
 import VendorPOArticlePickerPortal from "./VendorPOArticlePickerPortal";
@@ -19,13 +19,13 @@ export type VendorPoFormSubmitAction = "draft" | "submit";
 
 interface VendorPOFormProps {
   initialData: VendorPOFormData | null;
-  vendors: { id: string; vendorCode: string; vendorName: string }[];
+  initialSelectedVendor?: VendorOption | null;
   articles: VendorPOArticle[];
   onVendorChange?: (vendorId: string) => void;
   formMode?: VendorPoRaiseFormMode;
   apiStatus?: VendorPoApiStatus | null;
   workflowLocked?: boolean;
-  onSubmit: (data: VendorPOFormData, action: VendorPoFormSubmitAction) => void;
+  onSubmit: (data: VendorPOFormData, action: VendorPoFormSubmitAction, selectedVendor: VendorOption | null) => void;
   onCancel: () => void;
   isSubmitting?: boolean;
 }
@@ -35,7 +35,7 @@ interface VendorPOFormProps {
  */
 export default function VendorPOForm({
   initialData,
-  vendors,
+  initialSelectedVendor = null,
   articles,
   onVendorChange,
   formMode = "full",
@@ -51,6 +51,7 @@ export default function VendorPOForm({
   );
 
   const [vendorId, setVendorId] = useState(initialData?.vendorId ?? "");
+  const [selectedVendor, setSelectedVendor] = useState<VendorOption | null>(initialSelectedVendor);
   const [creditDays, setCreditDays] = useState<number>(initialData?.creditDays ?? 0);
   const [estimatedOrderDeliveryDate, setEstimatedOrderDeliveryDate] = useState<string>(
     initialData?.estimatedOrderDeliveryDate ?? ""
@@ -216,9 +217,15 @@ export default function VendorPOForm({
     ),
   });
 
+  const handleVendorSelect = (vendor: VendorOption) => {
+    setVendorId(vendor.id);
+    setSelectedVendor(vendor);
+    onVendorChange?.(vendor.id);
+  };
+
   const handleFormAction = (action: VendorPoFormSubmitAction) => {
     if (!validate(action)) return;
-    onSubmit(getFormData(), action);
+    onSubmit(getFormData(), action, selectedVendor);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -403,12 +410,11 @@ export default function VendorPOForm({
       <VendorPOFormHeaderSection
         canEditHeader={fieldAccess.canEditHeader}
         vendorId={vendorId}
+        selectedVendor={selectedVendor}
         creditDays={creditDays}
         estimatedOrderDeliveryDate={estimatedOrderDeliveryDate}
-        vendors={vendors}
         errors={errors}
-        onVendorChange={onVendorChange}
-        setVendorId={setVendorId}
+        onVendorSelect={handleVendorSelect}
         setCreditDays={setCreditDays}
         setEstimatedOrderDeliveryDate={setEstimatedOrderDeliveryDate}
         clearError={clearError}

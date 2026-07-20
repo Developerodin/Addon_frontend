@@ -8,8 +8,7 @@ import { useNavigation } from "@/shared/contextapi/navigationContext";
 import { toast } from "react-hot-toast";
 import VendorPOForm from "../components/VendorPOForm";
 import { VendorPOFormData } from "../types";
-import { listVendors, getVendor } from "@/shared/services/vendorManagementService";
-import { mapVendorDocToVendor } from "../../vendor-list/vendorMappers";
+import { getVendor } from "@/shared/services/vendorManagementService";
 import vendorPurchaseOrderService from "@/shared/services/vendorPurchaseOrderService";
 import { listProducts, getProductById } from "@/shared/services/productService";
 import { productRecordToVendorPOArticle } from "../components/vendorPoArticleMapping";
@@ -18,8 +17,9 @@ import {
   getVendorPoRaiseFormMode,
   hasFullVendorPoRaiseAccess,
 } from "../components/vendorPoRaiseAccess";
-import { buildVendorPoApiPayload } from "../components/vendorPoFormPayload";
 import type { VendorPoFormSubmitAction } from "../components/VendorPOForm";
+import type { VendorOption } from "../components/VendorPOFormHeaderSection";
+import { buildVendorPoApiPayload } from "../components/vendorPoFormPayload";
 
 const VendorPOCreatePage = () => {
   const router = useRouter();
@@ -29,35 +29,11 @@ const VendorPOCreatePage = () => {
   const canAccess = hasSubPermission("/vendor-po", "Vendor PO Raise") || hasFullVendorPoRaiseAccess(authUser?.role);
   const canAdd = canAccess && canAccessVendorPoRaiseAdd(authUser?.role);
 
-  const [vendors, setVendors] = useState<{ id: string; vendorCode: string; vendorName: string }[]>([]);
   const [allCatalogArticles, setAllCatalogArticles] = useState<
     { id: string; code: string; name: string; internalCode?: string }[]
   >([]);
   const [articles, setArticles] = useState<{ id: string; code: string; name: string; internalCode?: string }[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await listVendors({ page: 1, limit: 500, sortBy: "createdAt:desc", populate: "products" });
-        if (!cancelled) {
-          setVendors(
-            res.results.map(mapVendorDocToVendor).map((v) => ({
-              id: v.id,
-              vendorCode: v.vendorCode,
-              vendorName: v.vendorName,
-            }))
-          );
-        }
-      } catch {
-        if (!cancelled) setVendors([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -107,10 +83,14 @@ const VendorPOCreatePage = () => {
     }
   };
 
-  const handleCreate = async (data: VendorPOFormData, action: VendorPoFormSubmitAction) => {
+  const handleCreate = async (
+    data: VendorPOFormData,
+    action: VendorPoFormSubmitAction,
+    selectedVendor: VendorOption | null
+  ) => {
     setIsSubmitting(true);
     try {
-      const payload = buildVendorPoApiPayload(data, vendors, action);
+      const payload = buildVendorPoApiPayload(data, selectedVendor, action);
       if (!payload.vendorName) {
         toast.error("Could not resolve vendor name. Reload the page and try again.");
         return;
@@ -183,7 +163,6 @@ const VendorPOCreatePage = () => {
         <div className="px-[10px] pb-[10px]">
           <VendorPOForm
             initialData={null}
-            vendors={vendors}
             articles={articles}
             onVendorChange={handleVendorChange}
             formMode={formMode}

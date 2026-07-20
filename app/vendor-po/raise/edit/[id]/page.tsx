@@ -8,8 +8,7 @@ import { toast } from "react-hot-toast";
 import { useNavigation } from "@/shared/contextapi/navigationContext";
 import VendorPOForm from "../../components/VendorPOForm";
 import { VendorPOFormData, VendorPO } from "../../types";
-import { listVendors, getVendor } from "@/shared/services/vendorManagementService";
-import { mapVendorDocToVendor } from "../../../vendor-list/vendorMappers";
+import { getVendor } from "@/shared/services/vendorManagementService";
 import vendorPurchaseOrderService from "@/shared/services/vendorPurchaseOrderService";
 import { mapVendorPurchaseOrderToUi } from "../../../utils/vendorPoFlow";
 import { listProducts, getProductById } from "@/shared/services/productService";
@@ -21,6 +20,7 @@ import {
 } from "../../components/vendorPoRaiseAccess";
 import { buildVendorPoUpdatePayload } from "../../components/vendorPoFormPayload";
 import type { VendorPoFormSubmitAction } from "../../components/VendorPOForm";
+import type { VendorOption } from "../../components/VendorPOFormHeaderSection";
 
 function poToFormData(po: VendorPO): VendorPOFormData {
   return {
@@ -61,7 +61,6 @@ const VendorPOEditPage = () => {
   const id = params?.id as string;
   const [po, setPo] = useState<VendorPO | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const [vendors, setVendors] = useState<{ id: string; vendorCode: string; vendorName: string }[]>([]);
   const [allCatalogArticles, setAllCatalogArticles] = useState<
     { id: string; code: string; name: string; internalCode?: string }[]
   >([]);
@@ -116,20 +115,6 @@ const VendorPOEditPage = () => {
           setPo(null);
           setNotFound(true);
         }
-      }
-      try {
-        const res = await listVendors({ page: 1, limit: 500, sortBy: "createdAt:desc", populate: "products" });
-        if (!cancelled) {
-          setVendors(
-            res.results.map(mapVendorDocToVendor).map((v) => ({
-              id: v.id,
-              vendorCode: v.vendorCode,
-              vendorName: v.vendorName,
-            }))
-          );
-        }
-      } catch {
-        if (!cancelled) setVendors([]);
       }
       try {
         const products = await listProducts({ page: 1, limit: 500 });
@@ -215,12 +200,16 @@ const VendorPOEditPage = () => {
     return canAccessVendorPoRaiseEdit(authUser?.role, po.apiStatus);
   }, [po, authUser?.role]);
 
-  const handleSave = (data: VendorPOFormData, action: VendorPoFormSubmitAction) => {
+  const handleSave = (
+    data: VendorPOFormData,
+    action: VendorPoFormSubmitAction,
+    selectedVendor: VendorOption | null
+  ) => {
     if (!po) return;
     setIsSubmitting(true);
     void (async () => {
       try {
-        const payload = buildVendorPoUpdatePayload(data, vendors, action);
+        const payload = buildVendorPoUpdatePayload(data, selectedVendor, action);
         const vendorName = payload.vendorName?.trim() || po.vendorName?.trim() || "";
         if (!vendorName) {
           toast.error("Could not resolve vendor name. Reload the page and try again.");
@@ -298,6 +287,13 @@ const VendorPOEditPage = () => {
   }
 
   const initialData = poToFormData(po);
+  const initialSelectedVendor: VendorOption | null = po.vendorId
+    ? {
+        id: po.vendorId,
+        vendorCode: po.vendorCode?.trim() || po.vendorName?.trim() || "—",
+        vendorName: po.vendorName?.trim() || "",
+      }
+    : null;
 
   if (!roleCanEdit) {
     return (
@@ -342,7 +338,7 @@ const VendorPOEditPage = () => {
         <div className="px-[10px] pb-[10px]">
           <VendorPOForm
             initialData={initialData}
-            vendors={vendors}
+            initialSelectedVendor={initialSelectedVendor}
             articles={articles}
             onVendorChange={handleVendorChange}
             formMode={formMode}

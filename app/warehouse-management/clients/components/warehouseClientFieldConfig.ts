@@ -64,6 +64,7 @@ export const STORE_EXPORT_COLUMNS: { header: string; key: string }[] = [
   { header: 'Status', key: 'status' },
   { header: 'Opening Date', key: 'openingDate' },
   { header: 'Channel', key: 'type' },
+  { header: 'Client ID', key: 'clientId' },
   { header: 'Bill Code', key: 'billCode' },
   { header: 'Retek Code', key: 'retekCode' },
   { header: 'SAP Code', key: 'sapCode' },

@@ -40,6 +40,25 @@ function normalizeListResponse(
 }
 
 /**
+ * Formats the best available date for a vendor box row.
+ * @param box - Vendor box document
+ */
+function formatBoxDate(box: VendorBox): string {
+  const raw = box.receivedDate || box.orderDate || box.createdAt || box.updatedAt;
+  if (!raw) return "—";
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? "—" : parsed.toLocaleDateString();
+}
+
+/**
+ * Resolves invoice number from lot field on vendor box.
+ * @param box - Vendor box document
+ */
+function resolveInvoiceNo(box: VendorBox): string {
+  return box.lotNumber?.trim() || "—";
+}
+
+/**
  * Upcoming tab — paginated boxes pending secondary checking scan-accept.
  */
 export function VendorSecondaryCheckingUpcomingTab({
@@ -139,20 +158,24 @@ export function VendorSecondaryCheckingUpcomingTab({
       "VPO",
       "Product",
       "Vendor Code",
-      "Lot",
+      "Invoice no",
       "Units",
-      "Created",
+      "Date",
     ];
-    const lines = boxes.map((box) => [
-      box.boxId || "",
-      box.barcode || "",
-      box.vpoNumber || "",
-      resolveProductName(box),
-      resolveVendorCode(box),
-      box.lotNumber || "",
-      String(box.numberOfUnits ?? 0),
-      box.createdAt ? new Date(box.createdAt).toLocaleDateString() : "",
-    ]);
+    const lines = boxes.map((box) => {
+      const invoiceNo = resolveInvoiceNo(box);
+      const date = formatBoxDate(box);
+      return [
+        box.boxId || "",
+        box.barcode || "",
+        box.vpoNumber || "",
+        resolveProductName(box),
+        resolveVendorCode(box),
+        invoiceNo === "—" ? "" : invoiceNo,
+        String(box.numberOfUnits ?? 0),
+        date === "—" ? "" : date,
+      ];
+    });
     const csv = [header, ...lines]
       .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
       .join("\n");
@@ -172,7 +195,7 @@ export function VendorSecondaryCheckingUpcomingTab({
           <input
             type="search"
             className="w-full bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 placeholder:text-gray-400 font-medium"
-            placeholder="Search box, barcode, lot, VPO..."
+            placeholder="Search box, barcode, invoice, VPO..."
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
@@ -291,13 +314,13 @@ export function VendorSecondaryCheckingUpcomingTab({
                   Vendor code
                 </th>
                 <th className="px-1.5 py-2 text-left text-[10px] font-bold uppercase border border-gray-200">
-                  Lot
+                  Invoice no
                 </th>
                 <th className="px-1.5 py-2 text-right text-[10px] font-bold uppercase border border-gray-200">
                   Units
                 </th>
                 <th className="px-1.5 py-2 text-left text-[10px] font-bold uppercase border border-gray-200">
-                  Created
+                  Date
                 </th>
               </tr>
             </thead>
@@ -326,15 +349,13 @@ export function VendorSecondaryCheckingUpcomingTab({
                       : undefined) || "no vendor code"}
                   </td>
                   <td className="px-1.5 py-2 border border-gray-200 text-[10px] text-gray-500">
-                    {box.lotNumber || "—"}
+                    {resolveInvoiceNo(box)}
                   </td>
                   <td className="px-1.5 py-2 border border-gray-200 text-right text-[11px] font-bold">
                     {(box.numberOfUnits ?? 0).toLocaleString()}
                   </td>
                   <td className="px-1.5 py-2 border border-gray-200 text-[10px] text-gray-500">
-                    {box.createdAt
-                      ? new Date(box.createdAt).toLocaleDateString()
-                      : "—"}
+                    {formatBoxDate(box)}
                   </td>
                 </tr>
               ))}
@@ -381,10 +402,13 @@ export function VendorSecondaryCheckingUpcomingTab({
                             Vendor code
                           </th>
                           <th className="px-1.5 py-1.5 text-left text-[10px] font-bold uppercase border border-gray-200">
-                            Lot
+                            Invoice no
                           </th>
                           <th className="px-1.5 py-1.5 text-right text-[10px] font-bold uppercase border border-gray-200">
                             Units
+                          </th>
+                          <th className="px-1.5 py-1.5 text-left text-[10px] font-bold uppercase border border-gray-200">
+                            Date
                           </th>
                         </tr>
                       </thead>
@@ -403,10 +427,13 @@ export function VendorSecondaryCheckingUpcomingTab({
                                 : undefined) || "no vendor code"}
                             </td>
                             <td className="px-1.5 py-1.5 border border-gray-200 text-[10px] text-gray-500">
-                              {box.lotNumber || "—"}
+                              {resolveInvoiceNo(box)}
                             </td>
                             <td className="px-1.5 py-1.5 border border-gray-200 text-right text-[11px] font-bold">
                               {(box.numberOfUnits ?? 0).toLocaleString()}
+                            </td>
+                            <td className="px-1.5 py-1.5 border border-gray-200 text-[10px] text-gray-500">
+                              {formatBoxDate(box)}
                             </td>
                           </tr>
                         ))}

@@ -7,12 +7,12 @@ type VendorRow = { id: string; vendorName: string };
 /**
  * Build create/update API payload from form state.
  * @param data - Form values
- * @param vendors - Vendor lookup list
+ * @param selectedVendor - Selected vendor (from picker)
  * @param action - draft save or submit to vendor
  */
 export function buildVendorPoApiPayload(
   data: VendorPOFormData,
-  vendors: VendorRow[],
+  selectedVendor: VendorRow | null,
   action: VendorPoFormSubmitAction
 ): CreateVendorPoPayload {
   const subTotal = data.lineItems.reduce(
@@ -25,8 +25,7 @@ export function buildVendorPoApiPayload(
     0
   );
   const total = subTotal + gst;
-  const vendorRow = vendors.find((v) => v.id === data.vendorId);
-  const vendorName = vendorRow?.vendorName?.trim() ?? "";
+  const vendorName = selectedVendor?.vendorName?.trim() ?? "";
 
   return {
     vendor: data.vendorId,
@@ -57,15 +56,15 @@ export function buildVendorPoApiPayload(
 /**
  * Build PATCH payload from form state (includes line _id when persisted).
  * @param data - Form values
- * @param vendors - Vendor lookup list
+ * @param selectedVendor - Selected vendor (from picker)
  * @param action - draft save or submit to vendor
  */
 export function buildVendorPoUpdatePayload(
   data: VendorPOFormData,
-  vendors: VendorRow[],
+  selectedVendor: VendorRow | null,
   action: VendorPoFormSubmitAction
 ): UpdateVendorPoPayload {
-  const base = buildVendorPoApiPayload(data, vendors, action);
+  const base = buildVendorPoApiPayload(data, selectedVendor, action);
   return {
     ...base,
     poItems: data.lineItems.map((item) => ({

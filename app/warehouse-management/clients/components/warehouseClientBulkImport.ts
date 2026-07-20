@@ -101,6 +101,7 @@ export function downloadWarehouseClientStoreTemplate(): void {
     if (key === 'slNo') sample[header] = '1';
     else if (key === 'status') sample[header] = 'active';
     else if (key === 'type') sample[header] = 'Store';
+    else if (key === 'clientId') sample[header] = 'REFERENCE_ONLY_ON_EXPORT';
     else if (key === 'openingDate') sample[header] = '2026-04-02';
     else if (key === 'billCode') sample[header] = 'BILL-01';
     else if (key === 'sapCode') sample[header] = 'SAP123';
@@ -123,7 +124,8 @@ export function downloadWarehouseClientStoreTemplate(): void {
     ['Warehouse clients — Store import'],
     [''],
     ['Headers match Store for Akshay.xlsx. Channel = Store.'],
-    ['Do not add Client ID, createdAt, or updatedAt — system-managed.'],
+    ['Client ID is included on export for reference — ignored on import.'],
+    ['Do not add createdAt or updatedAt — system-managed.'],
   ]);
   XLSX.utils.book_append_sheet(wb, inst, 'Instructions');
   XLSX.writeFile(wb, STORE_TEMPLATE);
