@@ -125,6 +125,8 @@ export interface YarnRequisitionResponse {
   minQty: number;
   availableQty: number;
   blockedQty: number;
+  /** Live warehouse stock when `includeLiveStock=true` on list API. */
+  liveStock?: RequisitionLiveStockBreakdown;
   alertStatus: 'below_minimum' | 'overbooked' | null;
   poSent: boolean;
   draftForPo?: boolean;
@@ -139,6 +141,19 @@ export interface YarnRequisitionResponse {
   draftPoQuantity?: number | null;
   created: string;
   lastUpdated: string;
+}
+
+/** Live warehouse stock attached to requisition list rows (kg). */
+export interface RequisitionLiveStockBreakdown {
+  longTermKg: number;
+  shortTermKg: number;
+  /** QC-approved boxes not yet assigned to LT/ST slot. */
+  unallocatedKg: number;
+  blockedKg: number;
+  /** LT + ST − blocked (excludes unallocated). */
+  availableKg: number;
+  /** LT + ST in storage locations. */
+  totalStockKg: number;
 }
 
 /** Client-visible workflow buckets aligned with procurement spec. */
@@ -543,6 +558,7 @@ class YarnInventoryService {
     page?: number;
     limit?: number;
     skipRecalculation?: boolean;
+    includeLiveStock?: boolean;
     yarnName?: string;
     lastUpdatedFrom?: string;
     lastUpdatedTo?: string;
@@ -576,6 +592,8 @@ class YarnInventoryService {
     if (params.limit) queryParams.append('limit', params.limit.toString());
     if (params.skipRecalculation)
       queryParams.append('skipRecalculation', 'true');
+    if (params.includeLiveStock)
+      queryParams.append('includeLiveStock', 'true');
     if (params.yarnName?.trim())
       queryParams.append('yarnName', params.yarnName.trim());
     if (params.lastUpdatedFrom)

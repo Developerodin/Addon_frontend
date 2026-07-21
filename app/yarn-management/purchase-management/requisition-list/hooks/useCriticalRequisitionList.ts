@@ -7,6 +7,7 @@ import {
   deriveRequisitionWorkflowStage,
   requisitionMongoId,
   requisitionYarnCatalogId,
+  type RequisitionLiveStockBreakdown,
   type RequisitionWorkflowStageUi,
   type YarnRequisitionResponse,
 } from "@/app/yarn-management/dashboard/services/yarnInventoryService";
@@ -17,8 +18,12 @@ export interface CriticalRow {
   /** Catalog id when API sends it — used to match supplier yarn lines. */
   yarnCatalogId?: string;
   minimumQty: number;
+  /** Snapshot available net qty stored on requisition doc (at create/last recalc). */
   availableQty: number;
+  /** Snapshot blocked qty stored on requisition doc. */
   blockedQty: number;
+  /** Live warehouse stock from boxes/cones (when includeLiveStock=true). */
+  liveStock: RequisitionLiveStockBreakdown | null;
   /** Quantity (kg) staged on the linked draft PO line for this requisition, when applicable. */
   draftPoQuantity: number | null;
   lastUpdated: string;
@@ -140,6 +145,7 @@ export function mapRequisitionToCriticalRow(
     minimumQty: req.minQty,
     availableQty: req.availableQty,
     blockedQty: req.blockedQty,
+    liveStock: req.liveStock ?? null,
     draftPoQuantity:
       typeof req.draftPoQuantity === "number" && Number.isFinite(req.draftPoQuantity)
         ? req.draftPoQuantity
@@ -261,6 +267,7 @@ export function useCriticalRequisitionList(hasPermission: boolean) {
         page,
         limit,
         skipRecalculation: true,
+        includeLiveStock: true,
         yarnName: debouncedSearch || undefined,
         preferredSupplierId: vendorSupplierIdFilter || undefined,
         supplierName:
@@ -319,8 +326,14 @@ export function useCriticalRequisitionList(hasPermission: boolean) {
    * @param key - Sortable column key.
    */
   const handleSort = useCallback((key: keyof CriticalRow) => {
-    if (key === "id" || key === "workflowStage" || key === "preferredSupplierDisplayName" || key === "draftPoQuantity") {
-      toast("Sorting by supplier, workflow, or draft PO qty is handled via filters.", { icon: "ℹ️" });
+    if (
+      key === "id" ||
+      key === "workflowStage" ||
+      key === "preferredSupplierDisplayName" ||
+      key === "draftPoQuantity" ||
+      key === "liveStock"
+    ) {
+      toast("Sorting by supplier, workflow, live stock, or draft PO qty is handled via filters.", { icon: "ℹ️" });
       return;
     }
     setSortConfig((prev) => {
@@ -356,6 +369,7 @@ export function useCriticalRequisitionList(hasPermission: boolean) {
         page: apiPage,
         limit: pageSize,
         skipRecalculation: true,
+        includeLiveStock: true,
         yarnName: debouncedSearch || undefined,
         preferredSupplierId: vendorSupplierIdFilter || undefined,
         supplierName:

@@ -7,13 +7,14 @@ import { toast } from "react-hot-toast";
 import supplierService, { type Supplier } from "@/shared/services/supplierService";
 import { PoDraftQueueDrawerTrigger } from "./components/PoDraftQueueDrawer";
 import { RequisitionListPagination } from "./components/RequisitionListPagination";
+import { RequisitionListTable } from "./components/RequisitionListTable";
 import {
   CRITICAL_EXPORT_ROW_CAP,
   useCriticalRequisitionList,
   workflowStageLabel,
   type CriticalRow,
 } from "./hooks/useCriticalRequisitionList";
-import { vendorsForCriticalRow } from "./utils/vendorsForCriticalRow";
+import { formatStockKg } from "./utils/formatStockKg";
 
 const RequisitionListPage = () => {
   const { hasSubPermission } = useNavigation();
@@ -44,29 +45,15 @@ const RequisitionListPage = () => {
     };
   }, [hasPermission]);
 
-  /**
-   * Suppliers who list this requisition yarn in `yarnDetails` (plus legacy saved vendor if needed).
-   */
-  const vendorsForRow = useCallback(
-    (row: CriticalRow) => vendorsForCriticalRow(row, supplierOptions),
-    [supplierOptions]
-  );
-
   const isBelowMinimum = (yarn: CriticalRow) => yarn.availableQty < yarn.minimumQty;
   const isOverblocked = (yarn: CriticalRow) => yarn.blockedQty > yarn.availableQty;
 
   const getStatusBadges = (yarn: CriticalRow) => {
-    const badges: { label: string; className: string }[] = [];
-    if (isBelowMinimum(yarn)) {
-      badges.push({ label: "Below Minimum", className: "border border-red-200 bg-red-100 text-red-800" });
-    }
-    if (isOverblocked(yarn)) {
-      badges.push({ label: "Overblocked", className: "border border-amber-200 bg-amber-100 text-amber-800" });
-    }
-    if (badges.length === 0) {
-      badges.push({ label: "Healthy", className: "border border-emerald-200 bg-emerald-100 text-emerald-800" });
-    }
-    return badges;
+    const badges: string[] = [];
+    if (isBelowMinimum(yarn)) badges.push("Below Minimum");
+    if (isOverblocked(yarn)) badges.push("Overblocked");
+    if (badges.length === 0) badges.push("Healthy");
+    return badges.join(" | ");
   };
 
   const handleExport = async () => {
@@ -85,23 +72,34 @@ const RequisitionListPage = () => {
       const headers = [
         "Yarn Name",
         "Minimum Qty",
-        "Available net qty",
-        "Blocked Qty",
+        "Avail @ create (snapshot)",
+        "Blocked @ create (snapshot)",
+        "Live unallocated kg",
+        "Live LT kg",
+        "Live ST kg",
+        "Live total kg (LT+ST)",
+        "Live avail kg (LT+ST-blocked)",
+        "Live blocked kg",
         "Draft PO qty",
         "Alert inventory",
         "Procurement workflow",
         "Vendor snapshot",
       ];
       const rows = merged.map((yarn) => {
-        const badges =
-          getStatusBadges(yarn).map((badge) => badge.label).join(" | ") || "Healthy";
+        const live = yarn.liveStock;
         return [
           yarn.yarnName,
           yarn.minimumQty.toString(),
-          yarn.availableQty.toString(),
-          yarn.blockedQty.toString(),
-          yarn.draftPoQuantity != null ? yarn.draftPoQuantity.toString() : "",
-          badges,
+          formatStockKg(yarn.availableQty),
+          formatStockKg(yarn.blockedQty),
+          live ? formatStockKg(live.unallocatedKg) : "",
+          live ? formatStockKg(live.longTermKg) : "",
+          live ? formatStockKg(live.shortTermKg) : "",
+          live ? formatStockKg(live.totalStockKg) : "",
+          live ? formatStockKg(live.availableKg) : "",
+          live ? formatStockKg(live.blockedKg) : "",
+          yarn.draftPoQuantity != null ? formatStockKg(yarn.draftPoQuantity) : "",
+          getStatusBadges(yarn),
           workflowStageLabel(yarn.workflowStage),
           yarn.preferredSupplierDisplayName || "",
         ];
@@ -125,43 +123,21 @@ const RequisitionListPage = () => {
     }
   };
 
-  const onSendToDraft = (yarn: CriticalRow) => {
-    if (!yarn.preferredSupplierId) {
-      toast.error("Select a vendor before sending to draft PO.");
-      return;
-    }
+  const onSendToDraft = useCallback(
+    (yarn: CriticalRow) => {
+      if (!yarn.preferredSupplierId) {
+        toast.error("Select a vendor before sending to draft PO.");
+        return;
+      }
 
-    const confirmed = window.confirm(
-      `Create or merge ${yarn.yarnName} into the draft PO for this vendor (one draft per supplier until submitted)?`
-    );
-    if (!confirmed) return;
-    void rq.handleMarkPoSent(yarn.id, yarn.yarnName);
-  };
-
-  const workflowTone = (workflow: CriticalRow["workflowStage"]) => {
-    switch (workflow) {
-      case "in_requisition":
-        return "border border-slate-200 bg-slate-50 text-slate-800";
-      case "sent_to_draft":
-        return "border border-amber-200 bg-amber-50 text-amber-950";
-      case "order_placed":
-        return "border border-emerald-200 bg-emerald-50 text-emerald-900";
-      case "dismissed":
-      default:
-        return "border border-gray-200 bg-gray-50 text-gray-600";
-    }
-  };
-
-  const SortIcon = ({ field }: { field: keyof CriticalRow }) => {
-    if (rq.sortConfig?.key !== field) {
-      return <i className="ri-arrow-up-down-line text-gray-400 text-sm" />;
-    }
-    return rq.sortConfig.direction === "asc" ? (
-      <i className="ri-arrow-up-line text-purple-600 text-sm" />
-    ) : (
-      <i className="ri-arrow-down-line text-purple-600 text-sm" />
-    );
-  };
+      const confirmed = window.confirm(
+        `Create or merge ${yarn.yarnName} into the draft PO for this vendor (one draft per supplier until submitted)?`
+      );
+      if (!confirmed) return;
+      void rq.handleMarkPoSent(yarn.id, yarn.yarnName);
+    },
+    [rq]
+  );
 
   if (!hasPermission) {
     return (
@@ -234,7 +210,7 @@ const RequisitionListPage = () => {
                 {rq.totalResults}
               </span>
               <span className="text-[10px] text-gray-400 font-medium hidden sm:inline">
-                (live totals use cached requisition fields — fast load)
+                Snapshot columns = stored values; live columns = current warehouse stock
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -357,200 +333,18 @@ const RequisitionListPage = () => {
               </p>
             </div>
           ) : (
-            <table
-              className="w-full border-collapse border border-gray-200"
-              aria-busy={rq.loading}
-              aria-label="Critical yarn requisitions"
-            >
-              <thead>
-                <tr className="bg-gray-50/30">
-                  <th
-                    className="pl-[10px] pr-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100/50"
-                    onClick={() => rq.handleSort("yarnName")}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      Yarn Name
-                      <SortIcon field="yarnName" />
-                    </div>
-                  </th>
-                  <th
-                    className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100/50"
-                    onClick={() => rq.handleSort("minimumQty")}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      Min Qty
-                      <SortIcon field="minimumQty" />
-                    </div>
-                  </th>
-                  <th
-                    className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100/50"
-                    onClick={() => rq.handleSort("availableQty")}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      Available net qty
-                      <SortIcon field="availableQty" />
-                    </div>
-                  </th>
-                  <th
-                    className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100/50"
-                    onClick={() => rq.handleSort("blockedQty")}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      Blocked Qty
-                      <SortIcon field="blockedQty" />
-                    </div>
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200"
-                    title="Quantity on the linked draft purchase order line for this yarn (kg)"
-                    aria-label="Draft purchase order quantity in kilograms"
-                  >
-                    Draft PO qty
-                  </th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    Alert Status
-                  </th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    Status
-                  </th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    Vendor
-                  </th>
-                  <th
-                    className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 cursor-pointer hover:bg-gray-100/50"
-                    onClick={() => rq.handleSort("lastUpdated")}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      Last Updated
-                      <SortIcon field="lastUpdated" />
-                    </div>
-                  </th>
-                  <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rq.rows.map((yarn) => (
-                  <tr key={yarn.id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="pl-[10px] pr-1.5 py-2.5 border border-gray-200">
-                      <span className="text-[12px] font-bold text-gray-900">{yarn.yarnName}</span>
-                    </td>
-                    <td className="px-1.5 py-2.5 text-[12px] text-gray-900 border border-gray-200">
-                      {yarn.minimumQty.toLocaleString()}
-                    </td>
-                    <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">
-                      <span className="text-green-600 font-semibold">{yarn.availableQty.toLocaleString()}</span>
-                    </td>
-                    <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">
-                      <span className="text-orange-600 font-semibold">{yarn.blockedQty.toLocaleString()}</span>
-                    </td>
-                    <td
-                      className="px-1.5 py-2.5 text-[12px] border border-gray-200"
-                      title="Staged quantity on draft PO (kg)"
-                    >
-                      {yarn.draftPoQuantity != null ? (
-                        <span className="text-amber-700 font-semibold tabular-nums">
-                          {yarn.draftPoQuantity.toLocaleString()}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400 font-medium">—</span>
-                      )}
-                    </td>
-                    <td className="px-1.5 py-2.5 border border-gray-200">
-                      <div className="flex flex-wrap gap-1.5">
-                        {getStatusBadges(yarn).map((badge) => (
-                          <span
-                            key={badge.label}
-                            className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded uppercase tracking-tight ${badge.className}`}
-                          >
-                            {badge.label}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-1.5 py-2.5 border border-gray-200">
-                      <span
-                        className={`inline-flex px-2 py-0.5 text-[10px] font-bold rounded capitalize ${workflowTone(
-                          yarn.workflowStage
-                        )}`}
-                      >
-                        {workflowStageLabel(yarn.workflowStage)}
-                      </span>
-                    </td>
-                    <td className="px-1.5 py-2.5 border border-gray-200 min-w-[170px]">
-                      <select
-                        className="w-full bg-white border border-gray-200 text-[11px] font-medium rounded px-2 py-1 focus:ring-0 focus:border-purple-300 disabled:bg-gray-100"
-                        value={yarn.preferredSupplierId ?? ""}
-                        disabled={yarn.workflowStage !== "in_requisition" || rq.loading}
-                        onChange={(e) =>
-                          void rq.updateRowVendor(yarn.id, e.target.value)
-                        }
-                        aria-label={`Preferred vendor for ${yarn.yarnName}`}
-                      >
-                        <option value="">Select vendor…</option>
-                        {vendorsForRow(yarn).map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.brandName}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-1.5 py-2.5 text-[12px] text-gray-600 border border-gray-200">
-                      {new Date(yarn.lastUpdated).toLocaleString(undefined, {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </td>
-                    <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
-                      <div className="inline-flex flex-col sm:flex-row sm:flex-wrap items-stretch gap-2 justify-end">
-                        <button
-                          type="button"
-                          onClick={() => onSendToDraft(yarn)}
-                          disabled={
-                            rq.loading ||
-                            !rq.canStageRow(yarn) ||
-                            !yarn.preferredSupplierId
-                          }
-                          title={
-                            !yarn.preferredSupplierId
-                              ? "Select a vendor for this row before sending to draft PO."
-                              : undefined
-                          }
-                          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 border border-purple-200 text-purple-700 text-[11px] font-bold rounded hover:bg-purple-50 transition-colors disabled:opacity-50"
-                          aria-label={`Send ${yarn.yarnName} to PO draft`}
-                        >
-                          <i className="ri-draft-line text-sm" aria-hidden />
-                          Send to draft PO
-                        </button>
-                        {rq.canDismissRow(yarn) ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (
-                                window.confirm(`Dismiss requirement for "${yarn.yarnName}"?`)
-                              ) {
-                                void rq.dismissRow(yarn.id, yarn.yarnName);
-                              }
-                            }}
-                            disabled={rq.loading}
-                            className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 border border-red-100 text-red-700 text-[11px] font-bold rounded hover:bg-red-50 disabled:opacity-50"
-                            aria-label={`Dismiss ${yarn.yarnName}`}
-                          >
-                            <i className="ri-delete-bin-line text-sm" aria-hidden />
-                            Dismiss
-                          </button>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <RequisitionListTable
+              rows={rq.rows}
+              loading={rq.loading}
+              supplierOptions={supplierOptions}
+              sortConfig={rq.sortConfig}
+              onSort={rq.handleSort}
+              onSendToDraft={onSendToDraft}
+              onDismiss={rq.dismissRow}
+              onVendorChange={rq.updateRowVendor}
+              canStageRow={rq.canStageRow}
+              canDismissRow={rq.canDismissRow}
+            />
           )}
         </div>
 
