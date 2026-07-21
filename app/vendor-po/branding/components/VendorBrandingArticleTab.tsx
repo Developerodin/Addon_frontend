@@ -13,6 +13,30 @@ import {
 } from "../../utils/groupVendorProductionFlows";
 import { CRM } from "../../vendor-list/crmUiClasses";
 
+/**
+ * Escape a cell value for CSV export.
+ * @param value - Raw cell value
+ */
+function csvCell(value: string | number): string {
+  return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+/**
+ * Trigger a CSV download in the browser (Excel-compatible).
+ * @param filename - Download filename
+ * @param rows - CSV rows including header
+ */
+function downloadCsv(filename: string, rows: (string | number)[][]): void {
+  const csv = rows.map((r) => r.map(csvCell).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export type VendorBrandingArticleTabProps = {
   flows: VendorProductionFlow[];
   loading?: boolean;
@@ -64,6 +88,44 @@ export function VendorBrandingArticleTab({
     return articleRows.slice(start, start + itemsPerPage);
   }, [articleRows, currentPage, itemsPerPage]);
 
+  /** Export filtered article rows as CSV (Excel-compatible). */
+  const handleExportExcel = () => {
+    if (articleRows.length === 0) return;
+    const header = [
+      "Batch Ref",
+      "Product",
+      "VPO",
+      "Vendor",
+      "Vendor Code",
+      "Received",
+      "Completed",
+      "Remaining",
+      "Transferred",
+      "Style breakdown",
+    ];
+    const lines = articleRows.map((row) => {
+      const br = row.flow.floorQuantities.branding;
+      const styleBreakdown = br.transferredData?.length
+        ? enrichBrandingTransferredDataForDisplay(br.transferredData, row.flow)
+            .map((t) => formatTransferredRowLabel(t))
+            .join("; ")
+        : "";
+      return [
+        row.flow.referenceCode || "",
+        row.productName,
+        row.vpoNumber,
+        row.vendorName,
+        row.vendorCode,
+        String(br.received ?? 0),
+        String(br.completed ?? 0),
+        String(br.remaining ?? 0),
+        String(br.transferred ?? 0),
+        styleBreakdown,
+      ];
+    });
+    downloadCsv("vendor_branding_articles.csv", [header, ...lines]);
+  };
+
   if (loading) {
     return (
       <div className={CRM.loadingWrap}>
@@ -105,6 +167,17 @@ export function VendorBrandingArticleTab({
             <option value={25}>25</option>
             <option value={50}>50</option>
           </select>
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            disabled={articleRows.length === 0}
+            className={`${CRM.btnSecondary} disabled:opacity-50`}
+            title="Download filtered rows as CSV"
+            aria-label="Export branding articles to Excel"
+          >
+            <i className="ri-file-excel-2-line text-xs text-emerald-600" aria-hidden="true" />
+            Download Excel
+          </button>
         </div>
       </div>
 

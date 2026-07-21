@@ -9,6 +9,7 @@ import OrderLogsModal from "../../../shared/components/production/OrderLogsModal
 import ArticleLogsModal from "../../../shared/components/production/ArticleLogsModal";
 import { productionService, OrderFilters, ArticleWiseReportArticle, ArticleWiseReportResponse } from "@/shared/services/productionService";
 import YarnEstimationTab from "../../../shared/components/production/YarnEstimationTab";
+import SupervisorUpcomingViewTab from "@/shared/components/production/SupervisorUpcomingViewTab";
 
 interface ProductionOrder {
   id: string;
@@ -33,7 +34,7 @@ interface FloorQuantity {
 }
 
 
-type SupervisorTab = 'orders' | 'article-view' | 'yarn-estimation';
+type SupervisorTab = 'orders' | 'article-view' | 'yarn-estimation' | 'upcoming-view';
 
 const ProductionSupervisorPage = () => {
   const [activeTab, setActiveTab] = useState<SupervisorTab>('orders');
@@ -428,8 +429,20 @@ const ProductionSupervisorPage = () => {
                   if (activeTab === 'article-view') void loadArticleView();
                   else if (activeTab === 'orders') void loadOrders();
                 }}
-                disabled={activeTab === 'article-view' ? articleViewLoading : isLoading}
-                title={activeTab === 'article-view' ? 'Refresh Article view' : 'Refresh Orders'}
+                disabled={
+                  activeTab === 'upcoming-view'
+                    ? false
+                    : activeTab === 'article-view'
+                      ? articleViewLoading
+                      : isLoading
+                }
+                title={
+                  activeTab === 'article-view'
+                    ? 'Refresh Article view'
+                    : activeTab === 'upcoming-view'
+                      ? 'Use Refresh inside Upcoming view'
+                      : 'Refresh Orders'
+                }
               >
                 <i className={`ri-refresh-line text-xs ${(activeTab === 'article-view' ? articleViewLoading : isLoading) ? 'animate-spin' : ''}`}></i> Refresh
               </button>
@@ -500,6 +513,15 @@ const ProductionSupervisorPage = () => {
             >
               Yarn Estimation
             </button>
+            <button
+              type="button"
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${
+                activeTab === 'upcoming-view' ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setActiveTab('upcoming-view')}
+            >
+              Upcoming view
+            </button>
           </div>
         </div>
 
@@ -507,6 +529,8 @@ const ProductionSupervisorPage = () => {
         <div className="min-h-[300px]">
               {activeTab === 'yarn-estimation' ? (
                 <YarnEstimationTab />
+              ) : activeTab === 'upcoming-view' ? (
+                <SupervisorUpcomingViewTab />
               ) : activeTab === 'article-view' ? (
                 <>
                   <div className="p-[10px] mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
