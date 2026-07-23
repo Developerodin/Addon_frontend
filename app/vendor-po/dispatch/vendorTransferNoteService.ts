@@ -20,6 +20,7 @@ export interface VendorDispatchTransferNoteLine {
   containerBarcodes?: string[];
   vpoNumber?: string;
   vendorName?: string;
+  invoiceNumber?: string;
 }
 
 /** Persisted vendor dispatch stock transfer note. */
@@ -60,6 +61,7 @@ export interface VendorDispatchTransferNoteReportRow {
   totalBoxes: number;
   vpoNumber: string;
   vendorName: string;
+  invoiceNumber: string;
   articleNumber: string;
   sapArticleNo: string;
   articleName: string;

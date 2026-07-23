@@ -9,7 +9,14 @@ import {
   statusBadgeClass,
 } from "../utils/groupVendorScFlows";
 import { resolveLotExpectedQty } from "../utils/resolveScReconciliation";
-import { VendorSecondaryCheckingQtyBadges } from "./VendorSecondaryCheckingQtyBadges";
+
+/**
+ * Resolve saved VM4 quantity from secondary checking floor data.
+ * @param sc - Secondary checking floor quantities
+ */
+function savedVm4(sc: VendorProductionFlow["floorQuantities"]["secondaryChecking"]): number {
+  return sc.vm4Quantity ?? (sc as { m4Quantity?: number }).m4Quantity ?? 0;
+}
 
 /**
  * Escape a cell value for CSV export.
@@ -125,7 +132,7 @@ export function VendorSecondaryCheckingArticleTab({
         String(sc.m1Quantity ?? 0),
         String(sc.m2Quantity ?? 0),
         String(sc.m3Quantity ?? 0),
-        String(sc.vm4Quantity ?? sc.m4Quantity ?? 0),
+        String(savedVm4(sc)),
         sc.completed > 0 ? "Completed" : "Pending",
       ];
     });
@@ -223,8 +230,17 @@ export function VendorSecondaryCheckingArticleTab({
               <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase border border-gray-200">
                 Unclassified
               </th>
-              <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase border border-gray-200">
-                M1/M2/M3/VM4
+              <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase border border-gray-200">
+                M1
+              </th>
+              <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase border border-gray-200">
+                M2
+              </th>
+              <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase border border-gray-200">
+                M3
+              </th>
+              <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase border border-gray-200">
+                VM4
               </th>
               <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase border border-gray-200">
                 Status
@@ -238,7 +254,7 @@ export function VendorSecondaryCheckingArticleTab({
             {paginatedRows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={12}
+                  colSpan={15}
                   className="px-1.5 py-10 border border-gray-200 text-center text-gray-400 text-xs font-bold uppercase tracking-widest"
                 >
                   No articles found
@@ -304,8 +320,17 @@ export function VendorSecondaryCheckingArticleTab({
                     <td className="px-1.5 py-2.5 text-right font-bold text-amber-800 text-[12px] border border-gray-200">
                       {(sc.remaining ?? 0).toLocaleString()}
                     </td>
-                    <td className="px-1.5 py-2.5 border border-gray-200">
-                      <VendorSecondaryCheckingQtyBadges sc={sc} />
+                    <td className="px-1.5 py-2.5 text-right font-bold text-emerald-700 text-[12px] border border-gray-200">
+                      {(sc.m1Quantity ?? 0).toLocaleString()}
+                    </td>
+                    <td className="px-1.5 py-2.5 text-right font-bold text-amber-700 text-[12px] border border-gray-200">
+                      {(sc.m2Quantity ?? 0).toLocaleString()}
+                    </td>
+                    <td className="px-1.5 py-2.5 text-right font-bold text-violet-700 text-[12px] border border-gray-200">
+                      {(sc.m3Quantity ?? 0).toLocaleString()}
+                    </td>
+                    <td className="px-1.5 py-2.5 text-right font-bold text-red-700 text-[12px] border border-gray-200">
+                      {savedVm4(sc).toLocaleString()}
                     </td>
                     <td className="px-1.5 py-2.5 border border-gray-200">
                       <span className={statusBadgeClass(row.flow)}>

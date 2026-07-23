@@ -268,6 +268,7 @@ export function VendorTransferNoteHistoryTab({ refreshKey = 0 }: VendorTransferN
                               <thead>
                                 <tr>
                                   <th className="text-left py-1 font-semibold text-gray-500">VPO</th>
+                                  <th className="text-left py-1 font-semibold text-gray-500">Invoice</th>
                                   <th className="text-left py-1 font-semibold text-gray-500">Vendor</th>
                                   <th className="text-left py-1 font-semibold text-gray-500">Vendor Code</th>
                                   <th className="text-left py-1 font-semibold text-gray-500">Brand</th>
@@ -280,6 +281,7 @@ export function VendorTransferNoteHistoryTab({ refreshKey = 0 }: VendorTransferN
                                 {(note.lines ?? []).map((line, idx) => (
                                   <tr key={idx}>
                                     <td className="py-0.5">{line.vpoNumber || "—"}</td>
+                                    <td className="py-0.5">{line.invoiceNumber || "—"}</td>
                                     <td className="py-0.5">{line.vendorName || "—"}</td>
                                     <td className="py-0.5">{line.articleNumber}</td>
                                     <td className="py-0.5">{formatTransferNoteLineBrand(line)}</td>

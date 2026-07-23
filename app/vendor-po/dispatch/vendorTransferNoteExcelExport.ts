@@ -14,6 +14,7 @@ function rowsToExportRecords(rows: VendorDispatchTransferNoteReportRow[]): Recor
     Date: row.stnDate ? new Date(row.stnDate).toLocaleString() : '',
     Category: row.categoryLabel ?? '',
     VPO: row.vpoNumber ?? '',
+    'Invoice Number': row.invoiceNumber ?? '',
     Vendor: row.vendorName ?? '',
     'Vendor Code': row.articleNumber ?? '',
     Brand: row.brand ?? row.sapArticleNo ?? '',

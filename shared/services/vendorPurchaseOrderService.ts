@@ -171,9 +171,13 @@ export interface UpdateVendorPoPayload {
   creditDays?: number;
   currentStatus?: VendorPoApiStatus;
   statusLogs?: Array<{
-    status: VendorPoApiStatus;
+    statusCode?: VendorPoApiStatus;
+    status?: VendorPoApiStatus;
+    notes?: string;
     remarks?: string;
+    updatedAt?: string;
     changedAt?: string;
+    updatedBy?: { username?: string; user?: string };
     changedBy?: string;
   }>;
   packListDetails?: VendorPackListEntry[] | VendorPackListEntry;
