@@ -1,12 +1,11 @@
 "use client";
 
-import React from "react";
+import React, { useRef } from "react";
 import Link from "next/link";
 import type {
   PickListBatchDetail,
   PickListBatchItem,
 } from "@/shared/services/whmsPickListBatchService";
-import { printBatchPickList } from "./batchPickListPrint";
 
 function itemStatusBadge(status: string) {
   const map: Record<string, string> = {
@@ -31,11 +30,15 @@ export interface BatchPickListPanelProps {
   setExpandedKey: (key: string | null) => void;
   printedQtyByStyle: Map<string, number>;
   busy: boolean;
+  savingPicks: boolean;
   totalPicked: number;
+  hasUnsavedPicks: boolean;
+  canPrintPickList: boolean;
   onPickChange: (itemKey: string, rawValue: string, max: number, styleCode: string) => void;
   onSavePicks: () => void;
   onSendToScanning: () => void;
   onOpenBarcodeModal: (styleCode?: string) => void;
+  onPrintPickList: () => void;
 }
 
 /**
@@ -50,12 +53,38 @@ export default function BatchPickListPanel({
   setExpandedKey,
   printedQtyByStyle,
   busy,
+  savingPicks,
   totalPicked,
+  hasUnsavedPicks,
+  canPrintPickList,
   onPickChange,
   onSavePicks,
   onSendToScanning,
   onOpenBarcodeModal,
+  onPrintPickList,
 }: BatchPickListPanelProps) {
+  const pickInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  /**
+   * Focus the next editable picked-quantity input after Enter.
+   */
+  const focusNextPickInput = (currentIndex: number) => {
+    for (let i = currentIndex + 1; i < pickInputRefs.current.length; i++) {
+      const nextInput = pickInputRefs.current[i];
+      if (nextInput && !nextInput.disabled) {
+        nextInput.focus();
+        nextInput.select();
+        return;
+      }
+    }
+  };
+
+  /**
+   * Whether warehouse stock blocks picking for this line.
+   */
+  const isOutOfStock = (item: PickListBatchItem) =>
+    typeof item.availableStock === "number" && item.availableStock <= 0;
+
   const renderAllocationBreakdown = (item: PickListBatchItem) => (
     <ul className="text-[11px] text-gray-600 space-y-0.5 mt-2 pl-2 border-l-2 border-purple-100">
       {(item.allocations || []).map((a) => (
@@ -85,9 +114,10 @@ export default function BatchPickListPanel({
             </tr>
           </thead>
           <tbody>
-            {(batch.items || []).map((item) => {
+            {(batch.items || []).map((item, itemIndex) => {
               const picked = draftPicks[item.itemKey] ?? item.pickedQty;
               const isExpanded = expandedKey === item.itemKey;
+              const noStock = isOutOfStock(item);
               const status =
                 picked <= 0 ? "pending" : picked < item.requiredQty ? "partial" : "picked";
               return (
@@ -111,34 +141,64 @@ export default function BatchPickListPanel({
                       {[item.size, item.shade].filter(Boolean).join(" · ") || "—"}
                     </td>
                     <td className="px-3 py-2.5 text-right font-medium">{item.requiredQty}</td>
-                    <td className="px-3 py-2.5 text-right text-gray-500">{item.availableStock ?? "—"}</td>
+                    <td className="px-3 py-2.5 text-right text-gray-500">
+                      <span
+                        className={noStock ? "font-semibold text-red-600" : undefined}
+                        title={noStock ? "No warehouse stock for this style code" : undefined}
+                      >
+                        {item.availableStock ?? "—"}
+                      </span>
+                    </td>
                     <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                       {isEditable ? (
                         <div className="inline-flex flex-col items-end gap-0.5">
                           <input
+                            ref={(el) => {
+                              pickInputRefs.current[itemIndex] = el;
+                            }}
                             type="number"
                             min={0}
                             max={item.requiredQty}
                             step={1}
                             value={picked}
+                            disabled={noStock}
                             onChange={(e) =>
                               onPickChange(item.itemKey, e.target.value, item.requiredQty, item.styleCode)
                             }
                             onBlur={(e) =>
                               onPickChange(item.itemKey, e.target.value, item.requiredQty, item.styleCode)
                             }
+                            onKeyDown={(e) => {
+                              if (e.key !== "Enter") return;
+                              e.preventDefault();
+                              onPickChange(item.itemKey, e.currentTarget.value, item.requiredQty, item.styleCode);
+                              focusNextPickInput(itemIndex);
+                            }}
                             className={`w-20 border rounded px-2 py-1 text-right text-sm ${
-                              pickErrors[item.itemKey]
-                                ? "border-red-400 bg-red-50 focus:ring-red-300"
-                                : "border-gray-200"
+                              noStock
+                                ? "border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed"
+                                : pickErrors[item.itemKey]
+                                  ? "border-red-400 bg-red-50 focus:ring-red-300"
+                                  : "border-gray-200"
                             }`}
                             aria-label={`Picked quantity for ${item.styleCode}`}
                             aria-invalid={Boolean(pickErrors[item.itemKey])}
                             aria-describedby={
-                              pickErrors[item.itemKey] ? `pick-error-${item.itemKey}` : undefined
+                              pickErrors[item.itemKey]
+                                ? `pick-error-${item.itemKey}`
+                                : noStock
+                                  ? `pick-no-stock-${item.itemKey}`
+                                  : undefined
                             }
                           />
-                          {pickErrors[item.itemKey] ? (
+                          {noStock ? (
+                            <span
+                              id={`pick-no-stock-${item.itemKey}`}
+                              className="text-[10px] font-semibold text-red-600 max-w-[120px] text-right"
+                            >
+                              No stock
+                            </span>
+                          ) : pickErrors[item.itemKey] ? (
                             <span
                               id={`pick-error-${item.itemKey}`}
                               className="text-[10px] font-semibold text-red-600 max-w-[120px] text-right"
@@ -158,9 +218,10 @@ export default function BatchPickListPanel({
                       <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                         <button
                           type="button"
-                          disabled={picked <= 0 || busy}
+                          disabled={noStock || picked <= 0 || busy || hasUnsavedPicks}
                           onClick={() => onOpenBarcodeModal(item.styleCode)}
                           className="text-[11px] font-bold text-purple-600 hover:text-purple-800 disabled:opacity-40"
+                          title={hasUnsavedPicks ? "Save picks first" : undefined}
                         >
                           Print
                         </button>
@@ -183,41 +244,55 @@ export default function BatchPickListPanel({
 
       {isEditable && (
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
+          {/* Print Pick List moved to page header — keep footer actions focused on picks/barcode/scanning
           <button
             type="button"
-            onClick={() => printBatchPickList(batch)}
-            disabled={busy}
+            onClick={onPrintPickList}
+            disabled={busy || !canPrintPickList}
+            title={!canPrintPickList ? "Save picker name first" : undefined}
             className="px-4 py-2 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1.5"
             aria-label="Print pick list for warehouse picking"
           >
             <i className="ri-printer-line" aria-hidden />
             Print Pick List
           </button>
+          */}
           <button
             type="button"
             onClick={() => void onSavePicks()}
-            disabled={busy}
-            className="px-4 py-2 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 disabled:opacity-50"
+            disabled={busy || !hasUnsavedPicks || savingPicks}
+            className="px-4 py-2 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1.5 min-w-[100px] justify-center"
           >
-            Save Picks
+            {savingPicks ? (
+              <>
+                <i className="ri-loader-4-line animate-spin" aria-hidden />
+                Saving…
+              </>
+            ) : (
+              "Save Picks"
+            )}
           </button>
           <button
             type="button"
             onClick={() => onOpenBarcodeModal()}
-            disabled={busy || totalPicked <= 0}
+            disabled={busy || totalPicked <= 0 || hasUnsavedPicks}
             className="px-4 py-2 bg-white border border-gray-200 text-gray-800 text-[11px] font-bold rounded hover:bg-gray-50 disabled:opacity-40 flex items-center gap-1.5"
+            title={hasUnsavedPicks ? "Save picks first" : undefined}
           >
             <i className="ri-barcode-line" aria-hidden />
             Print Barcodes
           </button>
+          {/* Send to Scanning — hidden for now
           <button
             type="button"
             onClick={() => void onSendToScanning()}
-            disabled={busy || totalPicked <= 0}
+            disabled={busy || totalPicked <= 0 || hasUnsavedPicks}
             className="px-4 py-2 bg-indigo-600 text-white text-[11px] font-bold rounded hover:bg-indigo-700 disabled:opacity-40"
+            title={hasUnsavedPicks ? "Save picks first" : undefined}
           >
             Send to Scanning
           </button>
+          */}
         </div>
       )}
 
@@ -225,7 +300,7 @@ export default function BatchPickListPanel({
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
           <button
             type="button"
-            onClick={() => printBatchPickList(batch)}
+            onClick={onPrintPickList}
             className="px-4 py-2 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 flex items-center gap-1.5"
             aria-label="Reprint pick list"
           >

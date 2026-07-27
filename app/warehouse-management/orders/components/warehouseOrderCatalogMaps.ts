@@ -27,6 +27,7 @@ export function mapStyleCodeToSingleRow(
     colour: articleAttrs?.colour ?? "",
     type: sc.brand ?? "",
     pattern: articleAttrs?.pattern ?? "",
+    eanCode: sc.eanCode ?? "",
     quantity: keepQty,
   };
 }
@@ -133,6 +134,7 @@ export function mapStyleCodePairToMultiRow(
     colour: "",
     type: "",
     pattern: "",
+    eanCode: p.eanCode ?? "",
     quantity: keepQty,
   };
 }

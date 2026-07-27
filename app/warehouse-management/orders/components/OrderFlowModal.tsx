@@ -105,6 +105,11 @@ export default function OrderFlowModal({ orderId, onClose, onChanged }: Props) {
 
   const handleTransition = async (to: WarehouseOrderFlowStatus) => {
     if (to === "cancelled" && !window.confirm("Cancel this order?")) return;
+    if (to === "dispatched" || to === "partial-dispatched" || to === "ready-for-pickup") {
+      await handleDispatch(to, remarks);
+      setRemarks("");
+      return;
+    }
     setBusy(true);
     try {
       await whmsWarehouseOrders.transitionFlowStatus(orderId, to, remarks);
@@ -119,7 +124,7 @@ export default function OrderFlowModal({ orderId, onClose, onChanged }: Props) {
     }
   };
 
-  const handleSaveDispatchDetails = async () => {
+  const handleSaveDispatchDetails = async (successMessage?: string) => {
     setBusy(true);
     try {
       await whmsDispatch.setDetails(orderId, {
@@ -129,7 +134,7 @@ export default function OrderFlowModal({ orderId, onClose, onChanged }: Props) {
         ...(boxCount !== "" ? { boxCount: Number(boxCount) } : {}),
         shippingRemarks,
       });
-      toast.success("Dispatch details saved — order is Ready to Dispatch");
+      toast.success(successMessage || "Dispatch details saved");
       await load();
       onChanged();
     } catch (err) {
@@ -139,10 +144,31 @@ export default function OrderFlowModal({ orderId, onClose, onChanged }: Props) {
     }
   };
 
-  const handleDispatch = async (mode: "dispatched" | "partial-dispatched" | "ready-for-pickup") => {
+  /** Persist form fields when present, then run the dispatch transition. */
+  const handleDispatch = async (
+    mode: "dispatched" | "partial-dispatched" | "ready-for-pickup",
+    transitionRemarks = ""
+  ) => {
+    const hasAnyDetail = Boolean(
+      courierName.trim() ||
+        trackingNumber.trim() ||
+        vehicleDetails.trim() ||
+        boxCount !== "" ||
+        shippingRemarks.trim()
+    );
+
     setBusy(true);
     try {
-      await whmsDispatch.dispatch(orderId, mode, shippingRemarks);
+      if (hasAnyDetail) {
+        await whmsDispatch.setDetails(orderId, {
+          courierName,
+          trackingNumber,
+          vehicleDetails,
+          ...(boxCount !== "" ? { boxCount: Number(boxCount) } : {}),
+          shippingRemarks,
+        });
+      }
+      await whmsDispatch.dispatch(orderId, mode, transitionRemarks || shippingRemarks);
       toast.success(`Order marked ${warehouseOrderFlowStatusLabel(mode)}`);
       await load();
       onChanged();
@@ -212,6 +238,9 @@ export default function OrderFlowModal({ orderId, onClose, onChanged }: Props) {
   };
 
   const showDispatchSection = ["billed", "ready-to-dispatch", "dispatched", "partial-dispatched", "ready-for-pickup"].includes(flowStatus);
+  const canEditDispatchDetails = ["billed", "ready-to-dispatch", "dispatched", "partial-dispatched", "ready-for-pickup"].includes(flowStatus);
+  const canRunDispatchActions = ["billed", "ready-to-dispatch"].includes(flowStatus);
+  const canCompletePartialDispatch = flowStatus === "partial-dispatched";
 
   return (
     <div className="fixed inset-0 z-[999] flex items-start justify-center bg-black/40 overflow-y-auto py-8" onClick={onClose}>
@@ -292,56 +321,89 @@ export default function OrderFlowModal({ orderId, onClose, onChanged }: Props) {
             )}
 
             {showDispatchSection && (
-              <div className="border border-gray-200 rounded p-4">
-                <p className="text-[11px] font-bold text-gray-600 uppercase mb-3">Dispatch Preparation</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] text-gray-600 mb-1">Courier / Transport Company</label>
-                    <input value={courierName} onChange={(e) => setCourierName(e.target.value)} className="form-control text-[12px] w-full" />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-gray-600 mb-1">Tracking Number / AWB</label>
-                    <input value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} className="form-control text-[12px] w-full" />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-gray-600 mb-1">Vehicle Details</label>
-                    <input value={vehicleDetails} onChange={(e) => setVehicleDetails(e.target.value)} className="form-control text-[12px] w-full" />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-gray-600 mb-1">Boxes / Cartons</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={boxCount}
-                      onChange={(e) => setBoxCount(e.target.value === "" ? "" : Number(e.target.value))}
-                      className="form-control text-[12px] w-full"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-[11px] text-gray-600 mb-1">Shipping Remarks</label>
-                    <input value={shippingRemarks} onChange={(e) => setShippingRemarks(e.target.value)} className="form-control text-[12px] w-full" />
-                  </div>
+              <div className="border border-gray-200 rounded p-4 space-y-4">
+                <div>
+                  <p className="text-[11px] font-bold text-gray-600 uppercase mb-1">Dispatch Preparation</p>
+                  <p className="text-[11px] text-gray-500">
+                    Courier and AWB can be filled in later via Update Details after dispatch.
+                  </p>
                 </div>
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {["billed", "ready-to-dispatch"].includes(flowStatus) && (
-                    <button type="button" disabled={busy} onClick={handleSaveDispatchDetails} className="ti-btn ti-btn-light text-[11px] font-semibold">
-                      <i className="ri-save-line"></i> Save Details
-                    </button>
-                  )}
-                  {flowStatus === "ready-to-dispatch" && (
-                    <>
-                      <button type="button" disabled={busy} onClick={() => handleDispatch("dispatched")} className="ti-btn ti-btn-primary text-[11px] font-semibold">
-                        <i className="ri-truck-line"></i> Dispatched
+
+                <div>
+                  <p className="text-[11px] font-semibold text-gray-600 mb-2">Shipment details</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] text-gray-600 mb-1">Courier / Transport Company <span className="text-gray-400">(optional)</span></label>
+                      <input value={courierName} onChange={(e) => setCourierName(e.target.value)} className="form-control text-[12px] w-full" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-gray-600 mb-1">Tracking Number / AWB <span className="text-gray-400">(optional)</span></label>
+                      <input value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} className="form-control text-[12px] w-full" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-gray-600 mb-1">Vehicle Details <span className="text-gray-400">(optional)</span></label>
+                      <input value={vehicleDetails} onChange={(e) => setVehicleDetails(e.target.value)} className="form-control text-[12px] w-full" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-gray-600 mb-1">Boxes / Cartons <span className="text-gray-400">(optional)</span></label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={boxCount}
+                        onChange={(e) => setBoxCount(e.target.value === "" ? "" : Number(e.target.value))}
+                        className="form-control text-[12px] w-full"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-[11px] text-gray-600 mb-1">Shipping Remarks <span className="text-gray-400">(optional)</span></label>
+                      <input value={shippingRemarks} onChange={(e) => setShippingRemarks(e.target.value)} className="form-control text-[12px] w-full" />
+                    </div>
+                  </div>
+                  {canEditDispatchDetails && (
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          handleSaveDispatchDetails(
+                            flowStatus === "billed"
+                              ? "Dispatch details saved — order is Ready to Dispatch"
+                              : "Dispatch details updated"
+                          )
+                        }
+                        className="ti-btn ti-btn-light text-[11px] font-semibold"
+                      >
+                        <i className="ri-save-line"></i> {flowStatus === "billed" ? "Save Details" : "Update Details"}
                       </button>
-                      <button type="button" disabled={busy} onClick={() => handleDispatch("partial-dispatched")} className="ti-btn ti-btn-primary text-[11px] font-semibold">
-                        Partial Dispatch
-                      </button>
-                      <button type="button" disabled={busy} onClick={() => handleDispatch("ready-for-pickup")} className="ti-btn ti-btn-primary text-[11px] font-semibold">
-                        Ready for Pickup
-                      </button>
-                    </>
+                    </div>
                   )}
                 </div>
+
+                {(canRunDispatchActions || canCompletePartialDispatch) && (
+                  <div className="border-t border-gray-100 pt-4">
+                    <p className="text-[11px] font-semibold text-gray-600 mb-2">Dispatch actions</p>
+                    <div className="flex flex-wrap gap-2">
+                      {canRunDispatchActions && (
+                        <>
+                          <button type="button" disabled={busy} onClick={() => handleDispatch("dispatched")} className="ti-btn ti-btn-primary text-[11px] font-semibold">
+                            <i className="ri-truck-line"></i> Dispatched
+                          </button>
+                          <button type="button" disabled={busy} onClick={() => handleDispatch("partial-dispatched")} className="ti-btn ti-btn-primary text-[11px] font-semibold">
+                            Partial Dispatch
+                          </button>
+                          <button type="button" disabled={busy} onClick={() => handleDispatch("ready-for-pickup")} className="ti-btn ti-btn-primary text-[11px] font-semibold">
+                            Ready for Pickup
+                          </button>
+                        </>
+                      )}
+                      {canCompletePartialDispatch && (
+                        <button type="button" disabled={busy} onClick={() => handleDispatch("dispatched")} className="ti-btn ti-btn-primary text-[11px] font-semibold">
+                          <i className="ri-truck-line"></i> Complete Dispatch
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

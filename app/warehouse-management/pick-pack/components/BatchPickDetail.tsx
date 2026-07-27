@@ -44,6 +44,7 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
   const [barcodeAllowStyleSelection, setBarcodeAllowStyleSelection] = useState(false);
   const [barcodePrintBusy, setBarcodePrintBusy] = useState(false);
   const [pickErrors, setPickErrors] = useState<Record<string, string>>({});
+  const [savingPicks, setSavingPicks] = useState(false);
   const [activeTab, setActiveTab] = useState<BatchDetailTab>("picking");
 
   const isEditable = batch.status === "picking";
@@ -51,6 +52,20 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
     () => Object.values(draftPicks).reduce((s, n) => s + (Number(n) || 0), 0),
     [draftPicks],
   );
+
+  const hasUnsavedPicks = useMemo(
+    () =>
+      (batch.items || []).some((item) => {
+        const draft = Number(draftPicks[item.itemKey] ?? item.pickedQty ?? 0);
+        const saved = Number(item.pickedQty ?? 0);
+        return draft !== saved;
+      }),
+    [batch.items, draftPicks],
+  );
+
+  const savedPickerName = (batch.pickerName || "").trim();
+  const hasUnsavedPickerName = pickerName.trim() !== savedPickerName;
+  const canPrintPickList = Boolean(savedPickerName) && !hasUnsavedPickerName;
 
   const styleOptions = useMemo<BatchBarcodeStyleOption[]>(
     () =>
@@ -87,6 +102,10 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
   }, [barcodeModalStyle, batch.items, draftPicks, totalPicked]);
 
   const openBarcodeModal = (styleCode?: string) => {
+    if (hasUnsavedPicks) {
+      toast.error("Save picks before printing barcodes");
+      return;
+    }
     setBarcodeModalStyle(styleCode);
     setBarcodeAllowStyleSelection(!styleCode);
     setBarcodeModalOpen(true);
@@ -175,6 +194,7 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
 
   const handleSavePicks = useCallback(async () => {
     if (!validateDraftPicks()) return;
+    setSavingPicks(true);
     setBusy(true);
     try {
       const picks = Object.entries(draftPicks).map(([itemKey, pickedQty]) => ({
@@ -183,10 +203,16 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
       }));
       const updated = await whmsPickListBatches.savePicks(batch.id, picks);
       onBatchUpdated(updated);
+      const synced: Record<string, number> = {};
+      (updated.items || []).forEach((item) => {
+        synced[item.itemKey] = item.pickedQty;
+      });
+      setDraftPicks(synced);
       toast.success("Pick quantities saved");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save picks");
     } finally {
+      setSavingPicks(false);
       setBusy(false);
     }
   }, [batch.id, draftPicks, onBatchUpdated, batch.items]);
@@ -197,6 +223,9 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
     setBusy(true);
     try {
       await whmsPickListBatches.setPicker(batch.id, name);
+      const refreshed = await whmsPickListBatches.get(batch.id);
+      onBatchUpdated(refreshed);
+      setPickerName(refreshed.pickerName || name);
       toast.success("Picker name saved");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save picker");
@@ -205,16 +234,27 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
     }
   };
 
+  const handlePrintPickList = () => {
+    if (isEditable && !canPrintPickList) {
+      toast.error(
+        savedPickerName
+          ? "Save picker name before printing the pick list"
+          : "Enter and save picker name before printing the pick list",
+      );
+      return;
+    }
+    printBatchPickList(batch);
+  };
+
   const handleSendToScanning = async () => {
+    if (hasUnsavedPicks) {
+      toast.error("Save picks before sending to scanning");
+      return;
+    }
     if (!validateDraftPicks()) return;
-    if (!window.confirm("Save picks and send this pick list to the scanning team?")) return;
+    if (!window.confirm("Send this pick list to the scanning team?")) return;
     setBusy(true);
     try {
-      const picks = Object.entries(draftPicks).map(([itemKey, pickedQty]) => ({
-        itemKey,
-        pickedQty: Number(pickedQty) || 0,
-      }));
-      await whmsPickListBatches.savePicks(batch.id, picks);
       await whmsPickListBatches.sendToScanning(batch.id);
       toast.success("Sent to scanning");
       router.push("/warehouse-management/scanning");
@@ -264,8 +304,9 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => printBatchPickList(batch)}
-              disabled={busy}
+              onClick={handlePrintPickList}
+              disabled={busy || !canPrintPickList}
+              title={!canPrintPickList ? "Save picker name first" : undefined}
               className="px-3 py-1.5 text-[11px] font-bold text-purple-700 bg-purple-50 border border-purple-200 rounded hover:bg-purple-100 disabled:opacity-40 flex items-center gap-1.5"
               aria-label="Print pick list for warehouse"
             >
@@ -286,7 +327,7 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
             <button
               type="button"
               onClick={() => void handleSavePicker()}
-              disabled={busy || !pickerName.trim()}
+              disabled={busy || !pickerName.trim() || !hasUnsavedPickerName}
               className="px-3 py-1.5 text-[11px] font-bold border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40"
             >
               Save picker
@@ -346,11 +387,15 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
             setExpandedKey={setExpandedKey}
             printedQtyByStyle={printedQtyByStyle}
             busy={busy}
+            savingPicks={savingPicks}
             totalPicked={totalPicked}
+            hasUnsavedPicks={hasUnsavedPicks}
+            canPrintPickList={canPrintPickList}
             onPickChange={handlePickChange}
             onSavePicks={() => void handleSavePicks()}
             onSendToScanning={() => void handleSendToScanning()}
             onOpenBarcodeModal={openBarcodeModal}
+            onPrintPickList={handlePrintPickList}
           />
         )}
       </div>

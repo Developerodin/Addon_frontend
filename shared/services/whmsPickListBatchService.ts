@@ -109,6 +109,7 @@ export interface PickListBatchDetail extends PickListBatch {
 export interface PickListBatchBarcodeLabel {
   styleCode: string;
   skuCode: string;
+  eanCode?: string;
   size?: string;
   shade?: string;
   barcode: string;

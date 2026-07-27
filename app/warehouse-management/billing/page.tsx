@@ -16,6 +16,7 @@ import {
   WhmsListToolbar,
   WhmsOrderJourneyDrawer,
 } from "@/shared/components/whms";
+import { downloadBillingInvoiceExcel } from "./billingInvoiceExcelExport";
 
 /** Open a minimal print window for an invoice payload. */
 function printInvoice(invoice: WhmsInvoice & { generatedAt?: string }) {
@@ -74,6 +75,7 @@ const fetchInvoices = (params: { status?: string; sortBy: string; page: number; 
  */
 export default function BillingPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [exportingInvoiceId, setExportingInvoiceId] = useState<string | null>(null);
   const [journeyOrderId, setJourneyOrderId] = useState<string | null>(null);
   const [invoiceStatus, setInvoiceStatus] = useState("");
 
@@ -128,6 +130,22 @@ export default function BillingPage() {
       printInvoice(payload);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load invoice");
+    }
+  };
+
+  const handleExportExcel = async (invoice: WhmsInvoice) => {
+    setExportingInvoiceId(invoice.id);
+    try {
+      const rowCount = await downloadBillingInvoiceExcel(invoice);
+      if (rowCount === 0) {
+        toast.error("No line items to export");
+        return;
+      }
+      toast.success(`Downloaded Excel (${rowCount} line${rowCount === 1 ? "" : "s"})`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to export Excel");
+    } finally {
+      setExportingInvoiceId(null);
     }
   };
 
@@ -293,6 +311,21 @@ export default function BillingPage() {
                       <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">{invoice.createdAt ? new Date(invoice.createdAt).toLocaleDateString() : "—"}</td>
                       <td className="px-1.5 py-2.5 text-right border border-gray-200 whitespace-nowrap">
                         <button type="button" onClick={() => setJourneyOrderId(String(invoice.orderId))} className="ti-btn ti-btn-light px-2 py-1.5 text-[10px] font-semibold mr-1">Journey</button>
+                        <button
+                          type="button"
+                          disabled={exportingInvoiceId !== null}
+                          onClick={() => void handleExportExcel(invoice)}
+                          className="ti-btn ti-btn-light px-2 py-1.5 text-[10px] font-semibold mr-1"
+                          aria-label={`Download Excel for invoice ${invoice.invoiceNumber}`}
+                          title="Download order vs scanned vs sending qty tracker"
+                        >
+                          {exportingInvoiceId === invoice.id ? (
+                            <i className="ri-loader-4-line animate-spin" aria-hidden />
+                          ) : (
+                            <i className="ri-file-excel-2-line text-green-700" aria-hidden />
+                          )}{" "}
+                          Excel
+                        </button>
                         <button type="button" onClick={() => void handlePrint(invoice)} className="ti-btn ti-btn-light px-2 py-1.5 text-[10px] font-semibold mr-1"><i className="ri-printer-line"></i> Print</button>
                         {invoice.status !== "cancelled" ? (
                           <button type="button" disabled={busyId !== null} onClick={() => void handleCancel(invoice)} className="ti-btn ti-btn-danger px-2 py-1.5 text-[10px] font-semibold">Cancel</button>

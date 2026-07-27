@@ -231,6 +231,7 @@ export interface WarehouseOrderStyleCodeSinglePairRow {
   colour?: string;
   type?: string;
   pattern?: string;
+  eanCode?: string;
   quantity: number;
 }
 
@@ -241,6 +242,7 @@ export interface WarehouseOrderStyleCodeMultiPairRow {
   colour?: string;
   type?: string;
   pattern?: string;
+  eanCode?: string;
   quantity: number;
 }
 

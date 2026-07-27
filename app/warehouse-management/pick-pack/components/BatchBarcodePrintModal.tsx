@@ -10,6 +10,8 @@ export type BarcodePrintMode = "all" | "custom";
 
 export type { BatchBarcodeStyleOption };
 
+type PrintScope = "single" | "all";
+
 export interface BatchBarcodePrintModalProps {
   open: boolean;
   batchNumber: string;
@@ -47,45 +49,79 @@ export default function BatchBarcodePrintModal({
 }: BatchBarcodePrintModalProps) {
   const [mode, setMode] = useState<BarcodePrintMode>("all");
   const [customQty, setCustomQty] = useState(1);
-  const [selectedStyleCode, setSelectedStyleCode] = useState<string | undefined>(initialStyleCode);
+  const [printScope, setPrintScope] = useState<PrintScope>("single");
+  const [selectedStyleCode, setSelectedStyleCode] = useState<string>("");
 
   const selectableStyles = useMemo(
     () => styleOptions.filter((item) => Number(item.pickedQty) > 0),
     [styleOptions],
   );
 
-  const resolvedStyleCode = allowStyleSelection ? selectedStyleCode : initialStyleCode;
+  const isMultiStyleMode = allowStyleSelection && !initialStyleCode;
+  const isSingleStyleLocked = Boolean(initialStyleCode);
+
+  const resolvedStyleCode = useMemo(() => {
+    if (isSingleStyleLocked) return initialStyleCode;
+    if (!isMultiStyleMode) return initialStyleCode;
+    return printScope === "single" ? selectedStyleCode || undefined : undefined;
+  }, [initialStyleCode, isMultiStyleMode, isSingleStyleLocked, printScope, selectedStyleCode]);
+
+  const batchTotalQty = useMemo(
+    () => selectableStyles.reduce((sum, item) => sum + Number(item.pickedQty || 0), 0),
+    [selectableStyles],
+  );
 
   const resolvedMaxQty = useMemo(() => {
     if (resolvedStyleCode) {
       const item = selectableStyles.find((i) => i.styleCode === resolvedStyleCode);
       return Number(item?.pickedQty || 0);
     }
-    return selectableStyles.reduce((sum, item) => sum + Number(item.pickedQty || 0), 0);
-  }, [resolvedStyleCode, selectableStyles]);
+    return batchTotalQty;
+  }, [resolvedStyleCode, selectableStyles, batchTotalQty]);
 
-  const scopeLabel = resolvedStyleCode ? `style ${resolvedStyleCode}` : "all styles";
+  const selectedStyle = useMemo(
+    () => (resolvedStyleCode ? selectableStyles.find((i) => i.styleCode === resolvedStyleCode) : undefined),
+    [resolvedStyleCode, selectableStyles],
+  );
+
+  const canUseCustomQty = Boolean(resolvedStyleCode);
 
   useEffect(() => {
     if (!open) return;
     setMode("all");
-    setSelectedStyleCode(initialStyleCode);
-    setCustomQty(Math.max(1, resolvedMaxQty || maxQty));
-  }, [open, initialStyleCode, maxQty, resolvedMaxQty]);
+    setPrintScope("single");
+    setSelectedStyleCode(initialStyleCode ?? selectableStyles[0]?.styleCode ?? "");
+    setCustomQty(Math.max(1, initialStyleCode
+      ? Number(selectableStyles.find((i) => i.styleCode === initialStyleCode)?.pickedQty || maxQty || 1)
+      : Number(selectableStyles[0]?.pickedQty || 1)));
+  }, [open, initialStyleCode, maxQty, selectableStyles]);
 
   useEffect(() => {
     if (mode === "all") return;
     setCustomQty((prev) => Math.max(1, Math.min(prev, resolvedMaxQty || 1)));
   }, [resolvedMaxQty, mode]);
 
+  useEffect(() => {
+    if (canUseCustomQty || mode !== "custom") return;
+    setMode("all");
+  }, [canUseCustomQty, mode]);
+
   const effectiveQty = useMemo(() => {
     if (mode === "all") return resolvedMaxQty;
-    return Math.max(1, Math.min(9999, Number(customQty) || 1));
+    return Math.max(1, Math.min(resolvedMaxQty || 1, Number(customQty) || 1));
   }, [mode, resolvedMaxQty, customQty]);
+
+  const summaryText = useMemo(() => {
+    if (resolvedStyleCode && selectedStyle) {
+      return `${effectiveQty} label${effectiveQty === 1 ? "" : "s"} for ${resolvedStyleCode}`;
+    }
+    return `${effectiveQty} label${effectiveQty === 1 ? "" : "s"} for all ${selectableStyles.length} styles`;
+  }, [effectiveQty, resolvedStyleCode, selectedStyle, selectableStyles.length]);
 
   if (!open) return null;
 
   const handleConfirm = () => {
+    if (isMultiStyleMode && printScope === "single" && !selectedStyleCode) return;
     void onConfirm(mode, mode === "custom" ? effectiveQty : undefined, resolvedStyleCode);
   };
 
@@ -111,71 +147,141 @@ export default function BatchBarcodePrintModal({
           </button>
         </div>
 
-        <div className="px-4 py-4 space-y-3 text-[12px] text-gray-600">
+        <div className="px-4 py-4 space-y-4 text-[12px] text-gray-600">
           <p className="text-[11px] text-gray-500">
             Batch <strong className="text-gray-800">{batchNumber}</strong>
           </p>
 
-          {allowStyleSelection && !initialStyleCode ? (
-            <BatchBarcodeStyleSelector
-              styles={selectableStyles}
-              selectedStyleCode={selectedStyleCode}
-              onSelectStyleCode={setSelectedStyleCode}
-            />
+          {isSingleStyleLocked && initialStyleCode ? (
+            <div className="rounded-lg border border-purple-200 bg-purple-50/50 px-3 py-2.5">
+              <p className="text-[10px] font-bold uppercase text-purple-700 mb-0.5">Style code</p>
+              <p className="font-semibold text-gray-900">{initialStyleCode}</p>
+              {selectedStyle ? (
+                <p className="text-[11px] text-gray-600 mt-0.5">
+                  {selectedStyle.size || selectedStyle.shade
+                    ? [selectedStyle.size, selectedStyle.shade].filter(Boolean).join(" · ")
+                    : null}
+                  {selectedStyle.size || selectedStyle.shade ? " · " : ""}
+                  Picked <strong>{selectedStyle.pickedQty}</strong>
+                </p>
+              ) : null}
+            </div>
           ) : null}
 
-          {!allowStyleSelection && resolvedStyleCode ? (
-            <p className="text-[11px] text-gray-500">
-              Style <strong className="text-gray-800">{resolvedStyleCode}</strong>
+          {isMultiStyleMode ? (
+            <fieldset className="space-y-2">
+              <legend className="text-[11px] font-bold text-gray-700 uppercase mb-1">What to print</legend>
+
+              <label className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 has-[:checked]:border-purple-300 has-[:checked]:bg-purple-50/40">
+                <input
+                  type="radio"
+                  name="barcode-print-scope"
+                  checked={printScope === "single"}
+                  onChange={() => setPrintScope("single")}
+                  className="mt-0.5 text-purple-600"
+                />
+                <span>
+                  <span className="block font-semibold text-gray-900">One style code</span>
+                  <span className="text-[11px] text-gray-500">
+                    Pick a style and print all or a custom number of labels for it
+                  </span>
+                </span>
+              </label>
+
+              {printScope === "single" ? (
+                <div className="pl-1">
+                  <BatchBarcodeStyleSelector
+                    styles={selectableStyles}
+                    selectedStyleCode={selectedStyleCode}
+                    onSelectStyleCode={setSelectedStyleCode}
+                  />
+                </div>
+              ) : null}
+
+              <label className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 has-[:checked]:border-purple-300 has-[:checked]:bg-purple-50/40">
+                <input
+                  type="radio"
+                  name="barcode-print-scope"
+                  checked={printScope === "all"}
+                  onChange={() => setPrintScope("all")}
+                  className="mt-0.5 text-purple-600"
+                />
+                <span>
+                  <span className="block font-semibold text-gray-900">All styles in batch</span>
+                  <span className="text-[11px] text-gray-500">
+                    Print every picked label ({batchTotalQty} total across {selectableStyles.length}{" "}
+                    style{selectableStyles.length === 1 ? "" : "s"})
+                  </span>
+                </span>
+              </label>
+            </fieldset>
+          ) : null}
+
+          {printScope === "all" && isMultiStyleMode ? (
+            <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+              Custom quantity is only available for a single style. Choose <strong>One style code</strong>{" "}
+              above to print a specific number of labels.
             </p>
-          ) : null}
+          ) : (
+            <fieldset className="space-y-2">
+              <legend className="text-[11px] font-bold text-gray-700 uppercase mb-1">How many labels</legend>
 
-          <label className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 has-[:checked]:border-purple-300 has-[:checked]:bg-purple-50/40">
-            <input
-              type="radio"
-              name="barcode-print-mode"
-              checked={mode === "all"}
-              onChange={() => setMode("all")}
-              className="mt-0.5 text-purple-600"
-            />
-            <span>
-              <span className="block font-semibold text-gray-900">Print all barcodes</span>
-              <span className="text-[11px] text-gray-500">
-                Print {resolvedMaxQty} label{resolvedMaxQty === 1 ? "" : "s"} for {scopeLabel} (picked qty)
-              </span>
-            </span>
-          </label>
+              <label className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 has-[:checked]:border-purple-300 has-[:checked]:bg-purple-50/40">
+                <input
+                  type="radio"
+                  name="barcode-print-mode"
+                  checked={mode === "all"}
+                  onChange={() => setMode("all")}
+                  className="mt-0.5 text-purple-600"
+                />
+                <span>
+                  <span className="block font-semibold text-gray-900">All picked labels</span>
+                  <span className="text-[11px] text-gray-500">
+                    Print {resolvedMaxQty} label{resolvedMaxQty === 1 ? "" : "s"}
+                    {resolvedStyleCode ? ` for ${resolvedStyleCode}` : " for the entire batch"}
+                  </span>
+                </span>
+              </label>
 
-          <label className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 has-[:checked]:border-purple-300 has-[:checked]:bg-purple-50/40">
-            <input
-              type="radio"
-              name="barcode-print-mode"
-              checked={mode === "custom"}
-              onChange={() => setMode("custom")}
-              className="mt-0.5 text-purple-600"
-            />
-            <span className="flex-1">
-              <span className="block font-semibold text-gray-900">Custom quantity</span>
-              <span className="text-[11px] text-gray-500 block mb-2">
-                Enter how many barcode labels to print
-              </span>
-              <input
-                type="number"
-                min={1}
-                max={9999}
-                value={customQty}
-                onChange={(e) => setCustomQty(Number(e.target.value))}
-                disabled={mode !== "custom"}
-                className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm disabled:opacity-40"
-                aria-label="Number of barcode labels to print"
-              />
-            </span>
-          </label>
+              <label
+                className={`flex items-start gap-3 p-3 rounded-lg border border-gray-200 ${
+                  canUseCustomQty ? "cursor-pointer hover:bg-gray-50 has-[:checked]:border-purple-300 has-[:checked]:bg-purple-50/40" : "opacity-50 cursor-not-allowed bg-gray-50"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="barcode-print-mode"
+                  checked={mode === "custom"}
+                  onChange={() => canUseCustomQty && setMode("custom")}
+                  disabled={!canUseCustomQty}
+                  className="mt-0.5 text-purple-600"
+                />
+                <span className="flex-1">
+                  <span className="block font-semibold text-gray-900">Custom quantity</span>
+                  <span className="text-[11px] text-gray-500 block mb-2">
+                    {canUseCustomQty
+                      ? `Enter 1–${resolvedMaxQty} labels for ${resolvedStyleCode}`
+                      : "Select one style code to use a custom quantity"}
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={resolvedMaxQty || 1}
+                    value={customQty}
+                    onChange={(e) => setCustomQty(Number(e.target.value))}
+                    disabled={mode !== "custom" || !canUseCustomQty}
+                    className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm disabled:opacity-40"
+                    aria-label="Number of barcode labels to print"
+                  />
+                </span>
+              </label>
+            </fieldset>
+          )}
 
-          <p className="text-[11px] text-gray-500 pt-1">
-            Will print <strong className="text-gray-800">{effectiveQty}</strong> barcode label
-            {effectiveQty === 1 ? "" : "s"}.
-          </p>
+          <div className="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2.5">
+            <p className="text-[10px] font-bold uppercase text-gray-500 mb-0.5">Ready to print</p>
+            <p className="font-semibold text-gray-900">{summaryText}</p>
+          </div>
         </div>
 
         <div className="px-4 py-3 border-t border-gray-100 flex justify-end gap-2 sticky bottom-0 bg-white">
@@ -190,7 +296,11 @@ export default function BatchBarcodePrintModal({
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={busy || resolvedMaxQty <= 0}
+            disabled={
+              busy ||
+              resolvedMaxQty <= 0 ||
+              (isMultiStyleMode && printScope === "single" && !selectedStyleCode)
+            }
             className="px-3 py-1.5 text-[11px] font-bold text-white bg-purple-600 rounded hover:bg-purple-700 disabled:opacity-40 flex items-center gap-1.5"
           >
             {busy ? (

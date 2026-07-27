@@ -87,6 +87,7 @@ function fromOrder(o?: WarehouseOrder | null): FormState {
         colour: r.colour ?? "",
         type: r.type ?? "",
         pattern: r.pattern ?? "",
+        eanCode: r.eanCode ?? "",
         quantity: Number(r.quantity) || 0,
       })) ?? [],
     multi:
@@ -97,6 +98,7 @@ function fromOrder(o?: WarehouseOrder | null): FormState {
         colour: r.colour ?? "",
         type: r.type ?? "",
         pattern: r.pattern ?? "",
+        eanCode: r.eanCode ?? "",
         quantity: Number(r.quantity) || 0,
       })) ?? [],
   };
@@ -109,6 +111,7 @@ const emptySingle = (): WarehouseOrderStyleCodeSinglePairRow => ({
   colour: "",
   type: "",
   pattern: "",
+  eanCode: "",
   quantity: 0,
 });
 
@@ -119,6 +122,7 @@ const emptyMulti = (): WarehouseOrderStyleCodeMultiPairRow => ({
   colour: "",
   type: "",
   pattern: "",
+  eanCode: "",
   quantity: 0,
 });
 
@@ -386,6 +390,7 @@ export default function WarehouseOrderForm({
               {(
                 [
                   ["styleCode", "Style code"],
+                  ["eanCode", "EAN code"],
                   ["pack", "Pack"],
                   ["colour", "Colour"],
                   ["type", "Type"],
@@ -395,7 +400,7 @@ export default function WarehouseOrderForm({
                 <div key={k} className="col-span-12 sm:col-span-4">
                   <label className={labelClass}>{label}</label>
                   <input
-                    className={`${inputClass} ${warehouseOrderFieldClass(k, diagnostics)} ${k === "styleCode" ? "cursor-pointer" : ""}`}
+                    className={`${inputClass} ${warehouseOrderFieldClass(k, diagnostics)} ${k === "styleCode" ? "cursor-pointer" : ""} ${k === "eanCode" ? "bg-gray-50 text-gray-700" : ""}`}
                     value={(r as Record<string, string | number>)[k] ?? ""}
                     aria-invalid={diagnostics?.invalidFields.has(k) ? true : undefined}
                     aria-describedby={
@@ -405,7 +410,7 @@ export default function WarehouseOrderForm({
                       k === "styleCode" ? () => setStyleCodeModalIdx(idx) : undefined
                     }
                     onChange={
-                      k === "styleCode"
+                      k === "styleCode" || k === "eanCode"
                         ? undefined
                         : (e) =>
                             setS((p) => ({
@@ -415,8 +420,14 @@ export default function WarehouseOrderForm({
                               ),
                             }))
                     }
-                    readOnly={k === "styleCode"}
-                    placeholder={k === "styleCode" ? "Click to browse style codes..." : undefined}
+                    readOnly={k === "styleCode" || k === "eanCode"}
+                    placeholder={
+                      k === "styleCode"
+                        ? "Click to browse style codes..."
+                        : k === "eanCode"
+                          ? "Auto-filled from style code"
+                          : undefined
+                    }
                   />
                 </div>
               ))}
@@ -518,18 +529,20 @@ export default function WarehouseOrderForm({
               {(
                 [
                   ["styleCode", "Pair style code"],
+                  ["eanCode", "EAN code"],
                   ["pack", "Pack"],
                 ] as const
               ).map(([k, label]) => (
                 <div key={k} className="col-span-12 sm:col-span-4">
                   <label className={labelClass}>{label}</label>
                   <input
-                    className={`${inputClass} ${warehouseOrderFieldClass(k, diagnostics)}`}
+                    className={`${inputClass} ${warehouseOrderFieldClass(k, diagnostics)} ${k === "eanCode" ? "bg-gray-50 text-gray-700" : ""}`}
                     value={(r as Record<string, string | number>)[k] ?? ""}
                     aria-invalid={diagnostics?.invalidFields.has(k) ? true : undefined}
-                    readOnly={k === "styleCode"}
+                    readOnly={k === "styleCode" || k === "eanCode"}
+                    placeholder={k === "eanCode" ? "Auto-filled from pair" : undefined}
                     onChange={
-                      k === "styleCode"
+                      k === "styleCode" || k === "eanCode"
                         ? undefined
                         : (e) =>
                             setS((p) => ({

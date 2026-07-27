@@ -251,10 +251,10 @@ export default function ScanningLiveSession({
                 ref={scanInputRef}
                 value={barcode}
                 onChange={(e) => setBarcode(e.target.value)}
-                placeholder="Scan or type style code"
+                placeholder="Scan EAN code"
                 className="form-control w-full text-[13px]"
                 autoFocus
-                aria-label="Barcode scan input"
+                aria-label="Scan EAN code"
               />
             </div>
             <div className="w-24">
@@ -266,7 +266,8 @@ export default function ScanningLiveSession({
                 step={1}
                 value={scanQty}
                 onChange={(e) => handleScanQtyChange(e.target.value)}
-                className="form-control w-full text-[13px]"
+                disabled
+                className="form-control w-full text-[13px] disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
                 aria-label="Quantity to add per barcode scan"
               />
             </div>
