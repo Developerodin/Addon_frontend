@@ -174,6 +174,23 @@
 
 <body>
     <div class="grn-container">
+        <!-- Addon company block — populated from consignee snapshot -->
+        <div style="text-align: center; border-bottom: 1px solid #000; padding: 6px 5px;">
+            <div style="font-size: 14px; font-weight: 900; letter-spacing: 0.5px; margin-bottom: 4px;" id="consignee-name">
+                ADDON HOLDINGS PRIVATE LIMITED
+            </div>
+            <div style="font-size: 8px; line-height: 1.35;">
+                <b>Address:</b> <span id="consignee-address"></span><br>
+                <b>H.O:</b> <span id="consignee-head-office"></span><br>
+                <span style="margin-top: 2px; display: inline-block;">
+                    <b>Contact:</b> <span id="consignee-contact"></span> &nbsp;|&nbsp;
+                    <b>GST:</b> <span id="consignee-gst">27AAACA8827A1ZZ</span> &nbsp;|&nbsp;
+                    <b>State Code:</b> <span id="consignee-state-code">27</span> &nbsp;|&nbsp;
+                    <b>Email:</b> <span id="consignee-email"></span>
+                </span>
+            </div>
+        </div>
+
         <div class="header-title" id="page-title">GOODS RECEIPT NOTE</div>
 
         <table class="header-grid">
@@ -190,10 +207,6 @@
                         <b>E-Mail:</b> <span id="supplier-email"></span><br>
                         <b>MOB :</b> <span id="supplier-mob">9906010795</span><br>
                         <b>GST :</b> <span id="supplier-gst">01AAJCS1850N1ZA</span>
-                    </div>
-                    <div style="margin-top: 4px; font-size: 8px; color: #444;">
-                        <b>Consignee State Code:</b> <span id="consignee-state-code">27</span> &nbsp;
-                        <b>Consignee GST:</b> <span id="consignee-gst">27AAACA8827A1ZZ</span>
                     </div>
                 </td>
                 <td colspan="2" style="width: 25%; height: 22px;">
@@ -350,7 +363,7 @@
                     <div class="sig-label">Verified by</div>
                 </div>
                 <div class="sig-box" style="border: 1px solid #000; padding: 2px;">
-                    <div style="font-size: 8px; text-align: right;">For</div>
+                    <div style="font-size: 8px; text-align: right;">For <span id="signatory-company-name">ADDON HOLDINGS PRIVATE LIMITED</span></div>
                     <div class="sig-label" style="margin-top: 15px;">Authorised Signatory</div>
                 </div>
             </div>

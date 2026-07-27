@@ -28,6 +28,12 @@ const fmtDate = (value?: string | Date | null): string => {
 const fmtINR = (n: number, digits = 2) =>
   Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
+/**
+ * Sum net weight (kg) across all lots on a GRN.
+ */
+const sumNetWeight = (lots: YarnGrn['lots'] = []): number =>
+  lots.reduce((sum, lot) => sum + (Number(lot.netWeight) || 0), 0);
+
 const StatusBadge: React.FC<{ grn: YarnGrn }> = ({ grn }) => {
   if (grn.status === 'superseded') {
     return (
@@ -117,6 +123,7 @@ const GrnTable: React.FC<GrnTableProps> = ({
                 <th scope="col" className="px-3 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Supplier</th>
                 <th scope="col" className="px-3 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Lots</th>
                 <th scope="col" className="px-3 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Boxes</th>
+                <th scope="col" className="px-3 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Net Wt (kg)</th>
                 <th scope="col" className="px-3 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Grand Total</th>
                 <th scope="col" className="px-3 py-3 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Status</th>
                 <th scope="col" className="px-3 py-3 text-center text-[11px] font-bold text-[#495057] uppercase tracking-wider border-b border-gray-200">Actions</th>
@@ -125,6 +132,7 @@ const GrnTable: React.FC<GrnTableProps> = ({
             <tbody>
               {results.map((grn) => {
                 const totalBoxes = (grn.lots || []).reduce((s, l) => s + (l.numberOfBoxes || 0), 0);
+                const totalNetWeight = sumNetWeight(grn.lots);
                 return (
                   <tr key={grn.id} className="hover:bg-purple-50/40 transition-colors">
                     <td className="px-3 py-2 border-b border-gray-100">
@@ -144,6 +152,7 @@ const GrnTable: React.FC<GrnTableProps> = ({
                     <td className="px-3 py-2 border-b border-gray-100 text-[11px] text-gray-700">{grn.supplier?.name || '—'}</td>
                     <td className="px-3 py-2 border-b border-gray-100 text-[11px] text-gray-700 text-right">{(grn.lots || []).length}</td>
                     <td className="px-3 py-2 border-b border-gray-100 text-[11px] text-gray-700 text-right">{totalBoxes}</td>
+                    <td className="px-3 py-2 border-b border-gray-100 text-[11px] text-gray-700 text-right">{fmtINR(totalNetWeight)}</td>
                     <td className="px-3 py-2 border-b border-gray-100 text-[11px] text-gray-700 text-right">₹ {fmtINR(grn.totals?.grandTotal || 0)}</td>
                     <td className="px-3 py-2 border-b border-gray-100 text-center">
                       <StatusBadge grn={grn} />

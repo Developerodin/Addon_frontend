@@ -9,6 +9,7 @@ import yarnGrnService, { YarnGrn } from '@/shared/services/yarnGrnService';
 import GrnFilters from '@/shared/components/grn/GrnFilters';
 import GrnTable from '@/shared/components/grn/GrnTable';
 import GrnDetailDrawer from '@/shared/components/grn/GrnDetailDrawer';
+import { downloadGrnListExcel } from './grnExcelExport';
 
 /**
  * Yarn GRN History page.
@@ -26,6 +27,7 @@ export default function YarnGrnHistoryPage() {
   );
   const grns = useGrns();
   const [active, setActive] = useState<YarnGrn | null>(null);
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   const handlePrint = async (grn: YarnGrn) => {
     try {
@@ -61,6 +63,27 @@ export default function YarnGrnHistoryPage() {
     }
   };
 
+  const handleExportExcel = async () => {
+    if (grns.totalResults === 0) {
+      toast.error('No rows to export for the current filters.');
+      return;
+    }
+    setExportingExcel(true);
+    try {
+      const count = await downloadGrnListExcel(
+        grns.filters,
+        `yarn-grns_${new Date().toISOString().slice(0, 10)}`
+      );
+      if (count === 0) toast.error('No rows to export.');
+      else toast.success(`Downloaded ${count} GRN(s) to Excel.`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Excel export failed';
+      toast.error(message);
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
   return (
     <>
       <Seo title="Yarn GRN History" />
@@ -79,14 +102,29 @@ export default function YarnGrnHistoryPage() {
           </div>
         ) : (
           <>
-        <header className="flex items-center justify-between mb-3">
+        <header className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2">
             <div className="w-[3px] h-5 bg-purple-600 rounded-full" aria-hidden />
             <h1 className="text-sm font-bold text-gray-800">Yarn GRN History</h1>
           </div>
-          <p className="text-[11px] text-gray-500 font-bold">
-            Reprint any past Goods Receipt Note — by GRN no, lot no, PO, supplier or date.
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[11px] text-gray-500 font-bold">
+              Reprint any past Goods Receipt Note — by GRN no, lot no, PO, supplier or date.
+            </p>
+            <button
+              type="button"
+              onClick={() => void handleExportExcel()}
+              disabled={grns.isLoading || exportingExcel || grns.totalResults === 0}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 disabled:opacity-50 disabled:hover:bg-emerald-600 transition-colors"
+              aria-label="Download GRN list as Excel for current filters"
+            >
+              <i
+                className={`ri-file-excel-2-line text-white ${exportingExcel ? 'animate-pulse' : ''}`}
+                aria-hidden
+              />
+              {exportingExcel ? 'Exporting…' : 'Download Excel'}
+            </button>
+          </div>
         </header>
 
         <GrnFilters

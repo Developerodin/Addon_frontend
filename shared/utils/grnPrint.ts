@@ -11,6 +11,8 @@
  * regardless of later PO edits — keep all math out of this file.
  */
 
+import { ADDON_COMPANY } from '@/shared/constants/addonCompany';
+
 export interface GrnSnapshotItem {
   yarnName?: string;
   yarnCatalogId?: string;
@@ -49,8 +51,12 @@ export interface GrnSnapshotSupplier {
 export interface GrnSnapshotConsignee {
   name?: string;
   address?: string;
+  headOffice?: string;
   stateCode?: string;
+  state?: string;
   gstNo?: string;
+  contactNumber?: string;
+  email?: string;
 }
 
 export interface GrnSnapshotTotals {
@@ -99,6 +105,18 @@ export interface GrnSnapshot {
 }
 
 const TEMPLATE_PATH = '/templates/goods-received-note.html';
+
+/** Merge stored consignee snapshot with canonical Addon defaults for legacy GRNs. */
+const resolveConsignee = (consignee?: GrnSnapshotConsignee): Required<GrnSnapshotConsignee> => ({
+  name: consignee?.name?.trim() || ADDON_COMPANY.name,
+  address: consignee?.address?.trim() || ADDON_COMPANY.address,
+  headOffice: consignee?.headOffice?.trim() || ADDON_COMPANY.headOffice,
+  stateCode: consignee?.stateCode?.trim() || ADDON_COMPANY.stateCode,
+  state: consignee?.state?.trim() || ADDON_COMPANY.state,
+  gstNo: consignee?.gstNo?.trim() || ADDON_COMPANY.gstNo,
+  contactNumber: consignee?.contactNumber?.trim() || ADDON_COMPANY.contactNumber,
+  email: consignee?.email?.trim() || ADDON_COMPANY.email,
+});
 
 /**
  * @param value - any date-ish input
@@ -223,10 +241,19 @@ const renderGrnHtml = async (grn: GrnSnapshot): Promise<string> => {
   let html = await response.text();
 
   const supplier = grn.supplier || {};
-  const consignee = grn.consignee || {};
+  const consignee = resolveConsignee(grn.consignee);
 
   const supplierLocation = [supplier.city, supplier.state].filter(Boolean).join(', ');
   const supplierAddressBlock = `${supplier.address || 'N/A'}${supplierLocation ? `<br>${supplierLocation}` : ''}`;
+
+  html = setById(html, 'consignee-name', consignee.name);
+  html = setById(html, 'consignee-address', consignee.address);
+  html = setById(html, 'consignee-head-office', consignee.headOffice);
+  html = setById(html, 'consignee-contact', consignee.contactNumber);
+  html = setById(html, 'consignee-email', consignee.email);
+  html = setById(html, 'consignee-state-code', consignee.stateCode);
+  html = setById(html, 'consignee-gst', consignee.gstNo);
+  html = setById(html, 'signatory-company-name', consignee.name);
 
   html = setById(html, 'supplier-name', supplier.name || 'N/A');
   html = html.replace(
@@ -236,9 +263,6 @@ const renderGrnHtml = async (grn: GrnSnapshot): Promise<string> => {
   html = setById(html, 'supplier-email', supplier.email || 'N/A');
   html = setById(html, 'supplier-mob', supplier.contactNumber || 'N/A');
   html = setById(html, 'supplier-gst', supplier.gstNo || 'N/A');
-
-  html = setById(html, 'consignee-state-code', consignee.stateCode || '27');
-  html = setById(html, 'consignee-gst', consignee.gstNo || '27AAACA8827A1ZZ');
 
   html = setById(html, 'po-no', grn.poNumber || 'N/A');
   html = setById(html, 'po-date', formatDate(grn.poDate) || 'N/A');

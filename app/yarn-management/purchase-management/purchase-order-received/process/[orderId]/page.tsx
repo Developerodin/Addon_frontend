@@ -10,6 +10,7 @@ import yarnPurchaseOrderService, { PurchaseOrderStatus } from "@/shared/services
 import yarnBoxService, { YarnBox, UpdateYarnBoxPayload, BulkMatchUpdateItem } from "@/shared/services/yarnBoxService";
 import yarnGrnService, { YarnGrn } from "@/shared/services/yarnGrnService";
 import { downloadGrnHtml, printGrnDocument } from "@/shared/utils/grnPrint";
+import { ADDON_COMPANY } from "@/shared/constants/addonCompany";
 import { QZTrayLoader, QZTrayStatus, QZTrayUntrustedWarning, QZTrayRequestBlocked } from "@/shared/components/qzTray";
 import { printCones, connectQZ, getDefaultPrinter, isQZLoaded, getAvailablePrinters, PrinterInfo } from "@/shared/utils/qzTray";
 import { fetchWeightLatest } from "@/shared/data/utilities/weightApi";
@@ -1484,9 +1485,15 @@ const ProcessOrderPage = () => {
       htmlTemplate = htmlTemplate.replace(/id="supplier-mob".*?>.*?<\/span>/, `id="supplier-mob">${supplierContactNumber}</span>`);
       htmlTemplate = htmlTemplate.replace(/id="supplier-gst".*?>.*?<\/span>/, `id="supplier-gst">${supplierGST}</span>`);
 
-      // Consignee is fixed to ADDON HOLDINGS as per image, but we can ensure state code/gst is correct
-      htmlTemplate = htmlTemplate.replace(/id="consignee-state-code".*?>.*?<\/span>/, `id="consignee-state-code">27</span>`);
-      htmlTemplate = htmlTemplate.replace(/id="consignee-gst".*?>.*?<\/span>/, `id="consignee-gst">27AAACA8827A1ZZ</span>`);
+      // Consignee (Addon company) — shown above vendor on printed GRN
+      htmlTemplate = htmlTemplate.replace(/id="consignee-name".*?>.*?<\/div>/, `id="consignee-name">${ADDON_COMPANY.name}</div>`);
+      htmlTemplate = htmlTemplate.replace(/id="consignee-address".*?>.*?<\/span>/, `id="consignee-address">${ADDON_COMPANY.address}</span>`);
+      htmlTemplate = htmlTemplate.replace(/id="consignee-head-office".*?>.*?<\/span>/, `id="consignee-head-office">${ADDON_COMPANY.headOffice}</span>`);
+      htmlTemplate = htmlTemplate.replace(/id="consignee-contact".*?>.*?<\/span>/, `id="consignee-contact">${ADDON_COMPANY.contactNumber}</span>`);
+      htmlTemplate = htmlTemplate.replace(/id="consignee-email".*?>.*?<\/span>/, `id="consignee-email">${ADDON_COMPANY.email}</span>`);
+      htmlTemplate = htmlTemplate.replace(/id="consignee-state-code".*?>.*?<\/span>/, `id="consignee-state-code">${ADDON_COMPANY.stateCode}</span>`);
+      htmlTemplate = htmlTemplate.replace(/id="consignee-gst".*?>.*?<\/span>/, `id="consignee-gst">${ADDON_COMPANY.gstNo}</span>`);
+      htmlTemplate = htmlTemplate.replace(/id="signatory-company-name".*?>.*?<\/span>/, `id="signatory-company-name">${ADDON_COMPANY.name}</span>`);
 
       // Get order details
       const orderItems = rawApiOrder?.poItems || rawApiOrder?.items || [];
