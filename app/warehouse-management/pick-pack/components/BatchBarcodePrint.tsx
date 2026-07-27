@@ -11,6 +11,7 @@ import {
   countBarcodeLabels,
   type BarcodePrintMode,
 } from "./BatchBarcodePrintModal";
+import { printHtmlViaHiddenFrame } from "./printHtmlViaHiddenFrame";
 
 export interface BarcodePrintResult {
   batchNumber: string;
@@ -30,11 +31,7 @@ export function printBatchBarcodeLabels(batchNumber: string, labels: PickListBat
     toast.error("No labels to print");
     return false;
   }
-  const win = window.open("", "_blank", "width=800,height=900");
-  if (!win) {
-    toast.error("Popup blocked — allow popups to print");
-    return false;
-  }
+
   const blocks = labels
     .map((label) => {
       const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -60,16 +57,16 @@ export function printBatchBarcodeLabels(batchNumber: string, labels: PickListBat
       return Array.from({ length: label.quantity }, () => one).join("");
     })
     .join("");
-  win.document.write(`<!doctype html><html><head><title>Barcodes — ${batchNumber}</title>
+
+  const html = `<!doctype html><html><head><title>Barcodes — ${batchNumber}</title>
     <style>
       body { font-family: Arial, sans-serif; padding: 12px; }
       .label { display: inline-block; border: 1px dashed #bbb; padding: 6px 10px; margin: 4px; text-align: center; page-break-inside: avoid; }
       .meta { font-size: 11px; color: #333; margin-top: 2px; }
       .ean { font-size: 10px; color: #666; margin-top: 1px; }
-    </style></head><body>${blocks}
-    <script>window.onload = () => window.print();</script></body></html>`);
-  win.document.close();
-  return true;
+    </style></head><body>${blocks}</body></html>`;
+
+  return printHtmlViaHiddenFrame(html, `Print barcodes — ${batchNumber}`);
 }
 
 /**

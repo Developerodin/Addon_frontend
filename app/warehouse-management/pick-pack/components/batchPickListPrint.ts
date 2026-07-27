@@ -3,6 +3,7 @@
  */
 import type { PickListBatchDetail, PickListBatchItem } from "@/shared/services/whmsPickListBatchService";
 import { formatPickerLabel } from "./pickTableExport";
+import { printHtmlViaHiddenFrame } from "./printHtmlViaHiddenFrame";
 
 const escHtml = (value: string) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -137,10 +138,5 @@ export function printBatchPickList(batch: PickListBatchDetail) {
   </div>
 </body></html>`;
 
-  const w = window.open("", "_blank");
-  if (!w) return;
-  w.document.write(html);
-  w.document.close();
-  w.focus();
-  w.print();
+  printHtmlViaHiddenFrame(html, `Print pick list — ${batch.batchNumber}`);
 }

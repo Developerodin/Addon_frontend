@@ -1,14 +1,15 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
-import { Toaster } from "react-hot-toast";
+import { toast, Toaster } from "react-hot-toast";
 import {
   whmsWarehouseOrders,
   WarehouseOrder,
   warehouseOrderFlowStatusLabel,
   type PaginatedWarehouseOrders,
 } from "@/shared/services/whmsWarehouseOrderService";
+import { whmsDispatch } from "@/shared/services/whmsFulfilmentService";
 import { useWhmsPaginatedList } from "@/shared/hooks/useWhmsPaginatedList";
 import {
   WhmsListPagination,
@@ -17,6 +18,11 @@ import {
   getDispatchActorFromHistory,
 } from "@/shared/components/whms";
 import OrderFlowModal from "../orders/components/OrderFlowModal";
+import {
+  downloadDispatchImportResultReport,
+  exportDispatchDetailsExcel,
+  parseDispatchDetailsImportFile,
+} from "./dispatchDetailsExcel";
 
 type DispatchTab = "active" | "shipped";
 
@@ -35,6 +41,9 @@ export default function DispatchPage() {
   const [tab, setTab] = useState<DispatchTab>("active");
   const [journeyOrderId, setJourneyOrderId] = useState<string | null>(null);
   const [flowOrderId, setFlowOrderId] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const importRef = useRef<HTMLInputElement>(null);
 
   const baseParams = useMemo(
     () => ({ flowStatusIn: FLOW_BY_TAB[tab], sortBy: "createdAt:desc" }),
@@ -68,6 +77,66 @@ export default function DispatchPage() {
     setPage(1);
   };
 
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    try {
+      const data = await whmsWarehouseOrders.list({
+        flowStatusIn: FLOW_BY_TAB[tab],
+        sortBy: "createdAt:desc",
+        page: 1,
+        limit: 500,
+        ...(q ? { q } : {}),
+        ...(dateFrom ? { dateFrom } : {}),
+        ...(dateTo ? { dateTo } : {}),
+      });
+      if (!data.results.length) {
+        toast.error("No orders to export for the current filters");
+        return;
+      }
+      exportDispatchDetailsExcel(data.results, tab);
+      toast.success(`Exported ${data.results.length} order${data.results.length === 1 ? "" : "s"}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleBulkImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setIsImporting(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const { rows, errors } = parseDispatchDetailsImportFile(buffer);
+      if (errors.length) {
+        toast.error(errors.slice(0, 3).join(" · "));
+        if (errors.length > 3) toast.error(`${errors.length - 3} more row errors — fix the sheet and retry`);
+        return;
+      }
+      if (!rows.length) {
+        toast.error("No valid rows found in the Excel file");
+        return;
+      }
+
+      const result = await whmsDispatch.bulkImportDetails(rows);
+      if (result.summary.success) {
+        toast.success(`Updated dispatch details for ${result.summary.success} order${result.summary.success === 1 ? "" : "s"}`);
+      }
+      if (result.summary.failed) {
+        toast.error(`${result.summary.failed} row${result.summary.failed === 1 ? "" : "s"} failed — downloading result report`);
+        downloadDispatchImportResultReport(result);
+      }
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   return (
     <>
       <Seo title="Dispatch" />
@@ -78,7 +147,9 @@ export default function DispatchPage() {
           <div>
             <h3 className="box-title">Dispatch</h3>
             <p className="text-xs text-gray-500 mt-1">
-              Enter courier / AWB, print labels, and confirm shipment.
+              {tab === "shipped"
+                ? "Review shipped orders and bulk-update courier / AWB details via Excel."
+                : "Enter courier / AWB, print labels, and confirm shipment."}
             </p>
           </div>
           <button type="button" onClick={() => void refresh()} className="ti-btn ti-btn-light text-[12px]">
@@ -107,6 +178,53 @@ export default function DispatchPage() {
               Shipped / History
             </button>
           </div>
+
+          {tab === "shipped" ? (
+            <div className="flex flex-wrap items-center gap-2 mb-4 pb-3 border-b border-gray-100">
+              <span className="text-[11px] font-semibold text-gray-600 mr-1">Bulk shipment details:</span>
+              <button
+                type="button"
+                onClick={() => void handleExportExcel()}
+                disabled={isExporting}
+                className="ti-btn ti-btn-light text-[11px] font-semibold disabled:opacity-50"
+                aria-label="Export shipped orders with dispatch details to Excel"
+              >
+                {isExporting ? (
+                  <>
+                    <i className="ri-loader-4-line animate-spin" aria-hidden /> Exporting…
+                  </>
+                ) : (
+                  <>
+                    <i className="ri-file-excel-2-line text-green-700" aria-hidden /> Export Excel
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => importRef.current?.click()}
+                disabled={isImporting}
+                className="ti-btn ti-btn-primary text-[11px] font-semibold disabled:opacity-50"
+                aria-label="Import dispatch details from Excel"
+              >
+                {isImporting ? (
+                  <>
+                    <i className="ri-loader-4-line animate-spin" aria-hidden /> Importing…
+                  </>
+                ) : (
+                  <>
+                    <i className="ri-upload-2-line" aria-hidden /> Import Excel
+                  </>
+                )}
+              </button>
+              <input
+                ref={importRef}
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                onChange={(e) => void handleBulkImport(e)}
+              />
+            </div>
+          ) : null}
 
           <WhmsListToolbar
             search={q}

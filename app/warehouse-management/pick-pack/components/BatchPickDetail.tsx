@@ -266,75 +266,44 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <Link
-            href="/warehouse-management/pick-pack"
-            className="text-[11px] text-purple-600 hover:underline font-medium inline-flex items-center gap-1 mb-2"
-          >
-            <i className="ri-arrow-left-line" aria-hidden /> Back to pick lists
-          </Link>
-          <h1 className="text-lg font-bold text-gray-900">{batch.batchNumber}</h1>
-          <div className="flex flex-wrap gap-2 mt-2">
+    <div className="space-y-3">
+      <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <Link
+              href="/warehouse-management/pick-pack"
+              className="text-[11px] text-purple-600 hover:underline font-medium inline-flex items-center gap-0.5 shrink-0"
+            >
+              <i className="ri-arrow-left-line" aria-hidden /> Back
+            </Link>
+            <span className="text-gray-300 hidden sm:inline" aria-hidden>
+              |
+            </span>
+            <h1 className="text-base font-bold text-gray-900 truncate">{batch.batchNumber}</h1>
             <span
-              className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+              className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold uppercase shrink-0 ${
                 batch.type === "combined" ? "bg-violet-100 text-violet-800" : "bg-sky-100 text-sky-800"
               }`}
             >
-              {batch.type === "combined" ? "Combined order pick list" : "Single order pick list"}
+              {batch.type === "combined" ? "Combined" : "Single"}
             </span>
-            <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-gray-100 text-gray-700">
+            <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-gray-100 text-gray-700 shrink-0">
               {batch.status.replace(/-/g, " ")}
             </span>
           </div>
-          <div className="flex flex-wrap gap-1.5 mt-3">
-            {(batch.orderNumbers || []).map((num) => (
-              <span
-                key={num}
-                className="inline-flex px-2 py-1 rounded-full bg-purple-50 text-purple-800 text-[11px] font-semibold border border-purple-100"
-              >
-                {num}
-              </span>
-            ))}
-          </div>
+          {(batch.orderNumbers || []).length > 0 && (
+            <div className="flex flex-wrap items-center gap-1 mt-1">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase shrink-0">Orders:</span>
+              {(batch.orderNumbers || []).map((num) => (
+                <span
+                  key={num}
+                  className="inline-flex px-1.5 py-0.5 rounded bg-purple-50 text-purple-800 text-[10px] font-semibold border border-purple-100"
+                >
+                  {num}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
-
-        {isEditable && (
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={handlePrintPickList}
-              disabled={busy || !canPrintPickList}
-              title={!canPrintPickList ? "Save picker name first" : undefined}
-              className="px-3 py-1.5 text-[11px] font-bold text-purple-700 bg-purple-50 border border-purple-200 rounded hover:bg-purple-100 disabled:opacity-40 flex items-center gap-1.5"
-              aria-label="Print pick list for warehouse"
-            >
-              <i className="ri-printer-line" aria-hidden />
-              Print Pick List
-            </button>
-            <label htmlFor="picker-name" className="sr-only">
-              Picker name
-            </label>
-            <input
-              id="picker-name"
-              type="text"
-              value={pickerName}
-              onChange={(e) => setPickerName(e.target.value)}
-              placeholder="Picker name"
-              className="border border-gray-200 rounded px-3 py-1.5 text-sm min-w-[160px]"
-            />
-            <button
-              type="button"
-              onClick={() => void handleSavePicker()}
-              disabled={busy || !pickerName.trim() || !hasUnsavedPickerName}
-              className="px-3 py-1.5 text-[11px] font-bold border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40"
-            >
-              Save picker
-            </button>
-          </div>
-        )}
-      </div>
 
       <div
         className="flex gap-2 border-b border-gray-100 pb-2"
@@ -391,8 +360,12 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
             totalPicked={totalPicked}
             hasUnsavedPicks={hasUnsavedPicks}
             canPrintPickList={canPrintPickList}
+            pickerName={pickerName}
+            hasUnsavedPickerName={hasUnsavedPickerName}
             onPickChange={handlePickChange}
             onSavePicks={() => void handleSavePicks()}
+            onSavePicker={() => void handleSavePicker()}
+            onPickerNameChange={setPickerName}
             onSendToScanning={() => void handleSendToScanning()}
             onOpenBarcodeModal={openBarcodeModal}
             onPrintPickList={handlePrintPickList}

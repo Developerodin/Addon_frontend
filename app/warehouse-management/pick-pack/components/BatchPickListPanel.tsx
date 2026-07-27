@@ -34,8 +34,12 @@ export interface BatchPickListPanelProps {
   totalPicked: number;
   hasUnsavedPicks: boolean;
   canPrintPickList: boolean;
+  pickerName: string;
+  hasUnsavedPickerName: boolean;
   onPickChange: (itemKey: string, rawValue: string, max: number, styleCode: string) => void;
   onSavePicks: () => void;
+  onSavePicker: () => void;
+  onPickerNameChange: (value: string) => void;
   onSendToScanning: () => void;
   onOpenBarcodeModal: (styleCode?: string) => void;
   onPrintPickList: () => void;
@@ -57,8 +61,12 @@ export default function BatchPickListPanel({
   totalPicked,
   hasUnsavedPicks,
   canPrintPickList,
+  pickerName,
+  hasUnsavedPickerName,
   onPickChange,
   onSavePicks,
+  onSavePicker,
+  onPickerNameChange,
   onSendToScanning,
   onOpenBarcodeModal,
   onPrintPickList,
@@ -98,6 +106,68 @@ export default function BatchPickListPanel({
 
   return (
     <div className="space-y-4">
+      {isEditable && (
+        <div className="flex flex-wrap items-center gap-2 pb-2 border-b border-gray-100">
+          <button
+            type="button"
+            onClick={() => void onSavePicks()}
+            disabled={busy || !hasUnsavedPicks || savingPicks}
+            className="px-4 py-2 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1.5 min-w-[100px] justify-center"
+          >
+            {savingPicks ? (
+              <>
+                <i className="ri-loader-4-line animate-spin" aria-hidden />
+                Saving…
+              </>
+            ) : (
+              "Save Picks"
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => onOpenBarcodeModal()}
+            disabled={busy || totalPicked <= 0 || hasUnsavedPicks}
+            className="px-4 py-2 bg-white border border-gray-200 text-gray-800 text-[11px] font-bold rounded hover:bg-gray-50 disabled:opacity-40 flex items-center gap-1.5"
+            title={hasUnsavedPicks ? "Save picks first" : undefined}
+          >
+            <i className="ri-barcode-line" aria-hidden />
+            Print Barcodes
+          </button>
+          <button
+            type="button"
+            onClick={onPrintPickList}
+            disabled={busy || !canPrintPickList}
+            title={!canPrintPickList ? "Save picker name first" : undefined}
+            className="px-4 py-2 bg-purple-50 border border-purple-200 text-purple-700 text-[11px] font-bold rounded hover:bg-purple-100 disabled:opacity-40 flex items-center gap-1.5"
+            aria-label="Print pick list for warehouse"
+          >
+            <i className="ri-printer-line" aria-hidden />
+            Print Pick List
+          </button>
+          <div className="flex flex-wrap items-center gap-2 ml-auto">
+            <label htmlFor="picker-name" className="sr-only">
+              Picker name
+            </label>
+            <input
+              id="picker-name"
+              type="text"
+              value={pickerName}
+              onChange={(e) => onPickerNameChange(e.target.value)}
+              placeholder="Picker name"
+              className="border border-gray-200 rounded px-3 py-1.5 text-sm min-w-[140px] h-[34px]"
+            />
+            <button
+              type="button"
+              onClick={() => void onSavePicker()}
+              disabled={busy || !pickerName.trim() || !hasUnsavedPickerName}
+              className="px-3 py-1.5 text-[11px] font-bold border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40 h-[34px]"
+            >
+              Save picker
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="overflow-x-auto border border-gray-200 rounded-lg">
         <table className="w-full min-w-[800px]">
           <thead className="bg-gray-50">
@@ -241,60 +311,6 @@ export default function BatchPickListPanel({
           </tbody>
         </table>
       </div>
-
-      {isEditable && (
-        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
-          {/* Print Pick List moved to page header — keep footer actions focused on picks/barcode/scanning
-          <button
-            type="button"
-            onClick={onPrintPickList}
-            disabled={busy || !canPrintPickList}
-            title={!canPrintPickList ? "Save picker name first" : undefined}
-            className="px-4 py-2 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1.5"
-            aria-label="Print pick list for warehouse picking"
-          >
-            <i className="ri-printer-line" aria-hidden />
-            Print Pick List
-          </button>
-          */}
-          <button
-            type="button"
-            onClick={() => void onSavePicks()}
-            disabled={busy || !hasUnsavedPicks || savingPicks}
-            className="px-4 py-2 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1.5 min-w-[100px] justify-center"
-          >
-            {savingPicks ? (
-              <>
-                <i className="ri-loader-4-line animate-spin" aria-hidden />
-                Saving…
-              </>
-            ) : (
-              "Save Picks"
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => onOpenBarcodeModal()}
-            disabled={busy || totalPicked <= 0 || hasUnsavedPicks}
-            className="px-4 py-2 bg-white border border-gray-200 text-gray-800 text-[11px] font-bold rounded hover:bg-gray-50 disabled:opacity-40 flex items-center gap-1.5"
-            title={hasUnsavedPicks ? "Save picks first" : undefined}
-          >
-            <i className="ri-barcode-line" aria-hidden />
-            Print Barcodes
-          </button>
-          {/* Send to Scanning — hidden for now
-          <button
-            type="button"
-            onClick={() => void onSendToScanning()}
-            disabled={busy || totalPicked <= 0 || hasUnsavedPicks}
-            className="px-4 py-2 bg-indigo-600 text-white text-[11px] font-bold rounded hover:bg-indigo-700 disabled:opacity-40"
-            title={hasUnsavedPicks ? "Save picks first" : undefined}
-          >
-            Send to Scanning
-          </button>
-          */}
-        </div>
-      )}
 
       {!isEditable && (
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">

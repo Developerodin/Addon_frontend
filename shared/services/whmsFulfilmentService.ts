@@ -290,6 +290,23 @@ export interface DispatchDetailsBody {
   shippingRemarks?: string;
 }
 
+export interface DispatchDetailsBulkImportRow {
+  rowNumber?: number;
+  orderNumber?: string;
+  orderId?: string;
+  courierName?: string;
+  trackingNumber?: string;
+  vehicleDetails?: string;
+  boxCount?: number | string;
+  shippingRemarks?: string;
+}
+
+export interface DispatchDetailsBulkImportResult {
+  updated: Array<{ rowNumber: number; orderId: string; orderNumber?: string; flowStatus?: string }>;
+  failed: Array<{ rowNumber: number; orderNumber?: string; message: string }>;
+  summary: { total: number; success: number; failed: number };
+}
+
 export interface ShippingLabelPayload {
   orderId: string;
   orderNumber?: string;
@@ -385,6 +402,11 @@ export const whmsInvoices = {
 export const whmsDispatch = {
   setDetails: (orderId: string, body: DispatchDetailsBody) =>
     request<unknown>(`/warehouse-orders/${orderId}/dispatch-details`, { method: 'PATCH', body: JSON.stringify(body) }),
+  bulkImportDetails: (rows: DispatchDetailsBulkImportRow[]) =>
+    request<DispatchDetailsBulkImportResult>(`/warehouse-orders/dispatch-details/bulk-import`, {
+      method: 'POST',
+      body: JSON.stringify({ rows }),
+    }),
   dispatch: (orderId: string, mode: 'dispatched' | 'partial-dispatched' | 'ready-for-pickup', remarks = '') =>
     request<unknown>(`/warehouse-orders/${orderId}/dispatch`, {
       method: 'POST',
