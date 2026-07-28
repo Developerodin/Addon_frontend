@@ -32,6 +32,7 @@ import { QZTrayLoader, QZTrayStatus, QZTrayUntrustedWarning, QZTrayRequestBlocke
 import { printContainerLabels, isQZLoaded, type PrinterInfo } from "@/shared/utils/qzTray";
 import { openKnittingContainerLabelBrowserPrint } from "./utils/knittingContainerLabelBrowserPrint";
 import { encodeProductionArticleQr } from "@/shared/utils/productionArticleQr";
+import { canEditKnittingYarnStatus } from "@/shared/utils/userUtils";
 import {
   resolveProductionArticleQrScan,
   type ArticleQrScanFeedback,
@@ -161,6 +162,7 @@ function KnitDoneQuantityReminder({ entries }: { entries: KnitDoneEntry[] }) {
 const KnittingFloorSupervisorPage = () => {
   const user = useSelector((state: any) => state.auth?.user);
   const isUserRole = user?.role === "user" || user?.role === "accounts";
+  const canChangeKnittingYarnStatus = canEditKnittingYarnStatus(user);
   /** On Hold / Short Close status actions in update modal — admin and super_admin only */
   const canSetOnHold =
     user?.role === "admin" || user?.role === "super_admin";
@@ -1545,7 +1547,12 @@ const KnittingFloorSupervisorPage = () => {
         {/* Content: Orders | Machine view | Article view */}
         <div className="min-h-[300px]">
           {activeTab === "machine-view" ? (
-            <MachineViewTab onOpenEditModal={handleOpenUpdateModalFromMachine} refreshTrigger={machineViewRefreshTrigger} canShowSettings={!isUserRole} />
+            <MachineViewTab
+              onOpenEditModal={handleOpenUpdateModalFromMachine}
+              refreshTrigger={machineViewRefreshTrigger}
+              canShowSettings={!isUserRole || canChangeKnittingYarnStatus}
+              canChangeYarnStatus={canChangeKnittingYarnStatus}
+            />
           ) : activeTab === "planning" ? (
             <MachineArticlePlanningTab refreshTrigger={machineViewRefreshTrigger} />
           ) : activeTab === "article-view" ? (

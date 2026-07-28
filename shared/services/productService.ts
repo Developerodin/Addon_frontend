@@ -171,6 +171,7 @@ export interface ProductByFactoryCode {
   _id?: string;
   factoryCode?: string;
   name?: string;
+  image?: string;
   attributes?: Record<string, string>;
   [key: string]: unknown;
 }

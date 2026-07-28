@@ -34,6 +34,19 @@ export const isFinalUser = (user: any): boolean => {
   return user.email.toLowerCase() === 'itemfinal@addon.in';
 };
 
+/** Emails allowed to edit yarn issue status (not yarn return) in knitting Machine View PO drawer */
+const KNITTING_YARN_STATUS_EDITOR_EMAILS = new Set(['ramkrishnn@addbr.com']);
+
+/**
+ * Whether the user may change yarn issue status on machine assignment queue rows.
+ * @param user - User object from Redux store
+ */
+export const canEditKnittingYarnStatus = (user: { email?: string } | null | undefined): boolean => {
+  const email = user?.email?.trim().toLowerCase();
+  if (!email) return false;
+  return KNITTING_YARN_STATUS_EDITOR_EMAILS.has(email);
+};
+
 /**
  * Get allowed attribute names for final user
  * These attributes should be visible to itemfinal@addon.in user

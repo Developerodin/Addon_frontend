@@ -11,6 +11,21 @@ import {
 import { machinesService } from "@/shared/services/machinesService";
 import { productionService, type ProductionOrder, type Article } from "@/shared/services/productionService";
 import { getProductsByFactoryCodes } from "@/shared/services/productService";
+import ArticlePlanCell from "./ArticlePlanCell";
+import ArticleProductImageModal from "./ArticleProductImageModal";
+
+interface ProductCatalogInfo {
+  Type?: string;
+  Season?: string;
+  image?: string;
+  name?: string;
+}
+
+interface ImageModalState {
+  factoryCode: string;
+  imageUrl?: string;
+  productName?: string;
+}
 
 export interface PlanningRow {
   machineId: string;
@@ -32,6 +47,8 @@ export interface MachineArticlePlanningTabProps {
 export default function MachineArticlePlanningTab({ refreshTrigger }: MachineArticlePlanningTabProps) {
   const [rows, setRows] = useState<PlanningRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [productByFactoryCode, setProductByFactoryCode] = useState<Map<string, ProductCatalogInfo>>(new Map());
+  const [imageModal, setImageModal] = useState<ImageModalState | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -103,8 +120,8 @@ export default function MachineArticlePlanningTab({ refreshTrigger }: MachineArt
         }
       }
 
-      /** Collect factory codes from running articles only (In Progress) */
-      const runningFactoryCodes = new Set<string>();
+      /** Collect factory codes from running + next plan articles for catalog lookup */
+      const planFactoryCodes = new Set<string>();
       for (const m of machinesList) {
         const assignment = assignmentByMachineId.get(m.id);
         if (!assignment) continue;
@@ -112,29 +129,36 @@ export default function MachineArticlePlanningTab({ refreshTrigger }: MachineArt
           .filter((i) => i.priority != null && i.status !== OrderStatus.ON_HOLD)
           .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
         const runningItem = items.find((i) => i.status === OrderStatus.IN_PROGRESS);
-        if (runningItem) {
-          const runningArticle = articleByOrderArticle.get(`${getOrderId(runningItem)}:${getArticleId(runningItem)}`);
-          const fc = runningItem.articleNumber ?? runningArticle?.articleNumber ?? "";
-          if (fc.trim()) runningFactoryCodes.add(fc.trim());
+        const nextItem = items.find((i) => i.status === OrderStatus.PENDING);
+        for (const item of [runningItem, nextItem]) {
+          if (!item) continue;
+          const article = articleByOrderArticle.get(`${getOrderId(item)}:${getArticleId(item)}`);
+          const fc = item.articleNumber ?? article?.articleNumber ?? "";
+          if (fc.trim()) planFactoryCodes.add(fc.trim());
         }
       }
 
-      /** Fetch products by factory codes for attributes (Type, Season) */
-      const productByFactoryCode = new Map<string, { Type?: string; Season?: string }>();
-      if (runningFactoryCodes.size > 0) {
+      /** Fetch products by factory codes for attributes (Type, Season) and catalog image */
+      const productMap = new Map<string, ProductCatalogInfo>();
+      if (planFactoryCodes.size > 0) {
         try {
-          const products = await getProductsByFactoryCodes(Array.from(runningFactoryCodes));
+          const products = await getProductsByFactoryCodes(Array.from(planFactoryCodes));
           for (const p of products) {
             const fc = (p.factoryCode ?? "").trim();
-            if (fc) {
-              productByFactoryCode.set(fc.toLowerCase(), (p.attributes ?? {}) as { Type?: string; Season?: string });
-              productByFactoryCode.set(fc, (p.attributes ?? {}) as { Type?: string; Season?: string });
-            }
+            if (!fc) continue;
+            const info: ProductCatalogInfo = {
+              ...(p.attributes ?? {}) as { Type?: string; Season?: string },
+              image: typeof p.image === "string" ? p.image.trim() : undefined,
+              name: typeof p.name === "string" ? p.name.trim() : undefined,
+            };
+            productMap.set(fc.toLowerCase(), info);
+            productMap.set(fc, info);
           }
         } catch {
-          // ignore – attributes optional
+          // ignore – catalog data optional
         }
       }
+      setProductByFactoryCode(productMap);
 
       const planningRows: PlanningRow[] = [];
 
@@ -178,7 +202,7 @@ export default function MachineArticlePlanningTab({ refreshTrigger }: MachineArt
           ? (runningItem.articleNumber ?? runningArticle?.articleNumber ?? "").trim()
           : "";
         const attrs = runningFactoryCode
-          ? productByFactoryCode.get(runningFactoryCode) ?? productByFactoryCode.get(runningFactoryCode.toLowerCase())
+          ? productMap.get(runningFactoryCode) ?? productMap.get(runningFactoryCode.toLowerCase())
           : undefined;
         const running = attrs?.Season ?? "-";
         const type = attrs?.Type ?? "-";
@@ -223,6 +247,20 @@ export default function MachineArticlePlanningTab({ refreshTrigger }: MachineArt
   useEffect(() => {
     fetchData();
   }, [fetchData, refreshTrigger]);
+
+  /** Opens the product image modal for a planning-table article code. */
+  const handleArticleInfoClick = useCallback(
+    (factoryCode: string) => {
+      const info =
+        productByFactoryCode.get(factoryCode) ?? productByFactoryCode.get(factoryCode.toLowerCase());
+      setImageModal({
+        factoryCode,
+        imageUrl: info?.image,
+        productName: info?.name,
+      });
+    },
+    [productByFactoryCode],
+  );
 
   const handlePrint = useCallback(() => {
     const printWindow = window.open("", "_blank");
@@ -396,13 +434,13 @@ export default function MachineArticlePlanningTab({ refreshTrigger }: MachineArt
                   {row.machineCode}
                 </td>
                 <td className="px-2 py-2 text-[11px] text-gray-800 border-b border-r border-gray-300">
-                  {row.existingPlan}
+                  <ArticlePlanCell factoryCode={row.existingPlan} onInfoClick={handleArticleInfoClick} />
                 </td>
                 <td className="px-2 py-2 text-[11px] text-gray-800 border-b border-r border-gray-300">
                   {row.existingQty}
                 </td>
                 <td className="px-2 py-2 text-[11px] text-gray-800 border-b border-r border-gray-300">
-                  {row.nextPlan}
+                  <ArticlePlanCell factoryCode={row.nextPlan} onInfoClick={handleArticleInfoClick} />
                 </td>
                 <td className="px-2 py-2 text-[11px] text-gray-800 border-b border-gray-300">
                   {row.nextQty}
@@ -415,6 +453,15 @@ export default function MachineArticlePlanningTab({ refreshTrigger }: MachineArt
 
       {rows.length === 0 && !isLoading && (
         <p className="py-8 text-center text-[11px] text-gray-500">No machines or assignments found.</p>
+      )}
+
+      {imageModal && (
+        <ArticleProductImageModal
+          factoryCode={imageModal.factoryCode}
+          productName={imageModal.productName}
+          imageUrl={imageModal.imageUrl}
+          onClose={() => setImageModal(null)}
+        />
       )}
     </div>
   );

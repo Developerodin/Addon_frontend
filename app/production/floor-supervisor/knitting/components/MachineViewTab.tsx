@@ -7,6 +7,7 @@ import {
   getMachineOrderAssignment,
   updateAssignmentItemsPriorities,
   updateAssignmentItemStatus,
+  updateAssignmentItemYarnIssueStatus,
   OrderStatus,
   type MachineOrderAssignment,
   type OrderStatusType,
@@ -84,6 +85,8 @@ function assignmentItemStatusBadgeClass(status: OrderStatusType | undefined): st
   }
 }
 
+const YARN_ISSUE_STATUS_OPTIONS = ["Pending", "In Progress", "Completed"] as const;
+
 /**
  * Prioritized queue item that is knitting "running" for this machine: first In Progress among prioritized non–on-hold items.
  */
@@ -116,9 +119,11 @@ export interface MachineViewTabProps {
   refreshTrigger?: number;
   /** When false, hide settings icon in Actions (e.g. for "user" role). Default true. */
   canShowSettings?: boolean;
+  /** When true, Yarn column in PO drawer is an editable dropdown. */
+  canChangeYarnStatus?: boolean;
 }
 
-export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canShowSettings = true }: MachineViewTabProps) {
+export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canShowSettings = true, canChangeYarnStatus = false }: MachineViewTabProps) {
   const [rows, setRows] = useState<MachineOrderAssignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -136,6 +141,8 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
   const [savingOrder, setSavingOrder] = useState(false);
   /** Assignment item whose status PATCH is in flight (disables that row's status select). */
   const [savingStatusItemId, setSavingStatusItemId] = useState<string | null>(null);
+  /** Assignment item whose yarn issue status PATCH is in flight. */
+  const [savingYarnIssueItemId, setSavingYarnIssueItemId] = useState<string | null>(null);
   const [auditLogsTarget, setAuditLogsTarget] = useState<{ machineId: string; label: string } | null>(null);
 
   /** Reorder within the prioritized list only; on-hold and no-priority items keep trailing priorities. */
@@ -222,6 +229,57 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
         toast.error(e instanceof Error ? e.message : "Failed to update status");
       } finally {
         setSavingStatusItemId(null);
+      }
+    },
+    [poDetailsAssignment]
+  );
+
+  /**
+   * Persists one queue row's yarn issue status and mirrors the result into the drawer and machine table.
+   * @param itemId Subdocument id of the assignment line item
+   * @param nextStatus Target yarn issue status
+   */
+  const handleYarnIssueStatusChange = useCallback(
+    async (itemId: string, nextStatus: string) => {
+      if (!poDetailsAssignment?.id) return;
+      const items = poDetailsAssignment.productionOrderItems ?? [];
+      const current = items.find((i) => i.itemId === itemId);
+      const prev = current?.yarnIssueStatus ? String(current.yarnIssueStatus) : "Pending";
+      if (nextStatus === prev) return;
+      const assignmentId = poDetailsAssignment.id;
+      const snapshot = poDetailsAssignment;
+      setSavingYarnIssueItemId(itemId);
+      setPoDetailsAssignment((p) => {
+        if (!p?.id) return p;
+        return {
+          ...p,
+          productionOrderItems: (p.productionOrderItems ?? []).map((i) =>
+            i.itemId === itemId ? { ...i, yarnIssueStatus: nextStatus } : i
+          ),
+        };
+      });
+      setRows((prevRows) =>
+        prevRows.map((r) => {
+          if (r.id !== assignmentId) return r;
+          return {
+            ...r,
+            productionOrderItems: (r.productionOrderItems ?? []).map((i) =>
+              i.itemId === itemId ? { ...i, yarnIssueStatus: nextStatus } : i
+            ),
+          };
+        })
+      );
+      try {
+        const updated = await updateAssignmentItemYarnIssueStatus(assignmentId, itemId, nextStatus);
+        setPoDetailsAssignment(updated);
+        setRows((prevRows) => prevRows.map((r) => (r.id === assignmentId ? updated : r)));
+        toast.success("Yarn status updated");
+      } catch (e) {
+        setPoDetailsAssignment(snapshot);
+        setRows((prevRows) => prevRows.map((r) => (r.id === assignmentId ? snapshot : r)));
+        toast.error(e instanceof Error ? e.message : "Failed to update yarn status");
+      } finally {
+        setSavingYarnIssueItemId(null);
       }
     },
     [poDetailsAssignment]
@@ -726,13 +784,42 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
                                     </span>
                                   )}
                                 </td>
-                                <td className="px-2 py-1.5 border-r border-gray-300">
-                                  <span
-                                    className="inline-block text-gray-600 tabular-nums"
-                                    aria-label={`Yarn issue status: ${item.yarnIssueStatus ? String(item.yarnIssueStatus) : "not set"}`}
-                                  >
-                                    {item.yarnIssueStatus ? String(item.yarnIssueStatus) : "—"}
-                                  </span>
+                                <td
+                                  className="px-2 py-1.5 border-r border-gray-300 text-center align-middle"
+                                  onClick={(e) => e.stopPropagation()}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                >
+                                  {canChangeYarnStatus && item.itemId ? (
+                                    <>
+                                      <label className="sr-only" htmlFor={`po-item-yarn-${rowKey}`}>
+                                        Update yarn issue status for {item.orderNumber ?? "—"} ·{" "}
+                                        {item.articleNumber ?? "—"}
+                                      </label>
+                                      <select
+                                        id={`po-item-yarn-${rowKey}`}
+                                        value={item.yarnIssueStatus ? String(item.yarnIssueStatus) : "Pending"}
+                                        disabled={savingOrder || savingYarnIssueItemId === item.itemId}
+                                        onChange={(e) => {
+                                          void handleYarnIssueStatusChange(item.itemId!, e.target.value);
+                                        }}
+                                        className="w-full max-w-[132px] mx-auto block text-[10px] font-medium rounded border border-gray-300 bg-white dark:bg-slate-800 dark:border-slate-600 text-gray-800 dark:text-slate-100 py-0.5 px-1 focus:ring-1 focus:ring-purple-500 focus:border-purple-500 disabled:opacity-50"
+                                        aria-busy={savingYarnIssueItemId === item.itemId ? true : undefined}
+                                      >
+                                        {YARN_ISSUE_STATUS_OPTIONS.map((opt) => (
+                                          <option key={opt} value={opt}>
+                                            {opt}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </>
+                                  ) : (
+                                    <span
+                                      className="inline-block text-gray-600 tabular-nums"
+                                      aria-label={`Yarn issue status: ${item.yarnIssueStatus ? String(item.yarnIssueStatus) : "not set"}`}
+                                    >
+                                      {item.yarnIssueStatus ? String(item.yarnIssueStatus) : "—"}
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="px-2 py-1.5 border-r border-gray-300">
                                   <span
