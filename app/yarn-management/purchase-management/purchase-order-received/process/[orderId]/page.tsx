@@ -1493,7 +1493,7 @@ const ProcessOrderPage = () => {
       htmlTemplate = htmlTemplate.replace(/id="consignee-email".*?>.*?<\/span>/, `id="consignee-email">${ADDON_COMPANY.email}</span>`);
       htmlTemplate = htmlTemplate.replace(/id="consignee-state-code".*?>.*?<\/span>/, `id="consignee-state-code">${ADDON_COMPANY.stateCode}</span>`);
       htmlTemplate = htmlTemplate.replace(/id="consignee-gst".*?>.*?<\/span>/, `id="consignee-gst">${ADDON_COMPANY.gstNo}</span>`);
-      htmlTemplate = htmlTemplate.replace(/id="signatory-company-name".*?>.*?<\/span>/, `id="signatory-company-name">${ADDON_COMPANY.name}</span>`);
+      htmlTemplate = htmlTemplate.replace(/id="signatory-company-name".*?>.*?<\/div>/, `id="signatory-company-name">${ADDON_COMPANY.name}</div>`);
 
       // Get order details
       const orderItems = rawApiOrder?.poItems || rawApiOrder?.items || [];
@@ -1549,9 +1549,9 @@ const ProcessOrderPage = () => {
 
         itemsHtml += `
           <tr>
-            <td class="text-center" style="border: 1px solid #000; padding: 4px;">${index + 1}</td>
-            <td class="text-center" style="border: 1px solid #000; padding: 4px;">${shadeCode}</td>
-            <td style="border: 1px solid #000; padding: 4px;">${yarnName}${sizeCount !== 'N/A' ? ' - ' + sizeCount : ''}</td>
+            <td class="text-center col-sr" style="border: 1px solid #000; padding: 4px;">${index + 1}</td>
+            <td class="text-center col-color" style="border: 1px solid #000; padding: 4px;">${shadeCode}</td>
+            <td class="col-desc" style="border: 1px solid #000; padding: 4px;">${yarnName}${sizeCount !== 'N/A' ? ' - ' + sizeCount : ''}</td>
             <td class="text-right" style="border: 1px solid #000; padding: 4px;">${quantity.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             <td class="text-right" style="border: 1px solid #000; padding: 4px;">${rate.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             <td class="text-center" style="border: 1px solid #000; padding: 4px;">KGS</td>

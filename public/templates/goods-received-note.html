@@ -84,35 +84,39 @@
 
         /* Column Widths for Items Table */
         .col-sr {
-            width: 30px;
+            width: 4%;
         }
 
         .col-color {
-            width: 50px;
+            width: 13%;
+            min-width: 88px;
+            font-size: 8px;
+            line-height: 1.25;
+            word-break: break-word;
         }
 
         .col-desc {
-            width: auto;
+            width: 26%;
         }
 
         .col-hsn {
-            width: 55px;
+            width: 9%;
         }
 
         .col-qty {
-            width: 70px;
+            width: 11%;
         }
 
         .col-rate {
-            width: 60px;
+            width: 10%;
         }
 
         .col-per {
-            width: 40px;
+            width: 7%;
         }
 
         .col-amount {
-            width: 80px;
+            width: 20%;
         }
 
         .text-center {
@@ -164,9 +168,39 @@
             width: 30%;
         }
 
-        .sig-label {
-            margin-top: 20px;
+        .sig-box-authorised {
+            border: 1px solid #000;
+            padding: 8px 6px 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            min-height: 72px;
+            box-sizing: border-box;
+        }
+
+        .sig-for {
+            font-size: 8px;
+            width: 100%;
+            text-align: center;
+            margin-bottom: 2px;
+        }
+
+        .sig-company {
+            font-size: 8px;
             font-weight: bold;
+            text-align: center;
+            line-height: 1.25;
+            width: 100%;
+            margin-bottom: 6px;
+            word-wrap: break-word;
+        }
+
+        .sig-label {
+            margin-top: auto;
+            font-weight: bold;
+            width: 100%;
+            text-align: center;
         }
 
     </style>
@@ -256,9 +290,9 @@
             <tbody id="items-body">
                 <!-- Rows will be injected here -->
                 <tr>
-                    <td class="text-center">1</td>
-                    <td class="text-center">N/A</td>
-                    <td>Example Yarn Description</td>
+                    <td class="text-center col-sr">1</td>
+                    <td class="text-center col-color">N/A</td>
+                    <td class="col-desc">Example Yarn Description</td>
                     <td class="text-center">—</td>
                     <td class="text-right">0.00</td>
                     <td class="text-right">0.00</td>
@@ -362,9 +396,10 @@
                 <div class="sig-box">
                     <div class="sig-label">Verified by</div>
                 </div>
-                <div class="sig-box" style="border: 1px solid #000; padding: 2px;">
-                    <div style="font-size: 8px; text-align: right;">For <span id="signatory-company-name">ADDON HOLDINGS PRIVATE LIMITED</span></div>
-                    <div class="sig-label" style="margin-top: 15px;">Authorised Signatory</div>
+                <div class="sig-box sig-box-authorised">
+                    <div class="sig-for">For</div>
+                    <div class="sig-company" id="signatory-company-name">ADDON HOLDINGS PRIVATE LIMITED</div>
+                    <div class="sig-label">Authorised Signatory</div>
                 </div>
             </div>
 

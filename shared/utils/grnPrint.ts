@@ -173,9 +173,9 @@ const buildItemsHtml = (items: GrnSnapshotItem[]): string =>
       const hsn = item.hsnCode || '—';
       return `
           <tr>
-            <td class="text-center" style="border: 1px solid #000; padding: 4px;">${index + 1}</td>
-            <td class="text-center" style="border: 1px solid #000; padding: 4px;">${shade}</td>
-            <td style="border: 1px solid #000; padding: 4px;">${desc}</td>
+            <td class="text-center col-sr" style="border: 1px solid #000; padding: 4px;">${index + 1}</td>
+            <td class="text-center col-color" style="border: 1px solid #000; padding: 4px;">${shade}</td>
+            <td class="col-desc" style="border: 1px solid #000; padding: 4px;">${desc}</td>
             <td class="text-center" style="border: 1px solid #000; padding: 4px;">${hsn}</td>
             <td class="text-right" style="border: 1px solid #000; padding: 4px;">${formatINR(item.quantity, 2)}</td>
             <td class="text-right" style="border: 1px solid #000; padding: 4px;">${formatINR(item.rate, 2)}</td>
