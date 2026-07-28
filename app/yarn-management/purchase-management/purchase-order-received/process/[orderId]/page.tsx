@@ -1493,7 +1493,7 @@ const ProcessOrderPage = () => {
       htmlTemplate = htmlTemplate.replace(/id="consignee-email".*?>.*?<\/span>/, `id="consignee-email">${ADDON_COMPANY.email}</span>`);
       htmlTemplate = htmlTemplate.replace(/id="consignee-state-code".*?>.*?<\/span>/, `id="consignee-state-code">${ADDON_COMPANY.stateCode}</span>`);
       htmlTemplate = htmlTemplate.replace(/id="consignee-gst".*?>.*?<\/span>/, `id="consignee-gst">${ADDON_COMPANY.gstNo}</span>`);
-      htmlTemplate = htmlTemplate.replace(/id="signatory-company-name".*?>.*?<\/div>/, `id="signatory-company-name">${ADDON_COMPANY.name}</div>`);
+      htmlTemplate = htmlTemplate.replace(/id="signatory-company-name".*?>.*?<\/span>/, `id="signatory-company-name">${ADDON_COMPANY.name}</span>`);
 
       // Get order details
       const orderItems = rawApiOrder?.poItems || rawApiOrder?.items || [];
