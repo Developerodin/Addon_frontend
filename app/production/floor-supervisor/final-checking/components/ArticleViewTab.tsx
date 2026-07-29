@@ -11,6 +11,8 @@ import {
   ArticleViewOrderCell,
   formatArticleViewOrderLabel,
 } from "@/shared/components/production/ArticleViewOrderCell";
+import ArticleProductImageButton from "@/shared/components/production/ArticleProductImageButton";
+import { collectArticleFactoryCodes, useArticleProductImages } from "@/shared/hooks/useArticleProductImages";
 import {
   collapseLinesByBrand,
   formatBrandLine,
@@ -107,6 +109,9 @@ export default function ArticleViewTab({
   const [articlePage, setArticlePage] = useState(1);
 
   const articleRows = useMemo(() => flattenOrdersToArticles(orders), [orders]);
+  const factoryCodes = useMemo(() => collectArticleFactoryCodes(orders), [orders]);
+  const { openProductImage, productImageModal } = useArticleProductImages(factoryCodes);
+
 
   const visibilityFilteredRows = useMemo(() => {
     if (showAllArticles) return articleRows;
@@ -405,7 +410,7 @@ export default function ArticleViewTab({
                   <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
                     <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 flex-wrap">
                       {onAssignClick && (
-                        <button
+                      <button
                           type="button"
                           className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded transition-colors ${
                             isActiveRow
@@ -419,6 +424,7 @@ export default function ArticleViewTab({
                           Assign
                         </button>
                       )}
+                      <ArticleProductImageButton factoryCode={article.articleNumber ?? ""} onClick={openProductImage} />
                       <button
                         type="button"
                         className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-400 border border-blue-100 rounded hover:bg-blue-100 transition-opacity"
@@ -491,6 +497,7 @@ export default function ArticleViewTab({
           </div>
         </div>
       )}
+      {productImageModal}
     </div>
   );
 }

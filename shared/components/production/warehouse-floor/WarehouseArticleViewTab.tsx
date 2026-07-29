@@ -4,6 +4,8 @@ import React, { useMemo, useState } from "react";
 import type { ProductionOrder, Article } from "@/shared/services/productionService";
 import WarehouseQtyStyleBrandLines, { filterLinesWithQty } from "./WarehouseQtyStyleBrandLines";
 import { collapseLinesByBrand, formatBrandLine } from "@/shared/utils/brandTransfer.util";
+import ArticleProductImageButton from "@/shared/components/production/ArticleProductImageButton";
+import { collectArticleFactoryCodes, useArticleProductImages } from "@/shared/hooks/useArticleProductImages";
 
 export interface WarehouseArticleRow {
   article: Article;
@@ -65,6 +67,9 @@ export default function WarehouseArticleViewTab({
   const [articleSearch, setArticleSearch] = useState("");
 
   const articleRows = useMemo(() => flattenOrdersToArticles(orders), [orders]);
+  const factoryCodes = useMemo(() => collectArticleFactoryCodes(orders), [orders]);
+  const { openProductImage, productImageModal } = useArticleProductImages(factoryCodes);
+
 
   const filteredRows = useMemo(() => {
     if (!articleSearch.trim()) return articleRows;
@@ -259,7 +264,7 @@ export default function WarehouseArticleViewTab({
                   <td className="px-1.5 py-2.5 text-right pr-[10px] border border-gray-200">
                     <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 flex-wrap">
                       {onAssignClick && (
-                        <button
+                      <button
                           type="button"
                           className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded transition-colors ${
                             isActiveRow
@@ -273,6 +278,7 @@ export default function WarehouseArticleViewTab({
                           Assign
                         </button>
                       )}
+                      <ArticleProductImageButton factoryCode={article.articleNumber ?? ""} onClick={openProductImage} />
                       <button
                         type="button"
                         className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-400 border border-blue-100 rounded hover:bg-blue-100 transition-opacity"
@@ -301,6 +307,7 @@ export default function WarehouseArticleViewTab({
       {filteredRows.length === 0 && articleSearch.trim() && (
         <div className="py-8 text-center text-[11px] text-gray-500">No articles match &quot;{articleSearch.trim()}&quot;</div>
       )}
+      {productImageModal}
     </div>
   );
 }

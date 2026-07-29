@@ -15,6 +15,8 @@ import {
   formatBrandLine,
   formatBrandLines,
 } from "@/shared/utils/brandTransfer.util";
+import ArticleProductImageButton from "@/shared/components/production/ArticleProductImageButton";
+import { collectArticleFactoryCodes, useArticleProductImages } from "@/shared/hooks/useArticleProductImages";
 
 export interface ProductionOrder {
   id: string;
@@ -97,6 +99,8 @@ export default function ArticleViewTab({
   const [articlePage, setArticlePage] = useState(1);
 
   const articleRows = useMemo(() => flattenOrdersToArticles(orders), [orders]);
+  const factoryCodes = useMemo(() => collectArticleFactoryCodes(orders), [orders]);
+  const { openProductImage, productImageModal } = useArticleProductImages(factoryCodes);
 
   const visibilityFilteredRows = useMemo(() => {
     if (showAllArticles) return articleRows;
@@ -344,6 +348,7 @@ export default function ArticleViewTab({
                           <i className="ri-user-add-line text-xs" /> Assign
                         </button>
                       )}
+                      <ArticleProductImageButton factoryCode={article.articleNumber ?? ""} onClick={openProductImage} />
                       <button type="button" className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-400 border border-blue-100 rounded hover:bg-blue-100" onClick={() => onViewOrder(order, article)} title="View order" aria-label={`View order ${formatArticleViewOrderLabel(order)}`}>
                         <i className="ri-eye-line text-xs" />
                       </button>
@@ -404,6 +409,7 @@ export default function ArticleViewTab({
           </div>
         </div>
       )}
+      {productImageModal}
     </div>
   );
 }
