@@ -97,6 +97,66 @@ function StockCell({
 }
 
 /**
+ * Single cell showing Unalloc / LT / ST kg with inline labels.
+ */
+function StorageBreakdownCell({
+  unallocatedKg,
+  longTermKg,
+  shortTermKg,
+}: {
+  unallocatedKg: number;
+  longTermKg: number;
+  shortTermKg: number;
+}) {
+  return (
+    <div
+      className="flex flex-col gap-0.5 text-[11px] leading-tight"
+      title="Unalloc: QC-approved, not in LT/ST · LT: long-term slots · ST: short-term slots"
+    >
+      <div className="flex items-baseline gap-1">
+        <span className="text-[9px] font-bold uppercase text-slate-500 w-10 shrink-0">Unalloc</span>
+        <StockCell value={unallocatedKg} tone="slate" />
+      </div>
+      <div className="flex items-baseline gap-1">
+        <span className="text-[9px] font-bold uppercase text-slate-500 w-10 shrink-0">LT</span>
+        <StockCell value={longTermKg} tone="blue" />
+      </div>
+      <div className="flex items-baseline gap-1">
+        <span className="text-[9px] font-bold uppercase text-slate-500 w-10 shrink-0">ST</span>
+        <StockCell value={shortTermKg} tone="blue" />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Single cell showing snapshot Avail / Blocked kg with inline labels.
+ */
+function SnapshotBreakdownCell({
+  availableQty,
+  blockedQty,
+}: {
+  availableQty: number;
+  blockedQty: number;
+}) {
+  return (
+    <div
+      className="flex flex-col gap-0.5 text-[11px] leading-tight"
+      title={SNAPSHOT_HEADER}
+    >
+      <div className="flex items-baseline gap-1">
+        <span className="text-[9px] font-bold uppercase text-slate-500 w-12 shrink-0">Avail</span>
+        <StockCell value={availableQty} tone="green" />
+      </div>
+      <div className="flex items-baseline gap-1">
+        <span className="text-[9px] font-bold uppercase text-slate-500 w-12 shrink-0">Blocked</span>
+        <StockCell value={blockedQty} tone="orange" />
+      </div>
+    </div>
+  );
+}
+
+/**
  * Main requisition list table with snapshot vs live stock column groups.
  */
 export function RequisitionListTable({
@@ -148,14 +208,14 @@ export function RequisitionListTable({
             </div>
           </th>
           <th
-            colSpan={2}
+            colSpan={1}
             className={`${thBase} bg-slate-50 text-center text-[9px] normal-case tracking-normal`}
             title={SNAPSHOT_HEADER}
           >
             Snapshot (stored on requisition)
           </th>
           <th
-            colSpan={6}
+            colSpan={4}
             className={`${thBase} bg-sky-50/80 text-center text-[9px] normal-case tracking-normal`}
             title={LIVE_HEADER}
           >
@@ -190,28 +250,15 @@ export function RequisitionListTable({
             onClick={() => onSort("availableQty")}
           >
             <div className="flex items-center gap-1">
-              Avail @ create
+              @ Create
               <SortIcon field="availableQty" />
             </div>
           </th>
           <th
-            className={`${thBase} bg-slate-50/60 ${thSort}`}
-            title="Blocked qty stored on requisition record"
-            onClick={() => onSort("blockedQty")}
+            className={`${thBase} bg-sky-50/40`}
+            title="Unalloc: QC-approved not in slot · LT: long-term · ST: short-term"
           >
-            <div className="flex items-center gap-1">
-              Blocked @ create
-              <SortIcon field="blockedQty" />
-            </div>
-          </th>
-          <th className={`${thBase} bg-sky-50/40`} title="Boxes QC-approved but not yet in LT/ST slot">
-            Unalloc
-          </th>
-          <th className={`${thBase} bg-sky-50/40`} title="Long-term storage (QC-approved boxes in LT slots)">
-            LT
-          </th>
-          <th className={`${thBase} bg-sky-50/40`} title="Short-term storage (cones in ST slots + unopened ST boxes)">
-            ST
+            Storage
           </th>
           <th className={`${thBase} bg-sky-50/40`} title="LT + ST in storage locations">
             Total
@@ -235,24 +282,22 @@ export function RequisitionListTable({
               <td className="px-1.5 py-2.5 text-[12px] text-gray-900 border border-gray-200 tabular-nums">
                 {yarn.minimumQty.toLocaleString()}
               </td>
-              <td className="px-1.5 py-2.5 text-[12px] border border-gray-200 bg-slate-50/30">
-                <StockCell value={yarn.availableQty} tone="green" title={SNAPSHOT_HEADER} />
+              <td className="px-1.5 py-2.5 text-[12px] border border-gray-200 bg-slate-50/30 whitespace-nowrap">
+                <SnapshotBreakdownCell
+                  availableQty={yarn.availableQty}
+                  blockedQty={yarn.blockedQty}
+                />
               </td>
-              <td className="px-1.5 py-2.5 text-[12px] border border-gray-200 bg-slate-50/30">
-                <StockCell value={yarn.blockedQty} tone="orange" />
-              </td>
-              <td className="px-1.5 py-2.5 text-[12px] border border-gray-200 bg-sky-50/20">
+              <td className="px-1.5 py-2.5 text-[12px] border border-gray-200 bg-sky-50/20 whitespace-nowrap">
                 {live ? (
-                  <StockCell value={live.unallocatedKg} tone="slate" />
+                  <StorageBreakdownCell
+                    unallocatedKg={live.unallocatedKg}
+                    longTermKg={live.longTermKg}
+                    shortTermKg={live.shortTermKg}
+                  />
                 ) : (
                   <span className="text-gray-400">—</span>
                 )}
-              </td>
-              <td className="px-1.5 py-2.5 text-[12px] border border-gray-200 bg-sky-50/20">
-                {live ? <StockCell value={live.longTermKg} tone="blue" /> : <span className="text-gray-400">—</span>}
-              </td>
-              <td className="px-1.5 py-2.5 text-[12px] border border-gray-200 bg-sky-50/20">
-                {live ? <StockCell value={live.shortTermKg} tone="blue" /> : <span className="text-gray-400">—</span>}
               </td>
               <td className="px-1.5 py-2.5 text-[12px] border border-gray-200 bg-sky-50/20">
                 {live ? (
