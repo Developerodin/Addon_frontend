@@ -1,7 +1,12 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { productionService, type M2EntryRow } from "@/shared/services/productionService";
+import ArticleProductImageButton from "@/shared/components/production/ArticleProductImageButton";
+import {
+  collectFactoryCodesFromArticleNumbers,
+  useArticleProductImages,
+} from "@/shared/hooks/useArticleProductImages";
 import M2FilterBar, { type M2FloorFilter } from "./M2FilterBar";
 import M2Pagination from "./M2Pagination";
 
@@ -67,6 +72,9 @@ export default function EntriesTab({ refreshKey, onResolve }: EntriesTabProps) {
     setPage(1);
   };
 
+  const factoryCodes = useMemo(() => collectFactoryCodesFromArticleNumbers(entries), [entries]);
+  const { openProductImage, productImageModal } = useArticleProductImages(factoryCodes);
+
   return (
     <div>
       <M2FilterBar
@@ -125,7 +133,8 @@ export default function EntriesTab({ refreshKey, onResolve }: EntriesTabProps) {
                     {row.timestamp ? new Date(row.timestamp).toLocaleString() : "—"}
                   </td>
                   <td className="p-2">
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-wrap gap-1 items-center">
+                      <ArticleProductImageButton factoryCode={row.articleNumber} onClick={openProductImage} />
                       {row.canMergeToM1 !== false ? (
                         <button
                           type="button"
@@ -180,6 +189,7 @@ export default function EntriesTab({ refreshKey, onResolve }: EntriesTabProps) {
         totalResults={totalResults}
         onPageChange={setPage}
       />
+      {productImageModal}
     </div>
   );
 }

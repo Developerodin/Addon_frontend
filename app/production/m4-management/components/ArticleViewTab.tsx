@@ -3,6 +3,11 @@
 import React, { useMemo, useState } from "react";
 import type { M4ArticleRow } from "@/shared/services/productionService";
 import { ArticleViewOrderCell } from "@/shared/components/production/ArticleViewOrderCell";
+import ArticleProductImageButton from "@/shared/components/production/ArticleProductImageButton";
+import {
+  collectFactoryCodesFromArticleNumbers,
+  useArticleProductImages,
+} from "@/shared/hooks/useArticleProductImages";
 
 export interface ArticleViewTabProps {
   rows: M4ArticleRow[];
@@ -40,6 +45,8 @@ export default function ArticleViewTab({
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
   const paged = filtered.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+  const factoryCodes = useMemo(() => collectFactoryCodesFromArticleNumbers(rows), [rows]);
+  const { openProductImage, productImageModal } = useArticleProductImages(factoryCodes);
 
   return (
     <div>
@@ -122,6 +129,7 @@ export default function ArticleViewTab({
                     <td className="border border-gray-300 px-1 py-1 text-right text-red-800 font-bold">{s.availableForOutward}</td>
                     <td className="border border-gray-300 px-1 py-1 text-center">
                       <div className="flex justify-center gap-1">
+                        <ArticleProductImageButton factoryCode={row.articleNumber} onClick={openProductImage} />
                         <button
                           type="button"
                           onClick={() => onView(row)}
@@ -178,6 +186,7 @@ export default function ArticleViewTab({
       <p className="text-[10px] text-gray-500 mt-2">
         Combined M4 = sum across Knitting, Checking, Secondary Checking, and Final Checking. Use Orders tab for per-floor breakdown.
       </p>
+      {productImageModal}
     </div>
   );
 }

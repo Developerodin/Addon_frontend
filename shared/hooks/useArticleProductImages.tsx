@@ -34,6 +34,20 @@ export function collectArticleFactoryCodes(
 }
 
 /**
+ * Collects unique factory / article codes from flat article rows (M2/M3/M4 tables).
+ */
+export function collectFactoryCodesFromArticleNumbers(
+  rows: Array<{ articleNumber?: string }>,
+): string[] {
+  const codes = new Set<string>();
+  for (const row of rows) {
+    const fc = (row.articleNumber ?? "").trim();
+    if (fc && fc !== "—") codes.add(fc);
+  }
+  return Array.from(codes);
+}
+
+/**
  * Loads catalog product images for factory codes and exposes a modal opener for article views.
  */
 export function useArticleProductImages(factoryCodes: string[]) {
