@@ -10,9 +10,9 @@ import { formatStockKg } from "../utils/formatStockKg";
 import { vendorsForCriticalRow } from "../utils/vendorsForCriticalRow";
 
 const SNAPSHOT_HEADER =
-  "Qty stored on the requisition record when it was created or last recalculated — may differ from live warehouse stock.";
+  "Qty stored on the requisition record when it was created or last recalculated — may differ from live inventory.";
 const LIVE_HEADER =
-  "Current stock computed from warehouse boxes and cones. Available = LT + ST − blocked (unallocated is separate).";
+  "Current stock computed from inventory boxes and cones. Available = LT + ST − blocked (unallocated is separate).";
 
 interface RequisitionListTableProps {
   rows: CriticalRow[];
@@ -114,7 +114,7 @@ function StorageBreakdownCell({
       title="Unalloc: QC-approved, not in LT/ST · LT: long-term slots · ST: short-term slots"
     >
       <div className="flex items-baseline gap-1">
-        <span className="text-[9px] font-bold uppercase text-slate-500 w-10 shrink-0">Unalloc</span>
+        <span className="text-[9px] font-bold uppercase text-slate-500 w-10 shrink-0">UN</span>
         <StockCell value={unallocatedKg} tone="slate" />
       </div>
       <div className="flex items-baseline gap-1">
@@ -219,7 +219,7 @@ export function RequisitionListTable({
             className={`${thBase} bg-sky-50/80 text-center text-[9px] normal-case tracking-normal`}
             title={LIVE_HEADER}
           >
-            Live warehouse (now)
+            Live inventory (now)
           </th>
           <th rowSpan={2} className={thBase} title="Quantity on linked draft PO line (kg)">
             Draft PO qty

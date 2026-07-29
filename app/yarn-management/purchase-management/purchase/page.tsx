@@ -10,6 +10,7 @@ import { PurchaseOrderStatus } from "@/shared/services/yarnPurchaseOrderService"
 import PacklistModal, { PacklistDetails } from "./components/PacklistModal";
 import UpdatePacklistModal from "./components/UpdatePacklistModal";
 import ExcelProcessModal from "./components/ExcelProcessModal";
+import { downloadPurchaseListExcel } from "./utils/purchaseListExcelExport";
 import yarnPurchaseOrderService from "@/shared/services/yarnPurchaseOrderService";
 import { formatFileSize, getFileIcon } from "@/shared/services/fileUploadService";
 
@@ -313,6 +314,7 @@ const PurchasePage = () => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [excelProcessModalOpen, setExcelProcessModalOpen] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
 
   // Check permission
   const hasPermission = hasSubPermission('/yarn-management/purchase-management', 'Purchase Order');
@@ -905,6 +907,29 @@ const PurchasePage = () => {
   const endIndex = startIndex + itemsPerPage;
   const paginatedOrders = filteredOrders.slice(startIndex, endIndex);
 
+  /**
+   * Exports all filtered purchase orders and yarn line items to Excel.
+   */
+  const handleDownloadExcel = () => {
+    if (filteredOrders.length === 0) {
+      toast.error("No purchase orders to export");
+      return;
+    }
+
+    setIsExportingExcel(true);
+    try {
+      downloadPurchaseListExcel(filteredOrders);
+      toast.success(`Exported ${filteredOrders.length} purchase order(s)`);
+    } catch (error) {
+      console.error("Failed to export purchase orders:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to export Excel"
+      );
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
+
   // Handle select all
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
@@ -1091,6 +1116,18 @@ const PurchasePage = () => {
                 <i className="ri-arrow-down-s-line absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none group-hover:text-gray-600 transition-colors"></i>
                 <i className="ri-filter-3-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none" aria-hidden></i>
               </div>
+
+              {/* Download Excel */}
+              <button
+                type="button"
+                onClick={handleDownloadExcel}
+                disabled={isLoadingOrders || isExportingExcel || filteredOrders.length === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50"
+                aria-label="Download purchase orders and yarn items as Excel"
+              >
+                <i className="ri-file-excel-2-line text-xs" aria-hidden />
+                {isExportingExcel ? "Preparing…" : "Download Excel"}
+              </button>
 
               {/* New Order Button */}
               <Link

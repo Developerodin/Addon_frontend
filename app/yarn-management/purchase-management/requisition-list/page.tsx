@@ -11,10 +11,9 @@ import { RequisitionListTable } from "./components/RequisitionListTable";
 import {
   CRITICAL_EXPORT_ROW_CAP,
   useCriticalRequisitionList,
-  workflowStageLabel,
   type CriticalRow,
 } from "./hooks/useCriticalRequisitionList";
-import { formatStockKg } from "./utils/formatStockKg";
+import { downloadRequisitionListExcel } from "./utils/requisitionListExcelExport";
 
 const RequisitionListPage = () => {
   const { hasSubPermission } = useNavigation();
@@ -23,6 +22,7 @@ const RequisitionListPage = () => {
   const rq = useCriticalRequisitionList(hasPermission);
 
   const [supplierOptions, setSupplierOptions] = useState<Supplier[]>([]);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,18 +45,11 @@ const RequisitionListPage = () => {
     };
   }, [hasPermission]);
 
-  const isBelowMinimum = (yarn: CriticalRow) => yarn.availableQty < yarn.minimumQty;
-  const isOverblocked = (yarn: CriticalRow) => yarn.blockedQty > yarn.availableQty;
-
-  const getStatusBadges = (yarn: CriticalRow) => {
-    const badges: string[] = [];
-    if (isBelowMinimum(yarn)) badges.push("Below Minimum");
-    if (isOverblocked(yarn)) badges.push("Overblocked");
-    if (badges.length === 0) badges.push("Healthy");
-    return badges.join(" | ");
-  };
-
-  const handleExport = async () => {
+  /**
+   * Fetches filter-matching rows and downloads an Excel workbook.
+   */
+  const handleExportExcel = async () => {
+    setExporting(true);
     try {
       const merged = await rq.exportMatchingCsv();
       if (merged.length === 0) {
@@ -68,58 +61,13 @@ const RequisitionListPage = () => {
           icon: "⚠️",
         });
       }
-
-      const headers = [
-        "Yarn Name",
-        "Minimum Qty",
-        "Avail @ create (snapshot)",
-        "Blocked @ create (snapshot)",
-        "Live unallocated kg",
-        "Live LT kg",
-        "Live ST kg",
-        "Live total kg (LT+ST)",
-        "Live avail kg (LT+ST-blocked)",
-        "Live blocked kg",
-        "Draft PO qty",
-        "Alert inventory",
-        "Procurement workflow",
-        "Vendor snapshot",
-      ];
-      const rows = merged.map((yarn) => {
-        const live = yarn.liveStock;
-        return [
-          yarn.yarnName,
-          yarn.minimumQty.toString(),
-          formatStockKg(yarn.availableQty),
-          formatStockKg(yarn.blockedQty),
-          live ? formatStockKg(live.unallocatedKg) : "",
-          live ? formatStockKg(live.longTermKg) : "",
-          live ? formatStockKg(live.shortTermKg) : "",
-          live ? formatStockKg(live.totalStockKg) : "",
-          live ? formatStockKg(live.availableKg) : "",
-          live ? formatStockKg(live.blockedKg) : "",
-          yarn.draftPoQuantity != null ? formatStockKg(yarn.draftPoQuantity) : "",
-          getStatusBadges(yarn),
-          workflowStageLabel(yarn.workflowStage),
-          yarn.preferredSupplierDisplayName || "",
-        ];
-      });
-      const csvContent = [headers, ...rows]
-        .map((row) => row.map((value) => `"${value.replace(/"/g, '""')}"`).join(","))
-        .join("\n");
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", `critical-yarn-levels-${new Date().toISOString()}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      toast.success("Export started.");
+      downloadRequisitionListExcel(merged);
+      toast.success("Excel download started.");
     } catch (err) {
       console.error("Export critical list:", err);
-      toast.error(err instanceof Error ? err.message : "Export failed.");
+      toast.error(err instanceof Error ? err.message : "Excel export failed.");
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -210,7 +158,7 @@ const RequisitionListPage = () => {
                 {rq.totalResults}
               </span>
               <span className="text-[10px] text-gray-400 font-medium hidden sm:inline">
-                Snapshot columns = stored values; live columns = current warehouse stock
+                Snapshot columns = stored values; live columns = current inventory
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -223,11 +171,13 @@ const RequisitionListPage = () => {
               <PoDraftQueueDrawerTrigger />
               <button
                 type="button"
-                onClick={() => void handleExport()}
-                disabled={rq.loading}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50"
+                onClick={() => void handleExportExcel()}
+                disabled={rq.loading || exporting}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-[11px] font-bold rounded hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50"
+                aria-label="Download requisition list as Excel"
               >
-                <i className="ri-download-line"></i> Export
+                <i className="ri-file-excel-2-line" aria-hidden />
+                {exporting ? "Preparing…" : "Download Excel"}
               </button>
             </div>
           </div>
