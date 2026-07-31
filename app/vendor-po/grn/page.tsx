@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { toast } from "react-hot-toast";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { CRM } from "../vendor-list/crmUiClasses";
 import vendorGrnService, { type VendorGrn } from "@/shared/services/vendorGrnService";
+import { printVendorGrnDocument } from "@/shared/utils/vendorGrnPrint";
 
 const GRNPage = () => {
   const [grns, setGrns] = useState<VendorGrn[]>([]);
@@ -18,6 +20,23 @@ const GRNPage = () => {
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [vendorFilter, setVendorFilter] = useState("");
+  const [printingId, setPrintingId] = useState<string | null>(null);
+
+  /**
+   * Opens the vendor GRN form in a popup and triggers print for one list row.
+   * @param row - GRN from the list (re-fetched by number for full snapshot)
+   */
+  const handlePrint = async (row: VendorGrn) => {
+    setPrintingId(row.id);
+    try {
+      const full = await vendorGrnService.getByNumber(row.grnNumber);
+      await printVendorGrnDocument(full);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to print GRN");
+    } finally {
+      setPrintingId(null);
+    }
+  };
 
   const loadGrns = useCallback(async () => {
     setLoading(true);
@@ -217,7 +236,7 @@ const GRNPage = () => {
                 <th scope="col" className={`${CRM.th} text-center`}>
                   Status
                 </th>
-                <th scope="col" className={`${CRM.th} text-center w-[88px]`}>
+                <th scope="col" className={`${CRM.th} text-center w-[108px]`}>
                   Actions
                 </th>
               </tr>
@@ -279,14 +298,29 @@ const GRNPage = () => {
                         </span>
                       </td>
                       <td className={`${CRM.td} text-center`}>
-                        <Link
-                          href={`/vendor-po/grn/view/${encodeURIComponent(g.grnNumber)}`}
-                          className={`${CRM.iconView} mx-auto`}
-                          title={`View ${g.grnNumber}`}
-                          aria-label={`View ${g.grnNumber}`}
-                        >
-                          <i className="ri-eye-line text-xs" aria-hidden="true" />
-                        </Link>
+                        <div className="flex items-center justify-center gap-1">
+                          <Link
+                            href={`/vendor-po/grn/view/${encodeURIComponent(g.grnNumber)}`}
+                            className={CRM.iconView}
+                            title={`View ${g.grnNumber}`}
+                            aria-label={`View ${g.grnNumber}`}
+                          >
+                            <i className="ri-eye-line text-xs" aria-hidden="true" />
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => void handlePrint(g)}
+                            disabled={printingId === g.id}
+                            className="px-2 py-1 text-[10px] font-bold text-gray-600 hover:text-indigo-700 hover:bg-indigo-50 rounded transition-colors disabled:opacity-50"
+                            title="Print"
+                            aria-label={`Print ${g.grnNumber}`}
+                          >
+                            <i
+                              className={`ri-printer-line text-xs ${printingId === g.id ? "animate-pulse" : ""}`}
+                              aria-hidden="true"
+                            />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

@@ -195,8 +195,17 @@ export function VendorFinalCheckingArticleTab({
               <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
                 Remaining
               </th>
-              <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                M1/M2/M3/M4
+              <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                M1
+              </th>
+              <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                M2
+              </th>
+              <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                M3
+              </th>
+              <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+                M4
               </th>
               <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
                 Style breakdown
@@ -213,7 +222,7 @@ export function VendorFinalCheckingArticleTab({
             {paginatedRows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={12}
                   className="px-1.5 py-20 text-center text-gray-400 text-xs font-bold uppercase tracking-widest border border-gray-200"
                 >
                   No QC tasks found
@@ -269,21 +278,17 @@ export function VendorFinalCheckingArticleTab({
                         {remaining.toLocaleString()}
                       </span>
                     </td>
-                    <td className="px-1.5 py-2.5 border border-gray-200">
-                      <div className="flex gap-1.5 flex-wrap">
-                        <span className="text-emerald-700 font-bold text-[10px] bg-emerald-50 px-1 py-0.5 rounded">
-                          M1: {fc.m1Quantity}
-                        </span>
-                        <span className="text-amber-700 font-bold text-[10px] bg-amber-50 px-1 py-0.5 rounded">
-                          M2: {fc.m2Quantity}
-                        </span>
-                        <span className="text-violet-700 font-bold text-[10px] bg-violet-50 px-1 py-0.5 rounded">
-                          M3: {fc.m3Quantity ?? 0}
-                        </span>
-                        <span className="text-red-700 font-bold text-[10px] bg-red-50 px-1 py-0.5 rounded">
-                          M4: {fc.m4Quantity}
-                        </span>
-                      </div>
+                    <td className="px-1.5 py-2.5 text-right font-bold text-[12px] text-emerald-700 border border-gray-200">
+                      {fc.m1Quantity.toLocaleString()}
+                    </td>
+                    <td className="px-1.5 py-2.5 text-right font-bold text-[12px] text-amber-700 border border-gray-200">
+                      {fc.m2Quantity.toLocaleString()}
+                    </td>
+                    <td className="px-1.5 py-2.5 text-right font-bold text-[12px] text-violet-700 border border-gray-200">
+                      {(fc.m3Quantity ?? 0).toLocaleString()}
+                    </td>
+                    <td className="px-1.5 py-2.5 text-right font-bold text-[12px] text-red-700 border border-gray-200">
+                      {fc.m4Quantity.toLocaleString()}
                     </td>
                     <td className="px-1.5 py-2.5 border border-gray-200">
                       <div className="text-[10px] flex flex-wrap gap-1 max-w-[220px]">

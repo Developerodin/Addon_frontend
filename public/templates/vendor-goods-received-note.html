@@ -2,78 +2,204 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Vendor Goods Received Note</title>
   <style>
-    body { font-family: Arial, sans-serif; font-size: 12px; margin: 24px; color: #111; }
-    h1 { font-size: 18px; margin: 0 0 8px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-    th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
-    th { background: #f3f4f6; font-size: 10px; text-transform: uppercase; }
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 11px;
+      margin: 10px;
+      color: #000;
+      background-color: #fff;
+      line-height: 1.2;
+    }
+    .grn-container {
+      width: 100%;
+      border: 1px solid #000;
+      box-sizing: border-box;
+    }
+    .header-title {
+      text-align: center;
+      font-weight: bold;
+      font-size: 14px;
+      text-transform: uppercase;
+      padding: 5px 0;
+      border-bottom: 1px solid #000;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    td, th {
+      border: 1px solid #000;
+      padding: 2px 4px;
+      vertical-align: top;
+      word-wrap: break-word;
+    }
+    .label-cell {
+      font-size: 8px;
+      color: #333;
+    }
+    .value-cell {
+      font-weight: bold;
+      font-size: 9px;
+    }
+    .company-name {
+      font-weight: bold;
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+    .text-center { text-align: center; }
     .text-right { text-align: right; }
-    .meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 12px; }
-    .meta label { display: block; font-size: 10px; color: #666; text-transform: uppercase; }
+    .items-table th {
+      background-color: #f8f9fa;
+      font-size: 8px;
+      text-transform: uppercase;
+    }
+    .items-table td {
+      font-size: 9px;
+    }
+    .footer-section {
+      padding: 6px;
+      border-top: 1px solid #000;
+      font-size: 9px;
+    }
+    .signature-area {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 12px;
+      border-top: 1px solid #000;
+      padding-top: 5px;
+    }
+    .sig-box {
+      text-align: center;
+      width: 30%;
+      font-size: 9px;
+      font-weight: bold;
+    }
+    .sig-box-authorised {
+      border: 1px solid #000;
+      padding: 8px 4px 10px;
+      width: 38%;
+      min-height: 64px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+    }
+    .sig-for-company {
+      font-size: 7px;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+    @media print {
+      body { margin: 0; }
+    }
   </style>
 </head>
 <body>
-  <h1>Vendor Goods Received Note</h1>
-  <p id="grn-number"></p>
-  <div class="meta">
-    <div><label>GRN Date</label><span id="grn-date"></span></div>
-    <div><label>VPO</label><span id="vpo-number"></span></div>
-    <div><label>Vendor</label><span id="vendor-name"></span></div>
-    <div><label>Verified Qty</label><span id="verified-total"></span></div>
-  </div>
-  <table>
-    <thead>
+  <div class="grn-container">
+    <div style="text-align: center; border-bottom: 1px solid #000; padding: 6px 5px;">
+      <div style="font-size: 14px; font-weight: 900; letter-spacing: 0.5px; margin-bottom: 4px;" id="consignee-name">
+        ADDON HOLDINGS PRIVATE LIMITED
+      </div>
+      <div style="font-size: 8px; line-height: 1.35;">
+        <b>Address:</b> <span id="consignee-address"></span><br />
+        <b>H.O:</b> <span id="consignee-head-office"></span><br />
+        <span style="margin-top: 2px; display: inline-block;">
+          <b>Contact:</b> <span id="consignee-contact"></span> &nbsp;|&nbsp;
+          <b>GST:</b> <span id="consignee-gst"></span> &nbsp;|&nbsp;
+          <b>State Code:</b> <span id="consignee-state-code"></span> &nbsp;|&nbsp;
+          <b>Email:</b> <span id="consignee-email"></span>
+        </span>
+      </div>
+    </div>
+
+    <div class="header-title" id="page-title">VENDOR GOODS RECEIPT NOTE</div>
+
+    <table class="header-grid">
       <tr>
-        <th>Lot</th>
-        <th>Article</th>
-        <th>Vendor Code</th>
-        <th class="text-right">Expected</th>
-        <th class="text-right">Scan</th>
-        <th class="text-right">Verified</th>
-        <th class="text-right">M1</th>
-        <th class="text-right">M2</th>
-        <th class="text-right">M3</th>
-        <th class="text-right">M4</th>
-        <th class="text-right">Variance</th>
+        <td colspan="4" rowspan="2" style="width: 50%;">
+          <div class="label-cell">VENDOR NAME &amp; ADDRESS</div>
+          <div class="company-name" id="vendor-name"></div>
+          <div id="vendor-address"></div>
+          <div style="margin-top: 5px;">
+            <b>Vendor Code:</b> <span id="vendor-code"></span><br />
+            <b>GST:</b> <span id="vendor-gst"></span>
+          </div>
+        </td>
+        <td colspan="2" style="width: 25%;">
+          <div class="label-cell">VPO NO.</div>
+          <div class="value-cell" id="vpo-number"></div>
+        </td>
+        <td colspan="2" style="width: 25%;">
+          <div class="label-cell">VPO DATE</div>
+          <div class="value-cell" id="vpo-date"></div>
+        </td>
       </tr>
-    </thead>
-    <tbody id="line-items"></tbody>
-  </table>
-  <script>
-    /** Populate from window.__VENDOR_GRN__ injected by print view. */
-    (function () {
-      var grn = window.__VENDOR_GRN__;
-      if (!grn) return;
-      document.getElementById('grn-number').textContent = grn.grnNumber || '';
-      document.getElementById('grn-date').textContent = grn.grnDate ? new Date(grn.grnDate).toLocaleDateString() : '';
-      document.getElementById('vpo-number').textContent = grn.vpoNumber || '';
-      document.getElementById('vendor-name').textContent = (grn.vendor && grn.vendor.vendorName) || '';
-      document.getElementById('verified-total').textContent = String((grn.totals && grn.totals.verified) || 0);
-      var tbody = document.getElementById('line-items');
-      (grn.lots || []).forEach(function (lot) {
-        (lot.items || []).forEach(function (item) {
-          var tr = document.createElement('tr');
-          tr.innerHTML = [
-            lot.lotNumber,
-            item.productName || '',
-            item.vendorCode || '',
-            item.expectedQty,
-            item.scanAcceptedQty,
-            item.verifiedQty,
-            item.m1,
-            item.m2,
-            item.m3,
-            item.m4,
-            item.varianceQty
-          ].map(function (c, i) {
-            return '<td class="' + (i > 2 ? 'text-right' : '') + '">' + c + '</td>';
-          }).join('');
-          tbody.appendChild(tr);
-        });
-      });
-    })();
-  </script>
+      <tr>
+        <td colspan="2">
+          <div class="label-cell">GRN NO.</div>
+          <div class="value-cell" id="grn-number"></div>
+        </td>
+        <td colspan="2">
+          <div class="label-cell">GRN DATE</div>
+          <div class="value-cell" id="grn-date"></div>
+        </td>
+      </tr>
+    </table>
+
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th style="width: 4%;">SR</th>
+          <th style="width: 10%;">LOT / INVOICE</th>
+          <th style="width: 22%;">ARTICLE</th>
+          <th style="width: 10%;">VENDOR CODE</th>
+          <th style="width: 8%;" class="text-right">EXPECTED</th>
+          <th style="width: 8%;" class="text-right">SCAN</th>
+          <th style="width: 8%;" class="text-right">VERIFIED</th>
+          <th style="width: 6%;" class="text-right">M1</th>
+          <th style="width: 6%;" class="text-right">M2</th>
+          <th style="width: 6%;" class="text-right">M3</th>
+          <th style="width: 6%;" class="text-right">M4</th>
+          <th style="width: 6%;" class="text-right">VAR</th>
+        </tr>
+      </thead>
+      <tbody id="line-items"></tbody>
+      <tfoot>
+        <tr style="background-color: #f8f9fa; font-weight: bold;">
+          <td colspan="4" class="text-right">TOTALS</td>
+          <td class="text-right" id="total-expected"></td>
+          <td class="text-right">—</td>
+          <td class="text-right" id="total-verified"></td>
+          <td class="text-right" id="total-m1"></td>
+          <td class="text-right" id="total-m2"></td>
+          <td class="text-right" id="total-m3"></td>
+          <td class="text-right" id="total-m4"></td>
+          <td class="text-right" id="total-variance"></td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <div class="footer-section">
+      <div id="discrepancy-block" style="display: none; margin-bottom: 6px;">
+        <b>Discrepancy:</b> <span id="discrepancy-details"></span>
+      </div>
+      <div><b>Notes:</b> <span id="notes">—</span></div>
+      <div style="margin-top: 4px; font-size: 8px; color: #555;">
+        Verified qty = M1 + M2 + M3 + M4 (secondary checking classification).
+      </div>
+    </div>
+
+    <div class="signature-area">
+      <div class="sig-box">Prepared By</div>
+      <div class="sig-box">Checked By</div>
+      <div class="sig-box sig-box-authorised">
+        <div class="sig-for-company">For <span id="signatory-company-name"></span></div>
+        <div>Authorised Signatory</div>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

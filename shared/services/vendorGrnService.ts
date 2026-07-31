@@ -55,6 +55,10 @@ export interface VendorGrn {
     vendorName?: string;
     vendorCode?: string;
     gstin?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
   };
   lots: VendorGrnLot[];
   totals: VendorGrnTotals;

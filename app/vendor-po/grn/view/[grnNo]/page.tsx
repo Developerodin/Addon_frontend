@@ -1,12 +1,15 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { toast } from "react-hot-toast";
 import Seo from "@/shared/layout-components/seo/seo";
 import vendorGrnService, { type VendorGrn } from "@/shared/services/vendorGrnService";
+import { printVendorGrnDocument } from "@/shared/utils/vendorGrnPrint";
+import { CRM } from "../../../vendor-list/crmUiClasses";
 
-/** Vendor PO GRN detail + print view (API-backed snapshot). */
+/** Vendor PO GRN detail view (API-backed snapshot). Print opens a dedicated GRN form. */
 const GRNViewPage = () => {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -17,6 +20,7 @@ const GRNViewPage = () => {
   const [grn, setGrn] = useState<VendorGrn | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [printing, setPrinting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,24 +42,34 @@ const GRNViewPage = () => {
     };
   }, [grnNo]);
 
+  /**
+   * Opens the vendor GRN template in a popup and triggers the browser print dialog.
+   * @param doc - loaded GRN snapshot
+   */
+  const handlePrint = useCallback(async (doc: VendorGrn) => {
+    setPrinting(true);
+    try {
+      await printVendorGrnDocument(doc);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to print GRN");
+    } finally {
+      setPrinting(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (isPrint && grn) {
-      const t = setTimeout(() => window.print(), 300);
-      return () => clearTimeout(t);
+      void handlePrint(grn);
     }
-  }, [isPrint, grn]);
-
-  const handlePrint = () => window.print();
+  }, [isPrint, grn, handlePrint]);
 
   if (!loaded) {
     return (
-      <div className="main-content">
+      <div className={CRM.mainContent}>
         <Seo title="GRN" />
-        <div className="box">
-          <div className="box-body text-center py-12">
-            <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary border-t-transparent mx-auto mb-4" />
-            <p className="text-gray-600">Loading GRN…</p>
-          </div>
+        <div className={CRM.loadingWrap}>
+          <div className={CRM.spinner} />
+          <p className={CRM.loadingLabel}>Loading GRN…</p>
         </div>
       </div>
     );
@@ -63,21 +77,14 @@ const GRNViewPage = () => {
 
   if (!grn) {
     return (
-      <div className="main-content">
+      <div className={CRM.mainContent}>
         <Seo title="GRN Not Found" />
-        <div className="box">
-          <div className="box-body text-center py-12">
-            <p className="text-gray-600 mb-4">
-              {error || "GRN not found."}
-            </p>
-            <Link
-              href="/vendor-po/grn"
-              className="ti-btn ti-btn-primary inline-flex items-center gap-2 py-2 px-4 whitespace-nowrap"
-            >
-              <i className="ri-arrow-left-line me-2" />
-              Back to GRN List
-            </Link>
-          </div>
+        <div className={CRM.emptyWrap}>
+          <p className="text-[11px] text-[#7987A1] mb-4">{error || "GRN not found."}</p>
+          <Link href="/vendor-po/grn" className={CRM.btnPrimary}>
+            <i className="ri-arrow-left-line" aria-hidden="true" />
+            Back to GRN List
+          </Link>
         </div>
       </div>
     );
@@ -88,86 +95,95 @@ const GRNViewPage = () => {
   );
 
   return (
-    <div className="main-content print:text-black">
+    <div className={CRM.mainContent}>
       <Seo title={`GRN ${grn.grnNumber}`} />
-      <div className="box print:shadow-none print:border-0">
-        <div className="box-header flex flex-wrap items-center justify-between gap-3 print:hidden">
+      <div className={CRM.card}>
+        <div className={`${CRM.cardBody} flex flex-wrap items-center justify-between gap-3 border-b border-gray-100`}>
           <div>
-            <h1 className="box-title text-lg font-bold">{grn.grnNumber}</h1>
-            <p className="text-sm text-gray-500">
+            <h1 className={CRM.pageTitle}>{grn.grnNumber}</h1>
+            <p className="text-[11px] text-[#7987A1] mt-0.5">
               VPO {grn.vpoNumber} · {grn.vendor?.vendorName}
             </p>
           </div>
           <div className="flex gap-2">
-            <Link href="/vendor-po/grn" className="ti-btn ti-btn-light">
+            <Link href="/vendor-po/grn" className={CRM.btnSecondary}>
               Back
             </Link>
-            <button type="button" className="ti-btn ti-btn-primary" onClick={handlePrint}>
-              Print
+            <button
+              type="button"
+              className={CRM.btnPrimary}
+              onClick={() => void handlePrint(grn)}
+              disabled={printing}
+              aria-label={`Print ${grn.grnNumber}`}
+            >
+              <i className={`ri-printer-line text-xs ${printing ? "animate-pulse" : ""}`} aria-hidden="true" />
+              {printing ? "Printing…" : "Print"}
             </button>
           </div>
         </div>
 
-        <div className="box-body space-y-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+        <div className={`${CRM.cardBody} space-y-4`}>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-[11px]">
             <div>
-              <div className="text-xs text-gray-500 uppercase font-bold">GRN Date</div>
-              <div>{grn.grnDate ? new Date(grn.grnDate).toLocaleDateString() : "—"}</div>
+              <div className={CRM.label}>GRN Date</div>
+              <div className="font-semibold text-gray-900">
+                {grn.grnDate ? new Date(grn.grnDate).toLocaleDateString() : "—"}
+              </div>
             </div>
             <div>
-              <div className="text-xs text-gray-500 uppercase font-bold">Vendor</div>
-              <div>{grn.vendor?.vendorName ?? "—"}</div>
+              <div className={CRM.label}>Vendor</div>
+              <div className="font-semibold text-gray-900">{grn.vendor?.vendorName ?? "—"}</div>
             </div>
             <div>
-              <div className="text-xs text-gray-500 uppercase font-bold">Expected</div>
-              <div className="font-bold">{(grn.totals?.expected ?? 0).toLocaleString()} pcs</div>
+              <div className={CRM.label}>Expected</div>
+              <div className="font-bold tabular-nums">{(grn.totals?.expected ?? 0).toLocaleString()} pcs</div>
             </div>
             <div>
-              <div className="text-xs text-gray-500 uppercase font-bold">Verified</div>
-              <div className="font-bold text-emerald-700">
+              <div className={CRM.label}>Verified</div>
+              <div className="font-bold tabular-nums text-emerald-700">
                 {(grn.totals?.verified ?? 0).toLocaleString()} pcs
               </div>
             </div>
           </div>
 
           {grn.discrepancyDetails && (
-            <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm">
+            <div className="rounded border border-amber-200 bg-amber-50 p-3 text-[11px]">
               <strong>Discrepancy:</strong> {grn.discrepancyDetails}
             </div>
           )}
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm border-collapse">
+          <div className={CRM.tableWrap}>
+            <table className={CRM.table}>
               <thead>
-                <tr className="bg-gray-50 text-xs uppercase text-gray-600">
-                  <th className="border px-2 py-2 text-left">Lot / Invoice</th>
-                  <th className="border px-2 py-2 text-left">Article</th>
-                  <th className="border px-2 py-2 text-left">Vendor code</th>
-                  <th className="border px-2 py-2 text-right">Expected</th>
-                  <th className="border px-2 py-2 text-right">Scan accepted</th>
-                  <th className="border px-2 py-2 text-right">Verified</th>
-                  <th className="border px-2 py-2 text-right">M1</th>
-                  <th className="border px-2 py-2 text-right">M2</th>
-                  <th className="border px-2 py-2 text-right">M3</th>
-                  <th className="border px-2 py-2 text-right">M4</th>
-                  <th className="border px-2 py-2 text-right">Variance</th>
+                <tr className={CRM.theadTr}>
+                  <th scope="col" className={CRM.th}>Lot / Invoice</th>
+                  <th scope="col" className={CRM.th}>Article</th>
+                  <th scope="col" className={CRM.th}>Vendor code</th>
+                  <th scope="col" className={CRM.thRight}>Expected</th>
+                  <th scope="col" className={CRM.thRight}>Scan accepted</th>
+                  <th scope="col" className={CRM.thRight}>Verified</th>
+                  <th scope="col" className={CRM.thRight}>M1</th>
+                  <th scope="col" className={CRM.thRight}>M2</th>
+                  <th scope="col" className={CRM.thRight}>M3</th>
+                  <th scope="col" className={CRM.thRight}>M4</th>
+                  <th scope="col" className={CRM.thRight}>Variance</th>
                 </tr>
               </thead>
               <tbody>
                 {allItems.map(({ lot, item }, idx) => (
-                  <tr key={`${lot.lotNumber}-${idx}`}>
-                    <td className="border px-2 py-2 font-medium">{lot.lotNumber}</td>
-                    <td className="border px-2 py-2">{item.productName}</td>
-                    <td className="border px-2 py-2">{item.vendorCode || "—"}</td>
-                    <td className="border px-2 py-2 text-right">{item.expectedQty}</td>
-                    <td className="border px-2 py-2 text-right">{item.scanAcceptedQty}</td>
-                    <td className="border px-2 py-2 text-right font-bold">{item.verifiedQty}</td>
-                    <td className="border px-2 py-2 text-right">{item.m1}</td>
-                    <td className="border px-2 py-2 text-right">{item.m2}</td>
-                    <td className="border px-2 py-2 text-right">{item.m3}</td>
-                    <td className="border px-2 py-2 text-right">{item.m4}</td>
+                  <tr key={`${lot.lotNumber}-${idx}`} className={CRM.tbodyTr}>
+                    <td className={`${CRM.td} font-medium`}>{lot.lotNumber}</td>
+                    <td className={CRM.td}>{item.productName}</td>
+                    <td className={CRM.td}>{item.vendorCode || "—"}</td>
+                    <td className={`${CRM.td} text-right tabular-nums`}>{item.expectedQty}</td>
+                    <td className={`${CRM.td} text-right tabular-nums`}>{item.scanAcceptedQty}</td>
+                    <td className={`${CRM.td} text-right tabular-nums font-bold`}>{item.verifiedQty}</td>
+                    <td className={`${CRM.td} text-right tabular-nums`}>{item.m1}</td>
+                    <td className={`${CRM.td} text-right tabular-nums`}>{item.m2}</td>
+                    <td className={`${CRM.td} text-right tabular-nums`}>{item.m3}</td>
+                    <td className={`${CRM.td} text-right tabular-nums`}>{item.m4}</td>
                     <td
-                      className={`border px-2 py-2 text-right font-semibold ${
+                      className={`${CRM.td} text-right tabular-nums font-semibold ${
                         item.varianceQty > 0
                           ? "text-emerald-700"
                           : item.varianceQty < 0
@@ -182,24 +198,24 @@ const GRNViewPage = () => {
               </tbody>
               <tfoot>
                 <tr className="bg-gray-50 font-bold">
-                  <td colSpan={3} className="border px-2 py-2 text-right">
+                  <td colSpan={3} className={`${CRM.td} text-right`}>
                     Totals
                   </td>
-                  <td className="border px-2 py-2 text-right">{grn.totals?.expected ?? 0}</td>
-                  <td className="border px-2 py-2 text-right">—</td>
-                  <td className="border px-2 py-2 text-right">{grn.totals?.verified ?? 0}</td>
-                  <td className="border px-2 py-2 text-right">{grn.totals?.m1 ?? 0}</td>
-                  <td className="border px-2 py-2 text-right">{grn.totals?.m2 ?? 0}</td>
-                  <td className="border px-2 py-2 text-right">{grn.totals?.m3 ?? 0}</td>
-                  <td className="border px-2 py-2 text-right">{grn.totals?.m4 ?? 0}</td>
-                  <td className="border px-2 py-2 text-right">{grn.totals?.variance ?? 0}</td>
+                  <td className={`${CRM.td} text-right tabular-nums`}>{grn.totals?.expected ?? 0}</td>
+                  <td className={`${CRM.td} text-right`}>—</td>
+                  <td className={`${CRM.td} text-right tabular-nums`}>{grn.totals?.verified ?? 0}</td>
+                  <td className={`${CRM.td} text-right tabular-nums`}>{grn.totals?.m1 ?? 0}</td>
+                  <td className={`${CRM.td} text-right tabular-nums`}>{grn.totals?.m2 ?? 0}</td>
+                  <td className={`${CRM.td} text-right tabular-nums`}>{grn.totals?.m3 ?? 0}</td>
+                  <td className={`${CRM.td} text-right tabular-nums`}>{grn.totals?.m4 ?? 0}</td>
+                  <td className={`${CRM.td} text-right tabular-nums`}>{grn.totals?.variance ?? 0}</td>
                 </tr>
               </tfoot>
             </table>
           </div>
 
           {grn.notes && (
-            <p className="text-sm text-gray-600">
+            <p className="text-[11px] text-[#7987A1]">
               <strong>Notes:</strong> {grn.notes}
             </p>
           )}
