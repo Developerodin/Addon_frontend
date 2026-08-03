@@ -77,6 +77,7 @@ export interface PickListPrintPayload {
     shade: string;
     quantity: number;
     pickupQuantity: number;
+    availableStock?: number;
     status: string;
   }>;
   totals: { totalItems: number; totalQuantity: number; totalPickupQuantity: number };

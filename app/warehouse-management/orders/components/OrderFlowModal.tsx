@@ -10,6 +10,7 @@ import {
   warehouseOrderFlowStatusLabel,
 } from "@/shared/services/whmsWarehouseOrderService";
 import { whmsDispatch, whmsPickListFlow } from "@/shared/services/whmsFulfilmentService";
+import { printOrderPickListFromPayload } from "../../pick-pack/components/warehousePickListPrint";
 
 /**
  * Mirror of the backend transition map (orderFlow.service.js). The server is the
@@ -192,19 +193,7 @@ export default function OrderFlowModal({ orderId, onClose, onChanged }: Props) {
   const handlePrintPickList = async () => {
     try {
       const payload = await whmsPickListFlow.printPayload(orderId);
-      const head = `<table><thead><tr><th>#</th><th>SKU</th><th>Style Code</th><th>Size</th><th>Shade</th><th>Qty</th><th>Picked</th></tr></thead>`;
-      const body = `<tbody>${payload.items
-        .map(
-          (i) =>
-            `<tr><td>${i.srNo}</td><td>${i.skuCode}</td><td>${i.styleCode}</td><td>${i.size}</td><td>${i.shade}</td><td>${i.quantity}</td><td>${i.pickupQuantity}</td></tr>`
-        )
-        .join("")}</tbody></table>`;
-      printSimpleTable(
-        `Pick List — ${payload.order.orderNumber || orderId}`,
-        head,
-        body,
-        `<p class="meta">Client: ${payload.order.clientName || ""} · Total Qty: ${payload.totals.totalQuantity}</p>`
-      );
+      printOrderPickListFromPayload(payload);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load pick list");
     }
