@@ -243,10 +243,11 @@ export default function WarehouseOrderForm({
       return;
     }
 
+    const statusChanged = s.status !== initial.status;
     const body: UpdateWarehouseOrderBody = {
       addonOrderId: s.addonOrderId.trim(),
       ...(s.date ? { date: `${s.date}T00:00:00.000Z` } : {}),
-      ...(s.status ? { status: s.status } : {}),
+      ...(statusChanged && s.status ? { status: s.status } : {}),
       ...(single.length ? { styleCodeSinglePair: single } : { styleCodeSinglePair: [] }),
       ...(multi.length ? { styleCodeMultiPair: multi } : { styleCodeMultiPair: [] }),
     };

@@ -192,6 +192,7 @@ export default function ScanningPage() {
                   <thead>
                     <tr className="bg-gray-50/30">
                       <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Order #</th>
+                      <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Addon Order ID</th>
                       <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Client</th>
                       <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Batch</th>
                       <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Stage</th>
@@ -204,6 +205,7 @@ export default function ScanningPage() {
                     {activeList.results.map((order) => (
                       <tr key={order.id} className="hover:bg-gray-50/50">
                         <td className="px-1.5 py-2.5 text-[12px] font-bold border border-gray-200">{order.orderNumber || order.id}</td>
+                        <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">{order.addonOrderId?.trim() || "—"}</td>
                         <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">{order.clientName || "—"}</td>
                         <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">
                           {batchByOrder[order.id] ? (
@@ -239,6 +241,7 @@ export default function ScanningPage() {
                 <thead>
                   <tr className="bg-gray-50/30">
                     <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Order #</th>
+                    <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Addon Order ID</th>
                     <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Completed by</th>
                     <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Completed at</th>
                     <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Match summary</th>
@@ -249,6 +252,7 @@ export default function ScanningPage() {
                   {historyList.results.map((s) => (
                     <tr key={s.id} className="hover:bg-gray-50/50">
                       <td className="px-1.5 py-2.5 text-[12px] font-bold border border-gray-200">{s.orderNumber || "—"}</td>
+                      <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">{s.addonOrderId?.trim() || "—"}</td>
                       <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">{s.completedByName || s.startedByName || "—"}</td>
                       <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">{s.completedAt ? new Date(s.completedAt).toLocaleString() : "—"}</td>
                       <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">

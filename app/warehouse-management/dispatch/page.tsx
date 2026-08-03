@@ -18,6 +18,8 @@ import {
   getDispatchActorFromHistory,
 } from "@/shared/components/whms";
 import OrderFlowModal from "../orders/components/OrderFlowModal";
+import BulkDispatchStatusBar from "./components/BulkDispatchStatusBar";
+import { isOrderSelectableForBulkStatus } from "./dispatchBulkStatusUtils";
 import {
   downloadDispatchImportResultReport,
   exportDispatchDetailsExcel,
@@ -43,6 +45,7 @@ export default function DispatchPage() {
   const [flowOrderId, setFlowOrderId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
   const importRef = useRef<HTMLInputElement>(null);
 
   const baseParams = useMemo(
@@ -75,6 +78,38 @@ export default function DispatchPage() {
   const handleTabChange = (next: DispatchTab) => {
     setTab(next);
     setPage(1);
+    setSelectedOrderIds(new Set());
+  };
+
+  const selectableOrders = useMemo(
+    () => results.filter(isOrderSelectableForBulkStatus),
+    [results],
+  );
+
+  const selectedOrders = useMemo(
+    () => results.filter((o) => selectedOrderIds.has(o.id)),
+    [results, selectedOrderIds],
+  );
+
+  const allSelectableSelected =
+    selectableOrders.length > 0 && selectableOrders.every((o) => selectedOrderIds.has(o.id));
+
+  const toggleRowSelection = (order: WarehouseOrder) => {
+    if (!isOrderSelectableForBulkStatus(order)) return;
+    setSelectedOrderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(order.id)) next.delete(order.id);
+      else next.add(order.id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (allSelectableSelected) {
+      setSelectedOrderIds(new Set());
+      return;
+    }
+    setSelectedOrderIds(new Set(selectableOrders.map((o) => o.id)));
   };
 
   const handleExportExcel = async () => {
@@ -237,6 +272,13 @@ export default function DispatchPage() {
             onLimitChange={setLimit}
           />
 
+          <BulkDispatchStatusBar
+            tab={tab}
+            selectedOrders={selectedOrders}
+            onClearSelection={() => setSelectedOrderIds(new Set())}
+            onApplied={() => void refresh()}
+          />
+
           {error ? <p className="text-sm text-red-600 mb-3">{error}</p> : null}
 
           {loading ? (
@@ -254,7 +296,18 @@ export default function DispatchPage() {
               <table className="w-full border-collapse border border-gray-200">
                 <thead>
                   <tr className="bg-gray-50/30">
+                    <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 w-10">
+                      <input
+                        type="checkbox"
+                        checked={allSelectableSelected}
+                        onChange={toggleSelectAll}
+                        disabled={selectableOrders.length === 0}
+                        aria-label="Select all eligible orders for bulk status update"
+                        className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                      />
+                    </th>
                     <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Order #</th>
+                    <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Addon Order ID</th>
                     <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Client</th>
                     <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Stage</th>
                     <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Courier / AWB</th>
@@ -270,9 +323,34 @@ export default function DispatchPage() {
                 <tbody>
                   {results.map((order) => {
                     const dispatchActor = getDispatchActorFromHistory(order.flowHistory);
+                    const bulkSelectable = isOrderSelectableForBulkStatus(order);
+                    const isSelected = selectedOrderIds.has(order.id);
                     return (
-                      <tr key={order.id} className="hover:bg-gray-50/50 transition-colors">
+                      <tr
+                        key={order.id}
+                        className={`hover:bg-gray-50/50 transition-colors ${isSelected ? "bg-violet-50/40" : ""}`}
+                      >
+                        <td className="px-1.5 py-2.5 border border-gray-200">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            disabled={!bulkSelectable}
+                            onChange={() => toggleRowSelection(order)}
+                            aria-label={
+                              bulkSelectable
+                                ? `Select order ${order.orderNumber || order.id} for bulk status update`
+                                : `Order ${order.orderNumber || order.id} cannot be bulk updated at this stage`
+                            }
+                            title={
+                              bulkSelectable
+                                ? undefined
+                                : "Delivered or cancelled orders cannot be bulk updated"
+                            }
+                            className="rounded border-gray-300 text-purple-600 focus:ring-purple-500 disabled:opacity-40"
+                          />
+                        </td>
                         <td className="px-1.5 py-2.5 text-[12px] font-bold text-gray-900 border border-gray-200">{order.orderNumber || order.id}</td>
+                        <td className="px-1.5 py-2.5 text-[12px] text-gray-700 border border-gray-200">{order.addonOrderId?.trim() || "—"}</td>
                         <td className="px-1.5 py-2.5 text-[12px] text-gray-700 border border-gray-200">{order.clientName || "—"}</td>
                         <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">
                           <span className="badge bg-primary/10 text-primary text-[10px] font-semibold px-2 py-0.5 rounded">

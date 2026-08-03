@@ -115,10 +115,11 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
     mode: BarcodePrintMode,
     customQty?: number,
     selectedStyleCode?: string,
+    remarks?: string,
   ) => {
     setBarcodePrintBusy(true);
     try {
-      const result = await printBatchBarcodes(batch.id, mode, customQty, selectedStyleCode);
+      const result = await printBatchBarcodes(batch.id, mode, customQty, selectedStyleCode, remarks);
       if (!result) return;
 
       const refreshed = await whmsPickListBatches.get(batch.id);

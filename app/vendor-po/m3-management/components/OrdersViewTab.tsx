@@ -3,6 +3,12 @@
 import React, { useMemo, useState } from "react";
 import type { VendorM3FlowRow, VendorM3Snapshot } from "@/shared/services/vendorM2M3M4ManagementService";
 import { getVendorFlowRowId } from "@/app/vendor-po/utils/getVendorFlowRowId";
+import ArticleProductImageButton from "@/shared/components/production/ArticleProductImageButton";
+import {
+  collectFactoryCodesFromProductFactoryCodes,
+  useArticleProductImages,
+} from "@/shared/hooks/useArticleProductImages";
+import { getVendorRowProductFactoryCode } from "@/app/vendor-po/utils/getVendorProductFactoryCode";
 
 export interface OrdersViewTabProps {
   rows: VendorM3FlowRow[];
@@ -82,7 +88,11 @@ export default function OrdersViewTab({
     return vpoGroups.filter(
       (g) =>
         g.vpoNumber.toLowerCase().includes(q) ||
-        g.flows.some((f) => f.referenceCode.toLowerCase().includes(q))
+        g.flows.some(
+          (f) =>
+            f.referenceCode.toLowerCase().includes(q) ||
+            (f.productFactoryCode ?? "").toLowerCase().includes(q),
+        )
     );
   }, [vpoGroups, search]);
 
@@ -94,6 +104,12 @@ export default function OrdersViewTab({
       return next;
     });
   };
+
+  const factoryCodes = useMemo(
+    () => collectFactoryCodesFromProductFactoryCodes(rows),
+    [rows],
+  );
+  const { openProductImage, productImageModal } = useArticleProductImages(factoryCodes);
 
   return (
     <div>
@@ -170,6 +186,11 @@ export default function OrdersViewTab({
                             <td className="border border-gray-300 px-1 py-1 text-gray-400 text-[9px] pl-3">{group.vpoNumber}</td>
                             <td className="border border-gray-300 px-1 py-1 font-medium pl-2">
                               {row.referenceCode || "—"}
+                              {getVendorRowProductFactoryCode(row) ? (
+                                <span className="block text-[9px] font-normal text-purple-700">
+                                  {getVendorRowProductFactoryCode(row)}
+                                </span>
+                              ) : null}
                               {row.productVendorCode ? (
                                 <span className="block text-[9px] font-normal text-gray-500">VC: {row.productVendorCode}</span>
                               ) : null}
@@ -181,6 +202,10 @@ export default function OrdersViewTab({
                             <td className="border border-gray-300 px-1 py-1 text-right text-orange-800 font-bold">{s.availableForOutward}</td>
                             <td className="border border-gray-300 px-1 py-1 text-center">
                               <div className="flex justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                <ArticleProductImageButton
+                                  factoryCode={getVendorRowProductFactoryCode(row)}
+                                  onClick={openProductImage}
+                                />
                                 <button type="button" onClick={() => onView(row)} className="px-1.5 py-0.5 text-[9px] font-bold border border-gray-300 rounded hover:bg-gray-100">View</button>
                                 <button type="button" disabled={s.availableForOutward <= 0} onClick={() => onOutward(row)} className="px-1.5 py-0.5 text-[9px] font-bold border border-orange-300 text-orange-800 rounded hover:bg-orange-50 disabled:opacity-40">Outward</button>
                               </div>
@@ -199,6 +224,7 @@ export default function OrdersViewTab({
       <p className="text-[10px] text-gray-500 mt-2">
         SC M3 and FC M3 are separate floor buckets — not merged. On hand = SC + FC for outward ledger. Click a VPO to expand.
       </p>
+      {productImageModal}
     </div>
   );
 }

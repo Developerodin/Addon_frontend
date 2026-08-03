@@ -2,6 +2,7 @@ import type {
   QualityFloorQuantity,
   VendorProductionFlow,
 } from "@/shared/services/vendorProductionFlowService";
+import { getVendorFlowProductFactoryCode } from "@/app/vendor-po/utils/getVendorProductFactoryCode";
 
 /** Aggregated quantity totals for secondary checking flows. */
 export interface VendorScQuantityTotals {
@@ -33,6 +34,8 @@ export interface VendorScArticleRow {
   vendorName: string;
   vendorCode: string;
   productName: string;
+  /** Catalog factory code (article number) for product image lookup. */
+  factoryCode: string;
 }
 
 /**
@@ -88,6 +91,14 @@ export function getProductName(flow: VendorProductionFlow): string {
   if (!product) return "—";
   if (typeof product === "object") return product.name || "—";
   return "—";
+}
+
+/**
+ * Resolves catalog factory code (article number) from a vendor production flow.
+ * @param flow - Vendor production flow document
+ */
+export function getProductFactoryCode(flow: VendorProductionFlow): string {
+  return getVendorFlowProductFactoryCode(flow);
 }
 
 /**
@@ -265,6 +276,7 @@ export function flattenFlowsToArticles(
       vendorName: getVendorName(flow),
       vendorCode: getArticleVendorCode(flow),
       productName: getProductName(flow),
+      factoryCode: getProductFactoryCode(flow),
     }))
     .sort((a, b) => {
       const poCmp = a.vpoNumber.localeCompare(b.vpoNumber);

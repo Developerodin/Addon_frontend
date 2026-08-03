@@ -4,6 +4,7 @@ import type {
   FinalCheckingFloorQuantity,
   VendorProductionFlow,
 } from "@/shared/services/vendorProductionFlowService";
+import { getVendorFlowProductFactoryCode } from "@/app/vendor-po/utils/getVendorProductFactoryCode";
 import { getDispatchTransferableRemaining } from "../dispatch/dispatchTransferUtils";
 import { getVendorFinalCheckingRemaining } from "../final-checking/finalCheckingRemaining";
 
@@ -15,6 +16,8 @@ export interface VendorFlowArticleRow {
   vendorName: string;
   vendorCode: string;
   productName: string;
+  /** Catalog factory code (article number) for product image lookup. */
+  factoryCode: string;
 }
 
 /** Vendor PO order group with nested article flows. */
@@ -100,6 +103,14 @@ export function getProductName(flow: VendorProductionFlow): string {
 }
 
 /**
+ * Resolves catalog factory code (article number) from a vendor production flow.
+ * @param flow - Vendor production flow document
+ */
+export function getProductFactoryCode(flow: VendorProductionFlow): string {
+  return getVendorFlowProductFactoryCode(flow);
+}
+
+/**
  * Resolves flow document id (supports id or _id from API).
  * @param flow - Vendor production flow document
  */
@@ -158,6 +169,7 @@ export function flattenFlowsToArticles(
       vendorName: getVendorName(flow),
       vendorCode: getArticleVendorCode(flow),
       productName: getProductName(flow),
+      factoryCode: getProductFactoryCode(flow),
     }))
     .sort((a, b) => {
       const poCmp = a.vpoNumber.localeCompare(b.vpoNumber);

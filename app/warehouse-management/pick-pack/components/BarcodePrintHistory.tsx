@@ -138,6 +138,9 @@ export default function BarcodePrintHistory({ history = [], summary = [] }: Barc
               <th className="px-3 py-2 text-left text-[11px] font-bold text-gray-600 uppercase">
                 Breakdown
               </th>
+              <th className="px-3 py-2 text-left text-[11px] font-bold text-gray-600 uppercase">
+                Remark
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -168,6 +171,12 @@ export default function BarcodePrintHistory({ history = [], summary = [] }: Barc
                   </td>
                   <td className="px-3 py-2.5 text-[11px] text-gray-500 max-w-[240px] truncate" title={breakdown}>
                     {breakdown || "—"}
+                  </td>
+                  <td
+                    className="px-3 py-2.5 text-[12px] text-gray-600 max-w-[200px] truncate"
+                    title={entry.remarks || undefined}
+                  >
+                    {entry.remarks?.trim() ? entry.remarks : "—"}
                   </td>
                 </tr>
               );

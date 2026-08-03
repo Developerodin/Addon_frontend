@@ -48,6 +48,20 @@ export function collectFactoryCodesFromArticleNumbers(
 }
 
 /**
+ * Collects unique factory codes from vendor M2/M3/M4 rows or flat vendor article rows.
+ */
+export function collectFactoryCodesFromProductFactoryCodes(
+  rows: Array<{ productFactoryCode?: string | null; factoryCode?: string | null }>,
+): string[] {
+  const codes = new Set<string>();
+  for (const row of rows) {
+    const fc = (row.productFactoryCode ?? row.factoryCode ?? "").trim();
+    if (fc && fc !== "—") codes.add(fc);
+  }
+  return Array.from(codes);
+}
+
+/**
  * Loads catalog product images for factory codes and exposes a modal opener for article views.
  */
 export function useArticleProductImages(factoryCodes: string[]) {

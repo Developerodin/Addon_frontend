@@ -19,6 +19,7 @@ export interface BarcodePrintResult {
   quantity: number;
   mode: BarcodePrintMode;
   styleCode?: string;
+  remarks?: string;
 }
 
 /**
@@ -79,6 +80,7 @@ export async function logBarcodePrintEvent(batchId: string, result: BarcodePrint
     styleCode: result.styleCode || "",
     mode: result.mode,
     quantity: result.quantity,
+    remarks: result.remarks || "",
     labels: result.labels.map((label) => ({
       styleCode: label.styleCode,
       skuCode: label.skuCode,
@@ -101,6 +103,7 @@ export async function printBatchBarcodes(
   mode: BarcodePrintMode,
   customQty?: number,
   styleCode?: string,
+  remarks?: string,
 ): Promise<BarcodePrintResult | null> {
   try {
     const payload = await whmsPickListBatches.barcodes(batchId, styleCode ? { styleCode } : undefined);
@@ -123,6 +126,7 @@ export async function printBatchBarcodes(
       quantity: countBarcodeLabels(labels),
       mode,
       styleCode,
+      remarks: remarks?.trim() || "",
     };
 
     await logBarcodePrintEvent(batchId, result);
@@ -145,8 +149,9 @@ export async function printStyleBatchBarcodes(
   styleCode: string,
   mode: BarcodePrintMode,
   customQty?: number,
+  remarks?: string,
 ): Promise<BarcodePrintResult | null> {
-  return printBatchBarcodes(batchId, mode, customQty, styleCode);
+  return printBatchBarcodes(batchId, mode, customQty, styleCode, remarks);
 }
 
 /** @deprecated Use printBatchBarcodes with mode argument */

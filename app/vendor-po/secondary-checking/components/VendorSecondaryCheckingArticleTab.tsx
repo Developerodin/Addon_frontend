@@ -2,6 +2,11 @@
 
 import React, { useMemo } from "react";
 import type { VendorProductionFlow } from "@/shared/services/vendorProductionFlowService";
+import ArticleProductImageButton from "@/shared/components/production/ArticleProductImageButton";
+import {
+  collectFactoryCodesFromProductFactoryCodes,
+  useArticleProductImages,
+} from "@/shared/hooks/useArticleProductImages";
 import {
   filterSecondaryCheckingFlowsForView,
   flattenFlowsToArticles,
@@ -81,6 +86,7 @@ export function VendorSecondaryCheckingArticleTab({
       : rows.filter(
           (row) =>
             row.productName.toLowerCase().includes(q) ||
+            row.factoryCode.toLowerCase().includes(q) ||
             row.vpoNumber.toLowerCase().includes(q) ||
             row.vendorName.toLowerCase().includes(q) ||
             row.vendorCode.toLowerCase().includes(q) ||
@@ -88,6 +94,12 @@ export function VendorSecondaryCheckingArticleTab({
         );
     return searched;
   }, [flows, searchQuery, showAllArticles]);
+
+  const factoryCodes = useMemo(
+    () => collectFactoryCodesFromProductFactoryCodes(articleRows),
+    [articleRows],
+  );
+  const { openProductImage, productImageModal } = useArticleProductImages(factoryCodes);
 
   const totalPages = Math.max(1, Math.ceil(articleRows.length / itemsPerPage));
   const paginatedRows = useMemo(() => {
@@ -280,6 +292,11 @@ export function VendorSecondaryCheckingArticleTab({
                       <div className="font-bold text-gray-900 text-[12px]">
                         {row.productName}
                       </div>
+                      {row.factoryCode ? (
+                        <div className="text-[10px] font-semibold text-purple-700 mt-0.5">
+                          {row.factoryCode}
+                        </div>
+                      ) : null}
                     </td>
                     <td className="px-1.5 py-2.5 border border-gray-200">
                       <span className="text-[11px] font-bold text-purple-600">
@@ -338,14 +355,20 @@ export function VendorSecondaryCheckingArticleTab({
                       </span>
                     </td>
                     <td className="px-1.5 py-2.5 border border-gray-200">
-                      <button
-                        type="button"
-                        onClick={() => onProcess(row.flow)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
-                        aria-label={`Process ${row.productName}`}
-                      >
-                        Process
-                      </button>
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <ArticleProductImageButton
+                          factoryCode={row.factoryCode}
+                          onClick={openProductImage}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => onProcess(row.flow)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
+                          aria-label={`Process ${row.productName}`}
+                        >
+                          Process
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -383,6 +406,7 @@ export function VendorSecondaryCheckingArticleTab({
           </button>
         </div>
       </div>
+      {productImageModal}
     </>
   );
 }

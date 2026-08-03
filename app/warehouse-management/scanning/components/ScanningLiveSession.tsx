@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-hot-toast";
 import {
   whmsScanning,
@@ -10,32 +10,8 @@ import {
   whmsPickListBatches,
   type OrderBatchInfo,
 } from "@/shared/services/whmsPickListBatchService";
-
-const itemRowClass = (status: string) => {
-  switch (status) {
-    case "matched":
-      return "bg-green-50";
-    case "short":
-      return "bg-yellow-50";
-    case "excess":
-      return "bg-red-50";
-    default:
-      return "";
-  }
-};
-
-const itemBadge = (status: string) => {
-  switch (status) {
-    case "matched":
-      return <span className="badge bg-green-100 text-green-700 text-[10px] font-semibold px-2 py-0.5 rounded">Matched</span>;
-    case "short":
-      return <span className="badge bg-yellow-100 text-yellow-700 text-[10px] font-semibold px-2 py-0.5 rounded">Short</span>;
-    case "excess":
-      return <span className="badge bg-red-100 text-red-700 text-[10px] font-semibold px-2 py-0.5 rounded">Excess</span>;
-    default:
-      return <span className="badge bg-gray-100 text-gray-600 text-[10px] font-semibold px-2 py-0.5 rounded">Pending</span>;
-  }
-};
+import { buildScanDisplayGroups } from "../utils/scanSessionDisplayGroups";
+import ScanProgressTable from "./ScanProgressTable";
 
 export interface ScanningLiveSessionProps {
   session: ScanSession;
@@ -65,6 +41,11 @@ export default function ScanningLiveSession({
       ? session.orderId
       : String(session.orderId?.id || "");
 
+  const displayGroups = useMemo(
+    () => buildScanDisplayGroups(session.items),
+    [session.items],
+  );
+
   useEffect(() => {
     if (!orderId) return;
     void whmsPickListBatches.forOrder(orderId).then(setBatchInfo).catch(() => setBatchInfo(null));
@@ -77,6 +58,7 @@ export default function ScanningLiveSession({
 
     const qty = Math.max(1, Math.floor(Number(scanQty) || 1));
     const matchedItem =
+      session.items.find((i) => i.eanCode === code) ||
       session.items.find((i) => i.styleCode === code) ||
       session.items.find((i) => i.skuCode === code);
 
@@ -181,6 +163,9 @@ export default function ScanningLiveSession({
     }
   };
 
+  const hasSingle = displayGroups.single.length > 0;
+  const hasMulti = displayGroups.multi.length > 0;
+
   return (
     <>
       <div className="box mb-4">
@@ -278,49 +263,51 @@ export default function ScanningLiveSession({
         </div>
       </div>
 
-      <div className="box">
-        <div className="box-header flex flex-wrap items-center justify-between gap-2">
-          <h3 className="box-title">Scan Progress</h3>
-          <p className="text-[11px] text-gray-500">Scanned counts update via barcode scan only — not editable here.</p>
+      {hasSingle ? (
+        <div className="box mb-4">
+          <div className="box-header flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-4 bg-purple-600 rounded-full" aria-hidden />
+              <h3 className="box-title text-[11px] uppercase tracking-wide">StyleCode single pair</h3>
+              <span className="text-[10px] font-bold text-gray-500">{displayGroups.single.length}</span>
+            </div>
+            <p className="text-[11px] text-gray-500">Scanned counts update via barcode scan only.</p>
+          </div>
+          <div className="box-body overflow-x-auto">
+            <ScanProgressTable items={displayGroups.single} />
+          </div>
         </div>
-        <div className="box-body overflow-x-auto">
-          <table className="w-full border-collapse border border-gray-200">
-            <thead>
-              <tr className="bg-gray-50/30">
-                <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Style</th>
-                <th className="px-1.5 py-3 text-right text-[11px] font-bold uppercase border border-gray-200">Expected</th>
-                <th className="px-1.5 py-3 text-right text-[11px] font-bold uppercase border border-gray-200">Scanned</th>
-                <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {session.items.map((item) => {
-                const scanned = Number(item.scannedQty || 0);
-                const expected = Number(item.expectedQty || 0);
-                const isExcess = scanned > expected;
-                return (
-                <tr key={item.id || item._id || item.styleCode} className={itemRowClass(item.status)}>
-                  <td className="px-1.5 py-2.5 text-[12px] font-bold border border-gray-200">{item.styleCode}</td>
-                  <td className="px-1.5 py-2.5 text-[12px] text-right border border-gray-200">{expected}</td>
-                  <td className="px-1.5 py-2.5 text-right border border-gray-200">
-                    <span
-                      className={`inline-block min-w-[4rem] text-[12px] font-bold tabular-nums ${
-                        isExcess ? "text-red-700" : scanned >= expected && expected > 0 ? "text-emerald-700" : "text-gray-900"
-                      }`}
-                      aria-label={`Scanned ${scanned} of ${expected} for ${item.styleCode}`}
-                    >
-                      {scanned}
-                      <span className="text-gray-400 font-medium"> / {expected}</span>
-                    </span>
-                  </td>
-                  <td className="px-1.5 py-2.5 border border-gray-200">{itemBadge(item.status)}</td>
-                </tr>
-              );
-              })}
-            </tbody>
-          </table>
+      ) : null}
+
+      {hasMulti ? (
+        <div className="box mb-4">
+          <div className="box-header flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-[3px] h-4 bg-purple-600 rounded-full" aria-hidden />
+              <h3 className="box-title text-[11px] uppercase tracking-wide">StyleCode multi pair</h3>
+              <span className="text-[10px] font-bold text-gray-500">{displayGroups.multi.length}</span>
+            </div>
+            <p className="text-[11px] text-gray-500">Scanned counts update via barcode scan only.</p>
+          </div>
+          <div className="box-body overflow-x-auto space-y-4">
+            {displayGroups.multi.map((group) => (
+              <ScanProgressTable
+                key={group.pairStyleCode}
+                pairStyleCode={group.pairStyleCode}
+                items={group.children}
+              />
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
+
+      {!hasSingle && !hasMulti ? (
+        <div className="box">
+          <div className="box-body">
+            <p className="text-sm text-gray-500 text-center py-8">No scan items in this session.</p>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

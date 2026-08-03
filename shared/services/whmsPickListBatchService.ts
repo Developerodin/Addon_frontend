@@ -84,6 +84,7 @@ export interface PickListBatch {
   type: PickListBatchType;
   orderIds: string[];
   orderNumbers: string[];
+  addonOrderIds?: string[];
   status: PickListBatchStatus;
   pickerName?: string;
   items: PickListBatchItem[];
@@ -132,6 +133,7 @@ export interface BarcodePrintHistoryEntry {
   labels: BarcodePrintHistoryLabel[];
   printedBy?: string | null;
   printedByName?: string;
+  remarks?: string;
   printedAt: string;
 }
 
@@ -221,6 +223,7 @@ export const whmsPickListBatches = {
       styleCode?: string;
       mode: 'all' | 'custom';
       quantity: number;
+      remarks?: string;
       labels: BarcodePrintHistoryLabel[];
     },
   ): Promise<LogBarcodePrintResult> {

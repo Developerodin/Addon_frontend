@@ -92,12 +92,6 @@ function formatPickerLabel(pickerName?: string): string | null {
   return `Picked by: ${name}`;
 }
 
-function formatAddonOrderLabel(addonOrderId?: string): string | null {
-  const id = (addonOrderId ?? "").trim();
-  if (!id) return null;
-  return `Addon: ${id}`;
-}
-
 /** DOM id for a pick-line quantity input (used for Enter-to-save focus chain). */
 export function pickQtyInputId(itemId: string): string {
   return `pick-qty-${itemId}`;
@@ -136,6 +130,7 @@ function ItemRow({
   item,
   index,
   orderNumber,
+  addonOrderId,
   saveError,
   onSave,
   onAdvanceFocus,
@@ -144,6 +139,7 @@ function ItemRow({
   item: PickListOrderItem;
   index: number;
   orderNumber: string;
+  addonOrderId?: string;
   saveError?: string;
   onSave: (itemId: string, pickupQty: number) => Promise<void>;
   onAdvanceFocus?: (itemId: string) => void;
@@ -208,6 +204,9 @@ function ItemRow({
       </td>
       <td className="px-2 py-2 text-[11px] font-bold text-purple-700 border border-gray-200 whitespace-nowrap">
         {orderNumber}
+      </td>
+      <td className="px-2 py-2 text-[11px] font-medium text-gray-700 border border-gray-200 whitespace-nowrap">
+        {addonOrderId?.trim() || "—"}
       </td>
       <td className="px-2 py-2 text-[12px] font-bold text-gray-900 border border-gray-200 whitespace-nowrap">
         {item.skuCode}
@@ -298,7 +297,7 @@ function ItemRow({
     </tr>
     {saveError ? (
       <tr className="bg-red-50/60">
-        <td colSpan={10} className="px-3 py-2 border border-red-200">
+        <td colSpan={11} className="px-3 py-2 border border-red-200">
           <p role="alert" aria-live="polite" className="text-[10px] font-semibold text-red-800 leading-snug">
             <i className="ri-error-warning-fill mr-1" aria-hidden />
             {saveError}
@@ -556,11 +555,6 @@ function OrderGroupRow({
                   {formatClientLabel({ clientName: group.clientName, clientType: group.clientType })}
                 </span>
               ) : null}
-              {formatAddonOrderLabel(group.addonOrderId) ? (
-                <span className="text-[10px] font-semibold text-gray-500 leading-4 truncate">
-                  {formatAddonOrderLabel(group.addonOrderId)}
-                </span>
-              ) : null}
               {formatPickerLabel(group.pickerName) ? (
                 <span className="text-[10px] font-semibold text-gray-500 leading-4 truncate">
                   {formatPickerLabel(group.pickerName)}
@@ -576,6 +570,9 @@ function OrderGroupRow({
               <OrderProgressSummary group={group} progressPct={progressPct} />
             </div>
           ) : null}
+        </td>
+        <td className="px-2 py-2.5 text-[11px] font-medium text-gray-700 border border-gray-200 whitespace-nowrap">
+          {group.addonOrderId?.trim() || "—"}
         </td>
         {showDetailColumns ? (
           <>
@@ -733,6 +730,7 @@ function OrderGroupRow({
           item={item}
           index={idx}
           orderNumber={group.orderNumber}
+          addonOrderId={group.addonOrderId}
           saveError={pickItemErrors?.[item.id]}
           onSave={onSave}
           onAdvanceFocus={advancePickFocus}
@@ -791,7 +789,7 @@ export default function PickTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className={`w-full border-collapse border border-gray-200 ${showDetailColumns ? "min-w-[820px]" : "min-w-[560px]"}`}>
+      <table className={`w-full border-collapse border border-gray-200 ${showDetailColumns ? "min-w-[940px]" : "min-w-[680px]"}`}>
         <thead>
           <tr className="bg-gray-50/30">
             <th className="px-2 py-2.5 text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200 text-center w-10">
@@ -799,6 +797,9 @@ export default function PickTable({
             </th>
             <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
               Order No
+            </th>
+            <th className="px-2 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
+              Addon Order ID
             </th>
             {showDetailColumns ? (
               <>

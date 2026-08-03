@@ -3,6 +3,12 @@
 import React, { useMemo, useState } from "react";
 import type { VendorM3FlowRow } from "@/shared/services/vendorM2M3M4ManagementService";
 import { getVendorFlowRowId } from "@/app/vendor-po/utils/getVendorFlowRowId";
+import ArticleProductImageButton from "@/shared/components/production/ArticleProductImageButton";
+import {
+  collectFactoryCodesFromProductFactoryCodes,
+  useArticleProductImages,
+} from "@/shared/hooks/useArticleProductImages";
+import { getVendorRowProductFactoryCode } from "@/app/vendor-po/utils/getVendorProductFactoryCode";
 
 export interface FlowViewTabProps {
   rows: VendorM3FlowRow[];
@@ -34,12 +40,18 @@ export default function FlowViewTab({
       (r) =>
         r.referenceCode.toLowerCase().includes(q) ||
         r.vpoNumber.toLowerCase().includes(q) ||
-        (r.productVendorCode ?? "").toLowerCase().includes(q)
+        (r.productVendorCode ?? "").toLowerCase().includes(q) ||
+        (r.productFactoryCode ?? "").toLowerCase().includes(q)
     );
   }, [rows, search]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
   const paged = filtered.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+  const factoryCodes = useMemo(
+    () => collectFactoryCodesFromProductFactoryCodes(rows),
+    [rows],
+  );
+  const { openProductImage, productImageModal } = useArticleProductImages(factoryCodes);
 
   return (
     <div>
@@ -112,7 +124,14 @@ export default function FlowViewTab({
                 return (
                   <tr key={rowId} className="hover:bg-gray-50/50">
                     <td className="border border-gray-300 px-1 py-1 font-medium">{row.vpoNumber || "—"}</td>
-                    <td className="border border-gray-300 px-1 py-1 font-semibold">{row.referenceCode || "—"}</td>
+                    <td className="border border-gray-300 px-1 py-1 font-semibold">
+                      {row.referenceCode || "—"}
+                      {getVendorRowProductFactoryCode(row) ? (
+                        <span className="block text-[9px] font-normal text-purple-700">
+                          {getVendorRowProductFactoryCode(row)}
+                        </span>
+                      ) : null}
+                    </td>
                     <td className="border border-gray-300 px-1 py-1">{row.productVendorCode || "—"}</td>
                     <td className="border border-gray-300 px-1 py-1 text-right bg-orange-50/50 font-bold text-orange-900">
                       {s.byFloor.secondaryChecking}
@@ -125,6 +144,10 @@ export default function FlowViewTab({
                     <td className="border border-gray-300 px-1 py-1 text-right text-orange-800 font-bold">{s.availableForOutward}</td>
                     <td className="border border-gray-300 px-1 py-1 text-center">
                       <div className="flex justify-center gap-1">
+                        <ArticleProductImageButton
+                          factoryCode={getVendorRowProductFactoryCode(row)}
+                          onClick={openProductImage}
+                        />
                         <button
                           type="button"
                           onClick={() => onView(row)}
@@ -181,6 +204,7 @@ export default function FlowViewTab({
       <p className="text-[10px] text-gray-500 mt-2">
         SC M3 and FC M3 are tracked per floor. On hand = SC + FC (ledger total for outward only).
       </p>
+      {productImageModal}
     </div>
   );
 }

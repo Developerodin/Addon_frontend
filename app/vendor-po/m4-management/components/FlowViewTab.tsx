@@ -3,6 +3,12 @@
 import React, { useMemo, useState } from "react";
 import type { VendorM4FlowRow } from "@/shared/services/vendorM2M3M4ManagementService";
 import { getVendorFlowRowId } from "@/app/vendor-po/utils/getVendorFlowRowId";
+import ArticleProductImageButton from "@/shared/components/production/ArticleProductImageButton";
+import {
+  collectFactoryCodesFromProductFactoryCodes,
+  useArticleProductImages,
+} from "@/shared/hooks/useArticleProductImages";
+import { getVendorRowProductFactoryCode } from "@/app/vendor-po/utils/getVendorProductFactoryCode";
 
 export interface FlowViewTabProps {
   rows: VendorM4FlowRow[];
@@ -34,12 +40,18 @@ export default function FlowViewTab({
       (r) =>
         r.referenceCode.toLowerCase().includes(q) ||
         r.vpoNumber.toLowerCase().includes(q) ||
-        (r.productVendorCode ?? "").toLowerCase().includes(q)
+        (r.productVendorCode ?? "").toLowerCase().includes(q) ||
+        (r.productFactoryCode ?? "").toLowerCase().includes(q)
     );
   }, [rows, search]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
   const paged = filtered.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+  const factoryCodes = useMemo(
+    () => collectFactoryCodesFromProductFactoryCodes(rows),
+    [rows],
+  );
+  const { openProductImage, productImageModal } = useArticleProductImages(factoryCodes);
 
   return (
     <div>
@@ -106,13 +118,24 @@ export default function FlowViewTab({
                 return (
                   <tr key={rowId} className="hover:bg-gray-50/50">
                     <td className="border border-gray-300 px-1 py-1 font-medium">{row.vpoNumber || "—"}</td>
-                    <td className="border border-gray-300 px-1 py-1 font-semibold">{row.referenceCode || "—"}</td>
+                    <td className="border border-gray-300 px-1 py-1 font-semibold">
+                      {row.referenceCode || "—"}
+                      {getVendorRowProductFactoryCode(row) ? (
+                        <span className="block text-[9px] font-normal text-purple-700">
+                          {getVendorRowProductFactoryCode(row)}
+                        </span>
+                      ) : null}
+                    </td>
                     <td className="border border-gray-300 px-1 py-1">{row.productVendorCode || "—"}</td>
                     <td className="border border-gray-300 px-1 py-1 text-right bg-red-50/50 font-bold text-red-900">{s.onHand}</td>
                     <td className="border border-gray-300 px-1 py-1 text-right text-red-700">{s.outwardTotal}</td>
                     <td className="border border-gray-300 px-1 py-1 text-right text-red-800 font-bold">{s.availableForOutward}</td>
                     <td className="border border-gray-300 px-1 py-1 text-center">
                       <div className="flex justify-center gap-1">
+                        <ArticleProductImageButton
+                          factoryCode={getVendorRowProductFactoryCode(row)}
+                          onClick={openProductImage}
+                        />
                         <button type="button" onClick={() => onView(row)} className="px-1.5 py-0.5 text-[9px] font-bold border border-gray-300 rounded hover:bg-gray-100" aria-label={`View M4 detail for ${row.referenceCode}`}>View</button>
                         <button type="button" disabled={s.availableForOutward <= 0} onClick={() => onOutward(row)} className="px-1.5 py-0.5 text-[9px] font-bold border border-red-300 text-red-800 rounded hover:bg-red-50 disabled:opacity-40" aria-label={`Mark outward for ${row.referenceCode}`}>Outward</button>
                       </div>
@@ -138,6 +161,7 @@ export default function FlowViewTab({
       <p className="text-[10px] text-gray-500 mt-2">
         Vendor M4 ledger tracks Final Checking M4 only (SC vendor returns use vm4Quantity / PO Return).
       </p>
+      {productImageModal}
     </div>
   );
 }

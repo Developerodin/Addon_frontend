@@ -103,7 +103,7 @@ export interface VendorProductionFlow {
   id: string;
   vendor: string | { id: string; _id?: string; header?: { vendorName?: string; vendorCode?: string } };
   vendorPurchaseOrder?: string | { id: string; _id?: string; vpoNumber?: string };
-  product?: string | { id: string; _id?: string; name?: string; code?: string; vendorCode?: string };
+  product?: string | { id: string; _id?: string; name?: string; code?: string; vendorCode?: string; factoryCode?: string };
   referenceCode?: string;
   plannedQuantity: number;
   remarks?: string;

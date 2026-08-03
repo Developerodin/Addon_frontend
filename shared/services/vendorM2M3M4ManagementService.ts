@@ -38,6 +38,8 @@ export interface VendorM2EntryRow {
   referenceCode: string;
   productName?: string;
   productVendorCode?: string;
+  /** Catalog factory code for product image lookup. */
+  productFactoryCode?: string;
   vpoNumber: string;
   sourceFloor?: VendorM2SourceFloorKey | null;
   quantity: number;
@@ -93,6 +95,8 @@ export interface VendorM3FlowRow {
   referenceCode: string;
   productName?: string;
   productVendorCode?: string;
+  /** Catalog factory code for product image lookup. */
+  productFactoryCode?: string;
   vpoNumber: string;
   vendor?: string | { id?: string; header?: { vendorName?: string } };
   vendorPurchaseOrder?: string | { id?: string; vpoNumber?: string };
@@ -107,6 +111,8 @@ export interface VendorM4FlowRow {
   referenceCode: string;
   productName?: string;
   productVendorCode?: string;
+  /** Catalog factory code for product image lookup. */
+  productFactoryCode?: string;
   vpoNumber: string;
   vendor?: string | { id?: string; header?: { vendorName?: string } };
   vendorPurchaseOrder?: string | { id?: string; vpoNumber?: string };

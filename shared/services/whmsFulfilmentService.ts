@@ -133,14 +133,19 @@ export interface BarcodeLabelsPayload {
 
 export type ScanItemStatus = 'pending' | 'short' | 'matched' | 'excess';
 
+export type ScanItemKind = 'singlePair' | 'multiPair';
+
 export interface ScanSessionItem {
   id?: string;
   _id?: string;
   pickListId?: string;
   skuCode?: string;
   styleCode: string;
+  eanCode?: string;
   size?: string;
   shade?: string;
+  itemKind?: ScanItemKind;
+  pairStyleCode?: string;
   expectedQty: number;
   scannedQty: number;
   status: ScanItemStatus;
@@ -160,6 +165,7 @@ export interface ScanSession {
   id: string;
   orderId: string | { id?: string; orderNumber?: string };
   orderNumber?: string;
+  addonOrderId?: string;
   batchId?: string | null;
   status: 'open' | 'completed' | 'cancelled';
   items: ScanSessionItem[];

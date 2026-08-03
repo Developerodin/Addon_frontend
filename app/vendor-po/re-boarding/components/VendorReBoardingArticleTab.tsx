@@ -2,6 +2,11 @@
 
 import React, { useMemo } from "react";
 import type { VendorProductionFlow } from "@/shared/services/vendorProductionFlowService";
+import ArticleProductImageButton from "@/shared/components/production/ArticleProductImageButton";
+import {
+  collectFactoryCodesFromProductFactoryCodes,
+  useArticleProductImages,
+} from "@/shared/hooks/useArticleProductImages";
 import { formatTransferredRowLabel } from "../../utils/transferredStyleRows";
 import {
   filterReBoardingFlowsForView,
@@ -71,6 +76,7 @@ export function VendorReBoardingArticleTab({
       : rows.filter(
           (row) =>
             row.productName.toLowerCase().includes(q) ||
+            row.factoryCode.toLowerCase().includes(q) ||
             row.vpoNumber.toLowerCase().includes(q) ||
             row.vendorName.toLowerCase().includes(q) ||
             row.vendorCode.toLowerCase().includes(q) ||
@@ -78,6 +84,12 @@ export function VendorReBoardingArticleTab({
         );
     return searched;
   }, [flows, searchQuery, showAllArticles]);
+
+  const factoryCodes = useMemo(
+    () => collectFactoryCodesFromProductFactoryCodes(articleRows),
+    [articleRows],
+  );
+  const { openProductImage, productImageModal } = useArticleProductImages(factoryCodes);
 
   const totalPages = Math.max(1, Math.ceil(articleRows.length / itemsPerPage));
   const paginatedRows = useMemo(() => {
@@ -209,6 +221,11 @@ export function VendorReBoardingArticleTab({
                       <div className="text-[10px] text-gray-400 uppercase font-medium leading-none">
                         {row.productName}
                       </div>
+                      {row.factoryCode ? (
+                        <div className="text-[10px] font-semibold text-purple-700 mt-0.5">
+                          {row.factoryCode}
+                        </div>
+                      ) : null}
                     </td>
                     <td className={CRM.td}>
                       <div className="font-bold text-purple-600 underline decoration-purple-200 underline-offset-2">
@@ -251,6 +268,10 @@ export function VendorReBoardingArticleTab({
                     </td>
                     <td className={CRM.td}>
                       <div className={CRM.rowActions}>
+                        <ArticleProductImageButton
+                          factoryCode={row.factoryCode}
+                          onClick={openProductImage}
+                        />
                         <button
                           type="button"
                           onClick={() => onProcess(row.flow)}
@@ -294,6 +315,7 @@ export function VendorReBoardingArticleTab({
           </button>
         </div>
       </div>
+      {productImageModal}
     </>
   );
 }

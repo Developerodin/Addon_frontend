@@ -58,6 +58,16 @@ function printSimpleTable(title: string, headHtml: string, bodyHtml: string, met
   win.document.close();
 }
 
+const COURIER_OPTIONS = ["BLUEDART", "DELHIVERY", "SAFEXPRESS"] as const;
+
+/**
+ * Whether a saved courier name matches one of the predefined carrier options.
+ * @param name - Stored courier / transport company name
+ */
+function isKnownCourierOption(name: string): boolean {
+  return COURIER_OPTIONS.includes(name.trim().toUpperCase() as (typeof COURIER_OPTIONS)[number]);
+}
+
 type Props = {
   orderId: string;
   onClose: () => void;
@@ -334,7 +344,22 @@ export default function OrderFlowModal({ orderId, onClose, onChanged }: Props) {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-[11px] text-gray-600 mb-1">Courier / Transport Company <span className="text-gray-400">(optional)</span></label>
-                      <input value={courierName} onChange={(e) => setCourierName(e.target.value)} className="form-control text-[12px] w-full" />
+                      <select
+                        value={courierName}
+                        onChange={(e) => setCourierName(e.target.value)}
+                        className="form-control text-[12px] w-full"
+                        aria-label="Courier or transport company"
+                      >
+                        <option value="">Select courier</option>
+                        {COURIER_OPTIONS.map((name) => (
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
+                        ))}
+                        {courierName.trim() && !isKnownCourierOption(courierName) ? (
+                          <option value={courierName}>{courierName}</option>
+                        ) : null}
+                      </select>
                     </div>
                     <div>
                       <label className="block text-[11px] text-gray-600 mb-1">Tracking Number / AWB <span className="text-gray-400">(optional)</span></label>

@@ -79,6 +79,7 @@ export default function PickBatchTable({ batches, loading, variant = "active" }:
             <th className={th}>Batch #</th>
             <th className={th}>Type</th>
             <th className={th}>Orders</th>
+            <th className={th}>Addon Order ID</th>
             <th className={th}>Items</th>
             <th className={th}>Progress</th>
             <th className={th}>Status</th>
@@ -116,6 +117,11 @@ export default function PickBatchTable({ batches, loading, variant = "active" }:
                 </td>
                 <td className={td}>
                   <span className="line-clamp-2 text-[11px]">{(batch.orderNumbers || []).join(", ")}</span>
+                </td>
+                <td className={td}>
+                  <span className="line-clamp-2 text-[11px]">
+                    {(batch.addonOrderIds || []).filter(Boolean).join(", ") || "—"}
+                  </span>
                 </td>
                 <td className={td}>{summary?.itemCount ?? batch.items?.length ?? 0}</td>
                 <td className={td}>

@@ -1,11 +1,17 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import vendorM2M3M4ManagementService, {
   formatVendorQcFloor,
   type VendorM2EntryRow,
   type VendorM2SourceFloorKey,
 } from "@/shared/services/vendorM2M3M4ManagementService";
+import ArticleProductImageButton from "@/shared/components/production/ArticleProductImageButton";
+import {
+  collectFactoryCodesFromProductFactoryCodes,
+  useArticleProductImages,
+} from "@/shared/hooks/useArticleProductImages";
+import { getVendorRowProductFactoryCode } from "@/app/vendor-po/utils/getVendorProductFactoryCode";
 import VendorM2FilterBar, { type VendorM2FloorFilter } from "./VendorM2FilterBar";
 import M2Pagination from "@/app/production/m2-management/components/M2Pagination";
 
@@ -59,6 +65,12 @@ export default function EntriesTab({ refreshKey, onResolve }: EntriesTabProps) {
     };
   }, [page, debouncedSearch, sourceFloor, refreshKey]);
 
+  const factoryCodes = useMemo(
+    () => collectFactoryCodesFromProductFactoryCodes(entries),
+    [entries],
+  );
+  const { openProductImage, productImageModal } = useArticleProductImages(factoryCodes);
+
   return (
     <div>
       <VendorM2FilterBar
@@ -107,7 +119,14 @@ export default function EntriesTab({ refreshKey, onResolve }: EntriesTabProps) {
               entries.map((row) => (
                 <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="p-2">{row.vpoNumber || "—"}</td>
-                  <td className="p-2 font-medium">{row.referenceCode || "—"}</td>
+                  <td className="p-2">
+                    <div className="font-medium">{row.referenceCode || "—"}</div>
+                    {getVendorRowProductFactoryCode(row) ? (
+                      <div className="text-[10px] font-semibold text-purple-700">
+                        {getVendorRowProductFactoryCode(row)}
+                      </div>
+                    ) : null}
+                  </td>
                   <td className="p-2">{row.productVendorCode || "—"}</td>
                   <td className="p-2">{formatVendorQcFloor(row.sourceFloor)}</td>
                   <td className="p-2 text-right">{row.originalQuantity ?? row.quantity}</td>
@@ -124,7 +143,11 @@ export default function EntriesTab({ refreshKey, onResolve }: EntriesTabProps) {
                     {row.timestamp ? new Date(row.timestamp).toLocaleString() : "—"}
                   </td>
                   <td className="p-2">
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-wrap gap-1 items-center">
+                      <ArticleProductImageButton
+                        factoryCode={getVendorRowProductFactoryCode(row)}
+                        onClick={openProductImage}
+                      />
                       {row.canMergeToM1 !== false ? (
                         <button
                           type="button"
@@ -176,6 +199,7 @@ export default function EntriesTab({ refreshKey, onResolve }: EntriesTabProps) {
         totalResults={totalResults}
         onPageChange={setPage}
       />
+      {productImageModal}
     </div>
   );
 }
