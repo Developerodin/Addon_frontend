@@ -1,10 +1,14 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { toast } from "react-hot-toast";
 import vendorM2M3M4ManagementService, {
   formatVendorQcFloor,
   type VendorM3LogEntry,
 } from "@/shared/services/vendorM2M3M4ManagementService";
+import DownloadExcelButton from "@/shared/components/production/DownloadExcelButton";
+import { datedExportFilename, downloadCsv, formatTimestampForCsv } from "@/shared/utils/csvExport";
+import { fetchAllPaginatedResults } from "@/shared/utils/fetchAllPaginated";
 
 const FLOOR_OPTIONS = ["", "secondaryChecking", "finalChecking"] as const;
 const TYPE_OPTIONS = ["", "ENTRY", "OUTWARD"] as const;
@@ -26,6 +30,7 @@ export default function LogsTab({ refreshKey = 0 }: LogsTabProps) {
   const [sourceFloor, setSourceFloor] = useState<(typeof FLOOR_OPTIONS)[number]>("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
   const limit = 25;
 
   useEffect(() => {
@@ -54,6 +59,59 @@ export default function LogsTab({ refreshKey = 0 }: LogsTabProps) {
       cancelled = true;
     };
   }, [page, search, type, sourceFloor, dateFrom, dateTo, refreshKey]);
+
+  /** Export all filtered vendor M3 logs as CSV. */
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    try {
+      const rows = await fetchAllPaginatedResults<VendorM3LogEntry>((pageNum, pageLimit) =>
+        vendorM2M3M4ManagementService.getM3Logs({
+          page: pageNum,
+          limit: pageLimit,
+          search: search.trim() || undefined,
+          type: type || undefined,
+          sourceFloor: sourceFloor || undefined,
+          dateFrom: dateFrom || undefined,
+          dateTo: dateTo || undefined,
+        })
+      );
+
+      if (rows.length === 0) {
+        toast.error("No M3 logs to export");
+        return;
+      }
+
+      const header = [
+        "Timestamp",
+        "VPO",
+        "Reference",
+        "Type",
+        "Floor",
+        "Qty",
+        "User",
+        "Remarks",
+        "Available After",
+      ];
+      const lines = rows.map((log) => [
+        formatTimestampForCsv(log.timestamp),
+        log.vpoNumber || "",
+        log.referenceCode || "",
+        log.type,
+        formatVendorQcFloor(log.sourceFloor),
+        log.quantity,
+        log.userName || log.userId || "",
+        log.remarks || "",
+        log.availableAfter ?? "",
+      ]);
+
+      downloadCsv(datedExportFilename("vendor-m3-logs"), [header, ...lines]);
+      toast.success(`Exported ${rows.length} M3 log ${rows.length === 1 ? "row" : "rows"}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to export M3 logs");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   return (
     <div>
@@ -97,6 +155,14 @@ export default function LogsTab({ refreshKey = 0 }: LogsTabProps) {
         </select>
         <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} className="py-1.5 px-2 text-[11px] border border-gray-300 rounded" aria-label="Date from" />
         <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} className="py-1.5 px-2 text-[11px] border border-gray-300 rounded" aria-label="Date to" />
+        <div className="col-span-2 md:col-span-4 lg:col-span-6 flex justify-end">
+          <DownloadExcelButton
+            onClick={() => void handleExportExcel()}
+            isExporting={isExporting}
+            disabled={!isLoading && logs.length === 0}
+            ariaLabel="Export filtered vendor M3 logs to Excel"
+          />
+        </div>
       </div>
 
       <div className="border border-gray-300 rounded overflow-x-auto">

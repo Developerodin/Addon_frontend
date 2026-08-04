@@ -1,8 +1,11 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { toast } from "react-hot-toast";
 import type { M3ArticleRow, M3Snapshot } from "@/shared/services/productionService";
 import { ArticleViewOrderCell } from "@/shared/components/production/ArticleViewOrderCell";
+import DownloadExcelButton from "@/shared/components/production/DownloadExcelButton";
+import { datedExportFilename, downloadCsv } from "@/shared/utils/csvExport";
 
 export interface OrdersViewTabProps {
   rows: M3ArticleRow[];
@@ -102,16 +105,64 @@ export default function OrdersViewTab({
     });
   };
 
+  /** Export filtered M3 order/article rows (flat per-article) as CSV. */
+  const handleExportExcel = () => {
+    const exportRows = filtered.flatMap((group) =>
+      group.articles.map((row) => ({ group, row }))
+    );
+
+    if (exportRows.length === 0) {
+      toast.error("No M3 orders to export");
+      return;
+    }
+
+    const header = [
+      "Order",
+      "Order Note",
+      "Article",
+      "Checking M3",
+      "Secondary Checking M3",
+      "Final Checking M3",
+      "On Hand",
+      "Outward",
+      "Available",
+    ];
+    const lines = exportRows.map(({ group, row }) => {
+      const s = row.m3Snapshot;
+      return [
+        group.orderNumber,
+        group.orderNote || "",
+        row.articleNumber,
+        s.byFloor.checking,
+        s.byFloor.secondaryChecking,
+        s.byFloor.finalChecking,
+        s.onHand,
+        s.outwardTotal,
+        s.availableForOutward,
+      ];
+    });
+
+    downloadCsv(datedExportFilename("m3-orders"), [header, ...lines]);
+    toast.success(`Exported ${exportRows.length} M3 ${exportRows.length === 1 ? "row" : "rows"}`);
+  };
+
   return (
     <div>
-      <input
-        type="search"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Search order or article…"
-        className="w-full max-w-md py-1.5 px-2 text-[11px] border border-gray-300 rounded mb-3"
-        aria-label="Search M3 orders"
-      />
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search order or article…"
+          className="w-full max-w-md py-1.5 px-2 text-[11px] border border-gray-300 rounded"
+          aria-label="Search M3 orders"
+        />
+        <DownloadExcelButton
+          onClick={handleExportExcel}
+          disabled={filtered.length === 0}
+          ariaLabel="Export filtered M3 orders to Excel"
+        />
+      </div>
 
       <div className="border border-gray-300 rounded overflow-hidden overflow-x-auto">
         <table className="w-full border-collapse border border-gray-300 text-[10px] min-w-[820px]">

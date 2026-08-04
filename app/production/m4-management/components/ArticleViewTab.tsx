@@ -1,13 +1,16 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { toast } from "react-hot-toast";
 import type { M4ArticleRow } from "@/shared/services/productionService";
 import { ArticleViewOrderCell } from "@/shared/components/production/ArticleViewOrderCell";
 import ArticleProductImageButton from "@/shared/components/production/ArticleProductImageButton";
+import DownloadExcelButton from "@/shared/components/production/DownloadExcelButton";
 import {
   collectFactoryCodesFromArticleNumbers,
   useArticleProductImages,
 } from "@/shared/hooks/useArticleProductImages";
+import { datedExportFilename, downloadCsv } from "@/shared/utils/csvExport";
 
 export interface ArticleViewTabProps {
   rows: M4ArticleRow[];
@@ -48,6 +51,30 @@ export default function ArticleViewTab({
   const factoryCodes = useMemo(() => collectFactoryCodesFromArticleNumbers(rows), [rows]);
   const { openProductImage, productImageModal } = useArticleProductImages(factoryCodes);
 
+  /** Export filtered M4 article rows as CSV. */
+  const handleExportExcel = () => {
+    if (filtered.length === 0) {
+      toast.error("No M4 articles to export");
+      return;
+    }
+
+    const header = ["Order", "Order Note", "Article", "Combined M4", "Outward", "Available"];
+    const lines = filtered.map((row) => {
+      const s = row.m4Snapshot;
+      return [
+        row.orderNumber,
+        row.orderNote || "",
+        row.articleNumber,
+        s.onHand,
+        s.outwardTotal,
+        s.availableForOutward,
+      ];
+    });
+
+    downloadCsv(datedExportFilename("m4-articles"), [header, ...lines]);
+    toast.success(`Exported ${filtered.length} M4 ${filtered.length === 1 ? "row" : "rows"}`);
+  };
+
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -78,6 +105,12 @@ export default function ArticleViewTab({
             ))}
           </select>
         </label>
+        <DownloadExcelButton
+          onClick={handleExportExcel}
+          disabled={filtered.length === 0}
+          ariaLabel="Export filtered M4 articles to Excel"
+          className="ml-auto"
+        />
       </div>
 
       <div className="border border-gray-300 rounded overflow-hidden overflow-x-auto">

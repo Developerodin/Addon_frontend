@@ -1,14 +1,17 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { toast } from "react-hot-toast";
 import type { VendorM4FlowRow, VendorM4Snapshot } from "@/shared/services/vendorM2M3M4ManagementService";
 import { getVendorFlowRowId } from "@/app/vendor-po/utils/getVendorFlowRowId";
 import ArticleProductImageButton from "@/shared/components/production/ArticleProductImageButton";
+import DownloadExcelButton from "@/shared/components/production/DownloadExcelButton";
 import {
   collectFactoryCodesFromProductFactoryCodes,
   useArticleProductImages,
 } from "@/shared/hooks/useArticleProductImages";
 import { getVendorRowProductFactoryCode } from "@/app/vendor-po/utils/getVendorProductFactoryCode";
+import { datedExportFilename, downloadCsv } from "@/shared/utils/csvExport";
 
 export interface OrdersViewTabProps {
   rows: VendorM4FlowRow[];
@@ -105,16 +108,62 @@ export default function OrdersViewTab({
   );
   const { openProductImage, productImageModal } = useArticleProductImages(factoryCodes);
 
+  /** Export filtered vendor M4 VPO/flow rows (flat per-flow) as CSV. */
+  const handleExportExcel = () => {
+    const exportRows = filtered.flatMap((group) =>
+      group.flows.map((row) => ({ group, row }))
+    );
+
+    if (exportRows.length === 0) {
+      toast.error("No M4 VPO data to export");
+      return;
+    }
+
+    const header = [
+      "VPO",
+      "Reference",
+      "Factory Code",
+      "Vendor Code",
+      "FC M4",
+      "On Hand",
+      "Outward",
+      "Available",
+    ];
+    const lines = exportRows.map(({ group, row }) => {
+      const s = row.m4Snapshot;
+      return [
+        group.vpoNumber,
+        row.referenceCode || "",
+        getVendorRowProductFactoryCode(row),
+        row.productVendorCode || "",
+        s.byFloor.finalChecking,
+        s.onHand,
+        s.outwardTotal,
+        s.availableForOutward,
+      ];
+    });
+
+    downloadCsv(datedExportFilename("vendor-m4-vpo"), [header, ...lines]);
+    toast.success(`Exported ${exportRows.length} M4 ${exportRows.length === 1 ? "row" : "rows"}`);
+  };
+
   return (
     <div>
-      <input
-        type="search"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Search VPO or reference…"
-        className="w-full max-w-md py-1.5 px-2 text-[11px] border border-gray-300 rounded mb-3"
-        aria-label="Search vendor M4 VPO groups"
-      />
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search VPO or reference…"
+          className="w-full max-w-md py-1.5 px-2 text-[11px] border border-gray-300 rounded"
+          aria-label="Search vendor M4 VPO groups"
+        />
+        <DownloadExcelButton
+          onClick={handleExportExcel}
+          disabled={filtered.length === 0}
+          ariaLabel="Export filtered vendor M4 VPO data to Excel"
+        />
+      </div>
 
       <div className="border border-gray-300 rounded overflow-hidden overflow-x-auto">
         <table className="w-full border-collapse border border-gray-300 text-[10px] min-w-[760px]">

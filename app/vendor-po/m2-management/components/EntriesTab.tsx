@@ -1,17 +1,21 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { toast } from "react-hot-toast";
 import vendorM2M3M4ManagementService, {
   formatVendorQcFloor,
   type VendorM2EntryRow,
   type VendorM2SourceFloorKey,
 } from "@/shared/services/vendorM2M3M4ManagementService";
 import ArticleProductImageButton from "@/shared/components/production/ArticleProductImageButton";
+import DownloadExcelButton from "@/shared/components/production/DownloadExcelButton";
 import {
   collectFactoryCodesFromProductFactoryCodes,
   useArticleProductImages,
 } from "@/shared/hooks/useArticleProductImages";
 import { getVendorRowProductFactoryCode } from "@/app/vendor-po/utils/getVendorProductFactoryCode";
+import { datedExportFilename, downloadCsv, formatTimestampForCsv } from "@/shared/utils/csvExport";
+import { fetchAllPaginatedResults } from "@/shared/utils/fetchAllPaginated";
 import VendorM2FilterBar, { type VendorM2FloorFilter } from "./VendorM2FilterBar";
 import M2Pagination from "@/app/production/m2-management/components/M2Pagination";
 
@@ -34,6 +38,7 @@ export default function EntriesTab({ refreshKey, onResolve }: EntriesTabProps) {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sourceFloor, setSourceFloor] = useState<VendorM2FloorFilter>("");
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -71,20 +76,85 @@ export default function EntriesTab({ refreshKey, onResolve }: EntriesTabProps) {
   );
   const { openProductImage, productImageModal } = useArticleProductImages(factoryCodes);
 
+  /** Export all filtered vendor M2 entries as CSV. */
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    try {
+      const rows = await fetchAllPaginatedResults<VendorM2EntryRow>((pageNum, limit) =>
+        vendorM2M3M4ManagementService.getM2Entries({
+          page: pageNum,
+          limit,
+          search: debouncedSearch || undefined,
+          sourceFloor: (sourceFloor || undefined) as VendorM2SourceFloorKey | undefined,
+        })
+      );
+
+      if (rows.length === 0) {
+        toast.error("No M2 entries to export");
+        return;
+      }
+
+      const header = [
+        "VPO",
+        "Reference",
+        "Factory Code",
+        "Vendor Code",
+        "Floor",
+        "Original Qty",
+        "Remaining Qty",
+        "Status",
+        "Marked By",
+        "When",
+        "Entry ID",
+      ];
+      const lines = rows.map((row) => [
+        row.vpoNumber || "",
+        row.referenceCode || "",
+        getVendorRowProductFactoryCode(row),
+        row.productVendorCode || "",
+        formatVendorQcFloor(row.sourceFloor),
+        row.originalQuantity ?? row.quantity,
+        row.remainingQuantity ?? row.quantity,
+        row.status ?? "OPEN",
+        row.userEmail || row.userName || row.userId || "",
+        formatTimestampForCsv(row.timestamp),
+        row.entryId || row.id || "",
+      ]);
+
+      downloadCsv(datedExportFilename("vendor-m2-open-entries"), [header, ...lines]);
+      toast.success(`Exported ${rows.length} M2 ${rows.length === 1 ? "entry" : "entries"}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to export M2 entries");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div>
-      <VendorM2FilterBar
-        search={search}
-        onSearchChange={(v) => {
-          setSearch(v);
-          setPage(1);
-        }}
-        sourceFloor={sourceFloor}
-        onSourceFloorChange={(v) => {
-          setSourceFloor(v);
-          setPage(1);
-        }}
-      />
+      <div className="flex flex-wrap items-end gap-2 mb-3">
+        <div className="flex-1 min-w-[240px]">
+          <VendorM2FilterBar
+            search={search}
+            onSearchChange={(v) => {
+              setSearch(v);
+              setPage(1);
+            }}
+            sourceFloor={sourceFloor}
+            onSourceFloorChange={(v) => {
+              setSourceFloor(v);
+              setPage(1);
+            }}
+          />
+        </div>
+        <DownloadExcelButton
+          onClick={() => void handleExportExcel()}
+          isExporting={isExporting}
+          disabled={!isLoading && entries.length === 0}
+          ariaLabel="Export filtered vendor M2 open entries to Excel"
+          className="mb-3 shrink-0"
+        />
+      </div>
 
       <div className="overflow-x-auto border-2 border-gray-200 rounded">
         <table className="w-full text-[11px] min-w-[900px]">

@@ -1,12 +1,16 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { toast } from "react-hot-toast";
 import vendorM2M3M4ManagementService, {
   formatVendorQcFloor,
   type VendorM2EntryRow,
   type VendorM2LogType,
   type VendorM2SourceFloorKey,
 } from "@/shared/services/vendorM2M3M4ManagementService";
+import DownloadExcelButton from "@/shared/components/production/DownloadExcelButton";
+import { datedExportFilename, downloadCsv, formatTimestampForCsv } from "@/shared/utils/csvExport";
+import { fetchAllPaginatedResults } from "@/shared/utils/fetchAllPaginated";
 import VendorM2FilterBar, { type VendorM2FloorFilter } from "./VendorM2FilterBar";
 import M2Pagination from "@/app/production/m2-management/components/M2Pagination";
 
@@ -33,6 +37,7 @@ export default function LogsTab({ refreshKey }: LogsTabProps) {
   const [type, setType] = useState<(typeof TYPE_OPTIONS)[number]>("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -69,39 +74,92 @@ export default function LogsTab({ refreshKey }: LogsTabProps) {
 
   const resetPage = () => setPage(1);
 
+  /** Export all filtered vendor M2 logs as CSV. */
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    try {
+      const rows = await fetchAllPaginatedResults<VendorM2EntryRow>((pageNum, limit) =>
+        vendorM2M3M4ManagementService.getM2Logs({
+          page: pageNum,
+          limit,
+          search: debouncedSearch || undefined,
+          sourceFloor: (sourceFloor || undefined) as VendorM2SourceFloorKey | undefined,
+          type: (type || undefined) as VendorM2LogType | undefined,
+          dateFrom: dateFrom || undefined,
+          dateTo: dateTo || undefined,
+        })
+      );
+
+      if (rows.length === 0) {
+        toast.error("No M2 logs to export");
+        return;
+      }
+
+      const header = ["Type", "VPO", "Reference", "Floor", "Qty", "Remarks", "When", "User"];
+      const lines = rows.map((log) => [
+        log.type,
+        log.vpoNumber || "",
+        log.referenceCode || "",
+        formatVendorQcFloor(log.sourceFloor),
+        log.quantity,
+        log.remarks || "",
+        formatTimestampForCsv(log.timestamp),
+        log.userEmail || log.userName || log.userId || "",
+      ]);
+
+      downloadCsv(datedExportFilename("vendor-m2-logs"), [header, ...lines]);
+      toast.success(`Exported ${rows.length} M2 log ${rows.length === 1 ? "row" : "rows"}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to export M2 logs");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div>
-      <VendorM2FilterBar
-        search={search}
-        onSearchChange={(v) => {
-          setSearch(v);
-          resetPage();
-        }}
-        sourceFloor={sourceFloor}
-        onSourceFloorChange={(v) => {
-          setSourceFloor(v);
-          resetPage();
-        }}
-        searchPlaceholder="Search VPO, reference, remarks…"
-        showTypeFilter
-        type={type}
-        typeOptions={TYPE_OPTIONS}
-        onTypeChange={(v) => {
-          setType(v as (typeof TYPE_OPTIONS)[number]);
-          resetPage();
-        }}
-        showDateFilters
-        dateFrom={dateFrom}
-        dateTo={dateTo}
-        onDateFromChange={(v) => {
-          setDateFrom(v);
-          resetPage();
-        }}
-        onDateToChange={(v) => {
-          setDateTo(v);
-          resetPage();
-        }}
-      />
+      <div className="flex flex-wrap items-end gap-2 mb-3">
+        <div className="flex-1 min-w-[240px]">
+          <VendorM2FilterBar
+            search={search}
+            onSearchChange={(v) => {
+              setSearch(v);
+              resetPage();
+            }}
+            sourceFloor={sourceFloor}
+            onSourceFloorChange={(v) => {
+              setSourceFloor(v);
+              resetPage();
+            }}
+            searchPlaceholder="Search VPO, reference, remarks…"
+            showTypeFilter
+            type={type}
+            typeOptions={TYPE_OPTIONS}
+            onTypeChange={(v) => {
+              setType(v as (typeof TYPE_OPTIONS)[number]);
+              resetPage();
+            }}
+            showDateFilters
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateFromChange={(v) => {
+              setDateFrom(v);
+              resetPage();
+            }}
+            onDateToChange={(v) => {
+              setDateTo(v);
+              resetPage();
+            }}
+          />
+        </div>
+        <DownloadExcelButton
+          onClick={() => void handleExportExcel()}
+          isExporting={isExporting}
+          disabled={!loading && logs.length === 0}
+          ariaLabel="Export filtered vendor M2 logs to Excel"
+          className="mb-3 shrink-0"
+        />
+      </div>
 
       <div className="overflow-x-auto border-2 border-gray-200 rounded max-h-[520px] overflow-y-auto">
         <table className="w-full text-[10px] min-w-[800px]">

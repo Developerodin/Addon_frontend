@@ -1,14 +1,17 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { toast } from "react-hot-toast";
 import type { VendorM4FlowRow } from "@/shared/services/vendorM2M3M4ManagementService";
 import { getVendorFlowRowId } from "@/app/vendor-po/utils/getVendorFlowRowId";
 import ArticleProductImageButton from "@/shared/components/production/ArticleProductImageButton";
+import DownloadExcelButton from "@/shared/components/production/DownloadExcelButton";
 import {
   collectFactoryCodesFromProductFactoryCodes,
   useArticleProductImages,
 } from "@/shared/hooks/useArticleProductImages";
 import { getVendorRowProductFactoryCode } from "@/app/vendor-po/utils/getVendorProductFactoryCode";
+import { datedExportFilename, downloadCsv } from "@/shared/utils/csvExport";
 
 export interface FlowViewTabProps {
   rows: VendorM4FlowRow[];
@@ -53,6 +56,41 @@ export default function FlowViewTab({
   );
   const { openProductImage, productImageModal } = useArticleProductImages(factoryCodes);
 
+  /** Export filtered vendor M4 flow rows as CSV. */
+  const handleExportExcel = () => {
+    if (filtered.length === 0) {
+      toast.error("No M4 flows to export");
+      return;
+    }
+
+    const header = [
+      "VPO",
+      "Reference",
+      "Factory Code",
+      "Vendor Code",
+      "FC M4",
+      "On Hand",
+      "Outward",
+      "Available",
+    ];
+    const lines = filtered.map((row) => {
+      const s = row.m4Snapshot;
+      return [
+        row.vpoNumber || "",
+        row.referenceCode || "",
+        getVendorRowProductFactoryCode(row),
+        row.productVendorCode || "",
+        s.byFloor.finalChecking,
+        s.onHand,
+        s.outwardTotal,
+        s.availableForOutward,
+      ];
+    });
+
+    downloadCsv(datedExportFilename("vendor-m4-flows"), [header, ...lines]);
+    toast.success(`Exported ${filtered.length} M4 ${filtered.length === 1 ? "row" : "rows"}`);
+  };
+
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -83,6 +121,12 @@ export default function FlowViewTab({
             ))}
           </select>
         </label>
+        <DownloadExcelButton
+          onClick={handleExportExcel}
+          disabled={filtered.length === 0}
+          ariaLabel="Export filtered vendor M4 flows to Excel"
+          className="ml-auto"
+        />
       </div>
 
       <div className="border border-gray-300 rounded overflow-hidden overflow-x-auto">

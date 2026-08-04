@@ -1,12 +1,16 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { toast } from "react-hot-toast";
 import { productionService, type M2EntryRow } from "@/shared/services/productionService";
 import ArticleProductImageButton from "@/shared/components/production/ArticleProductImageButton";
+import DownloadExcelButton from "@/shared/components/production/DownloadExcelButton";
 import {
   collectFactoryCodesFromArticleNumbers,
   useArticleProductImages,
 } from "@/shared/hooks/useArticleProductImages";
+import { datedExportFilename, downloadCsv, formatTimestampForCsv } from "@/shared/utils/csvExport";
+import { fetchAllPaginatedResults } from "@/shared/utils/fetchAllPaginated";
 import M2FilterBar, { type M2FloorFilter } from "./M2FilterBar";
 import M2Pagination from "./M2Pagination";
 
@@ -29,6 +33,7 @@ export default function EntriesTab({ refreshKey, onResolve }: EntriesTabProps) {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sourceFloor, setSourceFloor] = useState<M2FloorFilter>("");
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -75,15 +80,76 @@ export default function EntriesTab({ refreshKey, onResolve }: EntriesTabProps) {
   const factoryCodes = useMemo(() => collectFactoryCodesFromArticleNumbers(entries), [entries]);
   const { openProductImage, productImageModal } = useArticleProductImages(factoryCodes);
 
+  /** Export all filtered M2 entries (not just the current page) as CSV. */
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    try {
+      const rows = await fetchAllPaginatedResults<M2EntryRow>((page, limit) =>
+        productionService.getM2Entries({
+          page,
+          limit,
+          search: debouncedSearch || undefined,
+          sourceFloor: sourceFloor || undefined,
+        })
+      );
+
+      if (rows.length === 0) {
+        toast.error("No M2 entries to export");
+        return;
+      }
+
+      const header = [
+        "Order",
+        "Article",
+        "Floor",
+        "Original Qty",
+        "Remaining Qty",
+        "Status",
+        "Marked By",
+        "When",
+        "Entry ID",
+      ];
+      const lines = rows.map((row) => [
+        row.orderNumber,
+        row.articleNumber,
+        row.sourceFloor,
+        row.originalQuantity ?? row.quantity,
+        row.remainingQuantity ?? row.quantity,
+        row.status ?? "OPEN",
+        row.userEmail || row.userName || row.userId || "",
+        formatTimestampForCsv(row.timestamp),
+        row.entryId || row.id || "",
+      ]);
+
+      downloadCsv(datedExportFilename("m2-open-entries"), [header, ...lines]);
+      toast.success(`Exported ${rows.length} M2 ${rows.length === 1 ? "entry" : "entries"}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to export M2 entries");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div>
-      <M2FilterBar
-        search={search}
-        onSearchChange={handleSearchChange}
-        sourceFloor={sourceFloor}
-        onSourceFloorChange={handleFloorChange}
-        searchPlaceholder="Search order, article, entry id…"
-      />
+      <div className="flex flex-wrap items-end gap-2 mb-3">
+        <div className="flex-1 min-w-[240px]">
+          <M2FilterBar
+            search={search}
+            onSearchChange={handleSearchChange}
+            sourceFloor={sourceFloor}
+            onSourceFloorChange={handleFloorChange}
+            searchPlaceholder="Search order, article, entry id…"
+          />
+        </div>
+        <DownloadExcelButton
+          onClick={() => void handleExportExcel()}
+          isExporting={isExporting}
+          disabled={!isLoading && entries.length === 0 && !debouncedSearch && !sourceFloor}
+          ariaLabel="Export filtered M2 open entries to Excel"
+          className="mb-3 shrink-0"
+        />
+      </div>
 
       <div className="overflow-x-auto border-2 border-gray-200 rounded">
         <table className="w-full text-[11px] min-w-[900px]">
