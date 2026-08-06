@@ -19,21 +19,37 @@ const DetailRow: React.FC<DetailRowProps> = ({ label, value }) => (
 
 interface BoxTrackerDetailsProps {
   data: BoxTrackerResponse;
+  /** Open relocate flow when box is already on a rack */
+  onRelocate?: () => void;
 }
 
 /**
  * Summary card for scanned box.
  */
-export const BoxTrackerDetails: React.FC<BoxTrackerDetailsProps> = ({ data }) => {
+export const BoxTrackerDetails: React.FC<BoxTrackerDetailsProps> = ({ data, onRelocate }) => {
   const { box } = data;
   const qc = box.qcData;
+  const canRelocate = Boolean(box.storedStatus && box.storageLocation);
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
-      <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
-        <i className="ri-box-3-line text-purple-600" aria-hidden />
-        Box {box.boxId}
-      </h3>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2 min-w-0">
+          <i className="ri-box-3-line text-purple-600 shrink-0" aria-hidden />
+          <span className="truncate" title={box.boxId}>Box {box.boxId}</span>
+        </h3>
+        {canRelocate && onRelocate ? (
+          <button
+            type="button"
+            onClick={onRelocate}
+            className="inline-flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap rounded-md bg-purple-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-1"
+            aria-label={`Relocate box ${box.boxId} to another rack`}
+          >
+            <i className="ri-arrow-left-right-line text-sm leading-none" aria-hidden />
+            Relocate
+          </button>
+        ) : null}
+      </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-purple-50 rounded-lg p-2 text-center">
           <div className="text-[10px] text-gray-500 uppercase">Current (kg)</div>
@@ -118,17 +134,20 @@ export const BoxTrackerDetails: React.FC<BoxTrackerDetailsProps> = ({ data }) =>
 
 interface ConeTrackerDetailsProps {
   data: ConeTrackerResponse;
+  /** Open relocate flow when cone is on a rack and not issued */
+  onRelocate?: () => void;
 }
 
 /**
  * Summary card for scanned cone.
  */
-export const ConeTrackerDetails: React.FC<ConeTrackerDetailsProps> = ({ data }) => {
+export const ConeTrackerDetails: React.FC<ConeTrackerDetailsProps> = ({ data, onRelocate }) => {
   const cone = data.cone;
   const issueStatus = String(cone.issueStatus ?? "").toLowerCase();
   const isIssued = issueStatus === "issued";
   const machineLabel = String(cone.machineLabel ?? "").trim();
   const machineFloor = String(cone.machineFloor ?? "").trim();
+  const canRelocate = Boolean(cone.coneStorageId) && !isIssued;
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
@@ -153,10 +172,25 @@ export const ConeTrackerDetails: React.FC<ConeTrackerDetailsProps> = ({ data }) 
           )}
         </div>
       ) : null}
-      <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
-        <i className="ri-contrast-drop-line text-purple-600" aria-hidden />
-        Cone {String(cone.barcode ?? "")}
-      </h3>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2 min-w-0">
+          <i className="ri-contrast-drop-line text-purple-600 shrink-0" aria-hidden />
+          <span className="truncate" title={String(cone.barcode ?? "")}>
+            Cone {String(cone.barcode ?? "")}
+          </span>
+        </h3>
+        {canRelocate && onRelocate ? (
+          <button
+            type="button"
+            onClick={onRelocate}
+            className="inline-flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap rounded-md bg-purple-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-1"
+            aria-label={`Relocate cone ${String(cone.barcode ?? "")} to another rack`}
+          >
+            <i className="ri-arrow-left-right-line text-sm leading-none" aria-hidden />
+            Relocate
+          </button>
+        ) : null}
+      </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <div className="bg-purple-50 rounded-lg p-2 text-center">
           <div className="text-[10px] text-gray-500 uppercase">Current (kg)</div>

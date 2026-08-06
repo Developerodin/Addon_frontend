@@ -67,12 +67,21 @@ const TrackerTimeline: React.FC<TrackerTimelineProps> = ({
             {ev.at ? new Date(ev.at).toLocaleString() : "—"}
           </time>
           <h4 className="text-sm font-semibold text-gray-900 mt-0.5">{ev.title}</h4>
+          {ev.details?.fromStorageLocation && ev.details?.toStorageLocation ? (
+            <p className="mt-0.5 text-xs font-medium text-gray-800 font-mono break-all">
+              {String(ev.details.fromStorageLocation)} → {String(ev.details.toStorageLocation)}
+            </p>
+          ) : null}
           {ev.details && Object.keys(ev.details).length > 0 ? (
             <dl className="mt-1 text-xs text-gray-600 grid grid-cols-1 gap-0.5">
               {Object.entries(ev.details)
                 .filter(
                   ([key, v]) =>
-                    !HIDDEN_DETAIL_KEYS.has(key) && v != null && v !== ""
+                    !HIDDEN_DETAIL_KEYS.has(key) &&
+                    key !== "fromStorageLocation" &&
+                    key !== "toStorageLocation" &&
+                    v != null &&
+                    v !== ""
                 )
                 .map(([key, value]) => (
                   <div key={key} className="flex gap-2 flex-wrap">

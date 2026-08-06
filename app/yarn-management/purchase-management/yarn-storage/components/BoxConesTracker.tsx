@@ -4,12 +4,20 @@ import { toast } from "react-hot-toast";
 import BarcodeScanner from "./BarcodeScanner";
 import TrackerTimeline from "./tracker/TrackerTimeline";
 import { BoxTrackerDetails, ConeTrackerDetails } from "./tracker/TrackerDetailCards";
+import RelocateModal, { RelocateKind } from "./tracker/RelocateModal";
 import yarnTrackerService, {
   BoxTrackerResponse,
   ConeTrackerResponse,
 } from "@/shared/services/yarnTrackerService";
 
 type ScannerMode = "idle" | "box" | "cone";
+
+interface RelocateTarget {
+  kind: RelocateKind;
+  itemId: string;
+  itemBarcode: string;
+  fromLocation: string;
+}
 
 /**
  * Box & cones tracker tab: scan a box or cone barcode and view full details + timeline.
@@ -19,10 +27,24 @@ const BoxConesTracker: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [boxData, setBoxData] = useState<BoxTrackerResponse | null>(null);
   const [coneData, setConeData] = useState<ConeTrackerResponse | null>(null);
+  const [relocateTarget, setRelocateTarget] = useState<RelocateTarget | null>(null);
 
   const clearResults = () => {
     setBoxData(null);
     setConeData(null);
+  };
+
+  /**
+   * Re-fetch the currently displayed tracker after a successful relocate.
+   */
+  const refreshAfterRelocate = async () => {
+    if (relocateTarget?.kind === "box" && relocateTarget.itemBarcode) {
+      await handleBoxScan(relocateTarget.itemBarcode);
+      return;
+    }
+    if (relocateTarget?.kind === "cone" && relocateTarget.itemBarcode) {
+      await handleConeScan(relocateTarget.itemBarcode);
+    }
   };
 
   const handleBoxScan = async (barcode: string): Promise<boolean> => {
@@ -163,7 +185,19 @@ const BoxConesTracker: React.FC = () => {
 
       {!isLoading && boxData && mode === "box" ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <BoxTrackerDetails data={boxData} />
+          <BoxTrackerDetails
+            data={boxData}
+            onRelocate={() => {
+              const from = String(boxData.box.storageLocation ?? "").trim();
+              if (!from) return;
+              setRelocateTarget({
+                kind: "box",
+                itemId: boxData.box.boxId,
+                itemBarcode: String(boxData.box.barcode ?? boxData.box.boxId),
+                fromLocation: from,
+              });
+            }}
+          />
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
               <i className="ri-time-line text-purple-600" aria-hidden />
@@ -179,7 +213,19 @@ const BoxConesTracker: React.FC = () => {
 
       {!isLoading && coneData && mode === "cone" ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <ConeTrackerDetails data={coneData} />
+          <ConeTrackerDetails
+            data={coneData}
+            onRelocate={() => {
+              const from = String(coneData.cone.coneStorageId ?? "").trim();
+              if (!from) return;
+              setRelocateTarget({
+                kind: "cone",
+                itemId: String(coneData.cone._id ?? ""),
+                itemBarcode: String(coneData.cone.barcode ?? ""),
+                fromLocation: from,
+              });
+            }}
+          />
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
               <i className="ri-time-line text-purple-600" aria-hidden />
@@ -191,6 +237,18 @@ const BoxConesTracker: React.FC = () => {
             <TrackerTimeline events={activeTimeline} />
           </div>
         </div>
+      ) : null}
+
+      {relocateTarget ? (
+        <RelocateModal
+          isOpen
+          kind={relocateTarget.kind}
+          itemId={relocateTarget.itemId}
+          itemBarcode={relocateTarget.itemBarcode}
+          fromLocation={relocateTarget.fromLocation}
+          onClose={() => setRelocateTarget(null)}
+          onSuccess={refreshAfterRelocate}
+        />
       ) : null}
     </div>
   );

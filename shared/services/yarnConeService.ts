@@ -227,6 +227,33 @@ class YarnConeService {
       body: JSON.stringify({ coneIds, coneStorageId }),
     });
   }
+
+  /**
+   * Relocate a stored cone to another ST rack (POST /relocate).
+   * Logs YarnTransaction internal_transfer with from/to locations.
+   */
+  async relocateCone(payload: {
+    coneId?: string;
+    coneBarcode?: string;
+    toStorageLocation: string;
+    transferDate?: string;
+  }): Promise<{
+    message: string;
+    fromStorageLocation: string;
+    toStorageLocation: string;
+    transactionId: string;
+  }> {
+    if (!payload?.toStorageLocation) {
+      throw new Error("toStorageLocation is required");
+    }
+    if (!payload.coneId && !payload.coneBarcode) {
+      throw new Error("coneId or coneBarcode is required");
+    }
+    return this.makeRequest("/relocate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
 }
 
 const yarnConeService = new YarnConeService();
