@@ -6,6 +6,7 @@ import type {
   PickListBatchDetail,
   PickListBatchItem,
 } from "@/shared/services/whmsPickListBatchService";
+import { getMaxPickableByStock } from "./batchPickStockUtils";
 
 function itemStatusBadge(status: string) {
   const map: Record<string, string> = {
@@ -36,7 +37,7 @@ export interface BatchPickListPanelProps {
   canPrintPickList: boolean;
   pickerName: string;
   hasUnsavedPickerName: boolean;
-  onPickChange: (itemKey: string, rawValue: string, max: number, styleCode: string) => void;
+  onPickChange: (itemKey: string, rawValue: string, maxStock: number, styleCode: string) => void;
   onSavePicks: () => void;
   onSavePicker: () => void;
   onPickerNameChange: (value: string) => void;
@@ -86,12 +87,6 @@ export default function BatchPickListPanel({
       }
     }
   };
-
-  /**
-   * Whether warehouse stock blocks picking for this line.
-   */
-  const isOutOfStock = (item: PickListBatchItem) =>
-    typeof item.availableStock === "number" && item.availableStock <= 0;
 
   const renderAllocationBreakdown = (item: PickListBatchItem) => (
     <ul className="text-[11px] text-gray-600 space-y-0.5 mt-2 pl-2 border-l-2 border-purple-100">
@@ -187,7 +182,8 @@ export default function BatchPickListPanel({
             {(batch.items || []).map((item, itemIndex) => {
               const picked = draftPicks[item.itemKey] ?? item.pickedQty;
               const isExpanded = expandedKey === item.itemKey;
-              const noStock = isOutOfStock(item);
+              const maxPickable = getMaxPickableByStock(item, batch.items || [], draftPicks);
+              const noStock = maxPickable <= 0;
               const status =
                 picked <= 0 ? "pending" : picked < item.requiredQty ? "partial" : "picked";
               return (
@@ -228,20 +224,25 @@ export default function BatchPickListPanel({
                             }}
                             type="number"
                             min={0}
-                            max={item.requiredQty}
+                            max={maxPickable}
                             step={1}
                             value={picked}
                             disabled={noStock}
                             onChange={(e) =>
-                              onPickChange(item.itemKey, e.target.value, item.requiredQty, item.styleCode)
+                              onPickChange(item.itemKey, e.target.value, maxPickable, item.styleCode)
                             }
                             onBlur={(e) =>
-                              onPickChange(item.itemKey, e.target.value, item.requiredQty, item.styleCode)
+                              onPickChange(item.itemKey, e.target.value, maxPickable, item.styleCode)
                             }
                             onKeyDown={(e) => {
                               if (e.key !== "Enter") return;
                               e.preventDefault();
-                              onPickChange(item.itemKey, e.currentTarget.value, item.requiredQty, item.styleCode);
+                              onPickChange(
+                                item.itemKey,
+                                e.currentTarget.value,
+                                maxPickable,
+                                item.styleCode,
+                              );
                               focusNextPickInput(itemIndex);
                             }}
                             className={`w-20 border rounded px-2 py-1 text-right text-sm ${
@@ -276,7 +277,7 @@ export default function BatchPickListPanel({
                               {pickErrors[item.itemKey]}
                             </span>
                           ) : (
-                            <span className="text-[10px] text-gray-400">Max {item.requiredQty}</span>
+                            <span className="text-[10px] text-gray-400">Max {maxPickable}</span>
                           )}
                         </div>
                       ) : (

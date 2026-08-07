@@ -16,6 +16,7 @@ import BatchBarcodePrintModal, {
 } from "./BatchBarcodePrintModal";
 import BarcodePrintHistory from "./BarcodePrintHistory";
 import BatchPickListPanel from "./BatchPickListPanel";
+import { getMaxPickableByStock } from "./batchPickStockUtils";
 
 type BatchDetailTab = "picking" | "barcode-history";
 
@@ -48,6 +49,16 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
   const [activeTab, setActiveTab] = useState<BatchDetailTab>("picking");
 
   const isEditable = batch.status === "picking";
+
+  /** Addon order IDs for header chips (batch denorm, fallback to nested orders). */
+  const addonOrderIds = useMemo(() => {
+    const fromBatch = (batch.addonOrderIds || []).map((id) => String(id).trim()).filter(Boolean);
+    if (fromBatch.length) return fromBatch;
+    return (batch.orders || [])
+      .map((o) => (o.addonOrderId || "").trim())
+      .filter(Boolean);
+  }, [batch.addonOrderIds, batch.orders]);
+
   const totalPicked = useMemo(
     () => Object.values(draftPicks).reduce((s, n) => s + (Number(n) || 0), 0),
     [draftPicks],
@@ -135,7 +146,20 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
     }
   };
 
-  const handlePickChange = (itemKey: string, rawValue: string, max: number, styleCode: string) => {
+  /**
+   * Update draft picked qty for a batch line.
+   * Over-required is allowed; cannot exceed available warehouse stock.
+   * @param itemKey - Batch item key
+   * @param rawValue - Raw input value
+   * @param maxStock - Max pickable from live stock for this line
+   * @param styleCode - Style code for toast context
+   */
+  const handlePickChange = (
+    itemKey: string,
+    rawValue: string,
+    maxStock: number,
+    styleCode: string,
+  ) => {
     const trimmed = rawValue.trim();
     if (trimmed === "") {
       setDraftPicks((prev) => ({ ...prev, [itemKey]: 0 }));
@@ -157,13 +181,13 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
     }
 
     const rounded = Math.floor(parsed);
-    if (rounded > max) {
+    if (rounded > maxStock) {
       setPickErrors((prev) => ({
         ...prev,
-        [itemKey]: `Cannot exceed required qty (${max})`,
+        [itemKey]: `Cannot exceed available stock (${maxStock})`,
       }));
-      setDraftPicks((prev) => ({ ...prev, [itemKey]: max }));
-      toast.error(`Max picked qty for ${styleCode} is ${max}`);
+      setDraftPicks((prev) => ({ ...prev, [itemKey]: maxStock }));
+      toast.error(`Max pick for ${styleCode} is ${maxStock} (available stock)`);
       return;
     }
 
@@ -175,19 +199,24 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
     setDraftPicks((prev) => ({ ...prev, [itemKey]: rounded }));
   };
 
-  /** Validate all draft picks before save; returns false if any exceed required. */
+  /** Validate draft picks before save — stock-capped, over-required allowed. */
   const validateDraftPicks = (): boolean => {
     const errors: Record<string, string> = {};
-    for (const item of batch.items || []) {
+    const items = batch.items || [];
+    for (const item of items) {
       const picked = Number(draftPicks[item.itemKey] ?? item.pickedQty ?? 0);
-      const max = Number(item.requiredQty || 0);
-      if (picked > max) {
-        errors[item.itemKey] = `Cannot exceed required qty (${max})`;
+      if (!Number.isFinite(picked) || picked < 0) {
+        errors[item.itemKey] = "Enter a valid quantity (0 or more)";
+        continue;
+      }
+      const maxStock = getMaxPickableByStock(item, items, draftPicks);
+      if (picked > maxStock) {
+        errors[item.itemKey] = `Cannot exceed available stock (${maxStock})`;
       }
     }
     setPickErrors(errors);
     if (Object.keys(errors).length) {
-      toast.error("Fix picked quantities — none can exceed required qty");
+      toast.error("Fix picked quantities — cannot exceed available stock");
       return false;
     }
     return true;
@@ -300,6 +329,21 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
                   className="inline-flex px-1.5 py-0.5 rounded bg-purple-50 text-purple-800 text-[10px] font-semibold border border-purple-100"
                 >
                   {num}
+                </span>
+              ))}
+            </div>
+          )}
+          {addonOrderIds.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1 mt-1">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase shrink-0">
+                Addon Order ID:
+              </span>
+              {addonOrderIds.map((id) => (
+                <span
+                  key={id}
+                  className="inline-flex px-1.5 py-0.5 rounded bg-sky-50 text-sky-800 text-[10px] font-semibold border border-sky-100"
+                >
+                  {id}
                 </span>
               ))}
             </div>
