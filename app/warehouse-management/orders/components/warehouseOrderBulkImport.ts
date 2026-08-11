@@ -142,9 +142,9 @@ export function downloadWarehouseOrdersBulkTemplate(clients: WarehouseClient[] =
     { Field: 'styleCode', Description: 'Style code string (backend resolves ID)' },
     { Field: 'quantity', Description: 'Numeric quantity (min 1)' },
     {
-      Field: 'type / colour / pattern',
+      Field: 'type / colour / pattern / eanCode',
       Description:
-        'Optional — auto-filled from catalogue (style-code brand + linked article attributes). Include only to override.',
+        'Optional — auto-filled from catalogue (style-code brand, EAN, and linked article attributes). Include only to override.',
     },
     { Field: 'GROUPING', Description: 'Rows with clientType filled start a new order. Following rows without clientType are line items.' },
   ];
