@@ -154,16 +154,15 @@
         <tr>
           <th style="width: 4%;">SR</th>
           <th style="width: 10%;">LOT / INVOICE</th>
-          <th style="width: 22%;">ARTICLE</th>
+          <th style="width: 24%;">ARTICLE</th>
           <th style="width: 10%;">VENDOR CODE</th>
-          <th style="width: 8%;" class="text-right">EXPECTED</th>
-          <th style="width: 8%;" class="text-right">SCAN</th>
-          <th style="width: 8%;" class="text-right">VERIFIED</th>
+          <th style="width: 10%;" class="text-right">INPUT QTY</th>
+          <th style="width: 10%;" class="text-right">RECEIVED QTY</th>
           <th style="width: 6%;" class="text-right">M1</th>
           <th style="width: 6%;" class="text-right">M2</th>
           <th style="width: 6%;" class="text-right">M3</th>
           <th style="width: 6%;" class="text-right">M4</th>
-          <th style="width: 6%;" class="text-right">VAR</th>
+          <th style="width: 8%;" class="text-right">VAR</th>
         </tr>
       </thead>
       <tbody id="line-items"></tbody>
@@ -171,7 +170,6 @@
         <tr style="background-color: #f8f9fa; font-weight: bold;">
           <td colspan="4" class="text-right">TOTALS</td>
           <td class="text-right" id="total-expected"></td>
-          <td class="text-right">—</td>
           <td class="text-right" id="total-verified"></td>
           <td class="text-right" id="total-m1"></td>
           <td class="text-right" id="total-m2"></td>
@@ -188,7 +186,7 @@
       </div>
       <div><b>Notes:</b> <span id="notes">—</span></div>
       <div style="margin-top: 4px; font-size: 8px; color: #555;">
-        Verified qty = M1 + M2 + M3 + M4 (secondary checking classification).
+        Received qty = M1 + M2 + M3 + M4 (secondary checking classification).
       </div>
     </div>
 

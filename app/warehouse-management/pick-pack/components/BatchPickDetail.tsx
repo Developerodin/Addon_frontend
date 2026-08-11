@@ -59,6 +59,14 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
       .filter(Boolean);
   }, [batch.addonOrderIds, batch.orders]);
 
+  /** Unique client names from nested batch orders. */
+  const clientNames = useMemo(() => {
+    const names = (batch.orders || [])
+      .map((o) => (o.clientName || "").trim())
+      .filter(Boolean);
+    return [...new Set(names)];
+  }, [batch.orders]);
+
   const totalPicked = useMemo(
     () => Object.values(draftPicks).reduce((s, n) => s + (Number(n) || 0), 0),
     [draftPicks],
@@ -344,6 +352,21 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
                   className="inline-flex px-1.5 py-0.5 rounded bg-sky-50 text-sky-800 text-[10px] font-semibold border border-sky-100"
                 >
                   {id}
+                </span>
+              ))}
+            </div>
+          )}
+          {clientNames.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1 mt-1">
+              <span className="text-[10px] font-semibold text-gray-500 uppercase shrink-0">
+                Client:
+              </span>
+              {clientNames.map((name) => (
+                <span
+                  key={name}
+                  className="inline-flex px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 text-[10px] font-semibold border border-emerald-100"
+                >
+                  {name}
                 </span>
               ))}
             </div>

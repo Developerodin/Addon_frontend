@@ -70,7 +70,6 @@ const buildLineItemsHtml = (grn: VendorGrn): string => {
           <td>${escapeHtml(item.productName || '—')}</td>
           <td>${escapeHtml(item.vendorCode || '—')}</td>
           <td class="text-right">${escapeHtml(item.expectedQty ?? 0)}</td>
-          <td class="text-right">${escapeHtml(item.scanAcceptedQty ?? 0)}</td>
           <td class="text-right">${escapeHtml(item.verifiedQty ?? 0)}</td>
           <td class="text-right">${escapeHtml(item.m1 ?? 0)}</td>
           <td class="text-right">${escapeHtml(item.m2 ?? 0)}</td>
