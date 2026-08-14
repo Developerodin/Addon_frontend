@@ -113,8 +113,17 @@ export interface PickListBatchBarcodeLabel {
   eanCode?: string;
   size?: string;
   shade?: string;
+  colour?: string;
   barcode: string;
   quantity: number;
+  mrp?: number;
+  productName?: string;
+  productType?: string;
+  pairCount?: number;
+  netQuantity?: string;
+  footLength?: string;
+  pack?: string;
+  brand?: string;
 }
 
 export interface BarcodePrintHistoryLabel {

@@ -12,6 +12,10 @@ import {
   type BarcodePrintMode,
 } from "./BatchBarcodePrintModal";
 import { printHtmlViaHiddenFrame } from "./printHtmlViaHiddenFrame";
+import {
+  buildProductLabelPrintDocument,
+  buildProductStickerHtml,
+} from "./productBarcodeLabelHtml";
 
 export interface BarcodePrintResult {
   batchNumber: string;
@@ -23,7 +27,67 @@ export interface BarcodePrintResult {
 }
 
 /**
- * Print barcode labels (CODE128) for a batch or single style code.
+ * Render barcode bars from this line's EAN. Unique SVG id so labels don't collide.
+ * @param value - EAN from style-code master
+ * @param uid - Unique id for this sticker group
+ */
+function renderLabelBarcodeSvg(value: string, uid: string): { svg: string; caption: string } {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("id", `ean-${uid}`);
+  const raw = String(value || "").trim() || "0";
+  const digits = raw.replace(/\D/g, "");
+  const common = {
+    height: 48,
+    displayValue: false,
+    margin: 0,
+    marginTop: 0,
+    marginBottom: 0,
+  } as const;
+
+  try {
+    if (digits.length === 12 || digits.length === 13) {
+      JsBarcode(svg, digits, { ...common, format: "EAN13", width: 1.45 });
+    } else {
+      JsBarcode(svg, raw, { ...common, format: "CODE128", width: 1.25 });
+    }
+  } catch (err) {
+    console.warn("EAN-13 render failed, falling back to CODE128", err);
+    try {
+      JsBarcode(svg, raw, { ...common, format: "CODE128", width: 1.25 });
+    } catch (fallbackErr) {
+      console.error("Barcode render failed", fallbackErr);
+    }
+  }
+
+  const encoded = digits.length === 12 ? `${digits}${ean13CheckDigit(digits)}` : digits;
+  return { svg: svg.outerHTML, caption: formatBarcodeCaption(encoded || raw, raw) };
+}
+
+/**
+ * Compute EAN-13 check digit for a 12-digit body.
+ * @param body12 - First 12 digits
+ */
+function ean13CheckDigit(body12: string): string {
+  const digits = body12.split("").map((ch) => Number(ch));
+  const sum = digits.reduce((acc, n, i) => acc + n * (i % 2 === 0 ? 1 : 3), 0);
+  return String((10 - (sum % 10)) % 10);
+}
+
+/**
+ * Group EAN-13 as `8 904442 926442`; otherwise return the raw code.
+ * @param encoded - Value JsBarcode encoded
+ * @param fallback - Original barcode string
+ */
+function formatBarcodeCaption(encoded: string, fallback: string): string {
+  const digits = String(encoded || "").replace(/\D/g, "");
+  if (digits.length === 13) {
+    return `${digits[0]} ${digits.slice(1, 7)} ${digits.slice(7)}`;
+  }
+  return String(encoded || fallback || "").trim();
+}
+
+/**
+ * Print 50×70mm statutory MRP stickers (EAN-13 + legal copy) for a batch.
  * @param batchNumber - Display batch number for print title
  * @param labels - Label payloads from the API
  */
@@ -33,40 +97,17 @@ export function printBatchBarcodeLabels(batchNumber: string, labels: PickListBat
     return false;
   }
 
-  const blocks = labels
-    .map((label) => {
-      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      JsBarcode(svg, label.barcode, {
-        format: "CODE128",
-        width: 2,
-        height: 55,
-        displayValue: true,
-        fontSize: 13,
-        margin: 8,
-      });
-      const metaParts = [
-        label.styleCode,
-        label.size ? label.size : "",
-        label.shade ? label.shade : "",
-      ].filter(Boolean);
-      const eanLine = label.eanCode && label.eanCode !== label.barcode ? `<div class="ean">EAN ${label.eanCode}</div>` : "";
-      const one = `<div class="label">
-          ${svg.outerHTML}
-          <div class="meta">${metaParts.join(" · ")}</div>
-          ${eanLine}
-        </div>`;
+  const stickers = labels
+    .map((label, index) => {
+      const ean = String(label.eanCode || label.barcode || "").trim();
+      const uid = `${index}-${String(label.styleCode || "").replace(/[^a-zA-Z0-9]/g, "")}-${ean}`;
+      const { svg, caption } = renderLabelBarcodeSvg(ean, uid);
+      const one = buildProductStickerHtml(label, svg, caption);
       return Array.from({ length: label.quantity }, () => one).join("");
     })
     .join("");
 
-  const html = `<!doctype html><html><head><title>Barcodes — ${batchNumber}</title>
-    <style>
-      body { font-family: Arial, sans-serif; padding: 12px; }
-      .label { display: inline-block; border: 1px dashed #bbb; padding: 6px 10px; margin: 4px; text-align: center; page-break-inside: avoid; }
-      .meta { font-size: 11px; color: #333; margin-top: 2px; }
-      .ean { font-size: 10px; color: #666; margin-top: 1px; }
-    </style></head><body>${blocks}</body></html>`;
-
+  const html = buildProductLabelPrintDocument(`Barcodes — ${batchNumber}`, stickers);
   return printHtmlViaHiddenFrame(html, `Print barcodes — ${batchNumber}`);
 }
 

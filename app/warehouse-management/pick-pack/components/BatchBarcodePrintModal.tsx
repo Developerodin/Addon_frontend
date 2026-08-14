@@ -91,7 +91,7 @@ export default function BatchBarcodePrintModal({
   useEffect(() => {
     if (!open) return;
     setMode("all");
-    setPrintScope("single");
+    setPrintScope("all");
     setRemarks("");
     setSelectedStyleCode(initialStyleCode ?? selectableStyles[0]?.styleCode ?? "");
     setCustomQty(Math.max(1, initialStyleCode
@@ -158,6 +158,7 @@ export default function BatchBarcodePrintModal({
         <div className="px-4 py-4 space-y-4 text-[12px] text-gray-600">
           <p className="text-[11px] text-gray-500">
             Batch <strong className="text-gray-800">{batchNumber}</strong>
+            <span className="text-gray-400"> · 50×70mm MRP sticker</span>
           </p>
 
           {isSingleStyleLocked && initialStyleCode ? (
