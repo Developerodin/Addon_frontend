@@ -7,6 +7,7 @@ import BatchBarcodeStyleSelector from "./BatchBarcodeStyleSelector";
 import type { BatchBarcodeStyleOption } from "./batchBarcodeStyleListUtils";
 
 export type BarcodePrintMode = "all" | "custom";
+export type BarcodePrintDestination = "qz" | "browser";
 
 export type { BatchBarcodeStyleOption };
 
@@ -25,13 +26,18 @@ export interface BatchBarcodePrintModalProps {
   maxQty: number;
   busy?: boolean;
   onClose: () => void;
-  /** Called with mode, optional custom count, and resolved style code (undefined = all). */
+  /** Called with mode, optional custom count, resolved style, remarks, and print destination. */
   onConfirm: (
     mode: BarcodePrintMode,
     customQty?: number,
     selectedStyleCode?: string,
     remarks?: string,
+    destination?: BarcodePrintDestination,
   ) => void | Promise<void>;
+  /** QZ Tray is connected and a default printer is available. */
+  qzReady?: boolean;
+  /** Default printer name when QZ is ready. */
+  qzPrinterName?: string;
 }
 
 /**
@@ -47,6 +53,8 @@ export default function BatchBarcodePrintModal({
   busy = false,
   onClose,
   onConfirm,
+  qzReady = false,
+  qzPrinterName,
 }: BatchBarcodePrintModalProps) {
   const [mode, setMode] = useState<BarcodePrintMode>("all");
   const [customQty, setCustomQty] = useState(1);
@@ -123,15 +131,21 @@ export default function BatchBarcodePrintModal({
 
   if (!open) return null;
 
-  const handleConfirm = () => {
+  const handleConfirm = (destination: BarcodePrintDestination) => {
     if (isMultiStyleMode && printScope === "single" && !selectedStyleCode) return;
     void onConfirm(
       mode,
       mode === "custom" ? effectiveQty : undefined,
       resolvedStyleCode,
       remarks.trim() || undefined,
+      destination,
     );
   };
+
+  const confirmDisabled =
+    busy ||
+    resolvedMaxQty <= 0 ||
+    (isMultiStyleMode && printScope === "single" && !selectedStyleCode);
 
   return (
     <div
@@ -159,6 +173,18 @@ export default function BatchBarcodePrintModal({
           <p className="text-[11px] text-gray-500">
             Batch <strong className="text-gray-800">{batchNumber}</strong>
             <span className="text-gray-400"> · 50×70mm MRP sticker</span>
+          </p>
+          <p className="text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded px-2 py-1.5">
+            {qzReady ? (
+              <>
+                QZ Tray ready
+                {qzPrinterName ? ` — ${qzPrinterName}` : ""}. Print sends the same sticker to the thermal printer.
+              </>
+            ) : (
+              <>
+                QZ Tray not connected. Use <strong>Connect</strong> on the page header, or Browser Print as fallback.
+              </>
+            )}
           </p>
 
           {isSingleStyleLocked && initialStyleCode ? (
@@ -309,7 +335,7 @@ export default function BatchBarcodePrintModal({
           </div>
         </div>
 
-        <div className="px-4 py-3 border-t border-gray-100 flex justify-end gap-2 sticky bottom-0 bg-white">
+        <div className="px-4 py-3 border-t border-gray-100 flex flex-wrap justify-end gap-2 sticky bottom-0 bg-white">
           <button
             type="button"
             onClick={onClose}
@@ -320,13 +346,25 @@ export default function BatchBarcodePrintModal({
           </button>
           <button
             type="button"
-            onClick={handleConfirm}
-            disabled={
-              busy ||
-              resolvedMaxQty <= 0 ||
-              (isMultiStyleMode && printScope === "single" && !selectedStyleCode)
-            }
+            onClick={() => handleConfirm("browser")}
+            disabled={confirmDisabled}
+            className="px-3 py-1.5 text-[11px] font-bold text-gray-700 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-40"
+            title="Open the browser print dialog (same 50×70mm layout)"
+            aria-label="Print barcodes with browser dialog"
+          >
+            Browser Print
+          </button>
+          <button
+            type="button"
+            onClick={() => handleConfirm("qz")}
+            disabled={confirmDisabled || !qzReady}
             className="px-3 py-1.5 text-[11px] font-bold text-white bg-purple-600 rounded hover:bg-purple-700 disabled:opacity-40 flex items-center gap-1.5"
+            aria-label="Print barcodes with QZ Tray"
+            title={
+              !qzReady
+                ? "Connect QZ Tray from the header first"
+                : `Print ${effectiveQty} label${effectiveQty === 1 ? "" : "s"} via QZ Tray`
+            }
           >
             {busy ? (
               <>
@@ -334,7 +372,7 @@ export default function BatchBarcodePrintModal({
               </>
             ) : (
               <>
-                <i className="ri-barcode-line" aria-hidden /> Print {effectiveQty} label
+                <i className="ri-printer-line" aria-hidden /> Print {effectiveQty} label
                 {effectiveQty === 1 ? "" : "s"}
               </>
             )}

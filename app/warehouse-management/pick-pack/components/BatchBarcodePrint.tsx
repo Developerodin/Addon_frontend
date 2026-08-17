@@ -9,13 +9,21 @@ import {
 import {
   buildLabelsForCount,
   countBarcodeLabels,
+  type BarcodePrintDestination,
   type BarcodePrintMode,
 } from "./BatchBarcodePrintModal";
 import { printHtmlViaHiddenFrame } from "./printHtmlViaHiddenFrame";
 import {
   buildProductLabelPrintDocument,
   buildProductStickerHtml,
+  buildSingleProductLabelDocument,
 } from "./productBarcodeLabelHtml";
+import { printHtmlLabelsViaQz } from "@/shared/utils/qzTrayOther";
+import { PRODUCT_LABEL_SIZE_MM } from "./productBarcodeLabelConstants";
+
+/** Rasterize JsBarcode SVG at ~2× 203dpi so QZ JavaFX HTML print stays sharp. */
+const QZ_BARCODE_PNG_W = 720;
+const QZ_BARCODE_PNG_H = 224;
 
 export interface BarcodePrintResult {
   batchNumber: string;
@@ -87,28 +95,121 @@ function formatBarcodeCaption(encoded: string, fallback: string): string {
 }
 
 /**
- * Print 50×70mm statutory MRP stickers (EAN-13 + legal copy) for a batch.
+ * Rasterize SVG markup to a PNG data URL for QZ Tray HTML printing.
+ * QZ pixel HTML uses JavaFX WebView, which is unreliable with JsBarcode SVG rects.
+ * @param svgMarkup - Raw SVG from JsBarcode
+ * @param widthPx - Output width
+ * @param heightPx - Output height
+ */
+async function svgMarkupToPngDataUrl(
+  svgMarkup: string,
+  widthPx: number,
+  heightPx: number,
+): Promise<string> {
+  const svg = svgMarkup.includes("xmlns")
+    ? svgMarkup
+    : svgMarkup.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
+  const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = new Image();
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("Failed to rasterize barcode SVG"));
+      img.src = url;
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = widthPx;
+    canvas.height = heightPx;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas 2D unavailable");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, widthPx, heightPx);
+    ctx.drawImage(img, 0, 0, widthPx, heightPx);
+    return canvas.toDataURL("image/png");
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/**
+ * Expand label groups into one sticker HTML fragment per physical copy.
+ * @param labels - API label groups with quantities
+ * @param barcodeMarkup - SVG or `<img>` markup to embed
+ */
+function expandStickerMarkup(
+  labels: PickListBatchBarcodeLabel[],
+  barcodeMarkup: (label: PickListBatchBarcodeLabel, index: number) => { markup: string; caption: string },
+): string[] {
+  const pages: string[] = [];
+  labels.forEach((label, index) => {
+    const { markup, caption } = barcodeMarkup(label, index);
+    const one = buildProductStickerHtml(label, markup, caption);
+    const qty = Math.max(0, Number(label.quantity || 0));
+    for (let i = 0; i < qty; i += 1) pages.push(one);
+  });
+  return pages;
+}
+
+/**
+ * Print 50×70mm statutory MRP stickers via QZ Tray (pixel HTML) or browser dialog.
  * @param batchNumber - Display batch number for print title
  * @param labels - Label payloads from the API
+ * @param destination - QZ Tray thermal print or browser fallback
  */
-export function printBatchBarcodeLabels(batchNumber: string, labels: PickListBatchBarcodeLabel[]) {
+export async function printBatchBarcodeLabels(
+  batchNumber: string,
+  labels: PickListBatchBarcodeLabel[],
+  destination: BarcodePrintDestination = "qz",
+): Promise<boolean> {
   if (!labels.length) {
     toast.error("No labels to print");
     return false;
   }
 
-  const stickers = labels
-    .map((label, index) => {
+  if (destination === "browser") {
+    const stickers = expandStickerMarkup(labels, (label, index) => {
       const ean = String(label.eanCode || label.barcode || "").trim();
       const uid = `${index}-${String(label.styleCode || "").replace(/[^a-zA-Z0-9]/g, "")}-${ean}`;
       const { svg, caption } = renderLabelBarcodeSvg(ean, uid);
-      const one = buildProductStickerHtml(label, svg, caption);
-      return Array.from({ length: label.quantity }, () => one).join("");
-    })
-    .join("");
+      return { markup: svg, caption };
+    }).join("");
+    const html = buildProductLabelPrintDocument(`Barcodes — ${batchNumber}`, stickers);
+    return printHtmlViaHiddenFrame(html, `Print barcodes — ${batchNumber}`);
+  }
 
-  const html = buildProductLabelPrintDocument(`Barcodes — ${batchNumber}`, stickers);
-  return printHtmlViaHiddenFrame(html, `Print barcodes — ${batchNumber}`);
+  try {
+    const unique = labels.map((label, index) => {
+      const ean = String(label.eanCode || label.barcode || "").trim();
+      const uid = `${index}-${String(label.styleCode || "").replace(/[^a-zA-Z0-9]/g, "")}-${ean}`;
+      const { svg, caption } = renderLabelBarcodeSvg(ean, uid);
+      return { label, svg, caption };
+    });
+
+    const pngByIndex = await Promise.all(
+      unique.map((row) => svgMarkupToPngDataUrl(row.svg, QZ_BARCODE_PNG_W, QZ_BARCODE_PNG_H)),
+    );
+
+    const pages = expandStickerMarkup(labels, (_label, index) => {
+      const row = unique[index];
+      const img = `<img src="${pngByIndex[index]}" alt="" width="${QZ_BARCODE_PNG_W}" height="${QZ_BARCODE_PNG_H}" />`;
+      return { markup: img, caption: row.caption };
+    }).map((sticker) => buildSingleProductLabelDocument(sticker));
+
+    const result = await printHtmlLabelsViaQz(pages, {
+      widthMm: PRODUCT_LABEL_SIZE_MM.width,
+      heightMm: PRODUCT_LABEL_SIZE_MM.height,
+    });
+
+    if (!result.success) {
+      toast.error(result.error || "QZ Tray print failed");
+      return false;
+    }
+    return true;
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : "QZ Tray print failed");
+    return false;
+  }
 }
 
 /**
@@ -138,6 +239,8 @@ export async function logBarcodePrintEvent(batchId: string, result: BarcodePrint
  * @param mode - Print all picked labels or a custom total
  * @param customQty - Label count when mode is custom
  * @param styleCode - Optional style filter
+ * @param remarks - Optional print-history remark
+ * @param destination - QZ Tray thermal print or browser fallback
  */
 export async function printBatchBarcodes(
   batchId: string,
@@ -145,6 +248,7 @@ export async function printBatchBarcodes(
   customQty?: number,
   styleCode?: string,
   remarks?: string,
+  destination: BarcodePrintDestination = "qz",
 ): Promise<BarcodePrintResult | null> {
   try {
     const payload = await whmsPickListBatches.barcodes(batchId, styleCode ? { styleCode } : undefined);
@@ -158,7 +262,7 @@ export async function printBatchBarcodes(
     }
 
     const title = styleCode ? `${payload.batchNumber} — ${styleCode}` : payload.batchNumber;
-    const printed = printBatchBarcodeLabels(title, labels);
+    const printed = await printBatchBarcodeLabels(title, labels, destination);
     if (!printed) return null;
 
     const result: BarcodePrintResult = {
@@ -191,8 +295,9 @@ export async function printStyleBatchBarcodes(
   mode: BarcodePrintMode,
   customQty?: number,
   remarks?: string,
+  destination: BarcodePrintDestination = "qz",
 ): Promise<BarcodePrintResult | null> {
-  return printBatchBarcodes(batchId, mode, customQty, styleCode, remarks);
+  return printBatchBarcodes(batchId, mode, customQty, styleCode, remarks, destination);
 }
 
 /** @deprecated Use printBatchBarcodes with mode argument */

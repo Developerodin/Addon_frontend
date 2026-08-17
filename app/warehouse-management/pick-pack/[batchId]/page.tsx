@@ -9,6 +9,11 @@ import {
   type PickListBatchDetail,
 } from "@/shared/services/whmsPickListBatchService";
 import BatchPickDetail from "../components/BatchPickDetail";
+import {
+  QZTrayLoader,
+  QZTrayUntrustedWarning,
+  QZTrayRequestBlocked,
+} from "@/shared/components/qzTray";
 
 /**
  * Pick-list batch detail page — pick entry, barcode print, send to scanning.
@@ -39,6 +44,9 @@ export default function PickBatchDetailPage() {
 
   return (
     <div className="main-content">
+      <QZTrayLoader />
+      <QZTrayUntrustedWarning />
+      <QZTrayRequestBlocked />
       <Toaster position="top-right" />
       <Seo title={batch?.batchNumber ? `Pick List ${batch.batchNumber}` : "Pick List"} />
 

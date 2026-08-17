@@ -123,7 +123,11 @@ export default function BatchPickListPanel({
             onClick={() => onOpenBarcodeModal()}
             disabled={busy || totalPicked <= 0 || hasUnsavedPicks}
             className="px-4 py-2 bg-white border border-gray-200 text-gray-800 text-[11px] font-bold rounded hover:bg-gray-50 disabled:opacity-40 flex items-center gap-1.5"
-            title={hasUnsavedPicks ? "Save picks first" : undefined}
+            title={
+              hasUnsavedPicks
+                ? "Save picks first"
+                : "Open print options (QZ Tray or browser)"
+            }
           >
             <i className="ri-barcode-line" aria-hidden />
             Print Barcodes
@@ -292,7 +296,11 @@ export default function BatchPickListPanel({
                           disabled={noStock || picked <= 0 || busy || hasUnsavedPicks}
                           onClick={() => onOpenBarcodeModal(item.styleCode)}
                           className="text-[11px] font-bold text-purple-600 hover:text-purple-800 disabled:opacity-40"
-                          title={hasUnsavedPicks ? "Save picks first" : undefined}
+                          title={
+                            hasUnsavedPicks
+                              ? "Save picks first"
+                              : "Open print options (QZ Tray or browser)"
+                          }
                         >
                           Print
                         </button>

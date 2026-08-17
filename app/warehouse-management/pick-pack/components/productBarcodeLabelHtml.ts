@@ -117,9 +117,11 @@ export function buildProductLabelPrintDocument(title: string, stickersHtml: stri
       align-items: center;
       margin-bottom: 1mm;
     }
-    .barcode svg {
+    .barcode svg,
+    .barcode img {
       width: 45mm;
       height: 14mm;
+      display: block;
     }
     .ean {
       margin-top: 0.3mm;
@@ -149,5 +151,80 @@ export function buildProductLabelPrintDocument(title: string, stickersHtml: stri
   </style>
 </head>
 <body>${stickersHtml}</body>
+</html>`;
+}
+
+/**
+ * One 50×70mm HTML document for a single sticker (QZ Tray pixel print).
+ * Same CSS as the browser document, without multi-page breaks.
+ * @param stickerHtml - Markup from `buildProductStickerHtml`
+ */
+export function buildSingleProductLabelDocument(stickerHtml: string): string {
+  const { width, height } = PRODUCT_LABEL_SIZE_MM;
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: ${width}mm;
+      height: ${height}mm;
+      overflow: hidden;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #000;
+      background: #fff;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .sticker {
+      width: ${width}mm;
+      height: ${height}mm;
+      padding: 1.6mm 2.2mm 1.4mm;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .barcode {
+      flex: 0 0 auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 1mm;
+    }
+    .barcode svg,
+    .barcode img {
+      width: 45mm;
+      height: 14mm;
+      display: block;
+    }
+    .ean {
+      margin-top: 0.3mm;
+      font-size: 2.1mm;
+      font-weight: 700;
+      letter-spacing: 0.12mm;
+      line-height: 1;
+    }
+    .legal {
+      flex: 0 0 auto;
+      font-size: 1.7mm;
+      line-height: 1.22;
+      font-weight: 400;
+    }
+    .legal p { margin: 0 0 0.85mm; }
+    .legal p:last-child { margin-bottom: 1.1mm; }
+    .legal .h, .legal .b { font-weight: 700; }
+    .details {
+      flex: 1 1 auto;
+      font-size: 2.05mm;
+      line-height: 1.32;
+      font-weight: 400;
+    }
+    .details div { margin: 0 0 0.15mm; }
+    .details .k { font-weight: 700; }
+    .tax { font-weight: 400; }
+  </style>
+</head>
+<body>${stickerHtml}</body>
 </html>`;
 }

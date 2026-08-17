@@ -334,5 +334,115 @@ export const printContainerLabels = async (
   }
 };
 
+const HTML_LABEL_CHUNK = 15;
+
+/**
+ * Dispatch the QZ Tray "request blocked" UI and return a user-facing error.
+ * @param err - Caught print/connect error
+ */
+function qzBlockedOrMessage(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err || "");
+  if (msg.includes("blocked") || msg.includes("Request blocked")) {
+    const currentUrl =
+      typeof window !== "undefined"
+        ? `${window.location.protocol}//${window.location.hostname}${
+            window.location.port ? `:${window.location.port}` : ""
+          }`
+        : "";
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("qz-tray-request-blocked", { detail: { url: currentUrl } })
+      );
+    }
+    return `Request blocked by QZ Tray. Add this site in QZ Tray → Site Manager → + → ${currentUrl}`;
+  }
+  return msg || "Print failed";
+}
+
+/**
+ * Print pre-rendered HTML label pages via QZ Tray pixel printing.
+ * One HTML document per physical sticker. Does not use ZPL/forceRaw so the
+ * existing 50×70mm MRP layout is preserved.
+ * @param htmlPages - Full HTML documents, one per sticker
+ * @param options - Printer and physical label size in mm
+ */
+export const printHtmlLabelsViaQz = async (
+  htmlPages: string[],
+  options: {
+    printerName?: string;
+    widthMm?: number;
+    heightMm?: number;
+  } = {}
+): Promise<{ success: boolean; printed: number; error?: string }> => {
+  try {
+    if (!htmlPages.length) {
+      return { success: false, printed: 0, error: "No labels to print" };
+    }
+
+    const connection = await connectQZ();
+    if (!connection.isConnected) {
+      throw new Error(connection.error || "Not connected to QZ Tray");
+    }
+
+    if (typeof window === "undefined" || typeof window.qz === "undefined") {
+      throw new Error("QZ Tray script not loaded");
+    }
+
+    let printerName = options.printerName;
+    if (!printerName) {
+      printerName = await window.qz.printers.getDefault();
+    }
+    if (!printerName) {
+      throw new Error(
+        "No default printer found. Set one in OS printer settings, then refresh QZ Tray."
+      );
+    }
+
+    const printer = await window.qz.printers.find(printerName);
+    if (!printer) {
+      throw new Error(`Printer "${printerName}" not found`);
+    }
+
+    const widthMm = options.widthMm ?? 50;
+    const heightMm = options.heightMm ?? 70;
+
+    const config = window.qz.configs.create(printer, {
+      size: { width: widthMm, height: heightMm },
+      units: "mm",
+      density: 203,
+      colorType: "blackwhite",
+      interpolation: "nearest-neighbor",
+      margins: 0,
+      scaleContent: true,
+      rasterize: true,
+    });
+
+    const data = htmlPages.map((html) => ({
+      type: "pixel",
+      format: "html",
+      flavor: "plain",
+      data: html,
+      options: {
+        pageWidth: widthMm,
+        pageHeight: heightMm,
+        units: "mm",
+      },
+    }));
+
+    for (let i = 0; i < data.length; i += HTML_LABEL_CHUNK) {
+      await window.qz.print(config, data.slice(i, i + HTML_LABEL_CHUNK));
+    }
+
+    return { success: true, printed: htmlPages.length };
+  } catch (error: unknown) {
+    console.error("[QZ Tray Other] HTML label print error:", error);
+    return {
+      success: false,
+      printed: 0,
+      error: qzBlockedOrMessage(error),
+    };
+  }
+};
+
 // Re-export shared QZ utilities so other sections can import from this file only
 export { connectQZ, getDefaultPrinter, isQZLoaded } from "@/shared/utils/qzTray";

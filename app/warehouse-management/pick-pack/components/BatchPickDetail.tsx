@@ -11,12 +11,15 @@ import {
 import { printBatchBarcodes } from "./BatchBarcodePrint";
 import { printBatchPickList } from "./batchPickListPrint";
 import BatchBarcodePrintModal, {
+  type BarcodePrintDestination,
   type BarcodePrintMode,
   type BatchBarcodeStyleOption,
 } from "./BatchBarcodePrintModal";
 import BarcodePrintHistory from "./BarcodePrintHistory";
 import BatchPickListPanel from "./BatchPickListPanel";
 import { getMaxPickableByStock } from "./batchPickStockUtils";
+import { QZTrayStatus } from "@/shared/components/qzTray";
+import type { PrinterInfo } from "@/shared/utils/qzTray";
 
 type BatchDetailTab = "picking" | "barcode-history";
 
@@ -47,6 +50,12 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
   const [pickErrors, setPickErrors] = useState<Record<string, string>>({});
   const [savingPicks, setSavingPicks] = useState(false);
   const [activeTab, setActiveTab] = useState<BatchDetailTab>("picking");
+  const [qzStatus, setQzStatus] = useState({
+    scriptLoaded: false,
+    connected: false,
+    printer: null as PrinterInfo | null,
+    printers: [] as PrinterInfo[],
+  });
 
   const isEditable = batch.status === "picking";
 
@@ -135,10 +144,18 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
     customQty?: number,
     selectedStyleCode?: string,
     remarks?: string,
+    destination: BarcodePrintDestination = "qz",
   ) => {
     setBarcodePrintBusy(true);
     try {
-      const result = await printBatchBarcodes(batch.id, mode, customQty, selectedStyleCode, remarks);
+      const result = await printBatchBarcodes(
+        batch.id,
+        mode,
+        customQty,
+        selectedStyleCode,
+        remarks,
+        destination,
+      );
       if (!result) return;
 
       const refreshed = await whmsPickListBatches.get(batch.id);
@@ -146,7 +163,7 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
       toast.success(
         `Printed ${result.quantity} barcode label${result.quantity === 1 ? "" : "s"}${
           selectedStyleCode ? ` for ${selectedStyleCode}` : ""
-        }`,
+        }${destination === "qz" ? " via QZ Tray" : ""}`,
       );
       setBarcodeModalOpen(false);
     } finally {
@@ -306,6 +323,7 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
   return (
     <div className="space-y-3">
       <div className="min-w-0">
+          <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <Link
               href="/warehouse-management/pick-pack"
@@ -327,6 +345,10 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
             <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-gray-100 text-gray-700 shrink-0">
               {batch.status.replace(/-/g, " ")}
             </span>
+          </div>
+          <div className="bg-gray-50 px-2 py-1 rounded border border-gray-200">
+            <QZTrayStatus onStatusChange={setQzStatus} />
+          </div>
           </div>
           {(batch.orderNumbers || []).length > 0 && (
             <div className="flex flex-wrap items-center gap-1 mt-1">
@@ -465,6 +487,8 @@ export default function BatchPickDetail({ batch, onBatchUpdated }: BatchPickDeta
         busy={barcodePrintBusy}
         onClose={() => setBarcodeModalOpen(false)}
         onConfirm={handleBarcodePrintConfirm}
+        qzReady={qzStatus.connected}
+        qzPrinterName={qzStatus.printer?.name}
       />
 
     </div>
