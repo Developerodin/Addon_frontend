@@ -300,8 +300,14 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
   const fetchList = useCallback(async () => {
     try {
       setIsLoading(true);
-      // 1. Fetch machines (source of order: K001, K002, K003...)
-      const machinesRes = await machinesService.getMachines(1, 500, "");
+      const [machinesRes, data] = await Promise.all([
+        machinesService.getMachines(1, 500, ""),
+        listMachineOrderAssignments({
+          page: 1,
+          limit: 500,
+          isActive: filterActive === "" ? undefined : filterActive,
+        }),
+      ]);
       const machinesList = (machinesRes.results ?? []).map((m: any) => ({
         id: m.id ?? m._id,
         machineCode: m.machineCode,
@@ -311,13 +317,6 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
         (a.machineCode ?? "").localeCompare(b.machineCode ?? "", undefined, { numeric: true })
       );
       setMachines(machinesList);
-
-      // 2. Fetch ALL assignments (limit 500 to get full set for merging)
-      const data = await listMachineOrderAssignments({
-        page: 1,
-        limit: 500,
-        isActive: filterActive === "" ? undefined : filterActive,
-      });
 
       const assignmentByMachineId = new Map<string, MachineOrderAssignment>();
       for (const a of data.results ?? []) {

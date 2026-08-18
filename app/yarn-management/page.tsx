@@ -52,6 +52,14 @@ const YarnManagementPage = () => {
       permissionParent: "/yarn-management/purchase-management",
     },
     {
+      title: "Yarn to Vendor",
+      description: "Send yarn boxes to a processor and receive them back into storage",
+      icon: "ri-truck-line",
+      path: "/yarn-management/purchase-management/yarn-to-vendor",
+      permission: "Yarn to Vendor",
+      permissionParent: "/yarn-management/purchase-management",
+    },
+    {
       title: "Yarn Master",
       description: "Manage yarn master data (Brand, Type, Count/Size, Color)",
       icon: "ri-database-line",

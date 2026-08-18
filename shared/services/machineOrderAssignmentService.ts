@@ -35,6 +35,10 @@ export interface ProductionOrderItem {
   orderCreatedAt?: string;
   /** Display only – from populated API; never sent in PATCH */
   articleNumber?: string;
+  /** Display only – populated article plannedQuantity (planning Rem/Prod). */
+  plannedQuantity?: number;
+  /** Display only – populated article floorQuantities.knitting.remaining. */
+  knittingRemaining?: number;
   /** Yarn issue status – from API; updated via PATCH .../items/:itemId/yarn-issue-status */
   yarnIssueStatus?: YarnIssueStatusType | string;
   /** Yarn return status – from API; updated via PATCH .../items/:itemId/yarn-return-status */
@@ -191,6 +195,21 @@ function getAuthHeaders(): HeadersInit {
 
 const BASE = `${API_BASE_URL}/production/machine-order-assignments`;
 
+/**
+ * Reads planned/remaining qty from a populated article ref on an assignment item.
+ * @param article Populated article object or id string
+ */
+function qtyFromPopulatedArticle(article: unknown): { plannedQuantity?: number; knittingRemaining?: number } {
+  if (!article || typeof article !== "object") return {};
+  const a = article as { plannedQuantity?: number; floorQuantities?: { knitting?: { remaining?: number } } };
+  const planned = a.plannedQuantity;
+  const rem = a.floorQuantities?.knitting?.remaining;
+  return {
+    ...(typeof planned === "number" ? { plannedQuantity: planned } : {}),
+    ...(typeof rem === "number" ? { knittingRemaining: rem } : {}),
+  };
+}
+
 function normalizeAssignment(raw: any): MachineOrderAssignment {
   const machineId = typeof raw.machine === 'object' ? raw.machine?.id ?? raw.machine?._id : raw.machine;
   return {
@@ -208,6 +227,7 @@ function normalizeAssignment(raw: any): MachineOrderAssignment {
           orderNote: item.productionOrder?.orderNote ?? item.orderNote ?? undefined,
           orderCreatedAt: item.productionOrder?.createdAt ?? item.orderCreatedAt ?? undefined,
           articleNumber: item.article?.articleNumber ?? item.articleNumber ?? undefined,
+          ...qtyFromPopulatedArticle(item.article),
           yarnIssueStatus: item.yarnIssueStatus,
           yarnReturnStatus: item.yarnReturnStatus,
         }))

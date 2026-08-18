@@ -37,6 +37,7 @@ const BlendIcon = <i className="ri ri-mix-line side-menu__icon" style={{ marginT
 const RequisitionIcon = <i className="ri ri-file-list-3-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const QCIcon = <i className="ri ri-checkbox-circle-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const StorageIcon = <i className="ri ri-stack-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const YarnToVendorIcon = <i className="ri ri-truck-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const WarehouseIcon = <i className="bx bx-store side-menu__icon"></i>;
 const OrdersIcon = <i className="ri ri-file-list-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const PickPackIcon = <i className="ri ri-handbag-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
@@ -570,6 +571,14 @@ const BaseMenuItems: any = [
         active: false,
         selected: false,
         title: "Yarn Storage",
+      },
+      {
+        icon: YarnToVendorIcon,
+        path: "/yarn-management/purchase-management/yarn-to-vendor",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Yarn to Vendor",
       },
       {
         icon: ReportsIcon,

@@ -81,7 +81,8 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
     { key: 'PO Return Challan', label: 'PO Return Challan' },
     { key: 'GRN History', label: 'GRN History' },
     { key: 'Yarn QC', label: 'Yarn QC' },
-    { key: 'Yarn Storage', label: 'Yarn Storage' }
+    { key: 'Yarn Storage', label: 'Yarn Storage' },
+    { key: 'Yarn to Vendor', label: 'Yarn to Vendor' }
   ]
 
   const yarnMasterSections = [

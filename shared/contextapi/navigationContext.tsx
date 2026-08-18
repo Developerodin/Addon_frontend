@@ -65,6 +65,7 @@ interface NavigationPermissions {
       'GRN History': boolean;
       'Yarn QC': boolean;
       'Yarn Storage': boolean;
+      'Yarn to Vendor': boolean;
     };
     'Yarn Issue': {
       'Issue for orders': boolean;
@@ -271,6 +272,7 @@ const defaultPermissions: NavigationPermissions = {
       'GRN History': false,
       'Yarn QC': false,
       'Yarn Storage': false,
+      'Yarn to Vendor': false,
     },
     'Yarn Issue': {
       'Issue for orders': false,

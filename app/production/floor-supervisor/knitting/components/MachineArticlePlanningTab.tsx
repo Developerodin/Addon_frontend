@@ -6,10 +6,8 @@ import {
   listMachineOrderAssignments,
   OrderStatus,
   type MachineOrderAssignment,
-  type ProductionOrderItem,
 } from "@/shared/services/machineOrderAssignmentService";
 import { machinesService } from "@/shared/services/machinesService";
-import { productionService, type ProductionOrder, type Article } from "@/shared/services/productionService";
 import { getProductsByFactoryCodes } from "@/shared/services/productService";
 import ArticlePlanCell from "./ArticlePlanCell";
 import ArticleProductImageModal from "./ArticleProductImageModal";
@@ -76,50 +74,6 @@ export default function MachineArticlePlanningTab({ refreshTrigger }: MachineArt
         if (mid) assignmentByMachineId.set(String(mid), a);
       }
 
-      function getOrderId(item: ProductionOrderItem): string {
-        const po = item.productionOrder;
-        if (typeof po === "string") return po;
-        return (po as { id?: string; _id?: string })?.id ?? (po as { id?: string; _id?: string })?._id ?? "";
-      }
-      function getArticleId(item: ProductionOrderItem): string {
-        const a = item.article;
-        if (typeof a === "string") return a;
-        return (a as { id?: string; _id?: string })?.id ?? (a as { id?: string; _id?: string })?._id ?? "";
-      }
-
-      const orderIds = new Set<string>();
-      for (const m of machinesList) {
-        const assignment = assignmentByMachineId.get(m.id);
-        if (!assignment) continue;
-        const items = (assignment.productionOrderItems ?? [])
-          .filter((i) => i.priority != null && i.status !== OrderStatus.ON_HOLD)
-          .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
-        for (const item of items.slice(0, 5)) {
-          const oid = getOrderId(item);
-          if (oid) orderIds.add(oid);
-        }
-      }
-
-      const ordersMap = new Map<string, ProductionOrder>();
-      await Promise.all(
-        Array.from(orderIds).map(async (oid) => {
-          try {
-            const res = await productionService.getOrder(oid);
-            if (res.success && res.data) ordersMap.set(oid, res.data);
-          } catch {
-            // skip failed
-          }
-        })
-      );
-
-      const articleByOrderArticle = new Map<string, Article>();
-      for (const [oid, order] of ordersMap) {
-        for (const article of order.articles ?? []) {
-          const aid = article.id ?? article._id;
-          if (aid) articleByOrderArticle.set(`${oid}:${aid}`, article);
-        }
-      }
-
       /** Collect factory codes from running + next plan articles for catalog lookup */
       const planFactoryCodes = new Set<string>();
       for (const m of machinesList) {
@@ -132,9 +86,8 @@ export default function MachineArticlePlanningTab({ refreshTrigger }: MachineArt
         const nextItem = items.find((i) => i.status === OrderStatus.PENDING);
         for (const item of [runningItem, nextItem]) {
           if (!item) continue;
-          const article = articleByOrderArticle.get(`${getOrderId(item)}:${getArticleId(item)}`);
-          const fc = item.articleNumber ?? article?.articleNumber ?? "";
-          if (fc.trim()) planFactoryCodes.add(fc.trim());
+          const fc = (item.articleNumber ?? "").trim();
+          if (fc) planFactoryCodes.add(fc);
         }
       }
 
@@ -190,33 +143,24 @@ export default function MachineArticlePlanningTab({ refreshTrigger }: MachineArt
         /** NXT PLAN: the item that is Pending (to be started next) */
         const nextItem = items.find((i) => i.status === OrderStatus.PENDING);
 
-        const runningArticle = runningItem
-          ? articleByOrderArticle.get(`${getOrderId(runningItem)}:${getArticleId(runningItem)}`)
-          : undefined;
-        const nextArticle = nextItem
-          ? articleByOrderArticle.get(`${getOrderId(nextItem)}:${getArticleId(nextItem)}`)
-          : undefined;
-
         /** Running article attributes (Type, Season) from products API */
-        const runningFactoryCode = runningItem
-          ? (runningItem.articleNumber ?? runningArticle?.articleNumber ?? "").trim()
-          : "";
+        const runningFactoryCode = runningItem ? (runningItem.articleNumber ?? "").trim() : "";
         const attrs = runningFactoryCode
           ? productMap.get(runningFactoryCode) ?? productMap.get(runningFactoryCode.toLowerCase())
           : undefined;
         const running = attrs?.Season ?? "-";
         const type = attrs?.Type ?? "-";
         const needle = (assignment.activeNeedle ?? "").trim() || "-";
-        const existingPlan = runningItem ? (runningItem.articleNumber ?? runningArticle?.articleNumber ?? "-") : "-";
-        const existingProd = runningArticle?.plannedQuantity;
-        const existingRem = runningArticle?.floorQuantities?.knitting?.remaining ?? existingProd;
+        const existingPlan = runningItem ? (runningItem.articleNumber ?? "-") : "-";
+        const existingProd = runningItem?.plannedQuantity;
+        const existingRem = runningItem?.knittingRemaining ?? existingProd;
         const existingQty =
           existingProd != null
             ? `${(existingRem ?? existingProd).toLocaleString()} / ${existingProd.toLocaleString()}`
             : "-";
-        const nextPlan = nextItem ? (nextItem.articleNumber ?? nextArticle?.articleNumber ?? "-") : "-";
-        const nextProd = nextArticle?.plannedQuantity;
-        const nextRem = nextArticle?.floorQuantities?.knitting?.remaining ?? nextProd;
+        const nextPlan = nextItem ? (nextItem.articleNumber ?? "-") : "-";
+        const nextProd = nextItem?.plannedQuantity;
+        const nextRem = nextItem?.knittingRemaining ?? nextProd;
         const nextQty =
           nextProd != null
             ? `${(nextRem ?? nextProd).toLocaleString()} / ${nextProd.toLocaleString()}`

@@ -62,6 +62,7 @@ export interface NavigationPermissions {
       'GRN History': boolean;
       'Yarn QC': boolean;
       'Yarn Storage': boolean;
+      'Yarn to Vendor': boolean;
     };
     'Yarn Issue': {
       'Issue for orders': boolean;

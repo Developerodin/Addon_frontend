@@ -63,6 +63,20 @@ const PurchaseManagementPage = () => {
       icon: "ri-checkbox-circle-line",
       path: "/yarn-management/purchase-management/yarn-qc",
       permission: "Yarn QC"
+    },
+    {
+      title: "Yarn Storage",
+      description: "Allocate boxes to racks and manage long-term / short-term storage",
+      icon: "ri-stack-line",
+      path: "/yarn-management/purchase-management/yarn-storage",
+      permission: "Yarn Storage"
+    },
+    {
+      title: "Yarn to Vendor",
+      description: "Send boxes to a processor and receive them back onto racks",
+      icon: "ri-truck-line",
+      path: "/yarn-management/purchase-management/yarn-to-vendor",
+      permission: "Yarn to Vendor"
     }
   ];
 
