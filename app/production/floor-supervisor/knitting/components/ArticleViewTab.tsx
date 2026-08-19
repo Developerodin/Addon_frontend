@@ -9,7 +9,7 @@ import {
   formatArticleViewOrderLabel,
 } from "@/shared/components/production/ArticleViewOrderCell";
 import ArticleProductImageButton from "@/shared/components/production/ArticleProductImageButton";
-import { collectArticleFactoryCodes, useArticleProductImages } from "@/shared/hooks/useArticleProductImages";
+import { collectFactoryCodesFromArticleNumbers, useArticleProductImages } from "@/shared/hooks/useArticleProductImages";
 
 export interface ArticleRow {
   article: Article;
@@ -122,8 +122,8 @@ export default function ArticleViewTab({
           }
         }
         if (!cancelled) setArticleToMachineMap(map);
-      } catch {
-        // Machine labels are optional for the grid
+      } catch (err) {
+        console.error("Failed to load machine assignments for article view:", err);
       }
     })();
     return () => {
@@ -132,9 +132,6 @@ export default function ArticleViewTab({
   }, []);
 
   const articleRows = useMemo(() => flattenOrdersToArticles(orders), [orders]);
-  const factoryCodes = useMemo(() => collectArticleFactoryCodes(orders), [orders]);
-  const { openProductImage, productImageModal } = useArticleProductImages(factoryCodes);
-
 
   const visibilityFilteredRows = useMemo(() => {
     if (showAllArticles) return articleRows;
@@ -169,6 +166,12 @@ export default function ArticleViewTab({
     const start = (safeArticlePage - 1) * itemsPerPage;
     return filteredRows.slice(start, start + itemsPerPage);
   }, [filteredRows, safeArticlePage, itemsPerPage]);
+
+  const factoryCodes = useMemo(
+    () => collectFactoryCodesFromArticleNumbers(pagedRows.map((r) => r.article)),
+    [pagedRows]
+  );
+  const { openProductImage, productImageModal } = useArticleProductImages(factoryCodes);
 
   useEffect(() => {
     if (!focusRowKey) return;

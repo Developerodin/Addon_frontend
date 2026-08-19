@@ -454,6 +454,8 @@ export interface FloorOrderFilters {
   machineId?: string;
   sortBy?: string;
   populate?: string;
+  /** Compact payload: skip nested machines, history arrays, and countDocuments. */
+  articleView?: boolean;
 }
 
 export interface ApiResponse<T> {
@@ -669,6 +671,12 @@ class ProductionService {
         };
       }
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw error;
+      }
+      if (error instanceof Error && error.name === "AbortError") {
+        throw error;
+      }
       console.error('API Error:', error);
       // Handle network errors or JSON parsing errors
       const errorMessage = error instanceof Error ? error.message : 'Network error occurred';
@@ -796,7 +804,7 @@ class ProductionService {
   async getFloorOrders(
     floor: string,
     filters: FloorOrderFilters = {},
-    options?: { cache?: RequestCache }
+    options?: { cache?: RequestCache; signal?: AbortSignal }
   ): Promise<ApiResponse<PaginatedResponse<ProductionOrder>>> {
     const queryParams = new URLSearchParams();
 
@@ -811,6 +819,7 @@ class ProductionService {
 
     const response = await this.request<any>(endpoint, {
       cache: options?.cache ?? "default",
+      ...(options?.signal ? { signal: options.signal } : {}),
     });
 
     if (!response.success) {

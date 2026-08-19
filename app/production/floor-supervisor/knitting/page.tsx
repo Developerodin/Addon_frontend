@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useSelector } from "react-redux";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
@@ -274,6 +274,7 @@ const KnittingFloorSupervisorPage = () => {
   const [updatingYarnItemId, setUpdatingYarnItemId] = useState<string | null>(null);
 
   const KNITTING_ARTICLE_VIEW_ORDER_LIMIT = 2000;
+  const articleViewAbortRef = useRef<AbortController | null>(null);
 
   // Load knitting floor orders from API
   const loadOrders = async () => {
@@ -310,16 +311,23 @@ const KnittingFloorSupervisorPage = () => {
    * Loads a large page of orders for Article view so article rows paginate by article, not by order count.
    */
   const loadArticleViewOrders = useCallback(async () => {
+    articleViewAbortRef.current?.abort();
+    const ac = new AbortController();
+    articleViewAbortRef.current = ac;
     setArticleViewLoading(true);
     try {
       const apiFilters: FloorOrderFilters = {
         page: 1,
         limit: KNITTING_ARTICLE_VIEW_ORDER_LIMIT,
+        articleView: true,
         ...(filters.status && { status: filters.status }),
         ...(filters.priority && { priority: filters.priority }),
         ...(searchQuery && { search: searchQuery }),
       };
-      const response = await productionService.getFloorOrders("Knitting", apiFilters);
+      const response = await productionService.getFloorOrders("Knitting", apiFilters, {
+        signal: ac.signal,
+      });
+      if (ac.signal.aborted) return;
       if (response.success) {
         setArticleViewOrders(response.data.results);
       } else {
@@ -331,11 +339,12 @@ const KnittingFloorSupervisorPage = () => {
         );
       }
     } catch (error: unknown) {
+      if (error instanceof Error && error.name === "AbortError") return;
       const msg = error instanceof Error ? error.message : "Failed to load article view";
       console.error("Error loading article view orders:", error);
       toast.error(msg);
     } finally {
-      setArticleViewLoading(false);
+      if (!ac.signal.aborted) setArticleViewLoading(false);
     }
   }, [filters.status, filters.priority, searchQuery]);
 
@@ -346,14 +355,15 @@ const KnittingFloorSupervisorPage = () => {
     }
   }, [isUserRole, activeTab]);
 
-  // Debounced search effect
+  // Debounced search effect (Orders tab only — article view uses its own wide fetch)
   useEffect(() => {
+    if (activeTab === "article-view") return;
     const timeoutId = setTimeout(() => {
       loadOrders();
     }, 500); // 500ms delay
 
     return () => clearTimeout(timeoutId);
-  }, [currentPage, itemsPerPage, filters, searchQuery]);
+  }, [currentPage, itemsPerPage, filters, searchQuery, activeTab]);
 
   // Article view: separate wide fetch (not limited by Orders tab page size)
   useEffect(() => {
@@ -361,7 +371,10 @@ const KnittingFloorSupervisorPage = () => {
     const timeoutId = setTimeout(() => {
       void loadArticleViewOrders();
     }, 500);
-    return () => clearTimeout(timeoutId);
+    return () => {
+      clearTimeout(timeoutId);
+      articleViewAbortRef.current?.abort();
+    };
   }, [activeTab, loadArticleViewOrders]);
 
   // When user enters/scans barcode in container modal, fetch container and check if free or same-floor (multi-article allowed)
@@ -1353,7 +1366,7 @@ const KnittingFloorSupervisorPage = () => {
       try {
         const response = await productionService.getFloorOrders(
           "Knitting",
-          { page: 1, limit: KNITTING_ARTICLE_VIEW_ORDER_LIMIT },
+          { page: 1, limit: KNITTING_ARTICLE_VIEW_ORDER_LIMIT, articleView: true },
           { cache: "no-store" }
         );
 
