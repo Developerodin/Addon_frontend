@@ -90,6 +90,8 @@ function vendorBoxesToCones(
         supplierName: vendorShort,
         poNumber: apiPo.vpoNumber || "",
         productLabel: "Product",
+        lotPrefix: "INV NO",
+        shadePrefix: "ART",
         quantity: Number.isFinite(quantity) ? quantity : undefined,
       };
     });

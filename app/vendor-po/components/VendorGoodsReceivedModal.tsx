@@ -13,13 +13,15 @@ import {
   dashOr,
   findPoLineItemById,
 } from "./vendorPacklistHelpers";
+import { VendorGoodsReceivedInvoiceCard } from "./VendorGoodsReceivedInvoiceCard";
 import {
   type VendorLotDraft,
   buildVendorLotDrafts,
+  createEmptyLotDraft,
   draftsToReceivedLotDetails,
-  emptyLineQtyMap,
   orderedQtyByLine,
-  totalBoxesForDraft,
+  packlistToArray,
+  retargetDraftToPacklist,
   totalReceivedFromDrafts,
   validateVendorLotDrafts,
 } from "./vendorGoodsReceivedModalHelpers";
@@ -29,16 +31,6 @@ export interface VendorGoodsReceivedModalProps {
   purchaseOrder: VendorPurchaseOrder | null;
   onClose: () => void;
   onSaved: () => void;
-}
-
-const lotInputCls =
-  "mt-0.5 w-full px-2 py-1.5 text-xs border border-gray-500 rounded bg-white text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-600";
-const lotQtyInputCls =
-  "w-full px-1.5 py-1 text-right text-xs border border-gray-500 rounded bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-600";
-
-function packlistToArray(pd: VendorPurchaseOrder["packListDetails"]) {
-  if (!pd) return [];
-  return Array.isArray(pd) ? pd : [pd];
 }
 
 /**
@@ -121,10 +113,20 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
   };
 
   const addLot = () => {
-    setLots((prev) => [
-      ...prev,
-      { lotNumber: "", numberOfBoxes: 1, lineQty: emptyLineQtyMap(poItems), lineBoxes: emptyLineQtyMap(poItems), isExisting: false },
-    ]);
+    setLots((prev) => [...prev, createEmptyLotDraft(poItems, packlists, prev)]);
+  };
+
+  /**
+   * Swap a new invoice onto a different packlist and reset its article qty/box maps.
+   */
+  const setLotPacklist = (lotIndex: number, packlistIndex: number) => {
+    setLots((prev) => {
+      const next = [...prev];
+      const lot = next[lotIndex];
+      if (!lot || lot.isExisting) return prev;
+      next[lotIndex] = retargetDraftToPacklist(lot, packlistIndex, poItems, packlists);
+      return next;
+    });
   };
 
   const removeLot = (index: number) => {
@@ -336,134 +338,28 @@ export function VendorGoodsReceivedModal({ isOpen, purchaseOrder, onClose, onSav
                 </p>
 
                 <div className="space-y-4">
-                  {lots.map((lot, lotIndex) => {
-                    const isReadOnly = !!lot.isExisting;
-                    return (
-                    <div
+                  {lots.map((lot, lotIndex) => (
+                    <VendorGoodsReceivedInvoiceCard
                       key={lotIndex}
-                      className={`border rounded-lg p-3 space-y-3 shadow-sm ${isReadOnly ? "border-gray-300 bg-gray-50/60" : "border-gray-200 bg-white"}`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-gray-800">Invoice {lotIndex + 1}</span>
-                          {isReadOnly && (
-                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-green-100 text-green-700 border border-green-200">
-                              <i className="ri-lock-line text-[9px]" /> Saved
-                            </span>
-                          )}
-                        </div>
-                        {lots.length > 1 && !isReadOnly && (
-                          <button
-                            type="button"
-                            onClick={() => removeLot(lotIndex)}
-                            className="text-[10px] font-bold text-red-600 hover:underline"
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-[10px] font-medium text-gray-600">Invoice number {isReadOnly ? "" : "*"}</label>
-                          {isReadOnly ? (
-                            <div className="mt-0.5 px-2 py-1.5 text-xs text-gray-700 bg-gray-100 border border-gray-200 rounded">{lot.lotNumber || "—"}</div>
-                          ) : (
-                          <input
-                            className={lotInputCls}
-                            value={lot.lotNumber}
-                            onChange={(e) =>
-                              setLots((prev) => {
-                                const n = [...prev];
-                                if (n[lotIndex]) n[lotIndex] = { ...n[lotIndex], lotNumber: e.target.value };
-                                return n;
-                              })
-                            }
-                            placeholder="e.g. INV-001"
-                          />
-                          )}
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-medium text-gray-600">Total boxes (auto)</label>
-                          <div className="mt-0.5 px-2 py-1.5 text-xs text-gray-700 bg-gray-100 border border-gray-200 rounded text-right">
-                            {totalBoxesForDraft(lot)}
-                          </div>
-                          <p className="text-[9px] text-gray-400 mt-0.5">Sum of per-article boxes below</p>
-                        </div>
-                      </div>
-
-                      <div className="border border-gray-100 rounded overflow-hidden">
-                        <table className="min-w-full text-[10px]">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-2 py-2 text-left font-bold text-gray-600">Article</th>
-                              <th className="px-2 py-2 text-left font-bold text-gray-600">Vendor code</th>
-                              <th className="px-2 py-2 text-left font-bold text-gray-600">Type</th>
-                              <th className="px-2 py-2 text-left font-bold text-gray-600">Color</th>
-                              <th className="px-2 py-2 text-left font-bold text-gray-600">Pattern</th>
-                              {!isReadOnly && <th className="px-2 py-2 text-right">Ordered</th>}
-                              <th className="px-2 py-2 text-right w-[88px]">Qty</th>
-                              <th className="px-2 py-2 text-right w-[88px]">Boxes</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {poItems.map((it) => {
-                              const id = getPoLineItemId(it);
-                              if (!id) return null;
-                              const ordered = orderedMap[id] ?? 0;
-                              const v = lot.lineQty[id] ?? 0;
-                              const boxV = lot.lineBoxes[id] ?? 0;
-                              const overReceived = v > ordered;
-                              return (
-                                <tr key={`${lotIndex}-${id}`} className="border-t border-gray-100">
-                                  <td className="px-2 py-2 text-gray-900">{it.productName || "—"}</td>
-                                  <td className="px-2 py-2 text-gray-700">{vendorCodeFromPoLineItem(it) || "no vendor code"}</td>
-                                  <td className="px-2 py-2 text-gray-700">{dashOr(it.type)}</td>
-                                  <td className="px-2 py-2 text-gray-700">{dashOr(it.color)}</td>
-                                  <td className="px-2 py-2 text-gray-700">{dashOr(it.pattern)}</td>
-                                  {!isReadOnly && <td className="px-2 py-2 text-right text-gray-500">{ordered}</td>}
-                                  <td className="px-2 py-2">
-                                    {isReadOnly ? (
-                                      <div className="text-right text-xs text-gray-700">{v || "—"}</div>
-                                    ) : (
-                                    <input
-                                      type="number"
-                                      min={0}
-                                      className={`${lotQtyInputCls} ${overReceived ? "border-amber-400 bg-amber-50 text-amber-800" : ""}`}
-                                      value={v === 0 ? "" : v}
-                                      title={overReceived ? `Over-received: ${v} vs ordered ${ordered}` : undefined}
-                                      onChange={(e) => {
-                                        const raw = e.target.value;
-                                        setLineQty(lotIndex, id, raw === "" ? 0 : Number(raw));
-                                      }}
-                                    />
-                                    )}
-                                  </td>
-                                  <td className="px-2 py-2">
-                                    {/* Boxes stay editable even on saved invoices so per-article
-                                        counts can be corrected, then re-synced on the process page. */}
-                                    <input
-                                      type="number"
-                                      min={0}
-                                      className={lotQtyInputCls}
-                                      value={boxV === 0 ? "" : boxV}
-                                      onChange={(e) => {
-                                        const raw = e.target.value;
-                                        setLineBoxes(lotIndex, id, raw === "" ? 0 : Number(raw));
-                                      }}
-                                    />
-                                    {isReadOnly && v > 0 && boxV < 1 && (
-                                      <p className="text-[9px] text-amber-600 mt-0.5 text-right">set boxes</p>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                    );
-                  })}
+                      lot={lot}
+                      lotIndex={lotIndex}
+                      lotsCount={lots.length}
+                      poItems={poItems}
+                      packlists={packlists}
+                      orderedMap={orderedMap}
+                      onLotNumberChange={(value) =>
+                        setLots((prev) => {
+                          const n = [...prev];
+                          if (n[lotIndex]) n[lotIndex] = { ...n[lotIndex], lotNumber: value };
+                          return n;
+                        })
+                      }
+                      onRemove={() => removeLot(lotIndex)}
+                      onLineQty={(lineId, value) => setLineQty(lotIndex, lineId, value)}
+                      onLineBoxes={(lineId, value) => setLineBoxes(lotIndex, lineId, value)}
+                      onPacklistChange={(packlistIndex) => setLotPacklist(lotIndex, packlistIndex)}
+                    />
+                  ))}
                 </div>
               </>
             )}

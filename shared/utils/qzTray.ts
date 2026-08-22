@@ -938,6 +938,10 @@ export const generateZPLCone = (
     boxId?: string;
     /** Label prefix for material line (default `Yarn`; vendor boxes use `Product`). */
     productLabel?: string;
+    /** Prefix for lot/invoice line (default `L`; vendor boxes use `INV NO`). */
+    lotPrefix?: string;
+    /** Prefix for shade/article line (default `S`; vendor boxes use `ART`). */
+    shadePrefix?: string;
     /** Optional quantity line rendered as `Q: …` below S. */
     quantity?: number;
     labelWidth?: number;
@@ -963,6 +967,8 @@ export const generateZPLCone = (
     weight,
     boxId,
     productLabel = 'Yarn',
+    lotPrefix = 'L',
+    shadePrefix = 'S',
     quantity,
     labelWidth = 812,
     labelHeight = 400,
@@ -977,6 +983,8 @@ export const generateZPLCone = (
     shadeLotFontSize = 20,
   } = options;
 
+  const lotLine = `${lotPrefix}: ${lotNumber || '-'}`;
+  const shadeLine = `${shadePrefix}: ${shadeCode || '-'}`;
   const labelMargin = 30; // Increased margin to prevent cutting at edges
   const isSmallSideBySide = labelHeight < 300 && labelWidth > 350;
 
@@ -1066,9 +1074,9 @@ export const generateZPLCone = (
         curX += step;
       }
 
-      zpl += `^FO${curX},${xStart}^A0R,${shadeLotFontSize},${shadeLotFontSize}^FB${rowLen},1,0,L^FDL: ${lotNumber || '-'}^FS\n`;
+      zpl += `^FO${curX},${xStart}^A0R,${shadeLotFontSize},${shadeLotFontSize}^FB${rowLen},1,0,L^FD${lotLine}^FS\n`;
       curX += step;
-      zpl += `^FO${curX},${xStart}^A0R,${shadeLotFontSize},${shadeLotFontSize}^FB${rowLen},1,0,L^FDS: ${shadeCode || '-'}^FS\n`;
+      zpl += `^FO${curX},${xStart}^A0R,${shadeLotFontSize},${shadeLotFontSize}^FB${rowLen},1,0,L^FD${shadeLine}^FS\n`;
       if (quantity !== undefined && Number.isFinite(quantity)) {
         curX += step;
         zpl += `^FO${curX},${xStart}^A0R,${shadeLotFontSize},${shadeLotFontSize}^FB${rowLen},1,0,L^FDQ: ${quantity}^FS\n`;
@@ -1127,9 +1135,9 @@ export const generateZPLCone = (
     curY += 4;
 
     // 4. Lot, vendor code, quantity on separate lines
-    zpl += `^FO${labelMargin},${curY}^A0N,${shadeLotFontSize},${shadeLotFontSize}^FB${contentWidth},1,0,L^FDL: ${lotNumber || '-'}^FS\n`;
+    zpl += `^FO${labelMargin},${curY}^A0N,${shadeLotFontSize},${shadeLotFontSize}^FB${contentWidth},1,0,L^FD${lotLine}^FS\n`;
     curY += shadeLotFontSize + 12;
-    zpl += `^FO${labelMargin},${curY}^A0N,${shadeLotFontSize},${shadeLotFontSize}^FB${contentWidth},1,0,L^FDS: ${shadeCode || '-'}^FS\n`;
+    zpl += `^FO${labelMargin},${curY}^A0N,${shadeLotFontSize},${shadeLotFontSize}^FB${contentWidth},1,0,L^FD${shadeLine}^FS\n`;
     if (quantity !== undefined && Number.isFinite(quantity)) {
       curY += shadeLotFontSize + 12;
       zpl += `^FO${labelMargin},${curY}^A0N,${shadeLotFontSize},${shadeLotFontSize}^FB${contentWidth},1,0,L^FDQ: ${quantity}^FS\n`;
@@ -1185,12 +1193,12 @@ export const generateZPLCone = (
     yPos += lineHeight;
 
     // 4. Lot - Darkened (Bold)
-    const lotText = `L: ${lotNumber || '-'}`;
+    const lotText = lotLine;
     printBold("Lot", xPos, yPos, detailsFont, lotText);
     yPos += lineHeight;
 
     // 5. Shade (Allow wrapping) - Darkened (Bold)
-    const shadeText = `S: ${shadeCode || '-'}`;
+    const shadeText = shadeLine;
     const shadeLines = wrapText(shadeText, maxYarnChars);
     shadeLines.slice(0, 2).forEach((line) => {
       printBold("Shade", xPos, yPos, detailsFont, line);
@@ -1773,6 +1781,8 @@ export const printCones = async (
     weight?: number;
     boxId?: string;
     productLabel?: string;
+    lotPrefix?: string;
+    shadePrefix?: string;
     quantity?: number;
   }>,
   options: {
@@ -1847,6 +1857,8 @@ export const printCones = async (
             weight: cone.weight,
             boxId: cone.boxId,
             productLabel: cone.productLabel,
+            lotPrefix: cone.lotPrefix,
+            shadePrefix: cone.shadePrefix,
             quantity: cone.quantity,
             labelWidth,
             labelHeight,
@@ -1885,7 +1897,9 @@ export const printCones = async (
           poNumber: cone.poNumber,
           lotNumber: cone.lotNumber,
           shadeCode: cone.shadeCode,
-          weight: cone.weight
+          weight: cone.weight,
+          lotPrefix: cone.lotPrefix,
+          shadePrefix: cone.shadePrefix,
         })
       );
       await window.qz.print(config, labels);
