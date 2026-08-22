@@ -227,9 +227,14 @@ export default function reducer(state = initialState, action: any) {
 
     switch (type) {
         case "ThemeChanger":
-            state = payload;
-            return state;
-            break;
+            if (!payload || typeof payload !== "object") {
+                return state;
+            }
+            return {
+                ...state,
+                ...payload,
+                auth: payload.auth ?? state.auth,
+            };
 
         case "ADD_TO_CART":
             state = {

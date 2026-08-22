@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 // Public assets base: "" so /assets/... resolves from root (set NEXT_PUBLIC_BASE_PATH if app is under a subpath)
 const assetBase = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 import { authActions } from '@/shared/redux/actions/authActions';
+import { toggleSidebar as applySidebarToggle } from './sidebarToggle';
 
 const Header = ({ local_varaiable, ThemeChanger }:any) => {
   const dispatch = useDispatch();
@@ -158,17 +159,21 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
     };
   }, []);
 
-  // Sync Redux state with DOM attributes
+  // Sync Redux state with the real documentElement (nested <html> is a no-op in prod)
   useEffect(() => {
-    console.log('Header: Redux state changed, syncing with DOM');
-    console.log('Current local_varaiable:', local_varaiable);
-    
-    // Update DOM attributes based on Redux state
     if (local_varaiable.dataToggled !== undefined) {
-      document.documentElement.setAttribute('data-toggled', local_varaiable.dataToggled);
+      if (local_varaiable.dataToggled) {
+        document.documentElement.setAttribute('data-toggled', local_varaiable.dataToggled);
+      } else {
+        document.documentElement.removeAttribute('data-toggled');
+      }
     }
     if (local_varaiable.iconOverlay !== undefined) {
-      document.documentElement.setAttribute('data-icon-overlay', local_varaiable.iconOverlay);
+      if (local_varaiable.iconOverlay) {
+        document.documentElement.setAttribute('data-icon-overlay', local_varaiable.iconOverlay);
+      } else {
+        document.documentElement.removeAttribute('data-icon-overlay');
+      }
     }
     
     // Ensure overlay is only active on mobile
@@ -181,142 +186,17 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
   }, [local_varaiable.dataToggled, local_varaiable.iconOverlay]);
 
 
-  function menuClose() {
-    const theme = store.getState();
-    if (window.innerWidth <= 992) {
-      ThemeChanger({ ...theme, dataToggled: "close" });
-    }
-    if (window.innerWidth >= 992) {
-      ThemeChanger({ ...theme, dataToggled: local_varaiable.dataToggled ? local_varaiable.dataToggled : '' });
-    }
-  }
-
-  const toggleSidebar = () => { 
-    console.log('Toggle sidebar clicked');
-    const theme = store.getState();
-    console.log('Current theme state:', theme);
-    
-    const isMobile = window.innerWidth < 992;
-    console.log('Is mobile:', isMobile);
-    
-    if (isMobile) {
-      // Mobile behavior - simple toggle between open and close
-      console.log('Mobile toggle - current dataToggled:', theme.dataToggled);
-      
-      if (theme.dataToggled === "close" || theme.dataToggled === "") {
-        console.log('Opening sidebar on mobile');
-        const newState = { ...theme, "dataToggled": "open" };
-        ThemeChanger(newState);
-        
-        // Force DOM update
-        setTimeout(() => {
-          document.documentElement.setAttribute('data-toggled', 'open');
-        }, 0);
-
-        setTimeout(() => {
-          const overlay = document.querySelector("#responsive-overlay");
-          if (overlay) {
-            overlay.classList.add("active");
-            // Remove existing event listeners to prevent duplicates
-            const newOverlay = overlay.cloneNode(true);
-            overlay.parentNode?.replaceChild(newOverlay, overlay);
-            
-            // Add new event listener
-            newOverlay.addEventListener("click", () => {
-              const overlay = document.querySelector("#responsive-overlay");
-              if (overlay) {
-                overlay.classList.remove("active");
-                menuClose();
-              }
-            });
-          }
-
-          window.addEventListener("resize", () => {
-            if (window.innerWidth >= 992) {
-              const overlay = document.querySelector("#responsive-overlay");
-              if (overlay) {
-                overlay.classList.remove("active");
-              }
-            }
-          });
-        }, 100);
-      } else {
-        console.log('Closing sidebar on mobile');
-        const newState = { ...theme, "dataToggled": "close" };
-        ThemeChanger(newState);
-        
-        // Force DOM update
-        setTimeout(() => {
-          document.documentElement.setAttribute('data-toggled', 'close');
-        }, 0);
-        
-        // Remove overlay if it exists
-        const overlay = document.querySelector("#responsive-overlay");
-        if (overlay) {
-          overlay.classList.remove("active");
-        }
-      }
-    } else {
-      // Desktop behavior
-      console.log('Desktop toggle - verticalStyle:', theme.dataVerticalStyle, 'dataToggled:', theme.dataToggled);
-      
-      let newToggledState = "";
-      let newIconOverlay = "";
-      
-      if (theme.dataVerticalStyle === "overlay") {
-        if (theme.dataToggled === "icon-overlay-close") {
-          console.log('Opening overlay sidebar');
-          newToggledState = "";
-          newIconOverlay = "";
-        } else {
-          console.log('Closing overlay sidebar');
-          newToggledState = "icon-overlay-close";
-          newIconOverlay = "";
-        }
-      } else if (theme.dataVerticalStyle === "closed") {
-        if (theme.dataToggled === "close-menu-close") {
-          console.log('Opening closed sidebar');
-          newToggledState = "";
-        } else {
-          console.log('Closing closed sidebar');
-          newToggledState = "close-menu-close";
-        }
-      } else if (theme.dataVerticalStyle === "icontext") {
-        if (theme.dataToggled === "icon-text-close") {
-          console.log('Opening icontext sidebar');
-          newToggledState = "";
-        } else {
-          console.log('Closing icontext sidebar');
-          newToggledState = "icon-text-close";
-        }
-      } else if (theme.dataVerticalStyle === "detached") {
-        if (theme.dataToggled === "detached-close") {
-          console.log('Opening detached sidebar');
-          newToggledState = "";
-          newIconOverlay = "";
-        } else {
-          console.log('Closing detached sidebar');
-          newToggledState = "detached-close";
-          newIconOverlay = "";
-        }
-      } else {
-        // Default behavior - just toggle
-        console.log('Default toggle behavior');
-        newToggledState = theme.dataToggled === "" ? "close" : "";
-      }
-      
-      const newState = { ...theme, "dataToggled": newToggledState, "iconOverlay": newIconOverlay };
-      ThemeChanger(newState);
-      
-      // Force DOM update
-      setTimeout(() => {
-        document.documentElement.setAttribute('data-toggled', newToggledState);
-        if (newIconOverlay !== undefined) {
-          document.documentElement.setAttribute('data-icon-overlay', newIconOverlay);
-        }
-        console.log('DOM updated with data-toggled:', newToggledState);
-      }, 0);
-    }
+  /**
+   * Hamburger click — bound on the wrapper so the full 57×60 hit area works
+   * after production CSS absolutely-positions `.animated-arrow`.
+   */
+  const handleToggleSidebar = (event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const applyTheme = typeof ThemeChanger === "function"
+      ? ThemeChanger
+      : (next: Record<string, unknown>) => dispatch({ type: "ThemeChanger", payload: next });
+    applySidebarToggle(applyTheme);
   };
   //Dark Model
 
@@ -400,11 +280,14 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
                   </Link>
                 </div>
               </div>
-              <div className="header-element md:px-[0.325rem] !items-center">
+              <div
+                className="header-element md:px-[0.325rem] !items-center relative z-[100] cursor-pointer"
+                onClick={handleToggleSidebar}
+              >
                 <button 
                   aria-label="Toggle Sidebar"
-                  className="sidemenu-toggle animated-arrow hor-toggle horizontal-navtoggle inline-flex items-center"
-                  onClick={() => toggleSidebar()}
+                  className="sidemenu-toggle animated-arrow hor-toggle horizontal-navtoggle inline-flex items-center !relative z-[100] h-full min-h-[3.75rem] min-w-[2.5rem]"
+                  onClick={handleToggleSidebar}
                   type="button"
                 >
                   <span></span>

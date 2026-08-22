@@ -1,11 +1,11 @@
-
-export const ThemeChanger = (value:any) => async (dispatch:any) => {
-    dispatch({
-      type: "ThemeChanger",
-      payload: value,
-    });
-  
-  };
+/**
+ * Plain action — NOT an async thunk. The async wrapper is dropped by SWC
+ * minify in production, so sidebar toggle appeared to do nothing after build.
+ */
+export const ThemeChanger = (value: any) => ({
+  type: "ThemeChanger",
+  payload: value,
+});
   export const AddToCart = (id: string) => async (dispatch: (arg0: { type: string; payload: string; }) => void) => {
     dispatch({
       type: "ADD_TO_CART",
