@@ -1,4 +1,4 @@
-import { NavigationPermissions } from '@/shared/contextapi/navigationContext';
+import { NavigationPermissions, hasAnyDashboardAccess } from '@/shared/contextapi/navigationContext';
 
 /**
  * True if user may open Yarn Issue flows for production orders (legacy flat flag or nested key).
@@ -18,8 +18,13 @@ export const getFirstAvailableRoute = (permissions: NavigationPermissions | null
   }
 
   // Check routes in order of priority
+  const dashboard = permissions.Dashboard;
   const routeChecks = [
-    { path: '/dashboards/main', permission: permissions.Dashboard }, // Check actual Dashboard permission
+    { path: '/dashboards/catalog', permission: dashboard?.['Catalog Dashboard'] },
+    { path: '/dashboards/production', permission: dashboard?.['Production Dashboard'] },
+    { path: '/dashboards/vendor', permission: dashboard?.['Vendor Dashboard'] },
+    { path: '/dashboards/yarn', permission: dashboard?.['Yarn Dashboard'] },
+    { path: '/dashboards/main', permission: hasAnyDashboardAccess(dashboard) },
     { path: '/catalog/items', permission: permissions.Catalog?.Items },
     { path: '/catalog/categories', permission: permissions.Catalog?.Categories },
     { path: '/catalog/raw-material', permission: permissions.Catalog?.['Raw Material'] },

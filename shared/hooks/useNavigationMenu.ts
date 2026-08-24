@@ -275,6 +275,9 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
 
           if (child.type === 'link' && child.path) {
             // Map paths to parent/child structure
+            if (child.path.startsWith('/dashboards/')) {
+              return hasSubPermission('/dashboards', child.title);
+            }
             // Handle yarn-management items that are shown under catalog
             if (child.path.startsWith('/yarn-management/')) {
               const childName = child.title;
@@ -506,6 +509,9 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
           }
           
           if (child.type === 'link' && child.path) {
+            if (child.path.startsWith('/dashboards/')) {
+              return hasSubPermission('/dashboards', child.title);
+            }
             // Handle yarn-management items that may be shown under catalog
             if (child.path.startsWith('/yarn-management/')) {
               const childName = child.title;

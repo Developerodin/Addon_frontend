@@ -64,7 +64,7 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
 
       const value = third as boolean;
       if (subsection) {
-        if (!newNav[section]) {
+        if (!newNav[section] || typeof newNav[section] !== 'object') {
           newNav[section] = {};
         }
         (newNav[section] as Record<string, unknown>)[subsection] = value;
@@ -120,7 +120,6 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
             <div className="space-y-2">
               {[
                 { key: 'Users', label: 'Users Management' },
-                { key: 'Dashboard', label: 'Dashboard' },
                 { key: 'Stores', label: 'Stores' },
                 { key: 'Analytics', label: 'Analytics' },
                 { key: 'Replenishment Agent', label: 'Replenishment Agent' },
@@ -135,6 +134,45 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
                     className="rounded border-gray-300 text-primary focus:ring-primary"
                   />
                   <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">{section.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Dashboard Section */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-md font-medium text-gray-900 dark:text-white">Dashboard</h3>
+              <button
+                type="button"
+                className="text-xs text-primary hover:text-primary-dark"
+                onClick={() =>
+                  handleSelectAll('Dashboard', [
+                    'Catalog Dashboard',
+                    'Production Dashboard',
+                    'Vendor Dashboard',
+                    'Yarn Dashboard',
+                  ])
+                }
+              >
+                Toggle All
+              </button>
+            </div>
+            <div className="space-y-2 ml-4">
+              {[
+                { key: 'Catalog Dashboard', label: 'Catalog Dashboard' },
+                { key: 'Production Dashboard', label: 'Production Dashboard' },
+                { key: 'Vendor Dashboard', label: 'Vendor Dashboard' },
+                { key: 'Yarn Dashboard', label: 'Yarn Dashboard' },
+              ].map((subsection) => (
+                <label key={subsection.key} className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={(navigation.Dashboard as Record<string, boolean> | undefined)?.[subsection.key] === true}
+                    onChange={(e) => handleNavigationChange('Dashboard', subsection.key, e.target.checked)}
+                    className="rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">{subsection.label}</span>
                 </label>
               ))}
             </div>

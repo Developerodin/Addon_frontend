@@ -11,13 +11,19 @@ interface NavigationPermissionsProps {
 
 const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigation, onChange }) => {
   const mainSections = [
-    { key: 'Dashboard', label: 'Dashboard' },
     { key: 'Stores', label: 'Stores' },
     { key: 'Analytics', label: 'Analytics' },
     { key: 'Replenishment Agent', label: 'Replenishment Agent' },
     { key: 'File Manager', label: 'File Manager' },
     { key: 'Help & Support', label: 'Help & Support' },
     { key: 'Users', label: 'Users Management' }
+  ]
+
+  const dashboardSections = [
+    { key: 'Catalog Dashboard', label: 'Catalog Dashboard' },
+    { key: 'Production Dashboard', label: 'Production Dashboard' },
+    { key: 'Vendor Dashboard', label: 'Vendor Dashboard' },
+    { key: 'Yarn Dashboard', label: 'Yarn Dashboard' },
   ]
 
   const catalogSections = [
@@ -150,6 +156,23 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
                   className="rounded border-gray-300 text-primary focus:ring-primary"
                 />
                 <span className="ml-2 text-sm text-gray-700">{section.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h4 className="text-md font-medium text-gray-900 mb-3">Dashboard</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-4">
+            {dashboardSections.map((subsection) => (
+              <label key={subsection.key} className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={(navigation.Dashboard as Record<string, boolean> | undefined)?.[subsection.key] === true}
+                  onChange={(e) => onChange('Dashboard', subsection.key, null, e.target.checked)}
+                  className="rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <span className="ml-2 text-sm text-gray-700">{subsection.label}</span>
               </label>
             ))}
           </div>

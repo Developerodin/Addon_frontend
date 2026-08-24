@@ -126,7 +126,7 @@ const EditUserPage = () => {
                 }
             } else if (subsection) {
                 // Handle nested sections like Catalog.Items
-                if (!newNav[section as keyof typeof newNav]) {
+                if (!newNav[section as keyof typeof newNav] || typeof newNav[section as keyof typeof newNav] !== 'object') {
                     newNav[section as keyof typeof newNav] = {} as any;
                 }
                 (newNav[section as keyof typeof newNav] as any)[subsection] = value;

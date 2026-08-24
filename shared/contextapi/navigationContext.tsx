@@ -3,9 +3,16 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { useSelector } from 'react-redux';
 import { User } from '@/shared/services/userService';
 
+export type DashboardNavPermissions = {
+  'Catalog Dashboard': boolean;
+  'Production Dashboard': boolean;
+  'Vendor Dashboard': boolean;
+  'Yarn Dashboard': boolean;
+};
+
 interface NavigationPermissions {
   // Main Sidebar
-  Dashboard: boolean;
+  Dashboard: DashboardNavPermissions;
   Catalog: {
     Items: boolean;
     Categories: boolean;
@@ -151,6 +158,61 @@ export function mergeYarnIssuePermissions(
   return { ...defaults };
 }
 
+/** Nested Dashboard flags — all off. */
+export const EMPTY_DASHBOARD_NAV_DEFAULTS: DashboardNavPermissions = {
+  'Catalog Dashboard': false,
+  'Production Dashboard': false,
+  'Vendor Dashboard': false,
+  'Yarn Dashboard': false,
+};
+
+/** Nested Dashboard flags — all on (legacy `Dashboard: true` and missing-nav fallback). */
+export const ALL_DASHBOARD_NAV_DEFAULTS: DashboardNavPermissions = {
+  'Catalog Dashboard': true,
+  'Production Dashboard': true,
+  'Vendor Dashboard': true,
+  'Yarn Dashboard': true,
+};
+
+/**
+ * Normalizes legacy boolean `Dashboard` flags and partial objects into the nested shape.
+ * @param raw - Stored Dashboard permission (boolean or object)
+ * @param defaults - Fallback nested flags
+ */
+export function mergeDashboardPermissions(
+  raw: boolean | DashboardNavPermissions | undefined,
+  defaults: DashboardNavPermissions
+): DashboardNavPermissions {
+  if (raw === true) {
+    return { ...ALL_DASHBOARD_NAV_DEFAULTS };
+  }
+  if (raw && typeof raw === 'object') {
+    const r = raw as Record<string, boolean | undefined>;
+    return {
+      ...defaults,
+      'Catalog Dashboard': Boolean(r['Catalog Dashboard']),
+      'Production Dashboard': Boolean(r['Production Dashboard']),
+      'Vendor Dashboard': Boolean(r['Vendor Dashboard']),
+      'Yarn Dashboard': Boolean(r['Yarn Dashboard']),
+    };
+  }
+  return { ...defaults };
+}
+
+/**
+ * True if the user may see the Dashboard sidebar group (any nested flag or legacy boolean).
+ * @param dashboard - Dashboard permission value from navigation
+ */
+export function hasAnyDashboardAccess(
+  dashboard: boolean | DashboardNavPermissions | undefined
+): boolean {
+  if (dashboard === true) return true;
+  if (dashboard && typeof dashboard === 'object') {
+    return Object.values(dashboard).some((value) => value === true);
+  }
+  return false;
+}
+
 /**
  * Deep-merge partial navigation with canonical defaults for complete PATCH payloads.
  * @param partial - User navigation from API or form state
@@ -166,6 +228,10 @@ export function mergeNavigationWithDefaults(
   return {
     ...defaultPermissions,
     ...partial,
+    Dashboard: mergeDashboardPermissions(
+      partial.Dashboard as boolean | DashboardNavPermissions | undefined,
+      defaultPermissions.Dashboard
+    ),
     Catalog: {
       ...defaultPermissions.Catalog,
       ...(partial.Catalog || {}),
@@ -212,7 +278,7 @@ const NavigationContext = createContext<NavigationContextType | undefined>(undef
 
 // Default permissions (all false for security)
 const defaultPermissions: NavigationPermissions = {
-  Dashboard: false,
+  Dashboard: { ...EMPTY_DASHBOARD_NAV_DEFAULTS },
   Catalog: {
     Items: false,
     Categories: false,
@@ -324,7 +390,7 @@ export const EMPTY_YARN_ISSUE_NAV_DEFAULTS = defaultPermissions['Yarn Management
 const NAVIGATION_CACHE_KEY = 'navigationPermissions';
 const NAVIGATION_CACHE_VERSION_KEY = 'navigationPermissionsVersion';
 /** Bump when permission semantics change (e.g. Help & Support opt-in). */
-const NAVIGATION_CACHE_VERSION = '3';
+const NAVIGATION_CACHE_VERSION = '4';
 
 interface NavigationProviderProps {
   children: ReactNode;
@@ -390,7 +456,7 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
       console.log('User exists but no navigation permissions found, using secure defaults');
       const securePermissions = {
         ...defaultPermissions,
-        Dashboard: true, // Always show dashboard for authenticated users
+        Dashboard: { ...ALL_DASHBOARD_NAV_DEFAULTS },
       };
       setPermissions(securePermissions);
       localStorage.setItem(NAVIGATION_CACHE_KEY, JSON.stringify(securePermissions));
@@ -413,8 +479,6 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
     // Map paths to permission keys
     const pathMap: { [key: string]: keyof NavigationPermissions } = {
       '/users': 'Users',
-      '/dashboard': 'Dashboard',
-      '/dashboards/main': 'Dashboard',
       '/stores': 'Stores',
       '/analytics': 'Analytics',
       '/replenishment': 'Replenishment Agent',
@@ -429,6 +493,10 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
         return permissions[permissionKey] === true;
       }
       return permissions[permissionKey] as boolean;
+    }
+
+    if (path === '/dashboard' || path === '/dashboards' || path === '/dashboards/main') {
+      return hasAnyDashboardAccess(permissions.Dashboard);
     }
 
     // Special handling for Vendor PO main menu - show if any Vendor PO permission is true
@@ -619,7 +687,17 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
     }
 
     // Map parent paths to permission objects
+    if (parent === '/dashboards' || parent === '/dashboards/main' || parent === '/dashboard') {
+      const dashboardRaw = permissions.Dashboard as unknown as boolean | DashboardNavPermissions;
+      if (dashboardRaw === true) return true;
+      if (dashboardRaw && typeof dashboardRaw === 'object') {
+        return dashboardRaw[child as keyof DashboardNavPermissions] === true;
+      }
+      return false;
+    }
+
     const parentMap: { [key: string]: keyof NavigationPermissions } = {
+      '/dashboards': 'Dashboard',
       '/catalog': 'Catalog',
       '/sales': 'Sales',
       '/production': 'Production Planning',

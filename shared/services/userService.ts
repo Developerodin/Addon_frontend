@@ -4,7 +4,12 @@ import Cookies from 'js-cookie';
 // User interface based on the provided schema
 export interface NavigationPermissions {
   // Main Sidebar
-  Dashboard: boolean;
+  Dashboard: {
+    'Catalog Dashboard': boolean;
+    'Production Dashboard': boolean;
+    'Vendor Dashboard': boolean;
+    'Yarn Dashboard': boolean;
+  };
   Catalog: {
     Items: boolean;
     Categories: boolean;
