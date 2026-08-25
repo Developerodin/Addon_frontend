@@ -1,16 +1,40 @@
 import { API_BASE_URL } from '@/shared/data/utilities/api';
 
+/** Needle size a machine supports, with its short-close cutoff quantity. */
+export interface MachineNeedleSizeConfig {
+  needleSize: string;
+  cutoffQuantity?: number;
+}
+
+/**
+ * Machine status. The API returns the title-case values (`Active`, `Idle`,
+ * `Under Maintenance`); the lower-case values are legacy and still accepted by
+ * older screens in this app.
+ */
+export type MachineStatus =
+  | 'Active'
+  | 'Idle'
+  | 'Under Maintenance'
+  | 'active'
+  | 'inactive'
+  | 'maintenance'
+  | 'retired';
+
 export interface Machine {
   id: string;
   name: string;
   machineCode: string;
+  /** Physical machine number from the catalog, distinct from machineCode. */
+  machineNumber?: string;
   machineType: string;
   manufacturer: string;
   model: string;
   serialNumber: string;
-  status: 'active' | 'inactive' | 'maintenance' | 'retired';
+  status: MachineStatus;
   location: string;
   capacity: number;
+  /** Needle sizes this machine can run; a machine may support several. */
+  needleSizeConfig?: MachineNeedleSizeConfig[];
   description?: string;
   purchaseDate?: string;
   lastMaintenanceDate?: string;

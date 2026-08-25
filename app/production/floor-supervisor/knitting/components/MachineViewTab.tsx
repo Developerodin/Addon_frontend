@@ -114,7 +114,7 @@ function getRunningArticleAriaLabel(item: NonNullable<ReturnType<typeof getRunni
 
 export interface MachineViewTabProps {
   /** When user clicks pencil on a machine card, open the same data-entry modal (priority order editable, upcoming read-only). */
-  onOpenEditModal?: (assignment: MachineOrderAssignment) => void;
+  onOpenEditModal?: (assignment: MachineOrderAssignment) => Promise<void>;
   /** When this value changes, machine assignments list is refetched (e.g. after completing an article in parent). */
   refreshTrigger?: number;
   /** When false, hide settings icon in Actions (e.g. for "user" role). Default true. */
@@ -144,6 +144,8 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
   /** Assignment item whose yarn issue status PATCH is in flight. */
   const [savingYarnIssueItemId, setSavingYarnIssueItemId] = useState<string | null>(null);
   const [auditLogsTarget, setAuditLogsTarget] = useState<{ machineId: string; label: string } | null>(null);
+  /** Track which row's Edit button is loading (prevents double-click and shows spinner). */
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
 
   /** Reorder within the prioritized list only; on-hold and no-priority items keep trailing priorities. */
   const handleReorderItems = useCallback(
@@ -551,11 +553,31 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
                               <>
                                 <button
                                   type="button"
-                                  onClick={() => onOpenEditModal?.(row)}
-                                  className="flex items-center justify-center rounded bg-purple-100 text-purple-600 hover:bg-purple-200 w-7 h-7"
-                                  title="Edit"
+                                  disabled={editingRowId === row.id}
+                                  onClick={async () => {
+                                    if (editingRowId || !onOpenEditModal) return;
+                                    setEditingRowId(row.id);
+                                    try {
+                                      await onOpenEditModal(row);
+                                    } catch (err) {
+                                      toast.error(err instanceof Error ? err.message : "Failed to open edit modal");
+                                    } finally {
+                                      setEditingRowId(null);
+                                    }
+                                  }}
+                                  className={`flex items-center justify-center rounded w-7 h-7 ${
+                                    editingRowId === row.id
+                                      ? "bg-purple-200 text-purple-400 cursor-wait"
+                                      : "bg-purple-100 text-purple-600 hover:bg-purple-200"
+                                  }`}
+                                  title={editingRowId === row.id ? "Loading..." : "Edit"}
+                                  aria-busy={editingRowId === row.id}
                                 >
-                                  <i className="ri-pencil-line text-sm" />
+                                  {editingRowId === row.id ? (
+                                    <span className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-purple-600 border-t-transparent" />
+                                  ) : (
+                                    <i className="ri-pencil-line text-sm" />
+                                  )}
                                 </button>
                                 {canShowSettings && (
                                   <button

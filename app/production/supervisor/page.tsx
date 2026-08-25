@@ -10,6 +10,9 @@ import ArticleLogsModal from "../../../shared/components/production/ArticleLogsM
 import { productionService, OrderFilters, ArticleWiseReportArticle, ArticleWiseReportResponse } from "@/shared/services/productionService";
 import YarnEstimationTab from "../../../shared/components/production/YarnEstimationTab";
 import SupervisorUpcomingViewTab from "@/shared/components/production/SupervisorUpcomingViewTab";
+import ProductionOrderSummaryTab from "@/shared/components/production/ProductionOrderSummaryTab";
+import BacklogReportTab from "@/shared/components/production/BacklogReportTab";
+import DailyProductionSummaryTab from "@/shared/components/production/DailyProductionSummaryTab";
 
 interface ProductionOrder {
   id: string;
@@ -34,7 +37,7 @@ interface FloorQuantity {
 }
 
 
-type SupervisorTab = 'orders' | 'article-view' | 'yarn-estimation' | 'upcoming-view';
+type SupervisorTab = 'orders' | 'article-view' | 'order-summary' | 'backlog-report' | 'daily-production-summary' | 'yarn-estimation' | 'upcoming-view';
 
 const ProductionSupervisorPage = () => {
   const [activeTab, setActiveTab] = useState<SupervisorTab>('orders');
@@ -69,6 +72,12 @@ const ProductionSupervisorPage = () => {
   const [articleViewTotalPages, setArticleViewTotalPages] = useState(1);
   const [articleViewTotal, setArticleViewTotal] = useState(0);
   const [articleFilter, setArticleFilter] = useState('');
+  const [orderSummaryRefreshNonce, setOrderSummaryRefreshNonce] = useState(0);
+  const [orderSummaryLoading, setOrderSummaryLoading] = useState(false);
+  const [backlogReportRefreshNonce, setBacklogReportRefreshNonce] = useState(0);
+  const [backlogReportLoading, setBacklogReportLoading] = useState(false);
+  const [dailyProductionRefreshNonce, setDailyProductionRefreshNonce] = useState(0);
+  const [dailyProductionLoading, setDailyProductionLoading] = useState(false);
 
   // Load orders from API
   const loadOrders = async () => {
@@ -428,23 +437,48 @@ const ProductionSupervisorPage = () => {
                 onClick={() => {
                   if (activeTab === 'article-view') void loadArticleView();
                   else if (activeTab === 'orders') void loadOrders();
+                  else if (activeTab === 'order-summary') setOrderSummaryRefreshNonce((n) => n + 1);
+                  else if (activeTab === 'backlog-report') setBacklogReportRefreshNonce((n) => n + 1);
+                  else if (activeTab === 'daily-production-summary') setDailyProductionRefreshNonce((n) => n + 1);
                 }}
                 disabled={
-                  activeTab === 'upcoming-view'
+                  activeTab === 'upcoming-view' || activeTab === 'yarn-estimation'
                     ? false
                     : activeTab === 'article-view'
                       ? articleViewLoading
-                      : isLoading
+                      : activeTab === 'order-summary'
+                        ? orderSummaryLoading
+                        : activeTab === 'backlog-report'
+                          ? backlogReportLoading
+                        : activeTab === 'daily-production-summary'
+                          ? dailyProductionLoading
+                        : isLoading
                 }
                 title={
                   activeTab === 'article-view'
                     ? 'Refresh Article view'
-                    : activeTab === 'upcoming-view'
+                    : activeTab === 'order-summary'
+                      ? 'Refresh Production order summary'
+                      : activeTab === 'backlog-report'
+                      ? 'Refresh Backlog report'
+                      : activeTab === 'daily-production-summary'
+                      ? 'Refresh Daily production summary'
+                      : activeTab === 'upcoming-view'
                       ? 'Use Refresh inside Upcoming view'
                       : 'Refresh Orders'
                 }
               >
-                <i className={`ri-refresh-line text-xs ${(activeTab === 'article-view' ? articleViewLoading : isLoading) ? 'animate-spin' : ''}`}></i> Refresh
+                <i className={`ri-refresh-line text-xs ${(
+                  activeTab === 'article-view'
+                    ? articleViewLoading
+                    : activeTab === 'order-summary'
+                      ? orderSummaryLoading
+                      : activeTab === 'backlog-report'
+                        ? backlogReportLoading
+                      : activeTab === 'daily-production-summary'
+                        ? dailyProductionLoading
+                      : isLoading
+                ) ? 'animate-spin' : ''}`}></i> Refresh
               </button>
               {selectedOrders.length > 0 && (
                 <button
@@ -507,6 +541,33 @@ const ProductionSupervisorPage = () => {
             <button
               type="button"
               className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${
+                activeTab === 'order-summary' ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setActiveTab('order-summary')}
+            >
+              Production order summary
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${
+                activeTab === 'backlog-report' ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setActiveTab('backlog-report')}
+            >
+              Backlog report
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${
+                activeTab === 'daily-production-summary' ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setActiveTab('daily-production-summary')}
+            >
+              Daily production summary
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${
                 activeTab === 'yarn-estimation' ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
               onClick={() => setActiveTab('yarn-estimation')}
@@ -531,6 +592,21 @@ const ProductionSupervisorPage = () => {
                 <YarnEstimationTab />
               ) : activeTab === 'upcoming-view' ? (
                 <SupervisorUpcomingViewTab />
+              ) : activeTab === 'order-summary' ? (
+                <ProductionOrderSummaryTab
+                  refreshNonce={orderSummaryRefreshNonce}
+                  onLoadingChange={setOrderSummaryLoading}
+                />
+              ) : activeTab === 'backlog-report' ? (
+                <BacklogReportTab
+                  refreshNonce={backlogReportRefreshNonce}
+                  onLoadingChange={setBacklogReportLoading}
+                />
+              ) : activeTab === 'daily-production-summary' ? (
+                <DailyProductionSummaryTab
+                  refreshNonce={dailyProductionRefreshNonce}
+                  onLoadingChange={setDailyProductionLoading}
+                />
               ) : activeTab === 'article-view' ? (
                 <>
                   <div className="p-[10px] mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">

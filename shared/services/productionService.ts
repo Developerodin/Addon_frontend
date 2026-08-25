@@ -528,6 +528,106 @@ export interface ArticleWiseReportResponse {
   total: number;
 }
 
+/** Qty rollups for one production order (or a totals row). */
+export interface OrderSummaryMetrics {
+  articleCount: number;
+  totalQty: number;
+  holdQty: number;
+  knitPendingWithHold: number;
+  knitPendingWithoutHold: number;
+  transferQty: number;
+  wipQty: number;
+}
+
+/** One production-order row in the order-summary report. */
+export interface OrderSummaryRow extends OrderSummaryMetrics {
+  orderId: string;
+  orderNumber: string;
+  orderNote?: string;
+  priority: string;
+  status: string;
+  createdAt?: string;
+}
+
+export interface OrderSummaryReportResponse {
+  results: OrderSummaryRow[];
+  page: number;
+  limit: number;
+  totalPages: number;
+  total: number;
+  totals: OrderSummaryMetrics;
+  pageTotals: OrderSummaryMetrics;
+}
+
+/** Floor column in the date × pending-qty backlog matrix. */
+export interface BacklogReportFloorColumn {
+  key: string;
+  label: string;
+}
+
+/** One calendar day in the backlog matrix. */
+export interface BacklogReportDateRow {
+  date: string;
+  isToday: boolean;
+  isFuture: boolean;
+  floors: Record<string, number | null>;
+  total: number | null;
+}
+
+/** GET /production/reports/backlog — DATE rows × floor pending qty. */
+export interface BacklogReportResponse {
+  year: number;
+  month: number;
+  timezone: string;
+  dates: string[];
+  todayKey: string;
+  floors: BacklogReportFloorColumn[];
+  rows: BacklogReportDateRow[];
+  asOf: {
+    date: string;
+    floors: Record<string, number | null>;
+    total: number;
+  };
+}
+
+/**
+ * Row kind in the daily production summary:
+ * - `floor`  — qty transferred off a non-QC floor that day
+ * - `m1`     — M1 (good quality) booked on a QC floor that day
+ * - `defect` — qty booked into the M2/M3/M4 ledger from a floor that day
+ */
+export type DailyProductionSummaryRowKind = "floor" | "m1" | "defect";
+
+/** One Details row of the daily production summary, with a qty per IST calendar date. */
+export interface DailyProductionSummaryRow {
+  key: string;
+  label: string;
+  kind: DailyProductionSummaryRowKind;
+  /** Source floor for `floor` rows, else null. */
+  floor: string | null;
+  /** Defect bucket (M2/M3/M4) for `defect` rows, else null. */
+  category: string | null;
+  /** Floor the qty was booked on for `m1` and `defect` rows, else null. */
+  sourceFloor: string | null;
+  /** Qty keyed by YYYY-MM-DD; null for future dates. */
+  values: Record<string, number | null>;
+  total: number;
+}
+
+/** GET /production/reports/daily-production-summary — Details rows × date columns. */
+export interface DailyProductionSummaryResponse {
+  year: number;
+  month: number;
+  timezone: string;
+  dates: string[];
+  todayKey: string;
+  includeExtraRows: boolean;
+  rows: DailyProductionSummaryRow[];
+  columnTotals: Record<string, number | null>;
+  grandTotal: number;
+  warnings: string[];
+}
+
 class ProductionService {
   private baseUrl = `${API_BASE_URL}/production`;
 
@@ -1148,6 +1248,61 @@ class ProductionService {
     const queryString = queryParams.toString();
     const endpoint = queryString ? `/reports/article-wise?${queryString}` : '/reports/article-wise';
     return this.request<ArticleWiseReportResponse>(endpoint);
+  }
+
+  /** Order-level production summary: planned, hold, knitting pending, WIP, dispatch transfer. */
+  async getOrderSummaryReport(filters: {
+    search?: string;
+    status?: string;
+    priority?: string;
+    limit?: number;
+    page?: number;
+    sortBy?: string;
+  } = {}): Promise<ApiResponse<OrderSummaryReportResponse>> {
+    const queryParams = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') {
+        queryParams.append(key, String(value));
+      }
+    });
+    const queryString = queryParams.toString();
+    const endpoint = queryString ? `/reports/order-summary?${queryString}` : '/reports/order-summary';
+    return this.request<OrderSummaryReportResponse>(endpoint);
+  }
+
+  /** Daily floor backlog matrix: pending qty by Details row and calendar date (IST). */
+  async getBacklogReport(filters: {
+    year?: number;
+    month?: number;
+  } = {}): Promise<ApiResponse<BacklogReportResponse>> {
+    const queryParams = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        queryParams.append(key, String(value));
+      }
+    });
+    const queryString = queryParams.toString();
+    const endpoint = queryString ? `/reports/backlog?${queryString}` : "/reports/backlog";
+    return this.request<BacklogReportResponse>(endpoint);
+  }
+
+  /** Daily production summary: qty transferred off each floor per IST calendar date. */
+  async getDailyProductionSummary(filters: {
+    year?: number;
+    month?: number;
+    includeExtraRows?: boolean;
+  } = {}): Promise<ApiResponse<DailyProductionSummaryResponse>> {
+    const queryParams = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        queryParams.append(key, String(value));
+      }
+    });
+    const queryString = queryParams.toString();
+    const endpoint = queryString
+      ? `/reports/daily-production-summary?${queryString}`
+      : "/reports/daily-production-summary";
+    return this.request<DailyProductionSummaryResponse>(endpoint);
   }
 
   // Logging & Audit APIs

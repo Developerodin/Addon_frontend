@@ -14,6 +14,8 @@ import { getHalfStepQuantityError, HALF_STEP_QTY_ERROR } from "@/shared/utils/ha
 import MachineViewTab from "./components/MachineViewTab";
 import ArticleViewTab from "./components/ArticleViewTab";
 import MachineArticlePlanningTab from "./components/MachineArticlePlanningTab";
+import MachineArticleAdvancedPlanningTab from "./components/MachineArticleAdvancedPlanningTab";
+import NeedleWiseProductionTab from "./components/NeedleWiseProductionTab";
 import {
   checkKnittingQuantityBuffer,
 } from "./utils/knittingQuantityValidation";
@@ -38,7 +40,13 @@ import {
   type ArticleQrScanFeedback,
 } from "@/shared/utils/productionArticleQrScanFlow";
 import ArticleQrScanDrawer from "@/shared/components/production/ArticleQrScanDrawer";
-type KnittingTab = "orders" | "machine-view" | "article-view" | "planning";
+type KnittingTab =
+  | "orders"
+  | "machine-view"
+  | "article-view"
+  | "planning"
+  | "advanced-planning"
+  | "needle-wise";
 
 /** 50×70mm ZPL preset — aligned with Containers Master default for thermal QR labels */
 const KNITTING_CONTAINER_LABEL_QZ_SETTINGS = {
@@ -562,13 +570,15 @@ const KnittingFloorSupervisorPage = () => {
   };
 
   /** Open the same data-entry (update) modal from machine view: only priority orders, first editable, rest read-only. */
-  const handleOpenUpdateModalFromMachine = async (assignment: MachineOrderAssignment) => {
+  const handleOpenUpdateModalFromMachine = async (assignment: MachineOrderAssignment): Promise<void> => {
     let assignmentForModal = assignment;
     if (!assignment.id.startsWith("placeholder-")) {
       try {
         assignmentForModal = await getMachineOrderAssignment(assignment.id);
-      } catch {
-        // keep list snapshot if GET fails
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to fetch machine assignment";
+        toast.error(msg);
+        throw new Error(msg);
       }
     }
     const items = (assignmentForModal.productionOrderItems ?? [])
@@ -581,28 +591,69 @@ const KnittingFloorSupervisorPage = () => {
       .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999))
       .slice(0, 2);
     if (items.length === 0) {
-      toast.error("No priority orders for this machine");
-      return;
+      const msg = "No priority orders for this machine";
+      toast.error(msg);
+      throw new Error(msg);
     }
-    const orderIds = [...new Set(items.map((i) => i.productionOrder))];
+    const orderIds = [...new Set(items.map((i) => {
+      const po = i.productionOrder;
+      if (typeof po === "string") return po;
+      if (po && typeof po === "object") return (po as { id?: string; _id?: string }).id ?? (po as { _id?: string })._id ?? "";
+      return "";
+    }))].filter(Boolean);
+    if (orderIds.length === 0) {
+      const msg = "No valid order IDs found for this machine";
+      toast.error(msg);
+      throw new Error(msg);
+    }
     const orders: ProductionOrder[] = [];
     for (const oid of orderIds) {
-      const res = await productionService.getOrder(oid);
-      if (res.success && res.data) orders.push(res.data);
+      try {
+        const res = await productionService.getOrder(oid);
+        if (res.success && res.data) {
+          orders.push(res.data);
+        } else {
+          const msg = res.message || `Failed to fetch order ${oid}`;
+          toast.error(msg);
+          throw new Error(msg);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to fetch order data";
+        toast.error(msg);
+        throw new Error(msg);
+      }
+    }
+    if (orders.length === 0) {
+      const msg = "Could not load order data";
+      toast.error(msg);
+      throw new Error(msg);
     }
     const articles: Article[] = [];
     for (const item of items) {
-      const order = orders.find((o) => o.id === item.productionOrder);
+      const poId = typeof item.productionOrder === "string"
+        ? item.productionOrder
+        : (item.productionOrder as { id?: string; _id?: string })?.id ??
+          (item.productionOrder as { _id?: string })?._id ?? "";
+      const order = orders.find((o) => o.id === poId);
       if (!order) continue;
       const article = order.articles.find((a) => (a.id || a._id) === item.article);
       if (article) articles.push(article);
     }
     if (articles.length === 0) {
-      toast.error("Could not load order/article data");
-      return;
+      const msg = "Could not load article data";
+      toast.error(msg);
+      throw new Error(msg);
     }
-    const firstOrder = orders.find((o) => o.id === items[0].productionOrder);
-    if (!firstOrder) return;
+    const firstPoId = typeof items[0].productionOrder === "string"
+      ? items[0].productionOrder
+      : (items[0].productionOrder as { id?: string; _id?: string })?.id ??
+        (items[0].productionOrder as { _id?: string })?._id ?? "";
+    const firstOrder = orders.find((o) => o.id === firstPoId);
+    if (!firstOrder) {
+      const msg = "Could not find order for first item";
+      toast.error(msg);
+      throw new Error(msg);
+    }
     const syntheticOrder: ProductionOrder = {
       ...firstOrder,
       id: firstOrder.id,
@@ -1554,6 +1605,20 @@ const KnittingFloorSupervisorPage = () => {
             >
               Planning
             </button>
+            <button
+              type="button"
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "advanced-planning" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              onClick={() => setActiveTab("advanced-planning")}
+            >
+              Advanced Planning
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "needle-wise" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              onClick={() => setActiveTab("needle-wise")}
+            >
+              Needle Wise Planning
+            </button>
           </div>
         </div>
 
@@ -1568,6 +1633,10 @@ const KnittingFloorSupervisorPage = () => {
             />
           ) : activeTab === "planning" ? (
             <MachineArticlePlanningTab refreshTrigger={machineViewRefreshTrigger} />
+          ) : activeTab === "advanced-planning" ? (
+            <MachineArticleAdvancedPlanningTab refreshTrigger={machineViewRefreshTrigger} />
+          ) : activeTab === "needle-wise" ? (
+            <NeedleWiseProductionTab refreshTrigger={machineViewRefreshTrigger} />
           ) : activeTab === "article-view" ? (
             <ArticleViewTab
               orders={articleTabOrders}
