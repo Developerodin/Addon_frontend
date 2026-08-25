@@ -78,15 +78,14 @@ export const NEEDLE_WISE_COLUMN_FORMULAS: Record<NeedleWiseColumnKey, ColumnForm
   },
 
   pendingQty: {
-    title: "Knitting Pending QTY",
-    formula: "SUM(item.knittingRemaining ?? item.plannedQuantity) for all live queue items on this needle",
+    title: "Pending on Machines",
+    formula: "SUM(knittingRemaining) for every live queue row on this needle",
     meaning:
-      "Total pieces still to be knitted across every machine on this needle. Uses the article's knitting remaining when available, otherwise falls back to its planned quantity. Completed, Short Close, On Hold and Cancelled queue items are excluded.",
+      "Pieces still to be knitted on machines currently set to this needle. This is only the work already loaded onto a machine — it is not the factory's whole knitting backlog. Work with no machine yet has no needle, so it cannot appear in this table and is reported as Unplanned in the reconciliation below.",
     fields: [
       "MachineOrderAssignment.productionOrderItems[]",
       "Article.floorQuantities.knitting.remaining",
-      "Article.plannedQuantity (fallback)",
-      "item.status not in (Completed, Short Close, On Hold, Cancelled)",
+      "item.status not in (Completed, Cancelled, Short Close, On Hold)",
     ],
     example: {
       given: [
@@ -97,29 +96,29 @@ export const NEEDLE_WISE_COLUMN_FORMULAS: Record<NeedleWiseColumnKey, ColumnForm
       result: "40,000 + 30,000 + 22,517 = 92,517",
     },
     caveat:
-      "Unlike the Advanced Planning table, items without a priority are still counted here so nothing is missed from the quantity total.",
+      "Supplied by the same backend calculation that feeds the Production Order Summary, so the two screens cannot drift. An article queued on two machines is counted once. Items without a priority are still counted, unlike the Advanced Planning table.",
   },
 
   daysRequired: {
     title: "No of days",
-    formula: "ceil(Knitting Pending QTY / (Daily rate x Active Machine))",
+    formula: "Row: ceil(Pending on Machines / (Daily rate x Active Machine)). Footer: sum of every row.",
     meaning:
       "Working days needed to clear this needle's pending quantity, assuming every active machine runs at the daily rate. Rounded up to a whole day. The daily rate is editable at the top of the tab so you can match it to real output.",
-    fields: ["Knitting Pending QTY", "Active Machine", "Daily rate per machine (tab input)"],
+    fields: ["Pending on Machines", "Active Machine", "Daily rate per machine (tab input)"],
     example: {
       given: EXAMPLE_GIVEN,
       result: "ceil(92,517 / (150 x 26)) = ceil(23.72) = 24 days",
     },
     caveat:
-      "Shows a dash when there is pending work but no active machine, since the queue would never clear. Inactive machines are never included in the divisor.",
+      "Shows a dash when there is pending work but no active machine, since the queue would never clear. Inactive machines are never included in the divisor. Unplanned work is not in this figure. The Total days footer sums the row days; needles run in parallel, so that number is capacity-days, not calendar days to clear the factory.",
   },
 
   remark: {
     title: "Remark",
-    formula: "Auto flags derived from Active Machine, Inactive Machine, Pending QTY and No of days",
+    formula: "Auto flags derived from Active Machine, Inactive Machine, Pending on Machines and No of days",
     meaning:
       "Read-only status flags. Nothing is saved to the database. Order of precedence: pending work with no active machine, then overloaded, then idle capacity, then on track. A separate grey flag is added whenever machines on the needle are down.",
-    fields: ["Active Machine", "Inactive Machine", "Knitting Pending QTY", "No of days"],
+    fields: ["Active Machine", "Inactive Machine", "Pending on Machines", "No of days"],
     example: {
       given: [
         "Needle 200: pending 103,175, active 20, inactive 1",
@@ -132,6 +131,6 @@ export const NEEDLE_WISE_COLUMN_FORMULAS: Record<NeedleWiseColumnKey, ColumnForm
 
 /** Reconciliation check shown at the bottom of every Needle Wise formula drawer. */
 export const NEEDLE_WISE_IDENTITY =
-  "SUM(Inactive Machine) + SUM(Active Machine) = total machines in the catalog";
+  "SUM(Inactive) + SUM(Active) = total machines  ·  Pending on Machines + Unplanned = Order Summary knit pending";
 
-export const NEEDLE_WISE_IDENTITY_EXAMPLE = "2 + 54 = 56 machines";
+export const NEEDLE_WISE_IDENTITY_EXAMPLE = "2 + 54 = 56 machines  ·  75,912 + 14,371 = 90,283 pcs";

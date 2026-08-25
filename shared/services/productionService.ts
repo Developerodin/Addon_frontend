@@ -532,9 +532,25 @@ export interface ArticleWiseReportResponse {
 export interface OrderSummaryMetrics {
   articleCount: number;
   totalQty: number;
+  /** Short-close leftover. Named holdQty for API compatibility. */
   holdQty: number;
   knitPendingWithHold: number;
+  /**
+   * Legacy pending figure (everything except short close). Kept so the UI can
+   * show the pre-bucket number next to the new one during rollout.
+   * @deprecated Use knitPendingQty.
+   */
   knitPendingWithoutHold: number;
+  /** Reportable pending: knitPendingOnMachine + knitPendingUnplanned. */
+  knitPendingQty: number;
+  /** Pending on a live machine queue. Reconciles with the Needle Wise table. */
+  knitPendingOnMachine: number;
+  /** Pending with no machine assigned yet. Needs planning. */
+  knitPendingUnplanned: number;
+  /** Balance left when the machine closed the row Completed / Cancelled. */
+  closedOnMachineQty: number;
+  /** Balance on rows paused as On Hold. */
+  onHoldQty: number;
   transferQty: number;
   wipQty: number;
 }
@@ -557,6 +573,46 @@ export interface OrderSummaryReportResponse {
   total: number;
   totals: OrderSummaryMetrics;
   pageTotals: OrderSummaryMetrics;
+}
+
+/** Where the factory's remaining knitting sits. Only the first two are pending. */
+export interface KnitPendingBucketTotals {
+  onMachine: number;
+  unplanned: number;
+  shortClosed: number;
+  closedOnMachine: number;
+  onHold: number;
+}
+
+/** An article with knitting left but no machine assigned. */
+export interface UnplannedKnitArticle {
+  articleId: string;
+  articleNumber: string;
+  orderId: string;
+  orderNumber: string;
+  orderNote: string;
+  qty: number;
+}
+
+/**
+ * Factory-wide knitting pending, bucketed, with the on-machine part split by
+ * needle. Single source of truth shared by the Order Summary and Needle Wise.
+ */
+export interface KnittingPendingBucketsResponse {
+  generatedAt: string;
+  buckets: KnitPendingBucketTotals;
+  articleCountByBucket: KnitPendingBucketTotals;
+  /** onMachine + unplanned. */
+  pendingQty: number;
+  /** Needle size -> on-machine pending qty. */
+  onMachineByNeedle: Record<string, number>;
+  unplannedArticles: UnplannedKnitArticle[];
+  /** Qty on articles whose production order no longer exists. Excluded from pending. */
+  orphanPendingQty: number;
+  orphanArticleCount: number;
+  /** Qty on articles whose orderId still points at an order they were dropped from. */
+  droppedFromOrderPendingQty: number;
+  droppedFromOrderArticleCount: number;
 }
 
 /** Floor column in the date × pending-qty backlog matrix. */
@@ -1268,6 +1324,15 @@ class ProductionService {
     const queryString = queryParams.toString();
     const endpoint = queryString ? `/reports/order-summary?${queryString}` : '/reports/order-summary';
     return this.request<OrderSummaryReportResponse>(endpoint);
+  }
+
+  /**
+   * Factory-wide knitting pending split into buckets, with the on-machine part
+   * broken down by needle. Lets Needle Wise show unplanned work and reconcile
+   * against the Order Summary.
+   */
+  async getKnittingPendingBuckets(): Promise<ApiResponse<KnittingPendingBucketsResponse>> {
+    return this.request<KnittingPendingBucketsResponse>('/reports/knitting-pending-buckets');
   }
 
   /** Daily floor backlog matrix: pending qty by Details row and calendar date (IST). */

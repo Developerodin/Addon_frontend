@@ -23,40 +23,43 @@ export function downloadOrderSummaryCsv(rows: OrderSummaryRow[], totals: OrderSu
     "Status",
     "Articles",
     "Total qty",
-    "Hold qty",
-    "Knit pending with hold",
-    "Knit pending without hold",
+    "All remaining",
+    "Knit pending on machine",
+    "Knit pending unplanned",
+    "Knit pending",
+    "Short close qty",
+    "Closed on machine qty",
+    "On hold qty",
     "WIP qty",
     "Transfer qty",
+    "Knit pending (legacy)",
   ];
 
-  const body = rows.map((row) => [
+  /** Numeric columns in header order, so rows and the totals row cannot drift. */
+  const metricCells = (m: OrderSummaryMetrics) => [
+    m.articleCount,
+    m.totalQty,
+    m.knitPendingWithHold,
+    m.knitPendingOnMachine,
+    m.knitPendingUnplanned,
+    m.knitPendingQty,
+    m.holdQty,
+    m.closedOnMachineQty,
+    m.onHoldQty,
+    m.wipQty,
+    m.transferQty,
+    m.knitPendingWithoutHold,
+  ];
+
+  const body: (string | number)[][] = rows.map((row) => [
     row.orderNumber || row.orderId,
     row.orderNote ?? "",
     row.priority ?? "",
     row.status ?? "",
-    row.articleCount,
-    row.totalQty,
-    row.holdQty,
-    row.knitPendingWithHold,
-    row.knitPendingWithoutHold,
-    row.wipQty,
-    row.transferQty,
+    ...metricCells(row),
   ]);
 
-  body.push([
-    "TOTAL (all matching)",
-    "",
-    "",
-    "",
-    totals.articleCount,
-    totals.totalQty,
-    totals.holdQty,
-    totals.knitPendingWithHold,
-    totals.knitPendingWithoutHold,
-    totals.wipQty,
-    totals.transferQty,
-  ]);
+  body.push(["TOTAL (all matching)", "", "", "", ...metricCells(totals)]);
 
   const csvContent = [headers.map(csvCell).join(","), ...body.map((r) => r.map(csvCell).join(","))].join("\n");
   const blob = new Blob([`\uFEFF${csvContent}`], { type: "text/csv;charset=utf-8;" });

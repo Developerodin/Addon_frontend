@@ -10,6 +10,7 @@ import {
 } from "@/shared/components/production/ArticleViewOrderCell";
 import ArticleProductImageButton from "@/shared/components/production/ArticleProductImageButton";
 import { collectFactoryCodesFromArticleNumbers, useArticleProductImages } from "@/shared/hooks/useArticleProductImages";
+import { knittingRemainingQty } from "@/shared/utils/knittingRemaining";
 
 export interface ArticleRow {
   article: Article;
@@ -36,18 +37,6 @@ export interface ArticleViewTabProps {
   onScanQrClick?: () => void;
   qrScanPinned?: boolean;
   onClearQrScanFilter?: () => void;
-}
-
-/**
- * Knitting remaining qty for an article (prefers API `remaining`, else received − transferred).
- */
-function knittingRemaining(article: Article): number {
-  const k = article.floorQuantities?.knitting;
-  if (k == null) return 0;
-  if (typeof k.remaining === "number") return k.remaining;
-  const received = k.received ?? 0;
-  const transferred = k.transferred ?? 0;
-  return Math.max(0, received - transferred);
 }
 
 /**
@@ -135,7 +124,7 @@ export default function ArticleViewTab({
 
   const visibilityFilteredRows = useMemo(() => {
     if (showAllArticles) return articleRows;
-    return articleRows.filter((r) => knittingRemaining(r.article) > 0);
+    return articleRows.filter((r) => knittingRemainingQty(r.article) > 0);
   }, [articleRows, showAllArticles]);
 
   const filteredRows = useMemo(() => {
@@ -215,7 +204,7 @@ export default function ArticleViewTab({
       const received = article.floorQuantities?.knitting?.received ?? 0;
       const completed = article.floorQuantities?.knitting?.completed ?? 0;
       const transferred = article.floorQuantities?.knitting?.transferred ?? 0;
-      const remaining = article.floorQuantities?.knitting?.remaining ?? 0;
+      const remaining = knittingRemainingQty(article);
       const m4 = article.floorQuantities?.knitting?.m4Quantity ?? 0;
       const machine = articleToMachineMap.get(`${order.id}|${article.id ?? article._id}`) ?? "—";
 
@@ -346,6 +335,8 @@ export default function ArticleViewTab({
           <option value={25}>25</option>
           <option value={50}>50</option>
           <option value={100}>100</option>
+          <option value={200}>200</option>
+          <option value={300}>300</option>
         </select>
 
         <span className="text-[11px] font-medium text-gray-500">
@@ -397,7 +388,7 @@ export default function ArticleViewTab({
               const received = article.floorQuantities?.knitting?.received ?? 0;
               const completed = article.floorQuantities?.knitting?.completed ?? 0;
               const transferred = article.floorQuantities?.knitting?.transferred ?? 0;
-              const remaining = article.floorQuantities?.knitting?.remaining ?? 0;
+              const remaining = knittingRemainingQty(article);
               const m4 = article.floorQuantities?.knitting?.m4Quantity ?? 0;
               const isOverproduction = completed > planned;
               const key = (article.id ?? article._id) + "-" + order.id;

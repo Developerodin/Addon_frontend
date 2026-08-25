@@ -4,11 +4,6 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-hot-toast";
 import FormulaDrawer from "@/shared/components/production/FormulaDrawer";
 import {
-  listMachineOrderAssignments,
-  type MachineOrderAssignment,
-} from "@/shared/services/machineOrderAssignmentService";
-import { machinesService, type Machine } from "@/shared/services/machinesService";
-import {
   NEEDLE_WISE_COLUMN_FORMULAS,
   NEEDLE_WISE_IDENTITY,
   NEEDLE_WISE_IDENTITY_EXAMPLE,
@@ -18,18 +13,25 @@ import {
   buildNeedleWiseRows,
   DEFAULT_DAILY_RATE_PER_MACHINE,
   type NeedleRemark,
+  type NeedleWisePendingSource,
   type NeedleWiseReport,
 } from "../utils/needleWiseProduction";
 import { printNeedleWiseTable } from "../utils/needleWisePrint";
-
-/** Upper bound on rows pulled from the paginated list endpoints. */
-const FETCH_LIMIT = 1000;
+import { useNeedleWiseData } from "../hooks/useNeedleWiseData";
+import NeedleWiseReconciliation from "./NeedleWiseReconciliation";
 
 const DAILY_RATE_STORAGE_KEY = "knitting.needleWise.dailyRate";
 
 const EMPTY_REPORT: NeedleWiseReport = {
   rows: [],
   totals: { needleCount: 0, inactiveMachines: 0, activeMachines: 0, pendingQty: 0, daysRequired: null },
+  reconciliation: {
+    onMachineQty: 0,
+    unplannedQty: 0,
+    totalPendingQty: 0,
+    unplannedArticleCount: 0,
+    hasUnplannedData: false,
+  },
 };
 
 const REMARK_TONE_CLASSES: Record<NeedleRemark["tone"], string> = {
@@ -82,16 +84,6 @@ function readStoredDailyRate(): number {
   return Number.isFinite(stored) && stored > 0 ? stored : DEFAULT_DAILY_RATE_PER_MACHINE;
 }
 
-/** Ensures every machine has a usable `id`, since the API may return `_id`. */
-function normalizeMachines(results: Machine[]): Machine[] {
-  return results
-    .map((machine) => ({
-      ...machine,
-      id: String(machine.id ?? (machine as { _id?: string })._id ?? ""),
-    }))
-    .filter((machine) => machine.id);
-}
-
 /** Formats a numeric cell, showing a dash for values that cannot be computed. */
 function formatNumber(value: number | null): string {
   return value === null ? "-" : value.toLocaleString();
@@ -102,9 +94,8 @@ function formatNumber(value: number | null): string {
  * by needle size, with the days needed to clear each needle's queue.
  */
 export default function NeedleWiseProductionTab({ refreshTrigger }: NeedleWiseProductionTabProps) {
-  const [machines, setMachines] = useState<Machine[]>([]);
-  const [assignments, setAssignments] = useState<MachineOrderAssignment[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { machines, assignments, buckets, isLoading, truncated, refetch } =
+    useNeedleWiseData(refreshTrigger);
   const [dailyRate, setDailyRate] = useState(DEFAULT_DAILY_RATE_PER_MACHINE);
   const [rateInput, setRateInput] = useState(String(DEFAULT_DAILY_RATE_PER_MACHINE));
   const [formulaColumn, setFormulaColumn] = useState<NeedleWiseColumnKey | null>(null);
@@ -115,31 +106,22 @@ export default function NeedleWiseProductionTab({ refreshTrigger }: NeedleWisePr
     setRateInput(String(stored));
   }, []);
 
-  const fetchData = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const [machinesRes, assignmentsRes] = await Promise.all([
-        machinesService.getMachines(1, FETCH_LIMIT, ""),
-        listMachineOrderAssignments({ page: 1, limit: FETCH_LIMIT }),
-      ]);
-      setMachines(normalizeMachines(machinesRes.results ?? []));
-      setAssignments(assignmentsRes.results ?? []);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to load needle wise planning data");
-      setMachines([]);
-      setAssignments([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData, refreshTrigger]);
+  /** Backend buckets are the source of truth, so both reports agree. */
+  const pendingSource = useMemo<NeedleWisePendingSource | undefined>(() => {
+    if (!buckets) return undefined;
+    return {
+      onMachineByNeedle: buckets.onMachineByNeedle ?? {},
+      unplannedQty: buckets.buckets?.unplanned ?? 0,
+      unplannedArticleCount: buckets.articleCountByBucket?.unplanned ?? 0,
+    };
+  }, [buckets]);
 
   const report = useMemo(
-    () => (machines.length === 0 ? EMPTY_REPORT : buildNeedleWiseRows(machines, assignments, dailyRate)),
-    [machines, assignments, dailyRate],
+    () =>
+      machines.length === 0
+        ? EMPTY_REPORT
+        : buildNeedleWiseRows(machines, assignments, dailyRate, pendingSource),
+    [machines, assignments, dailyRate, pendingSource],
   );
 
   /** Commits the daily rate input, ignoring blank or non-positive values. */
@@ -161,7 +143,7 @@ export default function NeedleWiseProductionTab({ refreshTrigger }: NeedleWisePr
 
   const handlePrint = useCallback(() => {
     try {
-      printNeedleWiseTable(report.rows, report.totals, dailyRate);
+      printNeedleWiseTable(report.rows, report.totals, dailyRate, report.reconciliation);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to print");
     }
@@ -219,7 +201,7 @@ export default function NeedleWiseProductionTab({ refreshTrigger }: NeedleWisePr
           </button>
           <button
             type="button"
-            onClick={fetchData}
+            onClick={() => void refetch()}
             aria-label="Refresh needle wise production planning"
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-[11px] font-bold rounded hover:bg-gray-50"
           >
@@ -229,11 +211,25 @@ export default function NeedleWiseProductionTab({ refreshTrigger }: NeedleWisePr
         </div>
       </div>
 
+      {truncated ? (
+        <div
+          className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2"
+          role="alert"
+        >
+          <p className="text-[11px] font-medium text-red-800">
+            <i className="ri-error-warning-line mr-1" aria-hidden="true" />
+            Too many machines or queues to load in one pass. This table is incomplete — contact support
+            rather than planning from these numbers.
+          </p>
+        </div>
+      ) : null}
+
       <div className="overflow-x-auto border border-gray-300 rounded">
         <table className="w-full border-collapse min-w-full">
           <caption className="sr-only">
             Knitting machines and pending quantity grouped by needle size, with days required to clear each
-            queue at {dailyRate} pieces per machine per day.
+            queue at {dailyRate} pieces per machine per day. Shows only work already assigned to a machine;
+            unplanned work is listed below the table.
           </caption>
           <thead>
             <tr className="bg-gray-100">
@@ -251,7 +247,7 @@ export default function NeedleWiseProductionTab({ refreshTrigger }: NeedleWisePr
                 onOpenFormula={setFormulaColumn}
               />
               <ColumnHeader
-                label="Knitting Pending QTY"
+                label="Pending on Machines"
                 columnKey="pendingQty"
                 align="right"
                 onOpenFormula={setFormulaColumn}
@@ -318,8 +314,11 @@ export default function NeedleWiseProductionTab({ refreshTrigger }: NeedleWisePr
                 <td className="px-2 py-2 text-right text-[11px] text-gray-800 border-r border-gray-300">
                   {report.totals.pendingQty.toLocaleString()}
                 </td>
-                <td className="px-2 py-2 text-right text-[11px] text-gray-900 border-r border-gray-300">
-                  {formatNumber(report.totals.daysRequired)}
+                <td className="px-2 py-2 text-right text-[11px] text-gray-900 border-r border-gray-300 whitespace-nowrap">
+                  <span className="block text-[9px] font-medium uppercase tracking-wide text-gray-500">
+                    Total days
+                  </span>
+                  <span className="tabular-nums">{formatNumber(report.totals.daysRequired)}</span>
                 </td>
                 <td className="px-2 py-2 text-[11px] text-gray-500 font-medium">
                   {report.totals.inactiveMachines + report.totals.activeMachines} machines total
@@ -330,10 +329,19 @@ export default function NeedleWiseProductionTab({ refreshTrigger }: NeedleWisePr
         </table>
       </div>
 
-      {report.rows.length === 0 && (
+      {report.rows.length === 0 ? (
         <p className="py-8 text-center text-[11px] text-gray-500">
           No needle sizes configured. Add needle sizes to machines in the catalog to see this report.
         </p>
+      ) : (
+        <NeedleWiseReconciliation
+          reconciliation={report.reconciliation}
+          unplannedArticles={buckets?.unplannedArticles ?? []}
+          orphanPendingQty={buckets?.orphanPendingQty ?? 0}
+          orphanArticleCount={buckets?.orphanArticleCount ?? 0}
+          droppedFromOrderPendingQty={buckets?.droppedFromOrderPendingQty ?? 0}
+          droppedFromOrderArticleCount={buckets?.droppedFromOrderArticleCount ?? 0}
+        />
       )}
 
       <FormulaDrawer

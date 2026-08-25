@@ -8,6 +8,8 @@ import {
   type OrderSummaryRow,
 } from "@/shared/services/productionService";
 import ProductionOrderSummaryFormulaDrawer from "./ProductionOrderSummaryFormulaDrawer";
+import ProductionOrderSummaryTable from "./ProductionOrderSummaryTable";
+import ProductionOrderSummaryToolbar from "./ProductionOrderSummaryToolbar";
 import { downloadOrderSummaryCsv } from "./productionOrderSummaryExport";
 import type { OrderSummaryColumnKey } from "./productionOrderSummaryFormulas";
 
@@ -24,73 +26,22 @@ const EMPTY_METRICS: OrderSummaryMetrics = {
   holdQty: 0,
   knitPendingWithHold: 0,
   knitPendingWithoutHold: 0,
+  knitPendingQty: 0,
+  knitPendingOnMachine: 0,
+  knitPendingUnplanned: 0,
+  closedOnMachineQty: 0,
+  onHoldQty: 0,
   transferQty: 0,
   wipQty: 0,
 };
 
-/**
- * Formats a qty for the summary table; negatives keep their sign (WIP not clamped).
- * @param n Quantity
- */
-function fmtQty(n: number): string {
-  return (n ?? 0).toLocaleString();
-}
+/** Max page buttons rendered in the pager. */
+const MAX_PAGE_BUTTONS = 7;
 
 /**
- * Tailwind badge classes for order priority.
- * @param priority Priority label
- */
-function priorityBadge(priority: string): string {
-  const map: Record<string, string> = {
-    Urgent: "bg-red-100 text-red-800",
-    High: "bg-orange-100 text-orange-800",
-    Medium: "bg-yellow-100 text-yellow-800",
-    Low: "bg-green-100 text-green-800",
-  };
-  return map[priority] || "bg-gray-100 text-gray-800";
-}
-
-/**
- * Header cell with a formula info button that opens the side drawer.
- */
-function FormulaHeader({
-  label,
-  columnKey,
-  align = "right",
-  rowSpan,
-  onOpen,
-}: {
-  label: string;
-  columnKey: OrderSummaryColumnKey;
-  align?: "left" | "right";
-  rowSpan?: number;
-  onOpen: (key: OrderSummaryColumnKey) => void;
-}) {
-  return (
-    <th
-      rowSpan={rowSpan}
-      className={`px-1.5 py-2 text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300 align-bottom ${
-        align === "right" ? "text-right" : "text-left"
-      }`}
-    >
-      <span className={`inline-flex items-center gap-0.5 ${align === "right" ? "justify-end w-full" : ""}`}>
-        {label}
-        <button
-          type="button"
-          className="p-0.5 rounded text-gray-400 hover:text-purple-600 hover:bg-purple-50 focus:outline-none focus:ring-2 focus:ring-purple-500"
-          aria-label={`How ${label} is calculated`}
-          title={`How ${label} is calculated`}
-          onClick={() => onOpen(columnKey)}
-        >
-          <i className="ri-information-line text-xs" aria-hidden="true" />
-        </button>
-      </span>
-    </th>
-  );
-}
-
-/**
- * Production supervisor tab: one row per order with planned / hold / knit pending / WIP / transfer.
+ * Production supervisor tab: one row per order with planned qty, knitting
+ * pending split into on-machine and unplanned, and the balances that are not
+ * pending (short close, closed on machine, on hold).
  */
 export default function ProductionOrderSummaryTab({
   refreshNonce = 0,
@@ -107,6 +58,7 @@ export default function ProductionOrderSummaryTab({
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [priority, setPriority] = useState("");
+  const [showLegacy, setShowLegacy] = useState(false);
   const [formulaColumn, setFormulaColumn] = useState<OrderSummaryColumnKey | null>(null);
 
   const load = useCallback(async () => {
@@ -126,9 +78,8 @@ export default function ProductionOrderSummaryTab({
         setRows(data.results || []);
         setTotals(data.totals || EMPTY_METRICS);
         setPageTotals(data.pageTotals || EMPTY_METRICS);
-        const tp = data.totalPages ?? 1;
         const tot = data.total ?? 0;
-        const safePages = tot === 0 ? 1 : Math.max(1, tp);
+        const safePages = tot === 0 ? 1 : Math.max(1, data.totalPages ?? 1);
         setTotalPages(safePages);
         setTotal(tot);
         if (page > safePages) setPage(safePages);
@@ -162,98 +113,33 @@ export default function ProductionOrderSummaryTab({
     }
   };
 
+  /** Resets to page 1 whenever a filter narrows the result set. */
+  const withPageReset = <T,>(setter: (value: T) => void) => (value: T) => {
+    setter(value);
+    setPage(1);
+  };
+
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to = Math.min(page * limit, total);
 
   return (
     <div>
-      <div className="p-[10px] mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <label className="relative flex items-center">
-          <span className="sr-only">Search orders</span>
-          <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none" aria-hidden="true" />
-          <input
-            type="text"
-            className="bg-white border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded focus:ring-0 focus:border-purple-300 w-52 placeholder:text-gray-400 font-medium"
-            placeholder="Search order number or name..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            aria-label="Search by order number or order name"
-          />
-        </label>
-        <select
-          className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-2 py-1.5"
-          value={status}
-          onChange={(e) => {
-            setStatus(e.target.value);
-            setPage(1);
-          }}
-          aria-label="Filter by order status"
-        >
-          <option value="">All statuses</option>
-          <option value="Pending">Pending</option>
-          <option value="In Progress">In Progress</option>
-          <option value="Completed">Completed</option>
-          <option value="On Hold">On Hold</option>
-          <option value="Short Close">Short Close</option>
-          <option value="Cancelled">Cancelled</option>
-        </select>
-        <select
-          className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-2 py-1.5"
-          value={priority}
-          onChange={(e) => {
-            setPriority(e.target.value);
-            setPage(1);
-          }}
-          aria-label="Filter by priority"
-        >
-          <option value="">All priorities</option>
-          <option value="Urgent">Urgent</option>
-          <option value="High">High</option>
-          <option value="Medium">Medium</option>
-          <option value="Low">Low</option>
-        </select>
-        <div className="flex items-center gap-1.5">
-          <label htmlFor="order-summary-page-size" className="text-[11px] font-medium text-gray-600 whitespace-nowrap">
-            Orders / page
-          </label>
-          <select
-            id="order-summary-page-size"
-            className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-3 py-1.5"
-            value={limit}
-            onChange={(e) => {
-              setLimit(Number(e.target.value));
-              setPage(1);
-            }}
-            aria-label="How many orders to show per page"
-          >
-            <option value={10}>10</option>
-            <option value={25}>25</option>
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-          </select>
-        </div>
-        <button
-          type="button"
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50"
-          onClick={() => void load()}
-          disabled={loading}
-          aria-label="Refresh production order summary"
-        >
-          <i className={`ri-refresh-line text-xs ${loading ? "animate-spin" : ""}`} aria-hidden="true" /> Refresh
-        </button>
-        <button
-          type="button"
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 disabled:opacity-50"
-          onClick={() => downloadOrderSummaryCsv(rows, totals)}
-          disabled={loading || rows.length === 0}
-          aria-label="Export current page as CSV"
-        >
-          <i className="ri-download-2-line text-xs" aria-hidden="true" /> Export
-        </button>
-      </div>
+      <ProductionOrderSummaryToolbar
+        search={search}
+        onSearchChange={withPageReset(setSearch)}
+        status={status}
+        onStatusChange={withPageReset(setStatus)}
+        priority={priority}
+        onPriorityChange={withPageReset(setPriority)}
+        limit={limit}
+        onLimitChange={withPageReset(setLimit)}
+        showLegacy={showLegacy}
+        onShowLegacyChange={setShowLegacy}
+        loading={loading}
+        canExport={rows.length > 0}
+        onRefresh={() => void load()}
+        onExport={() => downloadOrderSummaryCsv(rows, totals)}
+      />
 
       {loading && rows.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20" role="status" aria-live="polite">
@@ -269,121 +155,19 @@ export default function ProductionOrderSummaryTab({
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse border border-gray-300 [border-spacing:0]" aria-label="Production order summary">
-              <thead>
-                <tr className="bg-gray-50/80">
-                  <th
-                    rowSpan={2}
-                    className="pl-[10px] pr-1 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300 align-bottom"
-                  >
-                    <span className="inline-flex items-center gap-0.5">
-                      Order
-                      <button
-                        type="button"
-                        className="p-0.5 rounded text-gray-400 hover:text-purple-600 hover:bg-purple-50 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        aria-label="How Order is calculated"
-                        title="How Order is calculated"
-                        onClick={() => setFormulaColumn("order")}
-                      >
-                        <i className="ri-information-line text-xs" aria-hidden="true" />
-                      </button>
-                    </span>
-                  </th>
-                  <th
-                    colSpan={3}
-                    className="px-1.5 py-1.5 text-center text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-300 bg-purple-50/60"
-                  >
-                    Qty
-                  </th>
-                  <FormulaHeader
-                    label="Knit pending (no hold)"
-                    columnKey="knitPendingWithoutHold"
-                    rowSpan={2}
-                    onOpen={setFormulaColumn}
-                  />
-                  <FormulaHeader label="WIP" columnKey="wipQty" rowSpan={2} onOpen={setFormulaColumn} />
-                  <FormulaHeader label="Transfer" columnKey="transferQty" rowSpan={2} onOpen={setFormulaColumn} />
-                </tr>
-                <tr className="bg-gray-50/80">
-                  <FormulaHeader label="Total" columnKey="totalQty" onOpen={setFormulaColumn} />
-                  <FormulaHeader label="Hold" columnKey="holdQty" onOpen={setFormulaColumn} />
-                  <FormulaHeader label="Pending + hold" columnKey="knitPendingWithHold" onOpen={setFormulaColumn} />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.orderId} className="hover:bg-gray-50/50">
-                    <td className="pl-[10px] pr-1 py-2.5 border border-gray-300">
-                      <div className="text-[12px] font-bold text-gray-900">{row.orderNumber || row.orderId}</div>
-                      {row.orderNote ? (
-                        <div className="text-[11px] text-gray-600 font-medium truncate max-w-[220px]" title={row.orderNote}>
-                          {row.orderNote}
-                        </div>
-                      ) : null}
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${priorityBadge(row.priority)}`}>
-                          {row.priority || "—"}
-                        </span>
-                        <span className="text-[10px] text-gray-500">{row.articleCount} article{row.articleCount !== 1 ? "s" : ""}</span>
-                      </div>
-                    </td>
-                    <td className="px-1.5 py-2.5 text-right text-[12px] font-medium text-gray-800 border border-gray-300 tabular-nums">
-                      {fmtQty(row.totalQty)}
-                    </td>
-                    <td className="px-1.5 py-2.5 text-right text-[12px] font-medium text-orange-700 border border-gray-300 tabular-nums">
-                      {fmtQty(row.holdQty)}
-                    </td>
-                    <td className="px-1.5 py-2.5 text-right text-[12px] font-medium text-gray-800 border border-gray-300 tabular-nums">
-                      {fmtQty(row.knitPendingWithHold)}
-                    </td>
-                    <td className="px-1.5 py-2.5 text-right text-[12px] font-medium text-amber-700 border border-gray-300 tabular-nums">
-                      {fmtQty(row.knitPendingWithoutHold)}
-                    </td>
-                    <td
-                      className={`px-1.5 py-2.5 text-right text-[12px] font-semibold border border-gray-300 tabular-nums ${
-                        row.wipQty < 0 ? "text-red-700" : "text-blue-800"
-                      }`}
-                    >
-                      {fmtQty(row.wipQty)}
-                    </td>
-                    <td className="px-1.5 py-2.5 text-right text-[12px] font-medium text-emerald-800 border border-gray-300 tabular-nums">
-                      {fmtQty(row.transferQty)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="bg-gray-50 font-bold">
-                  <td className="pl-[10px] pr-1 py-2.5 text-[11px] text-gray-700 border border-gray-300">
-                    Page ({rows.length} order{rows.length !== 1 ? "s" : ""})
-                  </td>
-                  <td className="px-1.5 py-2.5 text-right text-[12px] border border-gray-300 tabular-nums">{fmtQty(pageTotals.totalQty)}</td>
-                  <td className="px-1.5 py-2.5 text-right text-[12px] text-orange-700 border border-gray-300 tabular-nums">{fmtQty(pageTotals.holdQty)}</td>
-                  <td className="px-1.5 py-2.5 text-right text-[12px] border border-gray-300 tabular-nums">{fmtQty(pageTotals.knitPendingWithHold)}</td>
-                  <td className="px-1.5 py-2.5 text-right text-[12px] text-amber-700 border border-gray-300 tabular-nums">{fmtQty(pageTotals.knitPendingWithoutHold)}</td>
-                  <td className="px-1.5 py-2.5 text-right text-[12px] text-blue-800 border border-gray-300 tabular-nums">{fmtQty(pageTotals.wipQty)}</td>
-                  <td className="px-1.5 py-2.5 text-right text-[12px] text-emerald-800 border border-gray-300 tabular-nums">{fmtQty(pageTotals.transferQty)}</td>
-                </tr>
-                <tr className="bg-purple-50 font-bold">
-                  <td className="pl-[10px] pr-1 py-2.5 text-[11px] text-purple-900 border border-gray-300">
-                    All matching ({total.toLocaleString()} order{total !== 1 ? "s" : ""} · {fmtQty(totals.articleCount)} articles)
-                  </td>
-                  <td className="px-1.5 py-2.5 text-right text-[12px] text-purple-900 border border-gray-300 tabular-nums">{fmtQty(totals.totalQty)}</td>
-                  <td className="px-1.5 py-2.5 text-right text-[12px] text-orange-800 border border-gray-300 tabular-nums">{fmtQty(totals.holdQty)}</td>
-                  <td className="px-1.5 py-2.5 text-right text-[12px] text-purple-900 border border-gray-300 tabular-nums">{fmtQty(totals.knitPendingWithHold)}</td>
-                  <td className="px-1.5 py-2.5 text-right text-[12px] text-amber-800 border border-gray-300 tabular-nums">{fmtQty(totals.knitPendingWithoutHold)}</td>
-                  <td className="px-1.5 py-2.5 text-right text-[12px] text-blue-900 border border-gray-300 tabular-nums">{fmtQty(totals.wipQty)}</td>
-                  <td className="px-1.5 py-2.5 text-right text-[12px] text-emerald-900 border border-gray-300 tabular-nums">{fmtQty(totals.transferQty)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+          <ProductionOrderSummaryTable
+            rows={rows}
+            pageTotals={pageTotals}
+            totals={totals}
+            total={total}
+            showLegacy={showLegacy}
+            onOpenFormula={setFormulaColumn}
+          />
           <div className="p-[10px] pt-4 flex flex-wrap items-center justify-between gap-4 border-t border-gray-100">
             <div className="text-[11px] font-medium text-[#495057]">
               Showing {from} to {to} of {total.toLocaleString()} orders
             </div>
-            <div className="flex items-center gap-1">
+            <nav className="flex items-center gap-1" aria-label="Order summary pagination">
               <button
                 type="button"
                 onClick={() => handlePageChange(page - 1)}
@@ -392,9 +176,9 @@ export default function ProductionOrderSummaryTab({
               >
                 Prev
               </button>
-              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+              {Array.from({ length: Math.min(totalPages, MAX_PAGE_BUTTONS) }, (_, i) => {
                 const pageNum =
-                  totalPages <= 7
+                  totalPages <= MAX_PAGE_BUTTONS
                     ? i + 1
                     : page <= 4
                       ? i + 1
@@ -406,6 +190,7 @@ export default function ProductionOrderSummaryTab({
                     key={pageNum}
                     type="button"
                     onClick={() => handlePageChange(pageNum)}
+                    aria-current={page === pageNum ? "page" : undefined}
                     className={`w-7 h-7 flex items-center justify-center text-[11px] font-bold rounded ${
                       page === pageNum ? "bg-purple-600 text-white shadow-md" : "text-gray-400 hover:bg-gray-50"
                     }`}
@@ -422,7 +207,7 @@ export default function ProductionOrderSummaryTab({
               >
                 Next
               </button>
-            </div>
+            </nav>
           </div>
         </>
       )}

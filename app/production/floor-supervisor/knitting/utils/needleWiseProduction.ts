@@ -38,12 +38,40 @@ export interface NeedleWiseTotals {
   inactiveMachines: number;
   activeMachines: number;
   pendingQty: number;
+  /** Sum of each needle row's days. */
   daysRequired: number | null;
+}
+
+/**
+ * Pending knitting that cannot appear in the needle table because it has no
+ * needle yet. Reported alongside the table so this tab reconciles against the
+ * Production Order Summary instead of silently reading lower.
+ */
+export interface NeedleWiseReconciliation {
+  /** Sum of the needle rows. Work already loaded onto a machine. */
+  onMachineQty: number;
+  /** Pending work with no machine assigned. Needs planning. */
+  unplannedQty: number;
+  /** onMachineQty + unplannedQty. Matches Order Summary "Knit pending". */
+  totalPendingQty: number;
+  /** How many articles make up {@link unplannedQty}. */
+  unplannedArticleCount: number;
+  /** False when the buckets endpoint failed, so unplanned qty is unknown. */
+  hasUnplannedData: boolean;
 }
 
 export interface NeedleWiseReport {
   rows: NeedleWiseRow[];
   totals: NeedleWiseTotals;
+  reconciliation: NeedleWiseReconciliation;
+}
+
+/** Backend-supplied pending, so both reports read from one calculation. */
+export interface NeedleWisePendingSource {
+  /** Needle size -> on-machine pending qty, from the buckets endpoint. */
+  onMachineByNeedle: Record<string, number>;
+  unplannedQty: number;
+  unplannedArticleCount: number;
 }
 
 /** Mutable accumulator used while bucketing machines and assignments. */
@@ -81,9 +109,9 @@ function toPositiveNumber(value: unknown): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
-/** Knitting pending for one queue item: remaining if known, else planned quantity. */
+/** Knitting pending for one queue item: Article View Rem, never planned qty. */
 function resolveItemPending(item: ProductionOrderItem): number {
-  return toPositiveNumber(item.knittingRemaining ?? item.plannedQuantity);
+  return toPositiveNumber(item.knittingRemaining);
 }
 
 /**
@@ -178,6 +206,7 @@ export function buildNeedleWiseRows(
   machines: Machine[],
   assignments: MachineOrderAssignment[],
   dailyRate: number,
+  pendingSource?: NeedleWisePendingSource,
 ): NeedleWiseReport {
   const assignmentByMachineId = new Map<string, MachineOrderAssignment>();
   for (const assignment of assignments) {
@@ -207,10 +236,19 @@ export function buildNeedleWiseRows(
     }
   }
 
-  for (const assignment of assignments) {
-    const pending = sumAssignmentPending(assignment);
-    if (pending <= 0) continue;
-    getBucket(buckets, resolveNeedleKey(assignment)).pendingQty += pending;
+  // Prefer the backend buckets: the Order Summary is computed from the same
+  // numbers, so the two screens cannot drift. Fall back to summing the queues
+  // locally only when that endpoint is unavailable.
+  if (pendingSource) {
+    for (const [needle, qty] of Object.entries(pendingSource.onMachineByNeedle)) {
+      if (qty > 0) getBucket(buckets, needle).pendingQty += qty;
+    }
+  } else {
+    for (const assignment of assignments) {
+      const pending = sumAssignmentPending(assignment);
+      if (pending <= 0) continue;
+      getBucket(buckets, resolveNeedleKey(assignment)).pendingQty += pending;
+    }
   }
 
   const needleKeys = Array.from(buckets.keys())
@@ -236,14 +274,53 @@ export function buildNeedleWiseRows(
     return { ...base, remarks: buildRemarks(base) };
   });
 
-  return { rows, totals: buildTotalsRow(rows, dailyRate) };
+  const totals = buildTotalsRow(rows);
+  return {
+    rows,
+    totals,
+    reconciliation: buildReconciliation(totals.pendingQty, pendingSource),
+  };
 }
 
 /**
- * Sums every needle row. The totals `daysRequired` is recomputed from the
- * pooled pending and machines, not summed, since days do not add up.
+ * Ties the needle table back to the Production Order Summary.
+ * @param onMachineQty Sum of the needle rows
+ * @param pendingSource Backend buckets, when available
  */
-export function buildTotalsRow(rows: NeedleWiseRow[], dailyRate: number): NeedleWiseTotals {
+export function buildReconciliation(
+  onMachineQty: number,
+  pendingSource?: NeedleWisePendingSource,
+): NeedleWiseReconciliation {
+  const unplannedQty = pendingSource?.unplannedQty ?? 0;
+  return {
+    onMachineQty,
+    unplannedQty,
+    totalPendingQty: onMachineQty + unplannedQty,
+    unplannedArticleCount: pendingSource?.unplannedArticleCount ?? 0,
+    hasUnplannedData: pendingSource != null,
+  };
+}
+
+/**
+ * Sums per-needle days. Null (pending with no active machine) is skipped so a
+ * dash on one needle does not wipe the factory total.
+ * @param rows Needle rows already given a daysRequired
+ */
+export function sumDaysRequired(rows: NeedleWiseRow[]): number | null {
+  let sum = 0;
+  let hasValue = false;
+  for (const row of rows) {
+    if (row.daysRequired == null) continue;
+    hasValue = true;
+    sum += row.daysRequired;
+  }
+  return hasValue ? sum : null;
+}
+
+/**
+ * Sums every needle row. Footer days are the sum of row days.
+ */
+export function buildTotalsRow(rows: NeedleWiseRow[]): NeedleWiseTotals {
   const totals = rows.reduce(
     (acc, row) => ({
       inactiveMachines: acc.inactiveMachines + row.inactiveMachines,
@@ -256,6 +333,6 @@ export function buildTotalsRow(rows: NeedleWiseRow[], dailyRate: number): Needle
   return {
     ...totals,
     needleCount: rows.length,
-    daysRequired: computeDaysRequired(totals.pendingQty, totals.activeMachines, dailyRate),
+    daysRequired: sumDaysRequired(rows),
   };
 }

@@ -1,4 +1,8 @@
-import type { NeedleWiseRow, NeedleWiseTotals } from "./needleWiseProduction";
+import type {
+  NeedleWiseReconciliation,
+  NeedleWiseRow,
+  NeedleWiseTotals,
+} from "./needleWiseProduction";
 
 /** Escapes text before it is injected into the print document. */
 function escapeHtml(value: string): string {
@@ -23,6 +27,7 @@ export function printNeedleWiseTable(
   rows: NeedleWiseRow[],
   totals: NeedleWiseTotals,
   dailyRate: number,
+  reconciliation?: NeedleWiseReconciliation,
 ): void {
   const printWindow = window.open("", "_blank");
   if (!printWindow) {
@@ -48,6 +53,19 @@ export function printNeedleWiseTable(
     )
     .join("");
 
+  // Printed alongside the table so a paper copy cannot contradict the screen:
+  // the needle rows only cover work already assigned to a machine.
+  const reconciliationBlock =
+    reconciliation && reconciliation.hasUnplannedData
+      ? `<table class="recon">
+          <tbody>
+            <tr><td>On machines (sum of needles above)</td><td class="num">${reconciliation.onMachineQty.toLocaleString()}</td></tr>
+            <tr><td>Unplanned — no machine assigned (${reconciliation.unplannedArticleCount} articles)</td><td class="num">${reconciliation.unplannedQty.toLocaleString()}</td></tr>
+            <tr class="grand"><td>Total knit pending</td><td class="num">${reconciliation.totalPendingQty.toLocaleString()}</td></tr>
+          </tbody>
+        </table>`
+      : "";
+
   printWindow.document.write(`
     <!DOCTYPE html>
     <html>
@@ -66,6 +84,9 @@ export function printNeedleWiseTable(
           td.num, th.num { text-align: right; }
           td.needle { font-weight: bold; }
           tfoot td { font-weight: bold; background: #f0f0f0; }
+          table.recon { width: auto; min-width: 60%; margin-top: 10px; }
+          table.recon td { font-size: 10px; }
+          table.recon tr.grand td { font-weight: bold; background: #f0f0f0; }
         </style>
       </head>
       <body>
@@ -79,7 +100,7 @@ export function printNeedleWiseTable(
               <th>Machine Needle</th>
               <th class="num">Inactive Machine</th>
               <th class="num">Active Machine</th>
-              <th class="num">Knitting Pending QTY</th>
+              <th class="num">Pending on Machines</th>
               <th class="num">No of days</th>
               <th>Remark</th>
             </tr>
@@ -91,11 +112,12 @@ export function printNeedleWiseTable(
               <td class="num">${totals.inactiveMachines.toLocaleString()}</td>
               <td class="num">${totals.activeMachines.toLocaleString()}</td>
               <td class="num">${totals.pendingQty.toLocaleString()}</td>
-              <td class="num">${formatCell(totals.daysRequired)}</td>
+              <td class="num">Total days ${formatCell(totals.daysRequired)}</td>
               <td></td>
             </tr>
           </tfoot>
         </table>
+        ${reconciliationBlock}
       </body>
     </html>
   `);
