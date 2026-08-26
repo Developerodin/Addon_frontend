@@ -27,13 +27,13 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
   ]
 
   const reportSections = [
-    { key: 'Invoice Report', label: 'Invoice Report' },
     { key: 'Production order summary', label: 'Production order summary' },
-    { key: 'Core Report', label: 'Core Report' },
-    { key: 'Backlog report', label: 'Backlog report' },
     { key: 'Daily production summary', label: 'Daily production summary' },
     { key: 'Advanced Planning', label: 'Advanced Planning' },
     { key: 'Needle Wise Planning', label: 'Needle Wise Planning' },
+    { key: 'Backlog report', label: 'Backlog report' },
+    { key: 'Core Report', label: 'Core Report' },
+    { key: 'Invoice Report', label: 'Vendor Report' },
   ]
 
   const catalogSections = [

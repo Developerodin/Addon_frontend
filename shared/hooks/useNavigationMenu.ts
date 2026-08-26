@@ -34,6 +34,12 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
       };
       return titleMap[displayTitle] || displayTitle;
     }
+    if (path.startsWith('/reports/')) {
+      const titleMap: { [key: string]: string } = {
+        'Vendor Report': 'Invoice Report',
+      };
+      return titleMap[displayTitle] || displayTitle;
+    }
     return displayTitle;
   };
 
@@ -279,7 +285,7 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               return hasSubPermission('/dashboards', child.title);
             }
             if (child.path.startsWith('/reports/')) {
-              return hasSubPermission('/reports', child.title);
+              return hasSubPermission('/reports', getPermissionKey(child.title, child.path));
             }
             // Handle yarn-management items that are shown under catalog
             if (child.path.startsWith('/yarn-management/')) {
@@ -516,7 +522,7 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
               return hasSubPermission('/dashboards', child.title);
             }
             if (child.path.startsWith('/reports/')) {
-              return hasSubPermission('/reports', child.title);
+              return hasSubPermission('/reports', getPermissionKey(child.title, child.path));
             }
             // Handle yarn-management items that may be shown under catalog
             if (child.path.startsWith('/yarn-management/')) {

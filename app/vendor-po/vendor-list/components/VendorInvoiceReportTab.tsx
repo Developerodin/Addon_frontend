@@ -94,7 +94,7 @@ const VendorInvoiceReportTab = () => {
         <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-2">
             <div className={CRM.titleAccent} />
-            <h1 className={CRM.pageTitle}>Invoice Report</h1>
+            <h1 className={CRM.pageTitle}>Vendor Report</h1>
             <span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
               {totalResults}
             </span>

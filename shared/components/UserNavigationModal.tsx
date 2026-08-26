@@ -187,13 +187,13 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
                 className="text-xs text-primary hover:text-primary-dark"
                 onClick={() =>
                   handleSelectAll('Reports', [
-                    'Invoice Report',
                     'Production order summary',
-                    'Core Report',
-                    'Backlog report',
                     'Daily production summary',
                     'Advanced Planning',
                     'Needle Wise Planning',
+                    'Backlog report',
+                    'Core Report',
+                    'Invoice Report',
                   ])
                 }
               >
@@ -202,13 +202,13 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
             </div>
             <div className="space-y-2 ml-4">
               {[
-                { key: 'Invoice Report', label: 'Invoice Report' },
                 { key: 'Production order summary', label: 'Production order summary' },
-                { key: 'Core Report', label: 'Core Report' },
-                { key: 'Backlog report', label: 'Backlog report' },
                 { key: 'Daily production summary', label: 'Daily production summary' },
                 { key: 'Advanced Planning', label: 'Advanced Planning' },
                 { key: 'Needle Wise Planning', label: 'Needle Wise Planning' },
+                { key: 'Backlog report', label: 'Backlog report' },
+                { key: 'Core Report', label: 'Core Report' },
+                { key: 'Invoice Report', label: 'Vendor Report' },
               ].map((subsection) => (
                 <label key={subsection.key} className="flex items-center">
                   <input

@@ -8,7 +8,7 @@ import ReportPageShell from "../components/ReportPageShell";
  */
 export default function InvoiceReportPage() {
   return (
-    <ReportPageShell title="Invoice Report">
+    <ReportPageShell title="Vendor Report">
       <VendorInvoiceReportTab />
     </ReportPageShell>
   );
