@@ -26,6 +26,16 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
     { key: 'Yarn Dashboard', label: 'Yarn Dashboard' },
   ]
 
+  const reportSections = [
+    { key: 'Invoice Report', label: 'Invoice Report' },
+    { key: 'Production order summary', label: 'Production order summary' },
+    { key: 'Core Report', label: 'Core Report' },
+    { key: 'Backlog report', label: 'Backlog report' },
+    { key: 'Daily production summary', label: 'Daily production summary' },
+    { key: 'Advanced Planning', label: 'Advanced Planning' },
+    { key: 'Needle Wise Planning', label: 'Needle Wise Planning' },
+  ]
+
   const catalogSections = [
     { key: 'Items', label: 'Items' },
     { key: 'Categories', label: 'Categories' },
@@ -170,6 +180,23 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
                   type="checkbox"
                   checked={(navigation.Dashboard as Record<string, boolean> | undefined)?.[subsection.key] === true}
                   onChange={(e) => onChange('Dashboard', subsection.key, null, e.target.checked)}
+                  className="rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <span className="ml-2 text-sm text-gray-700">{subsection.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h4 className="text-md font-medium text-gray-900 mb-3">Reports</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-4">
+            {reportSections.map((subsection) => (
+              <label key={subsection.key} className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={(navigation.Reports as Record<string, boolean> | undefined)?.[subsection.key] === true}
+                  onChange={(e) => onChange('Reports', subsection.key, null, e.target.checked)}
                   className="rounded border-gray-300 text-primary focus:ring-primary"
                 />
                 <span className="ml-2 text-sm text-gray-700">{subsection.label}</span>

@@ -14,8 +14,6 @@ import { getHalfStepQuantityError, HALF_STEP_QTY_ERROR } from "@/shared/utils/ha
 import MachineViewTab from "./components/MachineViewTab";
 import ArticleViewTab from "./components/ArticleViewTab";
 import MachineArticlePlanningTab from "./components/MachineArticlePlanningTab";
-import MachineArticleAdvancedPlanningTab from "./components/MachineArticleAdvancedPlanningTab";
-import NeedleWiseProductionTab from "./components/NeedleWiseProductionTab";
 import {
   checkKnittingQuantityBuffer,
 } from "./utils/knittingQuantityValidation";
@@ -44,9 +42,7 @@ type KnittingTab =
   | "orders"
   | "machine-view"
   | "article-view"
-  | "planning"
-  | "advanced-planning"
-  | "needle-wise";
+  | "planning";
 
 /** 50×70mm ZPL preset — aligned with Containers Master default for thermal QR labels */
 const KNITTING_CONTAINER_LABEL_QZ_SETTINGS = {
@@ -1605,20 +1601,6 @@ const KnittingFloorSupervisorPage = () => {
             >
               Planning
             </button>
-            <button
-              type="button"
-              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "advanced-planning" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-              onClick={() => setActiveTab("advanced-planning")}
-            >
-              Advanced Planning
-            </button>
-            <button
-              type="button"
-              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "needle-wise" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-              onClick={() => setActiveTab("needle-wise")}
-            >
-              Needle Wise Planning
-            </button>
           </div>
         </div>
 
@@ -1633,10 +1615,6 @@ const KnittingFloorSupervisorPage = () => {
             />
           ) : activeTab === "planning" ? (
             <MachineArticlePlanningTab refreshTrigger={machineViewRefreshTrigger} />
-          ) : activeTab === "advanced-planning" ? (
-            <MachineArticleAdvancedPlanningTab refreshTrigger={machineViewRefreshTrigger} />
-          ) : activeTab === "needle-wise" ? (
-            <NeedleWiseProductionTab refreshTrigger={machineViewRefreshTrigger} />
           ) : activeTab === "article-view" ? (
             <ArticleViewTab
               orders={articleTabOrders}

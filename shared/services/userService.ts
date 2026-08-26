@@ -10,6 +10,15 @@ export interface NavigationPermissions {
     'Vendor Dashboard': boolean;
     'Yarn Dashboard': boolean;
   };
+  Reports: {
+    'Invoice Report': boolean;
+    'Production order summary': boolean;
+    'Core Report': boolean;
+    'Backlog report': boolean;
+    'Daily production summary': boolean;
+    'Advanced Planning': boolean;
+    'Needle Wise Planning': boolean;
+  };
   Catalog: {
     Items: boolean;
     Categories: boolean;

@@ -178,6 +178,51 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
             </div>
           </div>
 
+          {/* Reports Section */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-md font-medium text-gray-900 dark:text-white">Reports</h3>
+              <button
+                type="button"
+                className="text-xs text-primary hover:text-primary-dark"
+                onClick={() =>
+                  handleSelectAll('Reports', [
+                    'Invoice Report',
+                    'Production order summary',
+                    'Core Report',
+                    'Backlog report',
+                    'Daily production summary',
+                    'Advanced Planning',
+                    'Needle Wise Planning',
+                  ])
+                }
+              >
+                Toggle All
+              </button>
+            </div>
+            <div className="space-y-2 ml-4">
+              {[
+                { key: 'Invoice Report', label: 'Invoice Report' },
+                { key: 'Production order summary', label: 'Production order summary' },
+                { key: 'Core Report', label: 'Core Report' },
+                { key: 'Backlog report', label: 'Backlog report' },
+                { key: 'Daily production summary', label: 'Daily production summary' },
+                { key: 'Advanced Planning', label: 'Advanced Planning' },
+                { key: 'Needle Wise Planning', label: 'Needle Wise Planning' },
+              ].map((subsection) => (
+                <label key={subsection.key} className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={(navigation.Reports as Record<string, boolean> | undefined)?.[subsection.key] === true}
+                    onChange={(e) => handleNavigationChange('Reports', subsection.key, e.target.checked)}
+                    className="rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">{subsection.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
           {/* Catalog Section */}
           <div>
             <div className="flex items-center justify-between mb-3">

@@ -10,9 +10,20 @@ export type DashboardNavPermissions = {
   'Yarn Dashboard': boolean;
 };
 
-interface NavigationPermissions {
+export type ReportsNavPermissions = {
+  'Invoice Report': boolean;
+  'Production order summary': boolean;
+  'Core Report': boolean;
+  'Backlog report': boolean;
+  'Daily production summary': boolean;
+  'Advanced Planning': boolean;
+  'Needle Wise Planning': boolean;
+};
+
+export interface NavigationPermissions {
   // Main Sidebar
   Dashboard: DashboardNavPermissions;
+  Reports: ReportsNavPermissions;
   Catalog: {
     Items: boolean;
     Categories: boolean;
@@ -213,6 +224,94 @@ export function hasAnyDashboardAccess(
   return false;
 }
 
+/** Nested Reports flags — all off. */
+export const EMPTY_REPORTS_NAV_DEFAULTS: ReportsNavPermissions = {
+  'Invoice Report': false,
+  'Production order summary': false,
+  'Core Report': false,
+  'Backlog report': false,
+  'Daily production summary': false,
+  'Advanced Planning': false,
+  'Needle Wise Planning': false,
+};
+
+/** Nested Reports flags — all on (legacy `Reports: true`). */
+export const ALL_REPORTS_NAV_DEFAULTS: ReportsNavPermissions = {
+  'Invoice Report': true,
+  'Production order summary': true,
+  'Core Report': true,
+  'Backlog report': true,
+  'Daily production summary': true,
+  'Advanced Planning': true,
+  'Needle Wise Planning': true,
+};
+
+/**
+ * Infers Reports flags from parent page permissions for users who never had a Reports object.
+ * @param partial - Stored navigation (may omit Reports)
+ */
+export function inferReportsFromParents(
+  partial: Partial<NavigationPermissions> | undefined
+): ReportsNavPermissions {
+  const vendorList = Boolean(partial?.['Vendor PO']?.['Vendor List']);
+  const productionOrders = Boolean(partial?.['Production Planning']?.['Production Orders']);
+  const knittingFloor = Boolean(partial?.['Production Planning']?.['Knitting Floor']);
+  return {
+    'Invoice Report': vendorList,
+    'Production order summary': productionOrders,
+    'Core Report': productionOrders,
+    'Backlog report': productionOrders,
+    'Daily production summary': productionOrders,
+    'Advanced Planning': knittingFloor,
+    'Needle Wise Planning': knittingFloor,
+  };
+}
+
+/**
+ * Normalizes legacy boolean `Reports` flags and partial objects into the nested shape.
+ * Missing Reports is backfilled from parent page flags so existing users keep access.
+ * @param raw - Stored Reports permission (boolean, object, or missing)
+ * @param defaults - Fallback nested flags when nothing can be inferred
+ * @param inferred - Flags derived from Vendor List / Production Orders / Knitting Floor
+ */
+export function mergeReportsPermissions(
+  raw: boolean | ReportsNavPermissions | undefined,
+  defaults: ReportsNavPermissions,
+  inferred?: ReportsNavPermissions
+): ReportsNavPermissions {
+  if (raw === true) {
+    return { ...ALL_REPORTS_NAV_DEFAULTS };
+  }
+  if (raw && typeof raw === 'object') {
+    const r = raw as Record<string, boolean | undefined>;
+    return {
+      ...defaults,
+      'Invoice Report': Boolean(r['Invoice Report']),
+      'Production order summary': Boolean(r['Production order summary']),
+      'Core Report': Boolean(r['Core Report']),
+      'Backlog report': Boolean(r['Backlog report']),
+      'Daily production summary': Boolean(r['Daily production summary']),
+      'Advanced Planning': Boolean(r['Advanced Planning']),
+      'Needle Wise Planning': Boolean(r['Needle Wise Planning']),
+    };
+  }
+  return { ...(inferred ?? defaults) };
+}
+
+/**
+ * True if the user may see the Reports sidebar group (any nested flag or legacy boolean).
+ * @param reports - Reports permission value from navigation
+ */
+export function hasAnyReportsAccess(
+  reports: boolean | ReportsNavPermissions | undefined
+): boolean {
+  if (reports === true) return true;
+  if (reports && typeof reports === 'object') {
+    return Object.values(reports).some((value) => value === true);
+  }
+  return false;
+}
+
 /**
  * Deep-merge partial navigation with canonical defaults for complete PATCH payloads.
  * @param partial - User navigation from API or form state
@@ -231,6 +330,11 @@ export function mergeNavigationWithDefaults(
     Dashboard: mergeDashboardPermissions(
       partial.Dashboard as boolean | DashboardNavPermissions | undefined,
       defaultPermissions.Dashboard
+    ),
+    Reports: mergeReportsPermissions(
+      partial.Reports as boolean | ReportsNavPermissions | undefined,
+      defaultPermissions.Reports,
+      inferReportsFromParents(partial)
     ),
     Catalog: {
       ...defaultPermissions.Catalog,
@@ -279,6 +383,7 @@ const NavigationContext = createContext<NavigationContextType | undefined>(undef
 // Default permissions (all false for security)
 const defaultPermissions: NavigationPermissions = {
   Dashboard: { ...EMPTY_DASHBOARD_NAV_DEFAULTS },
+  Reports: { ...EMPTY_REPORTS_NAV_DEFAULTS },
   Catalog: {
     Items: false,
     Categories: false,
@@ -390,7 +495,7 @@ export const EMPTY_YARN_ISSUE_NAV_DEFAULTS = defaultPermissions['Yarn Management
 const NAVIGATION_CACHE_KEY = 'navigationPermissions';
 const NAVIGATION_CACHE_VERSION_KEY = 'navigationPermissionsVersion';
 /** Bump when permission semantics change (e.g. Help & Support opt-in). */
-const NAVIGATION_CACHE_VERSION = '4';
+const NAVIGATION_CACHE_VERSION = '5';
 
 interface NavigationProviderProps {
   children: ReactNode;
@@ -497,6 +602,10 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
 
     if (path === '/dashboard' || path === '/dashboards' || path === '/dashboards/main') {
       return hasAnyDashboardAccess(permissions.Dashboard);
+    }
+
+    if (path === '/reports') {
+      return hasAnyReportsAccess(permissions.Reports);
     }
 
     // Special handling for Vendor PO main menu - show if any Vendor PO permission is true
@@ -696,8 +805,18 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
       return false;
     }
 
+    if (parent === '/reports') {
+      const reportsRaw = permissions.Reports as unknown as boolean | ReportsNavPermissions;
+      if (reportsRaw === true) return true;
+      if (reportsRaw && typeof reportsRaw === 'object') {
+        return reportsRaw[child as keyof ReportsNavPermissions] === true;
+      }
+      return false;
+    }
+
     const parentMap: { [key: string]: keyof NavigationPermissions } = {
       '/dashboards': 'Dashboard',
+      '/reports': 'Reports',
       '/catalog': 'Catalog',
       '/sales': 'Sales',
       '/production': 'Production Planning',

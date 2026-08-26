@@ -575,6 +575,43 @@ export interface OrderSummaryReportResponse {
   pageTotals: OrderSummaryMetrics;
 }
 
+/** Numeric columns on a Core Report row (or totals footer). */
+export interface CoreReportMetrics {
+  sapStock: number;
+  inwardPending: number;
+  inTransit: number;
+  wip: number;
+  runningOnMachine: number;
+  productionPlanning: number;
+  totalInhand: number;
+  /** Pending PO qty keyed by vendor name (dynamic columns). */
+  vendorPending: Record<string, number>;
+}
+
+/** One factory-code row in the Core Report. */
+export interface CoreReportRow extends CoreReportMetrics {
+  productId: string;
+  brand: string;
+  vendorCode: string;
+  factoryCode: string;
+  color: string;
+  type: string;
+  design: string;
+}
+
+export interface CoreReportResponse {
+  results: CoreReportRow[];
+  page: number;
+  limit: number;
+  totalPages: number;
+  total: number;
+  /** Active catalog items with a factory code, ignoring the current search. */
+  catalogTotal: number;
+  vendorColumns: string[];
+  totals: CoreReportMetrics;
+  pageTotals: CoreReportMetrics;
+}
+
 /** Where the factory's remaining knitting sits. Only the first two are pending. */
 export interface KnitPendingBucketTotals {
   onMachine: number;
@@ -1324,6 +1361,27 @@ class ProductionService {
     const queryString = queryParams.toString();
     const endpoint = queryString ? `/reports/order-summary?${queryString}` : '/reports/order-summary';
     return this.request<OrderSummaryReportResponse>(endpoint);
+  }
+
+  /**
+   * Core Report: warehouse stock, vendor inward/PO pending, and production qty
+   * per factory code.
+   */
+  async getCoreReport(filters: {
+    search?: string;
+    limit?: number;
+    page?: number;
+    sortBy?: string;
+  } = {}): Promise<ApiResponse<CoreReportResponse>> {
+    const queryParams = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') {
+        queryParams.append(key, String(value));
+      }
+    });
+    const queryString = queryParams.toString();
+    const endpoint = queryString ? `/reports/core-report?${queryString}` : '/reports/core-report';
+    return this.request<CoreReportResponse>(endpoint);
   }
 
   /**
