@@ -1348,6 +1348,8 @@ class ProductionService {
     search?: string;
     status?: string;
     priority?: string;
+    /** When true, include orders whose knit pending is 0. Default omits them. */
+    includeZeroPending?: boolean;
     limit?: number;
     page?: number;
     sortBy?: string;

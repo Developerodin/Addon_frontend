@@ -59,6 +59,7 @@ export default function ProductionOrderSummaryTab({
   const [status, setStatus] = useState("");
   const [priority, setPriority] = useState("");
   const [showLegacy, setShowLegacy] = useState(false);
+  const [includeZeroPending, setIncludeZeroPending] = useState(false);
   const [formulaColumn, setFormulaColumn] = useState<OrderSummaryColumnKey | null>(null);
 
   const load = useCallback(async () => {
@@ -72,6 +73,7 @@ export default function ProductionOrderSummaryTab({
         ...(search.trim() && { search: search.trim() }),
         ...(status && { status }),
         ...(priority && { priority }),
+        ...(includeZeroPending && { includeZeroPending: true }),
       });
       if (response.success && response.data) {
         const data = response.data;
@@ -95,7 +97,7 @@ export default function ProductionOrderSummaryTab({
       setLoading(false);
       onLoadingChange?.(false);
     }
-  }, [page, limit, search, status, priority, onLoadingChange]);
+  }, [page, limit, search, status, priority, includeZeroPending, onLoadingChange]);
 
   useEffect(() => {
     const t = setTimeout(() => void load(), search ? 400 : 0);
@@ -135,6 +137,8 @@ export default function ProductionOrderSummaryTab({
         onLimitChange={withPageReset(setLimit)}
         showLegacy={showLegacy}
         onShowLegacyChange={setShowLegacy}
+        includeZeroPending={includeZeroPending}
+        onIncludeZeroPendingChange={withPageReset(setIncludeZeroPending)}
         loading={loading}
         canExport={rows.length > 0}
         onRefresh={() => void load()}
@@ -152,6 +156,11 @@ export default function ProductionOrderSummaryTab({
             <i className="ri-inbox-line text-xl text-gray-200" aria-hidden="true" />
           </div>
           <h3 className="text-xs font-bold text-gray-400 mb-1">NO ORDER SUMMARY DATA</h3>
+          {!includeZeroPending ? (
+            <p className="text-[11px] text-gray-400 mt-1 max-w-xs">
+              Orders with knitting pending of 0 are hidden. Turn on Show all orders to include them.
+            </p>
+          ) : null}
         </div>
       ) : (
         <>

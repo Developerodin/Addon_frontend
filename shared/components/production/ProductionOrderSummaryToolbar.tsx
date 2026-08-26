@@ -13,6 +13,8 @@ export interface ProductionOrderSummaryToolbarProps {
   onLimitChange: (value: number) => void;
   showLegacy: boolean;
   onShowLegacyChange: (value: boolean) => void;
+  includeZeroPending: boolean;
+  onIncludeZeroPendingChange: (value: boolean) => void;
   loading: boolean;
   canExport: boolean;
   onRefresh: () => void;
@@ -49,6 +51,8 @@ export default function ProductionOrderSummaryToolbar({
   onLimitChange,
   showLegacy,
   onShowLegacyChange,
+  includeZeroPending,
+  onIncludeZeroPendingChange,
   loading,
   canExport,
   onRefresh,
@@ -135,6 +139,20 @@ export default function ProductionOrderSummaryToolbar({
       <span id="order-summary-legacy-hint" className="sr-only">
         Shows the pending figure as it was calculated before balances closed on a machine were separated
         out, so the change can be compared.
+      </span>
+
+      <label className="flex items-center gap-1.5 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={includeZeroPending}
+          onChange={(e) => onIncludeZeroPendingChange(e.target.checked)}
+          className="h-3.5 w-3.5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+          aria-describedby="order-summary-zero-pending-hint"
+        />
+        <span className="text-[11px] font-medium text-gray-600 whitespace-nowrap">Show all orders</span>
+      </label>
+      <span id="order-summary-zero-pending-hint" className="sr-only">
+        When off, orders whose knitting pending is 0 are hidden. Turn on to see every matching order.
       </span>
 
       <button
