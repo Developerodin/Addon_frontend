@@ -22,6 +22,13 @@ const formatDate = (value?: string | Date | null): string => {
   return `${day}-${month}-${year}`;
 };
 
+/** Indian-numbering INR formatter with given fraction digits. */
+const formatINR = (value: number, fractionDigits = 2): string =>
+  Number(value || 0).toLocaleString('en-IN', {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  });
+
 /** Escapes HTML special characters for safe template injection. */
 const escapeHtml = (value: unknown): string =>
   String(value ?? '')
@@ -43,6 +50,17 @@ const setById = (html: string, id: string, value: string): string => {
   return html.replace(re, `id="${id}">${value}</${closingTag}>`);
 };
 
+/** Hide a summary row when its amount is zero. */
+const hideRowIfZero = (html: string, rowId: string, value: number): string => {
+  if (Math.abs(value) < 0.0001) {
+    return html.replace(
+      new RegExp(`<tr id="${rowId}"[^>]*>[\\s\\S]*?<\\/tr>`, 'i'),
+      `<tr id="${rowId}" style="display:none;"><td></td><td></td></tr>`
+    );
+  }
+  return html;
+};
+
 /**
  * Builds vendor address block from snapshot vendor fields.
  * @param vendor - vendor snapshot on GRN
@@ -54,7 +72,8 @@ const formatVendorAddress = (vendor: VendorGrn['vendor']): string => {
 };
 
 /**
- * Builds line-item rows for the GRN items table.
+ * Builds line-item rows for the GRN items table (client commercial + M1–M4).
+ * Diff on paper = Invoice Qty − Received Qty.
  * @param grn - vendor GRN snapshot
  */
 const buildLineItemsHtml = (grn: VendorGrn): string => {
@@ -63,19 +82,26 @@ const buildLineItemsHtml = (grn: VendorGrn): string => {
   (grn.lots || []).forEach((lot) => {
     (lot.items || []).forEach((item) => {
       sr += 1;
+      const invoiceQty = item.expectedQty ?? 0;
+      const receivedQty = item.verifiedQty ?? 0;
+      const printDiff = invoiceQty - receivedQty;
       rows.push(`
         <tr>
           <td class="text-center">${sr}</td>
           <td>${escapeHtml(lot.lotNumber)}</td>
           <td>${escapeHtml(item.productName || '—')}</td>
           <td>${escapeHtml(item.vendorCode || '—')}</td>
-          <td class="text-right">${escapeHtml(item.expectedQty ?? 0)}</td>
-          <td class="text-right">${escapeHtml(item.verifiedQty ?? 0)}</td>
+          <td class="text-center">${escapeHtml(item.hsnCode || '—')}</td>
+          <td class="text-right">${escapeHtml(invoiceQty)}</td>
+          <td class="text-right">${escapeHtml(receivedQty)}</td>
+          <td class="text-right">${escapeHtml(printDiff)}</td>
+          <td class="text-right">${formatINR(item.rate ?? 0)}</td>
+          <td class="text-center">${escapeHtml(item.unit || 'Pairs')}</td>
+          <td class="text-right">${formatINR(item.amount ?? receivedQty * (item.rate ?? 0))}</td>
           <td class="text-right">${escapeHtml(item.m1 ?? 0)}</td>
           <td class="text-right">${escapeHtml(item.m2 ?? 0)}</td>
           <td class="text-right">${escapeHtml(item.m3 ?? 0)}</td>
           <td class="text-right">${escapeHtml(item.m4 ?? 0)}</td>
-          <td class="text-right">${escapeHtml(item.varianceQty ?? 0)}</td>
         </tr>`);
     });
   });
@@ -101,6 +127,8 @@ export const renderVendorGrnHtml = async (grn: VendorGrn): Promise<string> => {
     m3: 0,
     m4: 0,
   };
+  const printDiffTotal = (totals.expected ?? 0) - (totals.verified ?? 0);
+  const basicValue = totals.subTotal ?? 0;
 
   html = setById(html, 'consignee-name', ADDON_COMPANY.name);
   html = setById(html, 'consignee-address', ADDON_COMPANY.address);
@@ -138,11 +166,33 @@ export const renderVendorGrnHtml = async (grn: VendorGrn): Promise<string> => {
 
   html = setById(html, 'total-expected', escapeHtml(totals.expected ?? 0));
   html = setById(html, 'total-verified', escapeHtml(totals.verified ?? 0));
+  html = setById(html, 'total-diff', escapeHtml(printDiffTotal));
+  html = setById(html, 'total-amount', formatINR(basicValue));
   html = setById(html, 'total-m1', escapeHtml(totals.m1 ?? 0));
   html = setById(html, 'total-m2', escapeHtml(totals.m2 ?? 0));
   html = setById(html, 'total-m3', escapeHtml(totals.m3 ?? 0));
   html = setById(html, 'total-m4', escapeHtml(totals.m4 ?? 0));
-  html = setById(html, 'total-variance', escapeHtml(totals.variance ?? 0));
+
+  const taxableForTax = totals.taxableValue ?? basicValue;
+  html = setById(html, 'tax-rate-label', escapeHtml(totals.taxLabel || ''));
+  html = setById(html, 'taxable-value', formatINR(taxableForTax));
+  html = setById(html, 'sgst-amount', formatINR(totals.sgst ?? 0));
+  html = setById(html, 'cgst-amount', formatINR(totals.cgst ?? 0));
+  html = setById(html, 'igst-amount', formatINR(totals.igst ?? 0));
+
+  html = setById(html, 'basic-value', formatINR(basicValue));
+  html = setById(html, 'discount-amount', formatINR(totals.discountAmount ?? 0));
+  html = setById(html, 'taxable-value-after-discount', formatINR(taxableForTax));
+  html = setById(html, 'freight-amount', formatINR(totals.freightAmount ?? 0));
+  html = setById(html, 'freight-gst-amount', formatINR(totals.freightGst ?? 0));
+  html = setById(html, 'round-off-amount', formatINR(totals.roundOff ?? 0));
+  html = setById(html, 'grand-total', formatINR(totals.grandTotal ?? 0));
+  html = setById(html, 'amount-in-words', escapeHtml(totals.amountInWords || ''));
+
+  html = hideRowIfZero(html, 'row-discount', totals.discountAmount ?? 0);
+  html = hideRowIfZero(html, 'row-freight', totals.freightAmount ?? 0);
+  html = hideRowIfZero(html, 'row-freight-gst', totals.freightGst ?? 0);
+  html = hideRowIfZero(html, 'row-round-off', totals.roundOff ?? 0);
 
   const discrepancy = (grn.discrepancyDetails || '').trim();
   if (discrepancy) {

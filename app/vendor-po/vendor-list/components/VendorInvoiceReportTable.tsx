@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useCallback, useState } from "react";
 import type { VendorInvoiceReportRow } from "@/shared/services/vendorInvoiceReportService";
 import {
   formatInvoiceValue,
@@ -8,8 +8,14 @@ import {
   formatShortExc,
   invoiceReportTdCenter,
   invoiceReportTdLeft,
-  invoiceReportThClass,
 } from "../vendorInvoiceReportColumns";
+import {
+  getInvoiceReportColumnInfo,
+  type InvoiceReportColumnId,
+  type InvoiceReportColumnInfo,
+} from "../invoiceReportColumnInfo";
+import InvoiceReportColumnInfoDrawer from "./InvoiceReportColumnInfoDrawer";
+import InvoiceReportTh from "./InvoiceReportTh";
 
 type VendorInvoiceReportTableProps = {
   loading: boolean;
@@ -21,63 +27,81 @@ type VendorInvoiceReportTableProps = {
  * Two-row yellow header table for the vendor invoice reconciliation report.
  */
 const VendorInvoiceReportTable = ({ loading, rows, hasFilters }: VendorInvoiceReportTableProps) => {
+  const [columnInfo, setColumnInfo] = useState<InvoiceReportColumnInfo | null>(null);
+
+  /** Open the right drawer for a column. */
+  const openColumnInfo = useCallback((id: InvoiceReportColumnId) => {
+    setColumnInfo(getInvoiceReportColumnInfo(id));
+  }, []);
+
   return (
+    <>
     <div className="overflow-x-auto min-h-[300px]">
       <table className="w-full border-collapse border border-gray-200" aria-label="Vendor invoice report">
         <thead>
           <tr>
-            <th rowSpan={2} className={invoiceReportThClass}>
+            <InvoiceReportTh columnId="vendorName" rowSpan={2} onInfo={openColumnInfo}>
               Vendor Name
-            </th>
-            <th rowSpan={2} className={invoiceReportThClass}>
+            </InvoiceReportTh>
+            <InvoiceReportTh columnId="poNumber" rowSpan={2} onInfo={openColumnInfo}>
               PO Number
-            </th>
-            <th rowSpan={2} className={invoiceReportThClass}>
+            </InvoiceReportTh>
+            <InvoiceReportTh columnId="poDate" rowSpan={2} onInfo={openColumnInfo}>
               PO Date
-            </th>
-            <th rowSpan={2} className={invoiceReportThClass}>
+            </InvoiceReportTh>
+            <InvoiceReportTh columnId="invoiceNo" rowSpan={2} onInfo={openColumnInfo}>
               Invoice No
-            </th>
-            <th rowSpan={2} className={invoiceReportThClass}>
+            </InvoiceReportTh>
+            <InvoiceReportTh columnId="invDate" rowSpan={2} onInfo={openColumnInfo}>
               Inv Date
-            </th>
-            <th rowSpan={2} className={invoiceReportThClass}>
+            </InvoiceReportTh>
+            <InvoiceReportTh columnId="recdDt" rowSpan={2} onInfo={openColumnInfo}>
               Recd Dt
-            </th>
-            <th rowSpan={2} className={invoiceReportThClass}>
+            </InvoiceReportTh>
+            <InvoiceReportTh columnId="invoiceValue" rowSpan={2} onInfo={openColumnInfo}>
               Invoice Value
-            </th>
-            <th rowSpan={2} className={invoiceReportThClass}>
+            </InvoiceReportTh>
+            <InvoiceReportTh columnId="noOfBox" rowSpan={2} onInfo={openColumnInfo}>
               No of Box
-            </th>
-            <th rowSpan={2} className={invoiceReportThClass}>
+            </InvoiceReportTh>
+            <InvoiceReportTh columnId="invoiceQty" rowSpan={2} onInfo={openColumnInfo}>
               Invoice Qty
-            </th>
-            <th className={invoiceReportThClass}>WH Transfer Qty</th>
-            <th rowSpan={2} className={invoiceReportThClass}>
+            </InvoiceReportTh>
+            <InvoiceReportTh columnId="stnQty" onInfo={openColumnInfo}>
+              WH Transfer Qty
+            </InvoiceReportTh>
+            <InvoiceReportTh columnId="m1" rowSpan={2} onInfo={openColumnInfo}>
+              M1
+            </InvoiceReportTh>
+            <InvoiceReportTh columnId="m2" rowSpan={2} onInfo={openColumnInfo}>
+              M2
+            </InvoiceReportTh>
+            <InvoiceReportTh columnId="m3" rowSpan={2} onInfo={openColumnInfo}>
               M3
-            </th>
-            <th rowSpan={2} className={invoiceReportThClass}>
+            </InvoiceReportTh>
+            <InvoiceReportTh columnId="m4" rowSpan={2} onInfo={openColumnInfo}>
               M4
-            </th>
-            <th rowSpan={2} className={invoiceReportThClass}>
-              PR
-            </th>
-            <th rowSpan={2} className={invoiceReportThClass}>
+            </InvoiceReportTh>
+            <InvoiceReportTh columnId="vm4" rowSpan={2} onInfo={openColumnInfo}>
+              VM4/PR
+            </InvoiceReportTh>
+            <InvoiceReportTh columnId="shortExc" rowSpan={2} onInfo={openColumnInfo}>
               SHORT/EXC
-            </th>
-            <th rowSpan={2} className={invoiceReportThClass}>
+            </InvoiceReportTh>
+            <InvoiceReportTh columnId="pendingInward" rowSpan={2} onInfo={openColumnInfo}>
               PENDING INWARD
-            </th>
+            </InvoiceReportTh>
           </tr>
           <tr>
-            <th className={invoiceReportThClass}>STN Qty</th>
+            <InvoiceReportTh columnId="stnQty" onInfo={openColumnInfo}>
+              STN Qty
+            </InvoiceReportTh>
           </tr>
         </thead>
         <tbody>
           {loading ? (
             <tr>
-              <td colSpan={15} className="px-1.5 py-10 border border-gray-200">
+              <td colSpan={17} className="px-1.5 py-10 border border-gray-200">
                 <div className="flex flex-col items-center justify-center">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50" />
                   <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">
@@ -88,7 +112,7 @@ const VendorInvoiceReportTable = ({ loading, rows, hasFilters }: VendorInvoiceRe
             </tr>
           ) : rows.length === 0 ? (
             <tr>
-              <td colSpan={15} className="px-1.5 py-10 border border-gray-200">
+              <td colSpan={17} className="px-1.5 py-10 border border-gray-200">
                 <div className="flex flex-col items-center justify-center py-8 text-center">
                   <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-3">
                     <i className="ri-file-list-3-line text-xl text-gray-300" />
@@ -118,9 +142,11 @@ const VendorInvoiceReportTable = ({ loading, rows, hasFilters }: VendorInvoiceRe
                 <td className={invoiceReportTdCenter}>{formatQty(row.noOfBox)}</td>
                 <td className={invoiceReportTdCenter}>{formatQty(row.invoiceQty)}</td>
                 <td className={invoiceReportTdCenter}>{formatQty(row.stnQty)}</td>
+                <td className={invoiceReportTdCenter}>{formatQty(row.m1)}</td>
+                <td className={invoiceReportTdCenter}>{formatQty(row.m2)}</td>
                 <td className={invoiceReportTdCenter}>{formatQty(row.m3)}</td>
                 <td className={invoiceReportTdCenter}>{formatQty(row.m4)}</td>
-                <td className={invoiceReportTdCenter}>{formatQty(row.pr)}</td>
+                <td className={invoiceReportTdCenter}>{formatQty(row.vm4)}</td>
                 <td className={invoiceReportTdCenter}>{formatShortExc(row.shortExc)}</td>
                 <td className={invoiceReportTdCenter}>{formatQty(row.pendingInward)}</td>
               </tr>
@@ -129,6 +155,8 @@ const VendorInvoiceReportTable = ({ loading, rows, hasFilters }: VendorInvoiceRe
         </tbody>
       </table>
     </div>
+      <InvoiceReportColumnInfoDrawer info={columnInfo} onClose={() => setColumnInfo(null)} />
+    </>
   );
 };
 

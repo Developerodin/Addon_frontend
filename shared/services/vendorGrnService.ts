@@ -17,6 +17,11 @@ export interface VendorGrnItem {
   m3: number;
   m4: number;
   varianceQty: number;
+  hsnCode?: string;
+  rate?: number;
+  gstRate?: number;
+  unit?: string;
+  amount?: number;
   vendorProductionFlowId?: string;
   boxIds?: string[];
 }
@@ -28,6 +33,13 @@ export interface VendorGrnLot {
   items: VendorGrnItem[];
 }
 
+export interface VendorGrnAdjustments {
+  discountAmount?: number;
+  freightAmount?: number;
+  freightGstPercent?: number;
+  roundOff?: number;
+}
+
 export interface VendorGrnTotals {
   expected: number;
   verified: number;
@@ -36,6 +48,42 @@ export interface VendorGrnTotals {
   m2: number;
   m3: number;
   m4: number;
+  subTotal?: number;
+  discountAmount?: number;
+  taxableValue?: number;
+  freightAmount?: number;
+  freightGst?: number;
+  itemGst?: number;
+  preRoundTotal?: number;
+  roundOff?: number;
+  roundOffSuggested?: number;
+  sgst?: number;
+  cgst?: number;
+  igst?: number;
+  gst?: number;
+  grandTotal?: number;
+  totalQty?: number;
+  taxLabel?: string;
+  amountInWords?: string;
+}
+
+export interface VendorGrnLineCommercial {
+  lotNumber?: string;
+  poItem?: string;
+  productId?: string;
+  hsnCode?: string;
+  rate?: number;
+  unit?: string;
+}
+
+export interface VendorGrnHeaderPatch {
+  notes?: string;
+  discrepancyDetails?: string;
+  discountAmount?: number;
+  freightAmount?: number;
+  freightGstPercent?: number;
+  roundOff?: number;
+  lineCommercial?: VendorGrnLineCommercial[];
 }
 
 export interface VendorGrn {
@@ -61,6 +109,7 @@ export interface VendorGrn {
     pincode?: string;
   };
   lots: VendorGrnLot[];
+  adjustments?: VendorGrnAdjustments;
   totals: VendorGrnTotals;
   secondaryCheckingCompletedAt?: string | null;
   incompleteClassification?: boolean;
@@ -194,6 +243,18 @@ class VendorGrnService {
   ): Promise<VendorGrn> {
     return this.request<VendorGrn>(`/by-flow/${flowId}/issue`, {
       method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  /**
+   * Patch header metadata and commercial values (no revision).
+   * @param grnId - GRN document id
+   * @param body - notes, discrepancy, financials, line commercial
+   */
+  async updateHeader(grnId: string, body: VendorGrnHeaderPatch): Promise<VendorGrn> {
+    return this.request<VendorGrn>(`/${grnId}/header`, {
+      method: 'PATCH',
       body: JSON.stringify(body),
     });
   }

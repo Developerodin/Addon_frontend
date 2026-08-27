@@ -7,7 +7,9 @@ import { toast } from "react-hot-toast";
 import Seo from "@/shared/layout-components/seo/seo";
 import vendorGrnService, { type VendorGrn } from "@/shared/services/vendorGrnService";
 import { printVendorGrnDocument } from "@/shared/utils/vendorGrnPrint";
+import { fmtGrnINR } from "@/shared/utils/grnTotals";
 import { CRM } from "../../../vendor-list/crmUiClasses";
+import VendorGrnValuesEditor from "../../VendorGrnValuesEditor";
 
 /** Vendor PO GRN detail view (API-backed snapshot). Print opens a dedicated GRN form. */
 const GRNViewPage = () => {
@@ -123,7 +125,7 @@ const GRNViewPage = () => {
         </div>
 
         <div className={`${CRM.cardBody} space-y-4`}>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-[11px]">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-[11px]">
             <div>
               <div className={CRM.label}>GRN Date</div>
               <div className="font-semibold text-gray-900">
@@ -144,6 +146,12 @@ const GRNViewPage = () => {
                 {(grn.totals?.verified ?? 0).toLocaleString()} pcs
               </div>
             </div>
+            <div>
+              <div className={CRM.label}>Final Total</div>
+              <div className="font-bold tabular-nums text-purple-700">
+                {fmtGrnINR(grn.totals?.grandTotal ?? 0)}
+              </div>
+            </div>
           </div>
 
           {grn.discrepancyDetails && (
@@ -159,9 +167,13 @@ const GRNViewPage = () => {
                   <th scope="col" className={CRM.th}>Lot / Invoice</th>
                   <th scope="col" className={CRM.th}>Article</th>
                   <th scope="col" className={CRM.th}>Vendor code</th>
+                  <th scope="col" className={CRM.th}>HSN</th>
                   <th scope="col" className={CRM.thRight}>Expected</th>
                   <th scope="col" className={CRM.thRight}>Scan accepted</th>
                   <th scope="col" className={CRM.thRight}>Verified</th>
+                  <th scope="col" className={CRM.thRight}>Rate</th>
+                  <th scope="col" className={CRM.th}>Per</th>
+                  <th scope="col" className={CRM.thRight}>Amount</th>
                   <th scope="col" className={CRM.thRight}>M1</th>
                   <th scope="col" className={CRM.thRight}>M2</th>
                   <th scope="col" className={CRM.thRight}>M3</th>
@@ -175,9 +187,15 @@ const GRNViewPage = () => {
                     <td className={`${CRM.td} font-medium`}>{lot.lotNumber}</td>
                     <td className={CRM.td}>{item.productName}</td>
                     <td className={CRM.td}>{item.vendorCode || "—"}</td>
+                    <td className={CRM.td}>{item.hsnCode || "—"}</td>
                     <td className={`${CRM.td} text-right tabular-nums`}>{item.expectedQty}</td>
                     <td className={`${CRM.td} text-right tabular-nums`}>{item.scanAcceptedQty}</td>
                     <td className={`${CRM.td} text-right tabular-nums font-bold`}>{item.verifiedQty}</td>
+                    <td className={`${CRM.td} text-right tabular-nums`}>{fmtGrnINR(item.rate ?? 0)}</td>
+                    <td className={CRM.td}>{item.unit || "Pairs"}</td>
+                    <td className={`${CRM.td} text-right tabular-nums font-semibold`}>
+                      {fmtGrnINR(item.amount ?? (item.verifiedQty || 0) * (item.rate ?? 0))}
+                    </td>
                     <td className={`${CRM.td} text-right tabular-nums`}>{item.m1}</td>
                     <td className={`${CRM.td} text-right tabular-nums`}>{item.m2}</td>
                     <td className={`${CRM.td} text-right tabular-nums`}>{item.m3}</td>
@@ -198,12 +216,17 @@ const GRNViewPage = () => {
               </tbody>
               <tfoot>
                 <tr className="bg-gray-50 font-bold">
-                  <td colSpan={3} className={`${CRM.td} text-right`}>
+                  <td colSpan={4} className={`${CRM.td} text-right`}>
                     Totals
                   </td>
                   <td className={`${CRM.td} text-right tabular-nums`}>{grn.totals?.expected ?? 0}</td>
                   <td className={`${CRM.td} text-right`}>—</td>
                   <td className={`${CRM.td} text-right tabular-nums`}>{grn.totals?.verified ?? 0}</td>
+                  <td className={`${CRM.td} text-right`}>—</td>
+                  <td className={`${CRM.td} text-right`}>—</td>
+                  <td className={`${CRM.td} text-right tabular-nums`}>
+                    {fmtGrnINR(grn.totals?.subTotal ?? 0)}
+                  </td>
                   <td className={`${CRM.td} text-right tabular-nums`}>{grn.totals?.m1 ?? 0}</td>
                   <td className={`${CRM.td} text-right tabular-nums`}>{grn.totals?.m2 ?? 0}</td>
                   <td className={`${CRM.td} text-right tabular-nums`}>{grn.totals?.m3 ?? 0}</td>
@@ -219,6 +242,8 @@ const GRNViewPage = () => {
               <strong>Notes:</strong> {grn.notes}
             </p>
           )}
+
+          <VendorGrnValuesEditor grn={grn} onSaved={setGrn} />
         </div>
       </div>
     </div>

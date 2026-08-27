@@ -54,14 +54,14 @@ function renderLabelBarcodeSvg(value: string, uid: string): { svg: string; capti
 
   try {
     if (digits.length === 12 || digits.length === 13) {
-      JsBarcode(svg, digits, { ...common, format: "EAN13", width: 1.45 });
+      JsBarcode(svg, digits, { ...common, format: "EAN13", width: 1.25 });
     } else {
-      JsBarcode(svg, raw, { ...common, format: "CODE128", width: 1.25 });
+      JsBarcode(svg, raw, { ...common, format: "CODE128", width: 1.1 });
     }
   } catch (err) {
     console.warn("EAN-13 render failed, falling back to CODE128", err);
     try {
-      JsBarcode(svg, raw, { ...common, format: "CODE128", width: 1.25 });
+      JsBarcode(svg, raw, { ...common, format: "CODE128", width: 1.1 });
     } catch (fallbackErr) {
       console.error("Barcode render failed", fallbackErr);
     }

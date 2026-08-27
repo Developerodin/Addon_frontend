@@ -33,7 +33,7 @@
     }
     td, th {
       border: 1px solid #000;
-      padding: 2px 4px;
+      padding: 2px 3px;
       vertical-align: top;
       word-wrap: break-word;
     }
@@ -52,13 +52,21 @@
     }
     .text-center { text-align: center; }
     .text-right { text-align: right; }
+    .text-bold { font-weight: bold; }
     .items-table th {
       background-color: #f8f9fa;
-      font-size: 8px;
+      font-size: 7px;
       text-transform: uppercase;
     }
     .items-table td {
-      font-size: 9px;
+      font-size: 8px;
+    }
+    .tax-table {
+      margin-top: -1px;
+    }
+    .tax-table th,
+    .tax-table td {
+      font-size: 8px;
     }
     .footer-section {
       padding: 6px;
@@ -94,6 +102,7 @@
     }
     @media print {
       body { margin: 0; }
+      @page { size: A4 landscape; margin: 8mm; }
     }
   </style>
 </head>
@@ -152,32 +161,99 @@
     <table class="items-table">
       <thead>
         <tr>
-          <th style="width: 4%;">SR</th>
-          <th style="width: 10%;">LOT / INVOICE</th>
-          <th style="width: 24%;">ARTICLE</th>
-          <th style="width: 10%;">VENDOR CODE</th>
-          <th style="width: 10%;" class="text-right">INPUT QTY</th>
-          <th style="width: 10%;" class="text-right">RECEIVED QTY</th>
-          <th style="width: 6%;" class="text-right">M1</th>
-          <th style="width: 6%;" class="text-right">M2</th>
-          <th style="width: 6%;" class="text-right">M3</th>
-          <th style="width: 6%;" class="text-right">M4</th>
-          <th style="width: 8%;" class="text-right">VAR</th>
+          <th style="width: 3%;">SR. No.</th>
+          <th style="width: 9%;">Lot / Invoice</th>
+          <th style="width: 12%;">Article</th>
+          <th style="width: 8%;">Vendor code</th>
+          <th style="width: 7%;">HSN Code</th>
+          <th style="width: 6%;" class="text-right">Invoice Qty</th>
+          <th style="width: 6%;" class="text-right">Received QTY</th>
+          <th style="width: 5%;" class="text-right">Diff</th>
+          <th style="width: 6%;" class="text-right">Rate</th>
+          <th style="width: 5%;">Per</th>
+          <th style="width: 8%;" class="text-right">Amount</th>
+          <th style="width: 4%;" class="text-right">M1</th>
+          <th style="width: 4%;" class="text-right">M2</th>
+          <th style="width: 4%;" class="text-right">M3</th>
+          <th style="width: 4%;" class="text-right">M4</th>
         </tr>
       </thead>
       <tbody id="line-items"></tbody>
       <tfoot>
         <tr style="background-color: #f8f9fa; font-weight: bold;">
-          <td colspan="4" class="text-right">TOTALS</td>
+          <td colspan="5" class="text-right">TOTAL QTY</td>
           <td class="text-right" id="total-expected"></td>
           <td class="text-right" id="total-verified"></td>
+          <td class="text-right" id="total-diff"></td>
+          <td colspan="2" class="text-right">BASIC VALUE</td>
+          <td class="text-right" id="total-amount"></td>
           <td class="text-right" id="total-m1"></td>
           <td class="text-right" id="total-m2"></td>
           <td class="text-right" id="total-m3"></td>
           <td class="text-right" id="total-m4"></td>
-          <td class="text-right" id="total-variance"></td>
         </tr>
       </tfoot>
+    </table>
+
+    <table class="tax-table">
+      <thead>
+        <tr>
+          <th style="width: 18%;"></th>
+          <th style="width: 14%;">GST Rate</th>
+          <th style="width: 16%;">Taxable Value</th>
+          <th style="width: 18%;">SGST Amount</th>
+          <th style="width: 18%;">CGST Amount</th>
+          <th style="width: 18%;">IGST Amount</th>
+        </tr>
+      </thead>
+      <tbody id="tax-body">
+        <tr>
+          <td></td>
+          <td class="text-center" id="tax-rate-label"></td>
+          <td class="text-right" id="taxable-value">0.00</td>
+          <td class="text-right" id="sgst-amount">0.00</td>
+          <td class="text-right" id="cgst-amount">0.00</td>
+          <td class="text-right" id="igst-amount">0.00</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <table class="tax-table" id="summary-table">
+      <tbody>
+        <tr id="row-basic-value">
+          <td style="width: 70%;" class="text-bold">Basic Value</td>
+          <td class="text-right" id="basic-value">0.00</td>
+        </tr>
+        <tr id="row-discount">
+          <td class="text-bold">Discount (−)</td>
+          <td class="text-right" id="discount-amount">0.00</td>
+        </tr>
+        <tr id="row-taxable-value">
+          <td class="text-bold">Taxable Value</td>
+          <td class="text-right" id="taxable-value-after-discount">0.00</td>
+        </tr>
+        <tr id="row-freight">
+          <td class="text-bold">Freight / Shipping</td>
+          <td class="text-right" id="freight-amount">0.00</td>
+        </tr>
+        <tr id="row-freight-gst">
+          <td class="text-bold">Freight GST</td>
+          <td class="text-right" id="freight-gst-amount">0.00</td>
+        </tr>
+        <tr id="row-round-off">
+          <td class="text-bold">Round Off</td>
+          <td class="text-right" id="round-off-amount">0.00</td>
+        </tr>
+        <tr>
+          <td class="text-bold" style="font-size: 11px;">FINAL TOTAL</td>
+          <td class="text-right text-bold" id="grand-total" style="font-size: 11px;">0.00</td>
+        </tr>
+        <tr>
+          <td colspan="2" style="font-size: 9px; font-style: italic; padding-top: 4px;">
+            <span id="amount-in-words"></span>
+          </td>
+        </tr>
+      </tbody>
     </table>
 
     <div class="footer-section">
@@ -186,7 +262,7 @@
       </div>
       <div><b>Notes:</b> <span id="notes">—</span></div>
       <div style="margin-top: 4px; font-size: 8px; color: #555;">
-        Received qty = M1 + M2 + M3 + M4 (secondary checking classification).
+        Received qty = M1 + M2 + M3 + M4 (secondary checking classification). Diff = Invoice Qty − Received QTY.
       </div>
     </div>
 
@@ -199,5 +275,6 @@
       </div>
     </div>
   </div>
+  <div style="text-align: center; font-size: 11px; margin-top: 8px;"><b>This is a computer generated document.</b></div>
 </body>
 </html>

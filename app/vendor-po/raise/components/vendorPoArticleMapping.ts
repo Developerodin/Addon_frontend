@@ -24,6 +24,7 @@ export function productRecordToVendorPOArticle(
   const attrs = raw.attributes as Record<string, string> | undefined;
   const { type, color, pattern } = extractTypeColorPattern(attrs);
   const vendorCode = String(raw.vendorCode ?? "").trim();
+  const factoryCode = String(raw.factoryCode ?? "").trim();
   const internalRaw = String(raw.internalCode ?? "").trim();
   /** Display/search code is vendor code only (no factory/internal fallback). */
   const code = vendorCode;
@@ -33,6 +34,7 @@ export function productRecordToVendorPOArticle(
     id,
     code,
     vendorCode: vendorCode || undefined,
+    factoryCode: factoryCode || undefined,
     name,
     internalCode: internalRaw || undefined,
     type: type || undefined,

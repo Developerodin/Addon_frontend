@@ -31,6 +31,8 @@ export interface VendorPOLineItem {
   /** Already received quantity (for receive flow); default 0 */
   receivedQty?: number;
   lineRemarks?: string;
+  /** Set when the line was filled from Excel/CSV import — article cell is locked. */
+  imported?: boolean;
 }
 
 /** Article option for dropdown/search */
@@ -41,6 +43,7 @@ export interface VendorPOArticle {
   name: string;
   internalCode?: string;
   vendorCode?: string;
+  factoryCode?: string;
   /** From attributes; applied to line item on select */
   type?: string;
   color?: string;

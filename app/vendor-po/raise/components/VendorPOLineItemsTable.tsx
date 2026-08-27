@@ -1,5 +1,5 @@
 "use client";
-import React, { RefObject } from "react";
+import React, { RefObject, useEffect, useState } from "react";
 import { VendorPOLineItem } from "../types";
 import type { VendorPoFormFieldAccess } from "./vendorPoRaiseAccess";
 
@@ -26,6 +26,7 @@ type Props = {
   setLineItemRemarks: (rowId: string, value: string) => void;
   addRow: () => void;
   removeRow: (id: string) => void;
+  excelToolbar?: React.ReactNode;
 };
 
 /**
@@ -48,26 +49,41 @@ export default function VendorPOLineItemsTable({
   setLineItemRemarks,
   addRow,
   removeRow,
+  excelToolbar = null,
 }: Props) {
   const { canEditUserLineFields, canEditPricingFields, canAddLines, canRemoveLines, showPricingColumns } =
     fieldAccess;
   const userLineReadOnly = !canEditUserLineFields;
   const pricingReadOnly = !canEditPricingFields;
+  const PAGE_SIZE = 80;
+  const [page, setPage] = useState(0);
+  const pageCount = Math.max(1, Math.ceil(lineItems.length / PAGE_SIZE));
+  const paginate = lineItems.length > PAGE_SIZE;
+  const visibleRows = paginate
+    ? lineItems.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)
+    : lineItems;
+
+  useEffect(() => {
+    if (page > pageCount - 1) setPage(Math.max(0, pageCount - 1));
+  }, [page, pageCount]);
   return (
     <div className="border-t pt-4">
       <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
         <h4 className="text-xs font-bold text-gray-800">Items</h4>
-        {!canAddLines ? null : (
-          <button
-            type="button"
-            onClick={addRow}
-            disabled={lineItemsDisabled}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50"
-          >
-            <i className="ri-add-line text-xs" />
-            Add Item
-          </button>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {excelToolbar}
+          {!canAddLines ? null : (
+            <button
+              type="button"
+              onClick={addRow}
+              disabled={lineItemsDisabled}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50"
+            >
+              <i className="ri-add-line text-xs" />
+              Add Item
+            </button>
+          )}
+        </div>
       </div>
       <div>
         {errors.lineItems && (
@@ -144,7 +160,7 @@ export default function VendorPOLineItemsTable({
               </tr>
             </thead>
             <tbody className="bg-white">
-              {lineItems.map((row) => {
+              {visibleRows.map((row) => {
                 const rowSubTotal = Number(row.orderedQty || 0) * Number(row.rate || 0);
                 const rowGstAmount = (rowSubTotal * Number(row.gstRate || 0)) / 100;
                 const rowTotal = rowSubTotal + rowGstAmount;
@@ -152,12 +168,19 @@ export default function VendorPOLineItemsTable({
                   <tr key={row.id} className="hover:bg-gray-50">
                     <td className="border border-gray-300 px-2 py-1.5 align-top overflow-visible">
                       <div className="relative">
-                        {userLineReadOnly ? (
-                          <span
-                            className={`text-sm ${row.articleCode?.trim() ? "text-gray-800 font-medium" : "text-amber-600 italic"}`}
-                          >
-                            {articleVendorCodeLabel(row.articleCode)}
-                          </span>
+                        {userLineReadOnly || row.imported ? (
+                          <div>
+                            <span
+                              className={`text-sm ${row.articleCode?.trim() ? "text-gray-800 font-medium" : "text-amber-600 italic"}`}
+                            >
+                              {articleVendorCodeLabel(row.articleCode)}
+                            </span>
+                            {row.imported && row.articleName ? (
+                              <span className="block text-[10px] text-gray-500 truncate max-w-[12rem]">
+                                {row.articleName}
+                              </span>
+                            ) : null}
+                          </div>
                         ) : (
                           <>
                             <input
@@ -349,6 +372,33 @@ export default function VendorPOLineItemsTable({
             </tbody>
           </table>
         </div>
+        {paginate ? (
+          <div className="flex items-center justify-between mt-2 px-1">
+            <p className="text-[10px] text-gray-500 font-medium">
+              {lineItems.length} items · page {page + 1} of {pageCount}
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                className="px-2 py-1 text-[10px] font-bold border border-gray-200 rounded disabled:opacity-40"
+                aria-label="Previous item page"
+              >
+                Prev
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                disabled={page >= pageCount - 1}
+                className="px-2 py-1 text-[10px] font-bold border border-gray-200 rounded disabled:opacity-40"
+                aria-label="Next item page"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

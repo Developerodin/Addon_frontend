@@ -66,9 +66,11 @@ export function toInvoiceReportExcelRow(row: VendorInvoiceReportRow): Record<str
     "No of Box": row.noOfBox == null ? "" : row.noOfBox,
     "Invoice Qty": row.invoiceQty,
     "WH Transfer Qty / STN Qty": row.stnQty,
+    M1: row.m1,
+    M2: row.m2,
     M3: row.m3,
     M4: row.m4,
-    PR: row.pr,
+    "VM4/PR": row.vm4,
     "SHORT/EXC": formatShortExc(row.shortExc),
     "PENDING INWARD": row.pendingInward,
   };

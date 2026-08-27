@@ -12,9 +12,11 @@ export interface VendorInvoiceReportRow {
   noOfBox: number | null;
   invoiceQty: number;
   stnQty: number;
+  m1: number;
+  m2: number;
   m3: number;
+  vm4: number;
   m4: number;
-  pr: number;
   shortExc: number | null;
   pendingInward: number;
 }

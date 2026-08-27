@@ -201,8 +201,7 @@ export function buildSingleProductLabelDocument(stickerHtml: string): string {
     .ean {
       margin-top: 0.3mm;
       font-size: 2.1mm;
-      font-weight: 900;
-      font-family: Arial Black, Arial, Helvetica, sans-serif;
+      font-weight: 700;
       letter-spacing: 0.12mm;
       line-height: 1;
     }
@@ -214,11 +213,7 @@ export function buildSingleProductLabelDocument(stickerHtml: string): string {
     }
     .legal p { margin: 0 0 0.85mm; }
     .legal p:last-child { margin-bottom: 1.1mm; }
-    .legal .h, .legal .b {
-      font-family: Arial Black, Arial, Helvetica, sans-serif;
-      font-weight: 900;
-      text-shadow: 0.12mm 0 0 #000, -0.12mm 0 0 #000;
-    }
+    .legal .h, .legal .b { font-weight: 700; }
     .details {
       flex: 1 1 auto;
       font-size: 2.05mm;
@@ -226,11 +221,7 @@ export function buildSingleProductLabelDocument(stickerHtml: string): string {
       font-weight: 400;
     }
     .details div { margin: 0 0 0.15mm; }
-    .details .k {
-      font-family: Arial Black, Arial, Helvetica, sans-serif;
-      font-weight: 900;
-      text-shadow: 0.12mm 0 0 #000, -0.12mm 0 0 #000;
-    }
+    .details .k { font-weight: 700; }
     .tax { font-weight: 400; }
   </style>
 </head>

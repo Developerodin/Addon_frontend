@@ -13,6 +13,9 @@ import {
 import VendorPOPurchaseListLayout from "../purchase-management/components/VendorPOPurchaseListLayout";
 import { VendorPacklistModal } from "../components/VendorPacklistModal";
 import { VendorPODetailsDrawer } from "../components/VendorPODetailsDrawer";
+import VendorPOExcelToolbar from "./components/VendorPOExcelToolbar";
+import VendorPOImportResultModal from "./components/VendorPOImportResultModal";
+import { useVendorPoExcelImport } from "./hooks/useVendorPoExcelImport";
 import { mapVendorPurchaseOrderToUi, vendorPoUiStatusClass } from "../utils/vendorPoFlow";
 import { VendorPO, VendorPOStatus, VendorPOPriority } from "./types";
 import vendorPurchaseOrderService, { VendorPurchaseOrder } from "@/shared/services/vendorPurchaseOrderService";
@@ -77,6 +80,11 @@ const VendorPORaisePage = () => {
       setLoading(false);
     }
   }, []);
+
+  const excelImport = useVendorPoExcelImport({
+    mode: "create",
+    onCreated: loadOrders,
+  });
 
   useEffect(() => {
     void loadOrders();
@@ -192,13 +200,21 @@ const VendorPORaisePage = () => {
         }}
         headerActions={
           canCreatePo ? (
-            <Link
-              href="/vendor-po/raise/add"
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
-            >
-              <i className="ri-add-line text-xs" />
-              New Order
-            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <VendorPOExcelToolbar
+                importing={excelImport.importing}
+                fileInputRef={excelImport.fileInputRef}
+                onDownloadTemplate={excelImport.handleDownloadTemplate}
+                onFileChange={excelImport.handleFileChange}
+              />
+              <Link
+                href="/vendor-po/raise/add"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 transition-colors shadow-sm"
+              >
+                <i className="ri-add-line text-xs" />
+                New Order
+              </Link>
+            </div>
           ) : null
         }
         filterSlot={
@@ -406,6 +422,17 @@ const VendorPORaisePage = () => {
         onSubmit={handlePacklistSubmit}
         isSubmitting={packlistSubmitting}
       />
+
+      {canCreatePo ? (
+        <VendorPOImportResultModal
+          open={excelImport.modalOpen}
+          title={excelImport.modalTitle}
+          errors={excelImport.modalErrors}
+          successMessage={excelImport.successMessage}
+          onDownloadErrors={excelImport.handleDownloadErrors}
+          onClose={excelImport.closeModal}
+        />
+      ) : null}
     </>
   );
 };

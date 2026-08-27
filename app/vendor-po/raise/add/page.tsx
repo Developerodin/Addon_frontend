@@ -10,8 +10,9 @@ import VendorPOForm from "../components/VendorPOForm";
 import { VendorPOFormData } from "../types";
 import { getVendor } from "@/shared/services/vendorManagementService";
 import vendorPurchaseOrderService from "@/shared/services/vendorPurchaseOrderService";
-import { listProducts, getProductById } from "@/shared/services/productService";
+import { listProducts } from "@/shared/services/productService";
 import { productRecordToVendorPOArticle } from "../components/vendorPoArticleMapping";
+import { hydrateVendorPoArticles } from "../utils/hydrateVendorPoArticles";
 import {
   canAccessVendorPoRaiseAdd,
   getVendorPoRaiseFormMode,
@@ -68,16 +69,8 @@ const VendorPOCreatePage = () => {
         setArticles([]);
         return;
       }
-      const mapped = await Promise.all(
-        vendorProducts.map(async (product) => {
-          if (typeof product === "string") {
-            const full = await getProductById(product);
-            return productRecordToVendorPOArticle(full as Record<string, unknown> | null | undefined, product);
-          }
-          return productRecordToVendorPOArticle(product as Record<string, unknown>);
-        })
-      );
-      setArticles(mapped.filter((p): p is NonNullable<typeof p> => p != null && !!p.id && !!p.name));
+      const mapped = await hydrateVendorPoArticles(vendorProducts);
+      setArticles(mapped);
     } catch {
       setArticles([]);
     }
@@ -169,6 +162,7 @@ const VendorPOCreatePage = () => {
             onSubmit={handleCreate}
             onCancel={() => router.push("/vendor-po/raise")}
             isSubmitting={isSubmitting}
+            showExcelImport
           />
         </div>
       </div>

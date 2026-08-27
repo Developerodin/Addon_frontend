@@ -166,7 +166,22 @@ export async function bulkUpsertProducts(
   });
 }
 
-/** Product from POST /v1/products/by-factory-codes (attributes: Type, Season, etc.) */
+/** Product from POST /v1/products/by-ids (lean catalog fields for vendor PO hydrate). */
+
+/**
+ * POST /v1/products/by-ids
+ * Body: { ids: string[] } (max 1000)
+ * Returns products with name, vendorCode, factoryCode, attributes.
+ */
+export async function getProductsByIds(ids: string[]): Promise<ProductById[]> {
+  if (!ids.length) return [];
+  const url = `${API_BASE_URL}/products/by-ids`;
+  return request<ProductById[]>(url, {
+    method: 'POST',
+    body: JSON.stringify({ ids }),
+  });
+}
+
 export interface ProductByFactoryCode {
   _id?: string;
   factoryCode?: string;
@@ -392,6 +407,7 @@ export async function resolveArticleColourPattern(
 export const productService = {
   list: listProducts,
   getById: getProductById,
+  getByIds: getProductsByIds,
   bulkExport: bulkExportProducts,
   bulkUpsert: bulkUpsertProducts,
   getByFactoryCodes: getProductsByFactoryCodes,

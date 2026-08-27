@@ -8,14 +8,18 @@ import VendorPOLineItemsTable from "./VendorPOLineItemsTable";
 import VendorPOOrderTotalsSection from "./VendorPOOrderTotalsSection";
 import VendorPOArticlePickerPortal from "./VendorPOArticlePickerPortal";
 import VendorPOFormActions from "./VendorPOFormActions";
+import VendorPOExcelToolbar from "./VendorPOExcelToolbar";
+import VendorPOImportResultModal from "./VendorPOImportResultModal";
 import {
   getVendorPoFormFieldAccess,
   type VendorPoFormFieldAccess,
   type VendorPoRaiseFormMode,
 } from "./vendorPoRaiseAccess";
+import { validateVendorPoForm, type VendorPoFormSubmitAction } from "./vendorPoFormValidate";
+import { useVendorPoExcelImport } from "../hooks/useVendorPoExcelImport";
 import type { VendorPoApiStatus } from "@/shared/services/vendorPurchaseOrderService";
 
-export type VendorPoFormSubmitAction = "draft" | "submit";
+export type { VendorPoFormSubmitAction };
 
 interface VendorPOFormProps {
   initialData: VendorPOFormData | null;
@@ -28,6 +32,8 @@ interface VendorPOFormProps {
   onSubmit: (data: VendorPOFormData, action: VendorPoFormSubmitAction, selectedVendor: VendorOption | null) => void;
   onCancel: () => void;
   isSubmitting?: boolean;
+  /** Show Download Template / Import Excel on the items toolbar (add page). */
+  showExcelImport?: boolean;
 }
 
 /**
@@ -44,6 +50,7 @@ export default function VendorPOForm({
   onSubmit,
   onCancel,
   isSubmitting = false,
+  showExcelImport = false,
 }: VendorPOFormProps) {
   const fieldAccess: VendorPoFormFieldAccess = useMemo(
     () => getVendorPoFormFieldAccess(formMode, apiStatus, workflowLocked),
@@ -73,6 +80,46 @@ export default function VendorPOForm({
   const articleDropdownRef = useRef<HTMLDivElement>(null);
 
   const lineItemsDisabled = workflowLocked || !vendorId;
+
+  /**
+   * Merge Excel-imported lines into the form; abort if file vendor code conflicts.
+   */
+  const applyImportedLines = useCallback(
+    (
+      incoming: VendorPOLineItem[],
+      header: { vendorCode: string; creditDays: number; estimatedOrderDeliveryDate: string; notes: string }
+    ): boolean => {
+      if (selectedVendor?.vendorCode && header.vendorCode) {
+        const fileCode = header.vendorCode.trim().toUpperCase();
+        const selectedCode = selectedVendor.vendorCode.trim().toUpperCase();
+        if (fileCode && selectedCode && fileCode !== selectedCode) {
+          toast.error(
+            `File vendor ${header.vendorCode} does not match selected vendor ${selectedVendor.vendorCode}.`
+          );
+          return false;
+        }
+      }
+      setLineItems((prev) => {
+        const existingReal = prev.filter((r) => r.articleId);
+        const existingIds = new Set(existingReal.map((r) => r.articleId));
+        const toAdd = incoming.filter((r) => r.articleId && !existingIds.has(r.articleId));
+        if (!toAdd.length) return existingReal.length ? existingReal : prev;
+        return existingReal.length ? [...existingReal, ...toAdd] : toAdd;
+      });
+      if (header.creditDays >= 0) setCreditDays(header.creditDays);
+      if (header.estimatedOrderDeliveryDate) setEstimatedOrderDeliveryDate(header.estimatedOrderDeliveryDate);
+      if (header.notes) setRemarks(header.notes);
+      return true;
+    },
+    [selectedVendor]
+  );
+
+  const excelImport = useVendorPoExcelImport({
+    mode: "fill",
+    articles,
+    vendorSelected: Boolean(vendorId),
+    onFill: (result) => applyImportedLines(result.lineItems, result),
+  });
 
   const updateDropdownPosition = useCallback(() => {
     const input = articleInputRef.current;
@@ -142,43 +189,21 @@ export default function VendorPOForm({
    */
   const validate = (action: VendorPoFormSubmitAction): boolean => {
     const e: Record<string, string> = {};
-    const requirePricing = action === "submit" && fieldAccess.canEditPricingFields;
-
-    if (fieldAccess.canEditHeader) {
-      if (!vendorId.trim()) e.vendor = "Vendor is required";
-      if (creditDays < 0) e.creditDays = "Credit days must be 0 or greater";
-      if (!estimatedOrderDeliveryDate?.trim()) {
-        e.estimatedOrderDeliveryDate = "Estimated order delivery date is required";
-      }
-    }
-
-    if (!lineItems.length) e.lineItems = "At least one line item is required";
-
-    const articleIdCounts = new Map<string, number>();
-    lineItems.forEach((row) => {
-      if (!row.articleId) return;
-      articleIdCounts.set(row.articleId, (articleIdCounts.get(row.articleId) || 0) + 1);
+    const ok = validateVendorPoForm({
+      action,
+      fieldAccess,
+      formMode,
+      vendorId,
+      creditDays,
+      estimatedOrderDeliveryDate,
+      lineItems,
+      errors: e,
     });
-
-    lineItems.forEach((row) => {
-      if (fieldAccess.canEditUserLineFields) {
-        if (!row.articleId) e[`article_${row.id}`] = "Article is required";
-        if (row.articleId && (articleIdCounts.get(row.articleId) || 0) > 1) {
-          e[`dup_article_${row.id}`] = "This article is already on another line";
-        }
-        if (row.orderedQty <= 0) e[`qty_${row.id}`] = "Qty must be greater than 0";
-      }
-      if (requirePricing || (action === "submit" && formMode === "full")) {
-        if ((row.rate ?? 0) <= 0) e[`rate_${row.id}`] = "Rate must be greater than 0";
-        if ((row.gstRate ?? 0) <= 0) e[`gst_${row.id}`] = "GST % is required";
-      }
-    });
-
     setErrors(e);
-    if (Object.keys(e).length > 0) {
+    if (!ok) {
       toast.error("Please fix the highlighted fields before continuing.");
     }
-    return Object.keys(e).length === 0;
+    return ok;
   };
 
   const getFormData = (): VendorPOFormData => ({
@@ -437,6 +462,18 @@ export default function VendorPOForm({
         setLineItemRemarks={setLineItemRemarks}
         addRow={addRow}
         removeRow={removeRow}
+        excelToolbar={
+          showExcelImport && fieldAccess.canAddLines ? (
+            <VendorPOExcelToolbar
+              importing={excelImport.importing}
+              disabled={!vendorId || lineItemsDisabled}
+              disabledReason="Select a vendor first"
+              fileInputRef={excelImport.fileInputRef}
+              onDownloadTemplate={excelImport.handleDownloadTemplate}
+              onFileChange={excelImport.handleFileChange}
+            />
+          ) : null
+        }
       />
 
       <VendorPOOrderTotalsSection totals={totals} show={fieldAccess.showOrderTotals} />
@@ -473,6 +510,17 @@ export default function VendorPOForm({
         onSaveDraft={() => handleFormAction("draft")}
         workflowLocked={workflowLocked}
       />
+
+      {showExcelImport ? (
+        <VendorPOImportResultModal
+          open={excelImport.modalOpen}
+          title={excelImport.modalTitle}
+          errors={excelImport.modalErrors}
+          successMessage={excelImport.successMessage}
+          onDownloadErrors={excelImport.handleDownloadErrors}
+          onClose={excelImport.closeModal}
+        />
+      ) : null}
     </form>
   );
 }
