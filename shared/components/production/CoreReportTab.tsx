@@ -10,8 +10,9 @@ import {
 import CoreReportFormulaDrawer from "./CoreReportFormulaDrawer";
 import CoreReportTable from "./CoreReportTable";
 import CoreReportToolbar from "./CoreReportToolbar";
-import { downloadCoreReportCsv } from "./coreReportExport";
+import { downloadCoreReportExcel } from "./coreReportExport";
 import type { CoreReportColumnKey } from "./coreReportFormulas";
+import { fetchAllPaginatedResults, REPORT_EXPORT_PAGE_SIZE } from "@/shared/utils/fetchAllPaginated";
 
 export interface CoreReportTabProps {
   /** Increment from parent header Refresh to reload this tab. */
@@ -50,6 +51,7 @@ export default function CoreReportTab({ refreshNonce = 0, onLoadingChange }: Cor
   const [catalogTotal, setCatalogTotal] = useState(0);
   const [search, setSearch] = useState("");
   const [formulaColumn, setFormulaColumn] = useState<CoreReportColumnKey | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -109,6 +111,52 @@ export default function CoreReportTab({ refreshNonce = 0, onLoadingChange }: Cor
     setPage(1);
   };
 
+  /**
+   * Export only the currently visible page.
+   */
+  const handleExportPage = () => {
+    if (!rows.length) {
+      toast.error("No rows to export");
+      return;
+    }
+    downloadCoreReportExcel(rows, totals, vendorColumns, "page");
+  };
+
+  /**
+   * Fetch every matching page and download the full report.
+   */
+  const handleExportAll = async () => {
+    if (totalPages <= 1) {
+      downloadCoreReportExcel(rows, totals, vendorColumns, "full");
+      return;
+    }
+    setExporting(true);
+    try {
+      const allRows = await fetchAllPaginatedResults<CoreReportRow>(async (pageNum, pageLimit) => {
+        const response = await productionService.getCoreReport({
+          page: pageNum,
+          limit: pageLimit,
+          sortBy: "factoryCode:asc",
+          ...(search.trim() && { search: search.trim() }),
+        });
+        if (!response.success) {
+          throw new Error(response.error?.message || "Failed to load Core Report for export");
+        }
+        return response;
+      }, REPORT_EXPORT_PAGE_SIZE);
+      if (!allRows.length) {
+        toast.error("No rows to export");
+        return;
+      }
+      downloadCoreReportExcel(allRows, totals, vendorColumns, "full");
+      toast.success(`Exported ${allRows.length.toLocaleString()} items`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to export Core Report");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to = Math.min(page * limit, total);
 
@@ -121,8 +169,12 @@ export default function CoreReportTab({ refreshNonce = 0, onLoadingChange }: Cor
         onLimitChange={withPageReset(setLimit)}
         loading={loading}
         canExport={rows.length > 0}
+        exporting={exporting}
+        pageCount={rows.length}
+        totalPages={totalPages}
         onRefresh={() => void load()}
-        onExport={() => downloadCoreReportCsv(rows, totals, vendorColumns)}
+        onExportPage={handleExportPage}
+        onExportAll={() => void handleExportAll()}
         matchCount={total}
         catalogTotal={catalogTotal}
       />

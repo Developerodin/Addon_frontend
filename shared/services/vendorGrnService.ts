@@ -79,6 +79,8 @@ export interface VendorGrnLineCommercial {
 export interface VendorGrnHeaderPatch {
   notes?: string;
   discrepancyDetails?: string;
+  invoiceDate?: string | null;
+  receivedDate?: string | null;
   discountAmount?: number;
   freightAmount?: number;
   freightGstPercent?: number;
@@ -98,6 +100,8 @@ export interface VendorGrn {
   vendorPurchaseOrder: string;
   vpoNumber: string;
   vpoDate?: string;
+  invoiceDate?: string | null;
+  receivedDate?: string | null;
   vendor?: {
     vendorId?: string;
     vendorName?: string;

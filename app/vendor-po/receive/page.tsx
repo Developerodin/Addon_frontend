@@ -8,9 +8,10 @@ import { useNavigation } from "@/shared/contextapi/navigationContext";
 import VendorPOPurchaseListLayout from "../purchase-management/components/VendorPOPurchaseListLayout";
 import { VendorGoodsReceivedModal } from "../components/VendorGoodsReceivedModal";
 import { VendorPODetailsDrawer } from "../components/VendorPODetailsDrawer";
-import { lotDetailsForBulkBoxes, mapVendorPurchaseOrderToUi, vendorPoUiStatusClass } from "../utils/vendorPoFlow";
-import { vendorPoMatchesDateRange, vendorReceiveRowSummary } from "./receivePageUtils";
-import { VendorPO, VendorPOStatus, VendorPOPriority } from "../raise/types";
+import { lotDetailsForBulkBoxes, mapVendorPurchaseOrderToUi } from "../utils/vendorPoFlow";
+import { vendorPoMatchesDateRange, vendorReceiveInvoiceNumbers } from "./receivePageUtils";
+import VendorReceiveOrdersTable from "./VendorReceiveOrdersTable";
+import { VendorPO, VendorPOStatus } from "../raise/types";
 import vendorPurchaseOrderService, { VendorPurchaseOrder } from "@/shared/services/vendorPurchaseOrderService";
 import vendorBoxService from "@/shared/services/vendorBoxService";
 
@@ -20,21 +21,6 @@ const getDefaultStartDate = () => {
   return date.toISOString().split("T")[0];
 };
 const getDefaultEndDate = () => new Date().toISOString().split("T")[0];
-
-const getPriorityColor = (priority: VendorPOPriority) => {
-  switch (priority) {
-    case "Urgent":
-      return "bg-red-100 text-red-800";
-    case "High":
-      return "bg-orange-100 text-orange-800";
-    case "Medium":
-      return "bg-yellow-100 text-yellow-800";
-    case "Low":
-      return "bg-green-100 text-green-800";
-    default:
-      return "bg-gray-100 text-gray-800";
-  }
-};
 
 /** Filters aligned with yarn PO Received (in transit → receipt → process). */
 const RECEIVE_STATUS_OPTIONS: { value: "" | "Pending" | VendorPOStatus; label: string }[] = [
@@ -100,10 +86,15 @@ const VendorPOReceivePage = () => {
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
       if (!vendorPoMatchesDateRange(order, startDate, endDate)) return false;
+      const q = searchTerm.toLowerCase();
+      const invoiceHit = vendorReceiveInvoiceNumbers(order).some((no) =>
+        no.toLowerCase().includes(q)
+      );
       const matchesSearch =
         !searchTerm ||
-        order.poNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.vendorName.toLowerCase().includes(searchTerm.toLowerCase());
+        order.poNo.toLowerCase().includes(q) ||
+        order.vendorName.toLowerCase().includes(q) ||
+        invoiceHit;
       const pendingQty = order.totalQty - (order.receivedQty ?? 0);
       const isInboundPending =
         order.apiStatus === "in_transit" && pendingQty === order.totalQty && order.totalQty > 0;
@@ -224,7 +215,7 @@ const VendorPOReceivePage = () => {
       <VendorPOPurchaseListLayout
         listTitle="Vendor Purchase Order Received"
         count={loading ? 0 : filteredOrders.length}
-        searchPlaceholder="Search PO or vendor…"
+        searchPlaceholder="Search PO, vendor, or invoice…"
         searchValue={searchTerm}
         onSearchChange={setSearchTerm}
         startDate={startDate}
@@ -295,194 +286,20 @@ const VendorPOReceivePage = () => {
               </p>
             </div>
           ) : (
-            <table className="w-full border-collapse border border-gray-200">
-              <thead>
-                <tr className="bg-gray-50/30">
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    PO No
-                  </th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    PO Date
-                  </th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    Est. delivery
-                  </th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    Vendor
-                  </th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    Status
-                  </th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    Priority
-                  </th>
-                  <th className="px-1.5 py-3 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    Summary
-                  </th>
-                  <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    Ordered
-                  </th>
-                  <th className="px-1.5 py-3 text-right text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    Pending
-                  </th>
-                  <th className="px-1.5 py-3 text-right pr-[10px] text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredOrders.map((order) => {
-                  const pendingQty = order.totalQty - (order.receivedQty ?? 0);
-                  const goodsDisabled = !canOpenGoodsReceived(order);
-                  const processDisabled = !canProcess(order);
-                  const sum = vendorReceiveRowSummary(order);
-                  const est = order.estimatedOrderDeliveryDate;
-                  return (
-                    <tr
-                      key={order.id}
-                      className={`hover:bg-gray-50/50 transition-colors ${
-                        detailsOpen && detailsOrder?.id === order.id ? "!bg-primary/5" : ""
-                      }`}
-                    >
-                      <td className="px-1.5 py-2.5 text-[12px] font-bold text-gray-900 border border-gray-200">
-                        {order.poNo}
-                      </td>
-                      <td className="px-1.5 py-2.5 text-[12px] text-gray-600 border border-gray-200">
-                        {order.poDate
-                          ? new Date(order.poDate).toLocaleDateString(undefined, {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                            })
-                          : "—"}
-                      </td>
-                      <td className="px-1.5 py-2.5 text-[12px] text-gray-600 border border-gray-200">
-                        {est
-                          ? new Date(est).toLocaleDateString(undefined, {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                            })
-                          : "—"}
-                      </td>
-                      <td className="px-1.5 py-2.5 text-[12px] text-gray-700 border border-gray-200">{order.vendorName}</td>
-                      <td className="px-1.5 py-2.5 border border-gray-200">
-                        <span
-                          className={`inline-flex px-2 py-0.5 text-[10px] font-bold rounded-full ${vendorPoUiStatusClass(order.status)}`}
-                        >
-                          {order.status}
-                        </span>
-                      </td>
-                      <td className="px-1.5 py-2.5 border border-gray-200">
-                        <span
-                          className={`inline-flex px-2 py-0.5 text-[10px] font-bold rounded-full ${getPriorityColor(order.priority)}`}
-                        >
-                          {order.priority}
-                        </span>
-                      </td>
-                      <td className="px-1.5 py-2.5 border border-gray-200">
-                        <div className="flex flex-col gap-0.5 min-w-[7rem]">
-                          <div className="text-[12px] font-bold text-gray-800">
-                            ₹{sum.total.toLocaleString()}
-                          </div>
-                          {sum.received > 0 && (
-                            <div className="text-[10px] font-medium text-gray-500">
-                              Rec: {sum.received.toLocaleString()} pcs
-                            </div>
-                          )}
-                          {sum.ordered > 0 && (
-                            <div className="text-[10px] font-medium text-gray-500">
-                              Ord: {sum.ordered.toLocaleString()} pcs
-                            </div>
-                          )}
-                          {(sum.pending > 0 || (sum.ordered > 0 && sum.received === 0)) && (
-                            <div
-                              className={`text-[10px] font-medium ${
-                                sum.pending > 0 ? "text-orange-600" : "text-green-600"
-                              }`}
-                            >
-                              Pending: {sum.pending.toLocaleString()} pcs
-                            </div>
-                          )}
-                          {sum.ordered > 0 && sum.received > sum.ordered && (
-                            <div
-                              className="text-[10px] font-bold text-green-600"
-                              title="Received more than ordered (extra qty counted at receiving)"
-                            >
-                              Extra received: {(sum.received - sum.ordered).toLocaleString()} pcs
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-1.5 py-2.5 text-[12px] text-gray-900 text-right border border-gray-200">
-                        {order.totalQty.toLocaleString()}
-                      </td>
-                      <td className="px-1.5 py-2.5 text-[12px] text-right border border-gray-200">
-                        {pendingQty < 0 ? (
-                          <span
-                            className="inline-flex flex-col items-end leading-tight"
-                            title={`Over-received: ${Math.abs(pendingQty).toLocaleString()} pcs more than ordered`}
-                          >
-                            <span className="text-gray-900">0</span>
-                            <span className="text-[10px] font-bold text-green-600">
-                              +{Math.abs(pendingQty).toLocaleString()} extra received
-                            </span>
-                          </span>
-                        ) : (
-                          <span className="text-gray-900">{pendingQty.toLocaleString()}</span>
-                        )}
-                      </td>
-                      <td className="px-1.5 py-2.5 text-right border border-gray-200">
-                        <div className="flex flex-wrap items-center justify-end gap-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDetailsOrder(order);
-                              setDetailsOpen(true);
-                            }}
-                            className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-400 border border-blue-100 rounded hover:bg-blue-100 transition-colors shrink-0"
-                            title="View details"
-                          >
-                            <i className="ri-eye-line text-xs" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const raw = order.rawPurchaseOrder;
-                              if (raw) setGoodsModalPo(raw);
-                            }}
-                            disabled={goodsDisabled}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-600 text-white text-[10px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                            title={goodsDisabled ? "Nothing pending to receive" : "Record goods received (invoice + qty)"}
-                          >
-                            <i className="ri-checkbox-circle-line text-xs" />
-                            Goods received
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void handleProcess(order)}
-                            disabled={processDisabled || processingId === order.id}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-white text-gray-700 text-[10px] font-bold rounded border border-gray-200 hover:border-purple-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                            title={
-                              processDisabled
-                                ? "Complete goods receipt with invoice/boxes first"
-                                : "Create boxes (if needed) and open process"
-                            }
-                          >
-                            {processingId === order.id ? (
-                              <i className="ri-loader-4-line animate-spin text-xs" />
-                            ) : (
-                              <i className="ri-box-3-line text-xs" />
-                            )}
-                            Process
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <VendorReceiveOrdersTable
+              orders={filteredOrders}
+              detailsOpen={detailsOpen}
+              detailsOrderId={detailsOrder?.id}
+              processingId={processingId}
+              canOpenGoodsReceived={canOpenGoodsReceived}
+              canProcess={canProcess}
+              onViewDetails={(order) => {
+                setDetailsOrder(order);
+                setDetailsOpen(true);
+              }}
+              onGoodsReceived={setGoodsModalPo}
+              onProcess={(order) => void handleProcess(order)}
+            />
           )}
         </div>
       </VendorPOPurchaseListLayout>

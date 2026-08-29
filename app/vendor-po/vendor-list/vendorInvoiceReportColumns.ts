@@ -79,11 +79,15 @@ export function toInvoiceReportExcelRow(row: VendorInvoiceReportRow): Record<str
 /**
  * Download the current filter set as .xlsx.
  * @param rows Report rows to export
+ * @param scope Filename suffix: this page vs full report
  */
-export function downloadVendorInvoiceReportExcel(rows: VendorInvoiceReportRow[]): void {
+export function downloadVendorInvoiceReportExcel(
+  rows: VendorInvoiceReportRow[],
+  scope: "page" | "full" = "full",
+): void {
   const sheetRows = rows.length ? rows.map(toInvoiceReportExcelRow) : [{ Message: "No rows" }];
   const ws = XLSX.utils.json_to_sheet(sheetRows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Invoice Report");
-  XLSX.writeFile(wb, "vendor-invoice-report.xlsx");
+  XLSX.writeFile(wb, `vendor-invoice-report-${scope}.xlsx`);
 }

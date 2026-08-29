@@ -1,25 +1,18 @@
 import type { CoreReportMetrics, CoreReportRow } from "@/shared/services/productionService";
+import { datedXlsxFilename, downloadXlsxAoa } from "@/shared/utils/xlsxExport";
 
 /**
- * Escapes a CSV cell (quotes values that contain commas, quotes, or newlines).
- * @param value Cell value
- */
-function csvCell(value: string | number): string {
-  const s = String(value ?? "");
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
-}
-
-/**
- * Downloads the current Core Report page as a CSV file.
- * @param rows Page results
+ * Downloads Core Report rows as an Excel workbook.
+ * @param rows Rows to export (current page or full matching set)
  * @param totals Filter-wide totals
  * @param vendorColumns Dynamic vendor header names
+ * @param scope Filename suffix: this page vs full report
  */
-export function downloadCoreReportCsv(
+export function downloadCoreReportExcel(
   rows: CoreReportRow[],
   totals: CoreReportMetrics,
   vendorColumns: string[],
+  scope: "page" | "full" = "full",
 ): void {
   const headers = [
     "Brand",
@@ -65,16 +58,5 @@ export function downloadCoreReportCsv(
 
   body.push(["TOTAL (all matching)", "", "", "", "", "", ...metricCells(totals)]);
 
-  const csvContent = [headers.map(csvCell).join(","), ...body.map((r) => r.map(csvCell).join(","))].join("\n");
-  const blob = new Blob([`\uFEFF${csvContent}`], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  const now = new Date();
-  const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
-  a.href = url;
-  a.download = `core-report-${ts}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  downloadXlsxAoa(datedXlsxFilename(`core-report-${scope}`), "Core Report", [headers, ...body]);
 }

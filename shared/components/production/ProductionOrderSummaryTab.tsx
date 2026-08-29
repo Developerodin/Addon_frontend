@@ -10,8 +10,9 @@ import {
 import ProductionOrderSummaryFormulaDrawer from "./ProductionOrderSummaryFormulaDrawer";
 import ProductionOrderSummaryTable from "./ProductionOrderSummaryTable";
 import ProductionOrderSummaryToolbar from "./ProductionOrderSummaryToolbar";
-import { downloadOrderSummaryCsv } from "./productionOrderSummaryExport";
+import { downloadOrderSummaryExcel } from "./productionOrderSummaryExport";
 import type { OrderSummaryColumnKey } from "./productionOrderSummaryFormulas";
+import { fetchAllPaginatedResults, REPORT_EXPORT_PAGE_SIZE } from "@/shared/utils/fetchAllPaginated";
 
 export interface ProductionOrderSummaryTabProps {
   /** Increment from parent header Refresh to reload this tab. */
@@ -61,6 +62,7 @@ export default function ProductionOrderSummaryTab({
   const [showLegacy, setShowLegacy] = useState(false);
   const [includeZeroPending, setIncludeZeroPending] = useState(false);
   const [formulaColumn, setFormulaColumn] = useState<OrderSummaryColumnKey | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -121,6 +123,62 @@ export default function ProductionOrderSummaryTab({
     setPage(1);
   };
 
+  /**
+   * Shared filters for list + full Excel export.
+   */
+  const reportFilters = {
+    sortBy: "createdAt:desc",
+    ...(search.trim() && { search: search.trim() }),
+    ...(status && { status }),
+    ...(priority && { priority }),
+    ...(includeZeroPending && { includeZeroPending: true }),
+  };
+
+  /**
+   * Export only the currently visible page.
+   */
+  const handleExportPage = () => {
+    if (!rows.length) {
+      toast.error("No rows to export");
+      return;
+    }
+    downloadOrderSummaryExcel(rows, totals, "page");
+  };
+
+  /**
+   * Fetch every matching page and download the full report.
+   */
+  const handleExportAll = async () => {
+    if (totalPages <= 1) {
+      downloadOrderSummaryExcel(rows, totals, "full");
+      return;
+    }
+    setExporting(true);
+    try {
+      const allRows = await fetchAllPaginatedResults<OrderSummaryRow>(async (pageNum, pageLimit) => {
+        const response = await productionService.getOrderSummaryReport({
+          ...reportFilters,
+          page: pageNum,
+          limit: pageLimit,
+        });
+        if (!response.success) {
+          throw new Error(response.error?.message || "Failed to load order summary for export");
+        }
+        return response;
+      }, REPORT_EXPORT_PAGE_SIZE);
+      if (!allRows.length) {
+        toast.error("No rows to export");
+        return;
+      }
+      downloadOrderSummaryExcel(allRows, totals, "full");
+      toast.success(`Exported ${allRows.length.toLocaleString()} orders`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to export order summary");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to = Math.min(page * limit, total);
 
@@ -141,8 +199,13 @@ export default function ProductionOrderSummaryTab({
         onIncludeZeroPendingChange={withPageReset(setIncludeZeroPending)}
         loading={loading}
         canExport={rows.length > 0}
+        exporting={exporting}
+        pageCount={rows.length}
+        totalCount={total}
+        totalPages={totalPages}
         onRefresh={() => void load()}
-        onExport={() => downloadOrderSummaryCsv(rows, totals)}
+        onExportPage={handleExportPage}
+        onExportAll={() => void handleExportAll()}
       />
 
       {loading && rows.length === 0 ? (

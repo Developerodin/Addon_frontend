@@ -149,6 +149,8 @@ export const renderVendorGrnHtml = async (grn: VendorGrn): Promise<string> => {
 
   html = setById(html, 'vpo-number', escapeHtml(grn.vpoNumber || '—'));
   html = setById(html, 'vpo-date', formatDate(grn.vpoDate) || '—');
+  html = setById(html, 'invoice-date', formatDate(grn.invoiceDate) || '—');
+  html = setById(html, 'received-date', formatDate(grn.receivedDate) || '—');
   html = setById(html, 'grn-number', escapeHtml(grn.grnNumber));
   html = setById(html, 'grn-date', formatDate(grn.grnDate));
 

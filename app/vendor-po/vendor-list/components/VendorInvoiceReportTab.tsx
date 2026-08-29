@@ -5,12 +5,13 @@ import {
   listVendorInvoiceReport,
   type VendorInvoiceReportRow,
 } from "@/shared/services/vendorInvoiceReportService";
+import ReportExcelExportMenu from "@/shared/components/production/ReportExcelExportMenu";
+import { fetchAllPaginatedResults, REPORT_EXPORT_PAGE_SIZE } from "@/shared/utils/fetchAllPaginated";
 import { CRM } from "../crmUiClasses";
 import { downloadVendorInvoiceReportExcel } from "../vendorInvoiceReportColumns";
 import VendorInvoiceReportTable from "./VendorInvoiceReportTable";
 
 const PAGE_SIZE = 50;
-const EXPORT_LIMIT = 10000;
 
 /**
  * Invoice / lot reconciliation report.
@@ -67,20 +68,56 @@ const VendorInvoiceReportTab = () => {
   };
 
   /**
+   * Shared filters for list + full Excel export.
+   */
+  const reportFilters = {
+    search: searchQuery.trim() || undefined,
+    from: fromDate || undefined,
+    to: toDate || undefined,
+  };
+
+  /**
+   * Export only the currently visible page.
+   */
+  const handleExportPage = () => {
+    if (!rows.length) {
+      toast.error("No rows to export");
+      return;
+    }
+    downloadVendorInvoiceReportExcel(rows, "page");
+    toast.success(`Exported ${rows.length} rows`);
+  };
+
+  /**
    * Export all rows matching current filters (not just the current page).
    */
-  const handleExport = async () => {
+  const handleExportAll = async () => {
+    if (totalPages <= 1) {
+      if (!rows.length) {
+        toast.error("No rows to export");
+        return;
+      }
+      downloadVendorInvoiceReportExcel(rows, "full");
+      toast.success(`Exported ${rows.length} rows`);
+      return;
+    }
     setExporting(true);
     try {
-      const res = await listVendorInvoiceReport({
-        page: 1,
-        limit: EXPORT_LIMIT,
-        search: searchQuery.trim() || undefined,
-        from: fromDate || undefined,
-        to: toDate || undefined,
-      });
-      downloadVendorInvoiceReportExcel(res.results || []);
-      toast.success("Excel downloaded");
+      const allRows = await fetchAllPaginatedResults<VendorInvoiceReportRow>(
+        (pageNum, pageLimit) =>
+          listVendorInvoiceReport({
+            ...reportFilters,
+            page: pageNum,
+            limit: pageLimit,
+          }),
+        REPORT_EXPORT_PAGE_SIZE,
+      );
+      if (!allRows.length) {
+        toast.error("No rows to export");
+        return;
+      }
+      downloadVendorInvoiceReportExcel(allRows, "full");
+      toast.success(`Exported ${allRows.length.toLocaleString()} rows`);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Export failed");
     } finally {
@@ -146,25 +183,16 @@ const VendorInvoiceReportTab = () => {
                 Clear
               </button>
             )}
-            <button
-              type="button"
-              className={CRM.btnSuccess}
-              disabled={exporting || loading}
-              onClick={handleExport}
-              aria-label="Export invoice report to Excel"
-            >
-              {exporting ? (
-                <>
-                  <i className="ri-loader-4-line text-xs animate-spin" />
-                  Exporting…
-                </>
-              ) : (
-                <>
-                  <i className="ri-file-excel-2-line text-xs" />
-                  Excel
-                </>
-              )}
-            </button>
+            <ReportExcelExportMenu
+              variant="success"
+              disabled={exporting || loading || rows.length === 0}
+              exporting={exporting}
+              pageCount={rows.length}
+              totalCount={totalResults}
+              totalPages={totalPages}
+              onExportPage={handleExportPage}
+              onExportAll={() => void handleExportAll()}
+            />
           </div>
         </div>
       </div>

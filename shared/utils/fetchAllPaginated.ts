@@ -1,3 +1,6 @@
+/** Page size for full-report Excel exports (matches backend report max). */
+export const REPORT_EXPORT_PAGE_SIZE = 10000;
+
 type PaginatedPayload<T> = { results?: T[]; totalPages?: number };
 
 type PaginatedApiResponse<T> =
@@ -9,9 +12,9 @@ type PaginatedApiResponse<T> =
  * @param res - Raw paginated API response
  */
 function unwrapPaginatedPayload<T>(res: PaginatedApiResponse<T>): PaginatedPayload<T> | null {
+  if ("success" in res && res.success === false) return null;
   if ("data" in res && res.data) return res.data;
   if ("results" in res || "totalPages" in res) return res;
-  if ("success" in res && res.success === false) return null;
   return null;
 }
 

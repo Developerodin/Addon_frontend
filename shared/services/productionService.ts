@@ -665,6 +665,10 @@ export interface BacklogReportDateRow {
   isFuture: boolean;
   floors: Record<string, number | null>;
   total: number | null;
+  /** Live Upcoming (ACTIVE production containers) — today only. */
+  upcoming?: Record<string, number>;
+  /** Sum of rounded upcoming floor qty — today only. */
+  upcomingTotal?: number;
 }
 
 /** GET /production/reports/backlog — DATE rows × floor pending qty. */
@@ -680,6 +684,7 @@ export interface BacklogReportResponse {
     date: string;
     floors: Record<string, number | null>;
     total: number;
+    upcomingTotal?: number;
   };
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import ReportExcelExportMenu from "./ReportExcelExportMenu";
 
 export interface CoreReportToolbarProps {
   search: string;
@@ -9,8 +10,12 @@ export interface CoreReportToolbarProps {
   onLimitChange: (value: number) => void;
   loading: boolean;
   canExport: boolean;
+  exporting?: boolean;
+  pageCount: number;
+  totalPages: number;
   onRefresh: () => void;
-  onExport: () => void;
+  onExportPage: () => void;
+  onExportAll: () => void;
   /** Rows matching the current search. */
   matchCount: number;
   /** Catalog items with a factory code (search ignored). */
@@ -23,7 +28,7 @@ const SELECT_CLASS =
   "bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-2 py-1.5 focus:ring-0 focus:border-purple-300";
 
 /**
- * Search, page size, refresh and CSV export for the Core Report.
+ * Search, page size, refresh and Excel export for the Core Report.
  */
 export default function CoreReportToolbar({
   search,
@@ -32,8 +37,12 @@ export default function CoreReportToolbar({
   onLimitChange,
   loading,
   canExport,
+  exporting = false,
+  pageCount,
+  totalPages,
   onRefresh,
-  onExport,
+  onExportPage,
+  onExportAll,
   matchCount,
   catalogTotal,
 }: CoreReportToolbarProps) {
@@ -98,16 +107,15 @@ export default function CoreReportToolbar({
         Refresh
       </button>
 
-      <button
-        type="button"
-        className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 disabled:opacity-50"
-        onClick={onExport}
+      <ReportExcelExportMenu
         disabled={loading || !canExport}
-        aria-label="Export current page as CSV"
-      >
-        <i className="ri-download-2-line text-xs" aria-hidden="true" />
-        Export
-      </button>
+        exporting={exporting}
+        pageCount={pageCount}
+        totalCount={matchCount}
+        totalPages={totalPages}
+        onExportPage={onExportPage}
+        onExportAll={onExportAll}
+      />
     </div>
       <p className="text-[11px] text-gray-500" role="status">
         {filtered ? (

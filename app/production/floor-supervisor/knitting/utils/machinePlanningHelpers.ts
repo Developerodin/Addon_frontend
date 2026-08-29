@@ -9,6 +9,8 @@ import {
 export interface PlanSlot {
   articleNumber: string;
   qty: string;
+  remaining?: number;
+  planned?: number;
 }
 
 /** One machine row for Advanced Planning (running + remaining queue). */
@@ -90,10 +92,52 @@ export function formatPlanArticle(item: ProductionOrderItem | undefined): string
  */
 export function toPlanSlot(item: ProductionOrderItem | undefined): PlanSlot {
   if (!item) return { ...EMPTY_SLOT };
+  const planned = item.plannedQuantity;
   return {
     articleNumber: formatPlanArticle(item),
     qty: formatPlanQty(item),
+    remaining: planned == null ? undefined : (item.knittingRemaining ?? planned),
+    planned: planned ?? undefined,
   };
+}
+
+/**
+ * Sums remaining and planned qty across the given plan slots.
+ */
+function sumSlotQty(slots: PlanSlot[]): { remaining: number; planned: number; hasAny: boolean } {
+  let remaining = 0;
+  let planned = 0;
+  let hasAny = false;
+  for (const slot of slots) {
+    if (slot.planned == null) continue;
+    hasAny = true;
+    planned += slot.planned;
+    remaining += slot.remaining ?? slot.planned;
+  }
+  return { remaining, planned, hasAny };
+}
+
+/**
+ * Formats remaining / planned as "Rem / Prod", or "-" when none of the slots have qty.
+ */
+function formatSlotQtySum(slots: PlanSlot[]): string {
+  const { remaining, planned, hasAny } = sumSlotQty(slots);
+  if (!hasAny) return "-";
+  return `${remaining.toLocaleString()} / ${planned.toLocaleString()}`;
+}
+
+/**
+ * Sums remaining and planned qty across running + queued plans on a machine.
+ */
+export function formatMachineTotalQty(row: AdvancedPlanningRow): string {
+  return formatSlotQtySum([row.runningPlan, ...row.otherPlans]);
+}
+
+/**
+ * Grand remaining / planned qty of every machine's currently running (In Progress) plan.
+ */
+export function formatRunningPlanTotals(rows: AdvancedPlanningRow[]): string {
+  return formatSlotQtySum(rows.map((row) => row.runningPlan));
 }
 
 /**
@@ -174,6 +218,7 @@ export function printAdvancedPlanningTable(rows: AdvancedPlanningRow[], maxOther
         <td>${row.type}</td>
         <td>${row.needle}</td>
         <td>${row.machineCode}</td>
+        <td>${formatMachineTotalQty(row)}</td>
         <td>${row.runningPlan.articleNumber}</td>
         <td>${row.runningPlan.qty}</td>
         ${otherCells}
@@ -211,11 +256,13 @@ export function printAdvancedPlanningTable(rows: AdvancedPlanningRow[], maxOther
               <th>Type</th>
               <th>Needle</th>
               <th>M/c No.</th>
-              <th colspan="2" style="text-align:center">RUNNING PLAN</th>
+              <th>Total</th>
+              <th colspan="2" style="text-align:center">RUNNING PLAN<br/>${formatRunningPlanTotals(rows)}</th>
               ${otherGroupHeaders}
             </tr>
             <tr>
               <th></th><th></th><th></th><th></th>
+              <th>Rem / Prod</th>
               <th>Existing Plan</th><th>Rem / Prod</th>
               ${otherSubHeaders}
             </tr>

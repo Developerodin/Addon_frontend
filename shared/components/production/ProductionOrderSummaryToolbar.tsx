@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import ReportExcelExportMenu from "./ReportExcelExportMenu";
 
 export interface ProductionOrderSummaryToolbarProps {
   search: string;
@@ -17,8 +18,13 @@ export interface ProductionOrderSummaryToolbarProps {
   onIncludeZeroPendingChange: (value: boolean) => void;
   loading: boolean;
   canExport: boolean;
+  exporting?: boolean;
+  pageCount: number;
+  totalCount: number;
+  totalPages: number;
   onRefresh: () => void;
-  onExport: () => void;
+  onExportPage: () => void;
+  onExportAll: () => void;
 }
 
 const STATUS_OPTIONS = [
@@ -55,8 +61,13 @@ export default function ProductionOrderSummaryToolbar({
   onIncludeZeroPendingChange,
   loading,
   canExport,
+  exporting = false,
+  pageCount,
+  totalCount,
+  totalPages,
   onRefresh,
-  onExport,
+  onExportPage,
+  onExportAll,
 }: ProductionOrderSummaryToolbarProps) {
   return (
     <div className="p-[10px] mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -166,16 +177,15 @@ export default function ProductionOrderSummaryToolbar({
         Refresh
       </button>
 
-      <button
-        type="button"
-        className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50 disabled:opacity-50"
-        onClick={onExport}
+      <ReportExcelExportMenu
         disabled={loading || !canExport}
-        aria-label="Export current page as CSV"
-      >
-        <i className="ri-download-2-line text-xs" aria-hidden="true" />
-        Export
-      </button>
+        exporting={exporting}
+        pageCount={pageCount}
+        totalCount={totalCount}
+        totalPages={totalPages}
+        onExportPage={onExportPage}
+        onExportAll={onExportAll}
+      />
     </div>
   );
 }

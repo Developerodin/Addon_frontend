@@ -4,10 +4,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "react-hot-toast";
 import {
   productionService,
+  type BacklogReportDateRow,
   type BacklogReportResponse,
 } from "@/shared/services/productionService";
 import DownloadExcelButton from "./DownloadExcelButton";
 import { downloadBacklogReportCsv } from "./backlogReportExport";
+import BacklogQtyCell from "./BacklogQtyCell";
 
 export interface BacklogReportTabProps {
   /** Increment from parent header Refresh to reload this tab. */
@@ -50,21 +52,24 @@ function formatDateCell(iso: string): string {
 }
 
 /**
- * Formats a pending qty cell; future days are an em dash.
- * @param value Qty or null
- */
-function formatCell(value: number | null | undefined): string {
-  if (value == null) return "—";
-  return Math.round(value).toLocaleString();
-}
-
-/**
  * Year options from 2023 through the current IST year.
  */
 function yearOptions(currentYear: number): number[] {
   const years: number[] = [];
   for (let y = 2023; y <= currentYear; y += 1) years.push(y);
   return years;
+}
+
+/**
+ * Table rows: today only, or the full month when Show all is on.
+ * Months without a today row (past/future) always show the whole period.
+ * @param rows API date rows for the selected month
+ * @param showAll Whether the user expanded to the full month
+ */
+function visibleBacklogRows(rows: BacklogReportDateRow[], showAll: boolean): BacklogReportDateRow[] {
+  if (showAll) return rows;
+  const todayRows = rows.filter((row) => row.isToday);
+  return todayRows.length > 0 ? todayRows : rows;
 }
 
 /**
@@ -78,6 +83,7 @@ export default function BacklogReportTab({
   const [year, setYear] = useState(istNow.year);
   const [month, setMonth] = useState(istNow.month);
   const [loading, setLoading] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const [showFormula, setShowFormula] = useState(false);
   const [report, setReport] = useState<BacklogReportResponse | null>(null);
   const requestIdRef = useRef(0);
@@ -115,6 +121,8 @@ export default function BacklogReportTab({
   }, [load, refreshNonce]);
 
   const rows = report?.rows ?? [];
+  const hasTodayRow = rows.some((row) => row.isToday);
+  const visibleRows = useMemo(() => visibleBacklogRows(rows, showAll), [rows, showAll]);
   const floors = report?.floors ?? [];
   const asOfDate = report?.asOf?.date;
   const asOfLabel = asOfDate ? formatDateCell(asOfDate) : "";
@@ -135,7 +143,10 @@ export default function BacklogReportTab({
           <select
             className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-2 py-1.5"
             value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
+            onChange={(e) => {
+              setYear(Number(e.target.value));
+              setShowAll(false);
+            }}
             aria-label="Select report year"
           >
             {yearOptions(istNow.year).map((y) => (
@@ -150,7 +161,10 @@ export default function BacklogReportTab({
           <select
             className="bg-white border border-gray-200 text-[#495057] text-[11px] font-medium rounded px-2 py-1.5"
             value={month}
-            onChange={(e) => setMonth(Number(e.target.value))}
+            onChange={(e) => {
+              setMonth(Number(e.target.value));
+              setShowAll(false);
+            }}
             aria-label="Select report month"
           >
             {MONTH_LABELS.map((label, idx) => (
@@ -160,6 +174,17 @@ export default function BacklogReportTab({
             ))}
           </select>
         </label>
+        {hasTodayRow && (
+          <button
+            type="button"
+            className="px-2.5 py-1.5 text-[11px] font-bold rounded border border-gray-200 bg-white text-[#495057] hover:border-purple-300 hover:text-purple-700 hover:bg-purple-50 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            aria-pressed={showAll}
+            aria-label={showAll ? "Show today's backlog row only" : "Show all days in the selected month"}
+            onClick={() => setShowAll((open) => !open)}
+          >
+            {showAll ? "Show today" : "Show all"}
+          </button>
+        )}
         <p className="text-[11px] font-medium text-gray-500" aria-live="polite">
           {pending ? (
             <span className="inline-flex items-center gap-1.5 text-purple-700">
@@ -171,7 +196,10 @@ export default function BacklogReportTab({
             </span>
           ) : appliedLabel ? (
             <>
-              Showing <span className="font-bold text-gray-700">{appliedLabel}</span>
+              Showing{" "}
+              <span className="font-bold text-gray-700">
+                {hasTodayRow && !showAll ? "today" : appliedLabel}
+              </span>
             </>
           ) : (
             <>Showing {selectedLabel}</>
@@ -198,7 +226,7 @@ export default function BacklogReportTab({
               report.asOf.date
             );
           }}
-          disabled={pending || rows.length === 0}
+          disabled={pending || visibleRows.length === 0}
           ariaLabel="Download backlog report as CSV"
         />
       </div>
@@ -210,18 +238,24 @@ export default function BacklogReportTab({
             transferred off it. Today uses live received − transferred. Future days are blank.
           </p>
           <p>
-            <strong>Total</strong> is factory pending that day (sum of floor columns). Footer is as-of the last
+            <strong>Upcoming</strong> (today only, +N under pending) is qty in ACTIVE production containers
+            waiting to be accepted on that floor — transferred off the previous floor, not yet in received.
+            Vendor containers are excluded.
+          </p>
+          <p>
+            <strong>Total</strong> under a today cell with Upcoming is pending + upcoming. The date-row Total
+            column is factory pending; its third line is factory pending + all upcoming. Footer is as-of the last
             populated day, not the sum of dates.
           </p>
         </div>
       )}
 
-      {pending && rows.length === 0 ? (
+      {pending && visibleRows.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20" role="status" aria-live="polite">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-4 opacity-50" />
           <p className="text-[10px] text-gray-400 font-bold tracking-[0.2em] uppercase">Loading</p>
         </div>
-      ) : rows.length === 0 ? (
+      ) : visibleRows.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4">
             <i className="ri-inbox-line text-xl text-gray-200" aria-hidden="true" />
@@ -272,7 +306,7 @@ export default function BacklogReportTab({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {visibleRows.map((row) => (
                   <tr key={row.date} className={row.isToday ? "bg-purple-50/70" : "bg-white"}>
                     <th
                       scope="row"
@@ -282,22 +316,20 @@ export default function BacklogReportTab({
                     >
                       {formatDateCell(row.date)}
                     </th>
-                    {floors.map((floor) => {
-                      const value = row.floors[floor.key];
-                      return (
-                        <td
-                          key={floor.key}
-                          className={`px-1.5 py-1.5 text-right text-[11px] tabular-nums border border-gray-300 ${
-                            value == null ? "text-gray-300" : "text-gray-800"
-                          }`}
-                        >
-                          {formatCell(value)}
-                        </td>
-                      );
-                    })}
-                    <td className="px-1.5 py-1.5 text-right text-[11px] font-bold tabular-nums border border-gray-300 text-gray-800">
-                      {formatCell(row.total)}
-                    </td>
+                    {floors.map((floor) => (
+                      <BacklogQtyCell
+                        key={floor.key}
+                        pending={row.floors[floor.key]}
+                        upcoming={row.upcoming?.[floor.key]}
+                        pendingLabel={`${floor.label} pending`}
+                      />
+                    ))}
+                    <BacklogQtyCell
+                      pending={row.total}
+                      upcoming={row.upcomingTotal}
+                      emphasize
+                      pendingLabel="factory pending"
+                    />
                   </tr>
                 ))}
               </tbody>
@@ -309,6 +341,21 @@ export default function BacklogReportTab({
               <span className="font-bold text-gray-700">
                 {Math.round(report?.asOf.total ?? 0).toLocaleString()}
               </span>
+              {(report?.asOf.upcomingTotal ?? 0) > 0 ? (
+                <>
+                  {" "}
+                  +{" "}
+                  <span className="font-bold text-purple-700">
+                    {Math.round(report?.asOf.upcomingTotal ?? 0).toLocaleString()} upcoming
+                  </span>
+                  {" = "}
+                  <span className="font-bold text-gray-800">
+                    {(
+                      Math.round(report?.asOf.total ?? 0) + Math.round(report?.asOf.upcomingTotal ?? 0)
+                    ).toLocaleString()}
+                  </span>
+                </>
+              ) : null}
             </p>
           )}
         </div>

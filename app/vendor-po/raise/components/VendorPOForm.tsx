@@ -405,6 +405,10 @@ export default function VendorPOForm({
   const portalFiltered = articleOpen ? filteredArticles(articleOpen) : [];
 
   const totals = useMemo(() => {
+    const totalOrderedQty = lineItems.reduce(
+      (sum, item) => sum + Number(item.orderedQty || 0),
+      0
+    );
     const subTotal = lineItems.reduce(
       (sum, item) => sum + Number(item.orderedQty || 0) * Number(item.rate || 0),
       0
@@ -416,7 +420,7 @@ export default function VendorPOForm({
       0
     );
     const total = subTotal + gst;
-    return { subTotal, gst, total };
+    return { totalOrderedQty, subTotal, gst, total };
   }, [lineItems]);
 
   return (
@@ -476,7 +480,7 @@ export default function VendorPOForm({
         }
       />
 
-      <VendorPOOrderTotalsSection totals={totals} show={fieldAccess.showOrderTotals} />
+      <VendorPOOrderTotalsSection totals={totals} showMoneyTotals={fieldAccess.showOrderTotals} />
 
       {fieldAccess.canEditRemarks ? (
         <div className="border-t pt-4">

@@ -25,3 +25,20 @@ export function vendorReceiveRowSummary(order: VendorPO): {
   const pending = Math.max(0, ordered - received);
   return { total, ordered, received, pending };
 }
+
+/**
+ * Unique vendor invoice numbers for a PO (`receivedLotDetails.lotNumber`).
+ */
+export function vendorReceiveInvoiceNumbers(order: VendorPO): string[] {
+  const lots = order.rawPurchaseOrder?.receivedLotDetails;
+  if (!lots?.length) return [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const lot of lots) {
+    const no = lot.lotNumber?.trim();
+    if (!no || seen.has(no)) continue;
+    seen.add(no);
+    result.push(no);
+  }
+  return result;
+}

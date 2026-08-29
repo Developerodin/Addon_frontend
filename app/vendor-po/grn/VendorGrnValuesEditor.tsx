@@ -56,7 +56,21 @@ const buildLineDrafts = (grn: VendorGrn): LineDraft[] => {
 };
 
 /**
- * Commercial values editor for vendor GRN print: HSN, Rate, Per, discount ₹, freight, round-off.
+ * Convert any date-ish value to YYYY-MM-DD for `<input type="date">`.
+ * @param value - ISO string or Date
+ */
+const toDateInput = (value?: string | Date | null): string => {
+  if (!value) return "";
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+/**
+ * Commercial values editor for vendor GRN print: dates, HSN, Rate, Per, discount ₹, freight, round-off.
  */
 const VendorGrnValuesEditor: React.FC<VendorGrnValuesEditorProps> = ({ grn, onSaved }) => {
   const [lines, setLines] = useState<LineDraft[]>(() => buildLineDrafts(grn));
@@ -73,6 +87,8 @@ const VendorGrnValuesEditor: React.FC<VendorGrnValuesEditorProps> = ({ grn, onSa
         grn.adjustments.roundOff !== grn.totals.roundOffSuggested
     )
   );
+  const [invoiceDate, setInvoiceDate] = useState(toDateInput(grn.invoiceDate));
+  const [receivedDate, setReceivedDate] = useState(toDateInput(grn.receivedDate));
   const [saving, setSaving] = useState(false);
   const disabled = grn.status !== "active";
 
@@ -89,6 +105,8 @@ const VendorGrnValuesEditor: React.FC<VendorGrnValuesEditorProps> = ({ grn, onSa
           grn.adjustments.roundOff !== grn.totals.roundOffSuggested
       )
     );
+    setInvoiceDate(toDateInput(grn.invoiceDate));
+    setReceivedDate(toDateInput(grn.receivedDate));
   }, [grn]);
 
   const previewItems = useMemo(
@@ -166,6 +184,8 @@ const VendorGrnValuesEditor: React.FC<VendorGrnValuesEditorProps> = ({ grn, onSa
         return row;
       });
       const updated = await vendorGrnService.updateHeader(grn.id, {
+        invoiceDate: invoiceDate || null,
+        receivedDate: receivedDate || null,
         discountAmount,
         freightAmount,
         freightGstPercent,
@@ -203,6 +223,37 @@ const VendorGrnValuesEditor: React.FC<VendorGrnValuesEditorProps> = ({ grn, onSa
         <span className="text-[10px] text-purple-600 italic">
           {disabled ? "Only active GRNs can be edited" : "No revision will be created"}
         </span>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="vgrn-invoice-date" className={CRM.label}>
+            Invoice Date
+          </label>
+          <input
+            id="vgrn-invoice-date"
+            type="date"
+            value={invoiceDate}
+            onChange={(e) => setInvoiceDate(e.target.value)}
+            className={CRM.input}
+            disabled={disabled}
+            aria-label="Vendor invoice date"
+          />
+        </div>
+        <div>
+          <label htmlFor="vgrn-received-date" className={CRM.label}>
+            Received Date
+          </label>
+          <input
+            id="vgrn-received-date"
+            type="date"
+            value={receivedDate}
+            onChange={(e) => setReceivedDate(e.target.value)}
+            className={CRM.input}
+            disabled={disabled}
+            aria-label="Goods received date"
+          />
+        </div>
       </div>
 
       <div className={CRM.tableWrap}>

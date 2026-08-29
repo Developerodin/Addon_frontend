@@ -12,6 +12,8 @@ import ArticlePlanCell from "./ArticlePlanCell";
 import ArticleProductImageModal from "./ArticleProductImageModal";
 import {
   collectPlanFactoryCodes,
+  formatMachineTotalQty,
+  formatRunningPlanTotals,
   getAssignmentMachineId,
   getMaxOtherPlanCount,
   getQueuedPlanItems,
@@ -54,6 +56,7 @@ export default function MachineArticleAdvancedPlanningTab({
   const [imageModal, setImageModal] = useState<ImageModalState | null>(null);
 
   const maxOtherPlans = useMemo(() => getMaxOtherPlanCount(rows), [rows]);
+  const runningPlanTotals = useMemo(() => formatRunningPlanTotals(rows), [rows]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -227,11 +230,18 @@ export default function MachineArticleAdvancedPlanningTab({
               <th className="px-2 py-2 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider border-b border-r border-gray-300 whitespace-nowrap">
                 M/c No.
               </th>
+              <th className="px-2 py-2 text-left text-[10px] font-bold text-gray-700 uppercase tracking-wider border-b border-r border-gray-300 whitespace-nowrap">
+                Total
+              </th>
               <th
                 className="px-2 py-2 text-center text-[10px] font-bold text-gray-700 uppercase tracking-wider border-b border-r border-gray-300 whitespace-nowrap"
                 colSpan={2}
+                aria-label={`Running plan remaining and planned quantity ${runningPlanTotals}`}
               >
-                RUNNING PLAN
+                <span className="block">RUNNING PLAN</span>
+                <span className="mt-0.5 block normal-case tracking-normal font-semibold text-purple-700 tabular-nums">
+                  {runningPlanTotals}
+                </span>
               </th>
               {Array.from({ length: maxOtherPlans }, (_, i) => (
                 <th
@@ -248,6 +258,9 @@ export default function MachineArticleAdvancedPlanningTab({
               <th className="px-2 py-1.5 border-b border-r border-gray-300" />
               <th className="px-2 py-1.5 border-b border-r border-gray-300" />
               <th className="px-2 py-1.5 border-b border-r border-gray-300" />
+              <th className="px-2 py-1.5 text-[10px] font-semibold text-gray-600 border-b border-r border-gray-300 whitespace-nowrap">
+                Rem / Prod
+              </th>
               <th className="px-2 py-1.5 text-[10px] font-semibold text-gray-600 border-b border-r border-gray-300 whitespace-nowrap">
                 Existing Plan
               </th>
@@ -282,6 +295,12 @@ export default function MachineArticleAdvancedPlanningTab({
                   </td>
                   <td className="px-2 py-2 text-[11px] font-medium text-gray-800 border-b border-r border-gray-300 whitespace-nowrap">
                     {row.machineCode}
+                  </td>
+                  <td
+                    className="px-2 py-2 text-[11px] font-semibold text-gray-900 border-b border-r border-gray-300 whitespace-nowrap bg-gray-50"
+                    aria-label={`Total remaining and planned quantity for machine ${row.machineCode}`}
+                  >
+                    {formatMachineTotalQty(row)}
                   </td>
                   <td className="px-2 py-2 text-[11px] text-gray-800 border-b border-r border-gray-300 whitespace-nowrap">
                     <ArticlePlanCell

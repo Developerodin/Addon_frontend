@@ -125,11 +125,23 @@ const GRNViewPage = () => {
         </div>
 
         <div className={`${CRM.cardBody} space-y-4`}>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-[11px]">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-[11px]">
             <div>
               <div className={CRM.label}>GRN Date</div>
               <div className="font-semibold text-gray-900">
                 {grn.grnDate ? new Date(grn.grnDate).toLocaleDateString() : "—"}
+              </div>
+            </div>
+            <div>
+              <div className={CRM.label}>Invoice Date</div>
+              <div className="font-semibold text-gray-900">
+                {grn.invoiceDate ? new Date(grn.invoiceDate).toLocaleDateString() : "—"}
+              </div>
+            </div>
+            <div>
+              <div className={CRM.label}>Received Date</div>
+              <div className="font-semibold text-gray-900">
+                {grn.receivedDate ? new Date(grn.receivedDate).toLocaleDateString() : "—"}
               </div>
             </div>
             <div>
