@@ -4,7 +4,7 @@
  *
  * When the scale PC’s LAN IP or port changes, update WEIGHT_API_LAN_BASE (single place).
  */
-const WEIGHT_API_LAN_BASE = 'http://192.168.0.171:7001';
+const WEIGHT_API_LAN_BASE = 'http://192.168.0.29:7001';
 
 /** Default candidates for cone weight (e.g. yarn issue — /api/latest/cones). */
 const WEIGHT_API_CANDIDATES = [

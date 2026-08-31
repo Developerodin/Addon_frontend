@@ -86,12 +86,12 @@ export async function buildTransferNoteHtml(note: DispatchTransferNote): Promise
   );
 
   htmlTemplate = htmlTemplate
-    .replace('{{STN_DATE}}', printDate)
-    .replace('{{STN_SERIAL}}', escapeTransferNoteHtml(note.stnSerial || ''))
-    .replace('{{TOTAL_BOXES}}', String(note.totalBoxes ?? 0))
-    .replace('{{ARTICLE_ROWS}}', rowsHtml)
-    .replace('{{TOTAL_QTY}}', String(note.totalQty ?? 0))
-    .replace('{{CATEGORY_LABEL}}', categoryLabel);
+    .replaceAll('{{STN_DATE}}', printDate)
+    .replaceAll('{{STN_SERIAL}}', escapeTransferNoteHtml(note.stnSerial || ''))
+    .replaceAll('{{TOTAL_BOXES}}', String(note.totalBoxes ?? 0))
+    .replaceAll('{{ARTICLE_ROWS}}', rowsHtml)
+    .replaceAll('{{TOTAL_QTY}}', String(note.totalQty ?? 0))
+    .replaceAll('{{CATEGORY_LABEL}}', categoryLabel);
 
   return htmlTemplate;
 }
