@@ -192,7 +192,7 @@ export async function printBatchBarcodeLabels(
 
     const pages = expandStickerMarkup(labels, (_label, index) => {
       const row = unique[index];
-      const img = `<img src="${pngByIndex[index]}" alt="" width="${QZ_BARCODE_PNG_W}" height="${QZ_BARCODE_PNG_H}" />`;
+      const img = `<img src="${pngByIndex[index]}" alt="" />`;
       return { markup: img, caption: row.caption };
     }).map((sticker) => buildSingleProductLabelDocument(sticker));
 
