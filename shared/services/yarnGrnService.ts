@@ -60,6 +60,54 @@ export interface YarnGrnListParams {
   limit?: number;
 }
 
+/** One yarn-line row in the monthly GRN register. */
+export interface YarnGrnMonthlySummaryRow {
+  grnId: string;
+  grnNumber: string;
+  grnDate: string | Date | null;
+  poNumber: string;
+  supplier: string;
+  numberOfBoxes: number | null;
+  yarnName: string;
+  shadeCode: string;
+  qty: number;
+  rate: number;
+  amount: number;
+  gst: number | null;
+  grandTotal: number | null;
+  isFirstItemOfGrn: boolean;
+}
+
+/** Month-true totals for the yarn GRN register (unique GRNs for boxes/GST/grand total). */
+export interface YarnGrnMonthlySummaryTotals {
+  grnCount: number;
+  lineCount: number;
+  boxes: number;
+  qty: number;
+  amount: number;
+  gst: number;
+  grandTotal: number;
+}
+
+export interface YarnGrnMonthlySummaryParams {
+  year?: number;
+  month?: number;
+  supplierName?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface YarnGrnMonthlySummaryResponse {
+  year: number;
+  month: number;
+  results: YarnGrnMonthlySummaryRow[];
+  totals: YarnGrnMonthlySummaryTotals;
+  page: number;
+  limit: number;
+  totalPages: number;
+  totalResults: number;
+}
+
 /**
  * Read the JWT issued by the login flow. Mirrors the convention used by every
  * other service in the codebase (storageSlotService, yarnConeService, etc.).
@@ -131,6 +179,25 @@ class YarnGrnService {
     });
     const query = search.toString();
     return this.request<YarnGrnListResponse>(query ? `?${query}` : '');
+  }
+
+  /**
+   * Yarn-line monthly register for an IST calendar month.
+   * Totals on the payload are month-true, not page-true.
+   * @param params - year/month (defaults server-side to current IST month), optional supplier, paging
+   */
+  async getMonthlySummary(
+    params: YarnGrnMonthlySummaryParams = {}
+  ): Promise<YarnGrnMonthlySummaryResponse> {
+    const search = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value === undefined || value === null || value === '') return;
+      search.append(key, String(value));
+    });
+    const query = search.toString();
+    return this.request<YarnGrnMonthlySummaryResponse>(
+      `/monthly-summary${query ? `?${query}` : ''}`
+    );
   }
 
   /** Fetch a single GRN (with parent metadata if it's a revision). */
