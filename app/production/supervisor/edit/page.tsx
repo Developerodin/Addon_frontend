@@ -169,11 +169,17 @@ const EditOrderContent = () => {
   };
 
   /**
-   * Check if the entire order is locked (any article has started production).
-   * An article is in production when yarn is issued AND quantity transferred from knitting.
-   * When locked, the edit form should be read-only.
+   * Check if a form row is locked (matches an in-production order article).
+   * Newly added rows (timestamp ids) do not match order articles and stay editable.
+   * @param formArticle - Article row from the edit form
+   * @returns True if this row cannot be modified
    */
-  const isOrderLocked = order?.articles?.some((article: any) => isArticleInProduction(article)) ?? false;
+  const isFormArticleLocked = (formArticle: Article): boolean => {
+    const orderArticle = order?.articles?.find(
+      (a: any) => String(a._id ?? a.id) === String(formArticle.id)
+    );
+    return isArticleInProduction(orderArticle);
+  };
 
   /**
    * Get list of article numbers that are in production (for error messages)
@@ -181,6 +187,9 @@ const EditOrderContent = () => {
   const articlesInProductionList = order?.articles
     ?.filter((article: any) => isArticleInProduction(article))
     ?.map((article: any) => article.articleNumber || 'Unknown') ?? [];
+
+  /** True when at least one existing article is in production (banner only). */
+  const hasLockedArticles = articlesInProductionList.length > 0;
 
   /**
    * Get lock reason for display in UI
@@ -459,6 +468,11 @@ const EditOrderContent = () => {
 
   // Open product selection modal — set loading true first so modal shows loader immediately (no blank flash)
   const openProductModal = (articleIndex: number) => {
+    const target = formData.articles[articleIndex];
+    if (target && isFormArticleLocked(target)) {
+      setShowProductionLockError(true);
+      return;
+    }
     setSelectedArticleIndex(articleIndex);
     setProductSearchQuery('');
     setProductPage(1);
@@ -477,6 +491,11 @@ const EditOrderContent = () => {
   // Select product and update article
   const selectProduct = async (product: Product) => {
     if (selectedArticleIndex === null) return;
+    const target = formData.articles[selectedArticleIndex];
+    if (target && isFormArticleLocked(target)) {
+      setShowProductionLockError(true);
+      return;
+    }
     const productId = product.id ?? (product as any)._id;
     if (!productId) return;
 
@@ -737,6 +756,28 @@ const EditOrderContent = () => {
     (a) => a.productId && (!a.bom || a.bom.length === 0)
   );
 
+  /**
+   * Factory codes that appear on more than one article row (case-insensitive).
+   * Warning-only: duplicates do not block submit.
+   * @param articles - Current form article rows
+   * @returns Set of normalized factory codes that are duplicated
+   */
+  const getDuplicateArticleNumbers = (articles: Article[]): Set<string> => {
+    const counts = new Map<string, number>();
+    articles.forEach((article) => {
+      const key = (article.articleNumber || '').toString().trim().toLowerCase();
+      if (!key) return;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    const duplicates = new Set<string>();
+    counts.forEach((count, key) => {
+      if (count > 1) duplicates.add(key);
+    });
+    return duplicates;
+  };
+
+  const duplicateArticleNumbers = getDuplicateArticleNumbers(formData.articles);
+
   const handleInputChange = (field: keyof EditOrderFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     
@@ -751,6 +792,11 @@ const EditOrderContent = () => {
   };
 
   const handleArticleChange = (articleIndex: number, field: keyof Article, value: string | number | undefined) => {
+    const target = formData.articles[articleIndex];
+    if (target && isFormArticleLocked(target)) {
+      setShowProductionLockError(true);
+      return;
+    }
     setFormData(prev => ({
       ...prev,
       articles: prev.articles.map((article, index) => {
@@ -851,17 +897,26 @@ const EditOrderContent = () => {
    * @param {string} articleId - Local article row id
    */
   const requestRemoveArticle = (articleId: string) => {
-    if (formData.articles.length > 1) {
-      setArticlePendingDelete(articleId);
+    if (formData.articles.length <= 1) return;
+    const target = formData.articles.find((article) => article.id === articleId);
+    if (target && isFormArticleLocked(target)) {
+      setShowProductionLockError(true);
+      return;
     }
+    setArticlePendingDelete(articleId);
   };
 
   /** Confirms article removal and closes the delete modal. */
   const confirmRemoveArticle = () => {
-    if (articlePendingDelete) {
-      removeArticle(articlePendingDelete);
+    if (!articlePendingDelete) return;
+    const target = formData.articles.find((article) => article.id === articlePendingDelete);
+    if (target && isFormArticleLocked(target)) {
+      setShowProductionLockError(true);
       setArticlePendingDelete(null);
+      return;
     }
+    removeArticle(articlePendingDelete);
+    setArticlePendingDelete(null);
   };
 
   /**
@@ -1245,17 +1300,17 @@ const EditOrderContent = () => {
           </div>
         </div>
 
-        {/* Production Lock Warning Banner */}
-        {isOrderLocked && (
+        {/* Production Lock Warning Banner — only listed articles are locked */}
+        {hasLockedArticles && (
           <div className="mx-[10px] mt-[10px] p-4 bg-amber-50 border border-amber-200 rounded-lg">
             <div className="flex items-start gap-3">
               <div className="flex-shrink-0">
                 <i className="ri-lock-line text-amber-600 text-xl" aria-hidden="true"></i>
               </div>
               <div className="flex-1">
-                <h3 className="text-sm font-semibold text-amber-800">Order Locked - In Production</h3>
+                <h3 className="text-sm font-semibold text-amber-800">Some Articles Locked - In Production</h3>
                 <p className="mt-1 text-sm text-amber-700">
-                  This order cannot be modified from here.
+                  These articles are locked; other articles can still be edited.
                   {lockReason && (
                     <span className="block mt-1">
                       <strong>Reason:</strong> {lockReason}
@@ -1268,7 +1323,7 @@ const EditOrderContent = () => {
                   )}
                 </p>
                 <p className="mt-2 text-xs text-amber-600">
-                  Contact production floor supervisor if changes are required.
+                  Contact production floor supervisor if changes to locked articles are required.
                 </p>
               </div>
             </div>
@@ -1308,10 +1363,9 @@ const EditOrderContent = () => {
                   <div>
                     <label className="form-label text-sm">Order Priority *</label>
                     <select
-                      className={`form-select form-select-sm text-xs py-1 px-2 h-8 ${isOrderLocked ? 'opacity-60 cursor-not-allowed bg-gray-100' : ''}`}
+                      className="form-select form-select-sm text-xs py-1 px-2 h-8"
                       value={formData.orderPriority}
                       onChange={(e) => handleInputChange('orderPriority', e.target.value as 'Urgent' | 'High' | 'Medium' | 'Low')}
-                      disabled={isOrderLocked}
                     >
                       <option value="Urgent">Urgent</option>
                       <option value="High">High</option>
@@ -1322,12 +1376,11 @@ const EditOrderContent = () => {
                   <div className="lg:col-span-2">
                     <label className="form-label text-sm">Order Name (optional)</label>
                     <textarea
-                      className={`form-control form-control-sm text-xs py-1 px-2 ${isOrderLocked ? 'opacity-60 cursor-not-allowed bg-gray-100' : ''}`}
+                      className="form-control form-control-sm text-xs py-1 px-2"
                       rows={1}
                       placeholder="Add order-level instructions..."
                       value={formData.orderNote || ''}
                       onChange={(e) => handleInputChange('orderNote', e.target.value)}
-                      disabled={isOrderLocked}
                     />
                   </div>
                 </div>
@@ -1339,13 +1392,8 @@ const EditOrderContent = () => {
                     <button
                       type="button"
                       onClick={addArticle}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded shadow-sm ${
-                        isOrderLocked 
-                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                          : 'bg-purple-600 text-white hover:bg-purple-700'
-                      }`}
-                      title={isOrderLocked ? "Order is locked - articles in production" : "Add Article"}
-                      disabled={isOrderLocked}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded shadow-sm bg-purple-600 text-white hover:bg-purple-700"
+                      title="Add Article"
                     >
                       <i className="ri-add-line text-xs"></i> Add Article
                     </button>
@@ -1365,28 +1413,40 @@ const EditOrderContent = () => {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {formData.articles.map((article, index) => (
+                        {formData.articles.map((article, index) => {
+                          const isRowLocked = isFormArticleLocked(article);
+                          const articleNumberKey = (article.articleNumber || '').toString().trim().toLowerCase();
+                          const isDuplicateArticle = articleNumberKey.length > 0 && duplicateArticleNumbers.has(articleNumberKey);
+                          const articleNumberErrorId = `article-${index}-articleNumber-error`;
+                          const hasArticleNumberError = Boolean(
+                            errors[`article_${index}_articleNumber`] ||
+                            (article.productId && (!article.bom || article.bom.length === 0)) ||
+                            isDuplicateArticle
+                          );
+                          return (
                           <tr key={article.id} className="hover:bg-gray-50">
                             <td className="px-2 py-2">
                               <div className="flex gap-1">
                                 <input
                                   type="text"
-                                  className={`form-control form-control-sm flex-1 text-xs py-1 px-2 h-8 ${errors[`article_${index}_articleNumber`] || (article.productId && (!article.bom || article.bom.length === 0)) ? 'border-red-500 ring-1 ring-red-500' : ''} ${isOrderLocked ? 'opacity-60 cursor-not-allowed bg-gray-100' : ''}`}
+                                  className={`form-control form-control-sm flex-1 text-xs py-1 px-2 h-8 ${hasArticleNumberError ? 'border-red-500 ring-1 ring-red-500' : ''} ${isRowLocked ? 'opacity-60 cursor-not-allowed bg-gray-100' : ''}`}
                                   value={article.articleNumber}
                                   onChange={(e) => handleArticleChange(index, 'articleNumber', e.target.value)}
                                   placeholder="Factory Code"
-                                  disabled={isOrderLocked}
+                                  disabled={isRowLocked}
+                                  aria-invalid={hasArticleNumberError}
+                                  aria-describedby={hasArticleNumberError ? articleNumberErrorId : undefined}
                                 />
                                 <button
                                   type="button"
                                   onClick={() => openProductModal(index)}
                                   className={`flex items-center justify-center w-8 h-8 text-[11px] font-bold rounded ${
-                                    isOrderLocked 
+                                    isRowLocked 
                                       ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
                                       : 'bg-purple-600 text-white hover:bg-purple-700'
                                   }`}
-                                  title={isOrderLocked ? "Order is locked" : "Select Factory Code"}
-                                  disabled={isOrderLocked}
+                                  title={isRowLocked ? "Article is locked - in production" : "Select Factory Code"}
+                                  disabled={isRowLocked}
                                 >
                                   <i className="ri-search-line text-xs"></i>
                                 </button>
@@ -1397,7 +1457,12 @@ const EditOrderContent = () => {
                                 </div>
                               )}
                               {errors[`article_${index}_articleNumber`] && (
-                                <div className="text-red-600 text-[10px] mt-0.5 truncate">{errors[`article_${index}_articleNumber`]}</div>
+                                <div id={articleNumberErrorId} className="text-red-600 text-[10px] mt-0.5 truncate">{errors[`article_${index}_articleNumber`]}</div>
+                              )}
+                              {!errors[`article_${index}_articleNumber`] && isDuplicateArticle && (
+                                <div id={articleNumberErrorId} className="text-red-600 text-[10px] mt-0.5 truncate" role="status">
+                                  This article already exists in this order
+                                </div>
                               )}
                               {article.productId && (!article.bom || article.bom.length === 0) && (
                                 <div className="text-red-600 text-[10px] mt-0.5">Lin BOM is missing for this article or factory code order can&apos;t be created for it</div>
@@ -1410,7 +1475,7 @@ const EditOrderContent = () => {
                                 onChange={(value) => handleArticleChange(index, 'plannedQuantity', value)}
                                 placeholder="0"
                                 allowDecimals
-                                disabled={isOrderLocked || !article.productId}
+                                disabled={isRowLocked || !article.productId}
                               />
                               {errors[`article_${index}_quantity`] && (
                                 <div className="text-red-600 text-[10px] mt-0.5 truncate">{errors[`article_${index}_quantity`]}</div>
@@ -1421,7 +1486,7 @@ const EditOrderContent = () => {
                                 className="form-select form-select-sm w-full text-xs py-1 px-2 h-8 disabled:opacity-60 disabled:cursor-not-allowed"
                                 value={article.linkingType}
                                 onChange={(e) => handleArticleChange(index, 'linkingType', e.target.value as 'Auto Linking' | 'Rosso Linking' | 'Hand Linking')}
-                                disabled={isOrderLocked || !article.productId}
+                                disabled={isRowLocked || !article.productId}
                               >
                                 <option value="Auto Linking">Auto</option>
                                 <option value="Rosso Linking">Rosso</option>
@@ -1433,7 +1498,7 @@ const EditOrderContent = () => {
                                 className="form-select form-select-sm w-full text-xs py-1 px-2 h-8 disabled:opacity-60 disabled:cursor-not-allowed"
                                 value={article.priority}
                                 onChange={(e) => handleArticleChange(index, 'priority', e.target.value as 'Urgent' | 'High' | 'Medium' | 'Low')}
-                                disabled={isOrderLocked || !article.productId}
+                                disabled={isRowLocked || !article.productId}
                               >
                                 <option value="Urgent">Urgent</option>
                                 <option value="High">High</option>
@@ -1445,14 +1510,18 @@ const EditOrderContent = () => {
                               <button
                                 type="button"
                                 onClick={() => {
+                                  if (isRowLocked) {
+                                    setShowProductionLockError(true);
+                                    return;
+                                  }
                                   setMachineModalArticleIndex(index);
                                   setMachineSearchQuery('');
                                   setShowMachineModal(true);
                                 }}
-                                disabled={isOrderLocked || isLoadingMachines || !article.productId || !canChangeMachineForArticle(article)}
+                                disabled={isRowLocked || isLoadingMachines || !article.productId || !canChangeMachineForArticle(article)}
                                 title={
-                                  isOrderLocked
-                                    ? 'Order is locked - articles in production'
+                                  isRowLocked
+                                    ? 'Article is locked - in production'
                                     : !article.productId
                                     ? 'Select factory code first'
                                     : !canChangeMachineForArticle(article)
@@ -1476,7 +1545,7 @@ const EditOrderContent = () => {
                                 placeholder="Remarks..."
                                 value={article.remarks || ''}
                                 onChange={(e) => handleArticleChange(index, 'remarks', e.target.value)}
-                                disabled={isOrderLocked || !article.productId}
+                                disabled={isRowLocked || !article.productId}
                               />
                             </td>
                             <td className="px-2 py-2 text-center">
@@ -1484,26 +1553,27 @@ const EditOrderContent = () => {
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    if (isOrderLocked) {
+                                    if (isRowLocked) {
                                       setShowProductionLockError(true);
                                     } else {
                                       requestRemoveArticle(article.id);
                                     }
                                   }}
                                   className={`w-8 h-8 flex items-center justify-center border rounded ${
-                                    isOrderLocked 
+                                    isRowLocked 
                                       ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' 
                                       : 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100'
                                   }`}
-                                  title={isOrderLocked ? "Order is locked - articles in production" : "Remove Article"}
+                                  title={isRowLocked ? "Article is locked - in production" : "Remove Article"}
                                   aria-label={`Remove article ${article.articleNumber || index + 1}`}
                                 >
-                                  <i className={`text-xs ${isOrderLocked ? 'ri-lock-line' : 'ri-delete-bin-line'}`}></i>
+                                  <i className={`text-xs ${isRowLocked ? 'ri-lock-line' : 'ri-delete-bin-line'}`}></i>
                                 </button>
                               )}
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -1606,32 +1676,21 @@ const EditOrderContent = () => {
                 <div className="flex flex-wrap justify-between items-center pt-4 border-t border-gray-100 mt-4 gap-3">
                   <button
                     type="button"
-                    className={`flex items-center gap-1.5 px-3 py-1.5 border text-[11px] font-bold rounded ${
-                      isOrderLocked 
-                        ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' 
-                        : 'bg-white border-gray-200 text-[#495057] hover:bg-gray-50'
-                    }`}
+                    className="flex items-center gap-1.5 px-3 py-1.5 border text-[11px] font-bold rounded bg-white border-gray-200 text-[#495057] hover:bg-gray-50"
                     onClick={handleReset}
-                    disabled={isOrderLocked}
                   >
                     <i className="ri-refresh-line text-xs"></i> Reset
                   </button>
                   <div className="flex flex-wrap gap-2">
                     <Link href="/production/supervisor" className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-[#495057] text-[11px] font-bold rounded hover:bg-gray-50">
-                      <i className="ri-close-line text-xs"></i> {isOrderLocked ? 'Back' : 'Cancel'}
+                      <i className="ri-close-line text-xs"></i> Cancel
                     </Link>
                     <button
                       type="submit"
-                      className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded shadow-sm disabled:opacity-60 ${
-                        isOrderLocked 
-                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                          : 'bg-purple-600 text-white hover:bg-purple-700'
-                      }`}
-                      disabled={isSubmitting || hasArticleWithoutBOM || isOrderLocked}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded shadow-sm disabled:opacity-60 bg-purple-600 text-white hover:bg-purple-700"
+                      disabled={isSubmitting || hasArticleWithoutBOM}
                       title={
-                        isOrderLocked 
-                          ? "Order is locked - articles in production cannot be modified" 
-                          : hasArticleWithoutBOM 
+                        hasArticleWithoutBOM 
                           ? "Lin BOM is missing for one or more articles" 
                           : undefined
                       }
@@ -1640,10 +1699,6 @@ const EditOrderContent = () => {
                         <>
                           <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent"></div>
                           Updating...
-                        </>
-                      ) : isOrderLocked ? (
-                        <>
-                          <i className="ri-lock-line text-xs"></i> Locked
                         </>
                       ) : (
                         <>
@@ -1777,6 +1832,11 @@ const EditOrderContent = () => {
                                 <button
                                   type="button"
                                   onClick={() => {
+                                    const modalArticle = formData.articles[machineModalArticleIndex];
+                                    if (modalArticle && isFormArticleLocked(modalArticle)) {
+                                      setShowProductionLockError(true);
+                                      return;
+                                    }
                                     handleArticleChange(machineModalArticleIndex, 'machineId', id ?? '');
                                     setShowMachineModal(false);
                                     setMachineModalArticleIndex(null);
@@ -2009,7 +2069,7 @@ const EditOrderContent = () => {
                 <i className="ri-lock-line text-2xl text-amber-600" aria-hidden />
               </div>
               <h3 id="production-lock-title" className="text-lg font-semibold text-gray-900 text-center mb-2">
-                Order Locked
+                Article Locked
               </h3>
               <p id="production-lock-desc" className="text-sm text-gray-600 text-center mb-4">
                 This article is in production and cannot be deleted or changed.
