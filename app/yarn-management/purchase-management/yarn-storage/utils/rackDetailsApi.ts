@@ -27,6 +27,7 @@ function mapYarnBoxToBoxInSlot(box: YarnBox, storageLocation: string): BoxInSlot
     createdAt: box.createdAt ?? "",
     updatedAt: box.updatedAt ?? "",
     boxWeight: box.boxWeight ?? 0,
+    grossWeight: box.grossWeight,
     lotNumber: box.lotNumber ?? "",
     numberOfCones: box.numberOfCones ?? 0,
     shadeCode: box.shadeCode ?? "",

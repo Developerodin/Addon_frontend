@@ -4,6 +4,18 @@ import {
   BoxTrackerResponse,
   ConeTrackerResponse,
 } from "@/shared/services/yarnTrackerService";
+import { resolveBoxGrossWeightKg } from "../../utils/boxWeightDisplay";
+
+/**
+ * Formats a tracker summary kg value; missing/invalid weights show as an em dash.
+ * @param value - Weight in kg
+ */
+function formatTrackerKg(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "—";
+  }
+  return String(value);
+}
 
 interface DetailRowProps {
   label: string;
@@ -50,14 +62,22 @@ export const BoxTrackerDetails: React.FC<BoxTrackerDetailsProps> = ({ data, onRe
           </button>
         ) : null}
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div
+        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"
+        role="group"
+        aria-label="Box weight summary"
+      >
         <div className="bg-purple-50 rounded-lg p-2 text-center">
           <div className="text-[10px] text-gray-500 uppercase">Current (kg)</div>
-          <div className="text-lg font-bold text-gray-900">{box.boxWeight ?? 0}</div>
+          <div className="text-lg font-bold text-gray-900">{formatTrackerKg(box.boxWeight)}</div>
         </div>
         <div className="bg-gray-50 rounded-lg p-2 text-center">
           <div className="text-[10px] text-gray-500 uppercase">Initial (kg)</div>
-          <div className="text-lg font-bold text-gray-900">{box.initialWeight ?? "—"}</div>
+          <div className="text-lg font-bold text-gray-900">{formatTrackerKg(box.initialWeight)}</div>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-2 text-center">
+          <div className="text-[10px] text-gray-500 uppercase">Gross (kg)</div>
+          <div className="text-lg font-bold text-gray-900">{formatTrackerKg(resolveBoxGrossWeightKg(box))}</div>
         </div>
         <div className="bg-gray-50 rounded-lg p-2 text-center">
           <div className="text-[10px] text-gray-500 uppercase">Net (kg)</div>

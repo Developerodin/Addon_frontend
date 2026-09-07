@@ -33,6 +33,13 @@ import {
   storageCompactSelectClass,
 } from "./storageUiClasses";
 import { fetchRackDetailsFromYarnApis } from "../utils/rackDetailsApi";
+import {
+  formatWeightKgCell,
+  resolveBoxGrossWeightKg,
+  resolveBoxNetWeightKg,
+  resolveBoxTearWeightKg,
+  resolveConeNetWeightKg,
+} from "../utils/boxWeightDisplay";
 import { QZTrayStatus } from "@/shared/components/qzTray/QZTrayStatus";
 import { printRacks } from "@/shared/utils/qzTray";
 import BarcodeScanner from "./BarcodeScanner";
@@ -87,13 +94,6 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
   onRefresh,
   preferences,
 }) => {
-  /**
-   * Format weights safely with fixed decimals (avoids JS float noise like 0.6000000000000001).
-   */
-  const formatKg = useCallback((value: unknown, decimals = 4): string => {
-    if (typeof value !== "number" || !Number.isFinite(value)) return "-";
-    return value.toFixed(decimals);
-  }, []);
   const [selectedBox, setSelectedBox] = useState<PackedBox | null>(null);
   const [isLoadingBox, setIsLoadingBox] = useState(false);
   const [scannedBoxDetails, setScannedBoxDetails] = useState<YarnBox | null>(
@@ -1042,7 +1042,7 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
       yarnId: box._id || box.id || box.boxId || box.barcode,
       yarnName: box.yarnName || "",
       batchNumber: box.lotNumber || "",
-      weight: box.boxWeight ?? 0,
+      weight: resolveBoxNetWeightKg(box) ?? box.boxWeight ?? 0,
       numberOfCones: box.numberOfCones ?? 0,
       qcApproved,
       qcApprovedDate: box.qcData?.date,
@@ -1616,9 +1616,21 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600 uppercase">Box Weight (kg)</label>
+                  <label className="text-xs font-medium text-gray-600 uppercase">Gross Weight (kg)</label>
                   <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
-                    {scannedBoxDetails.boxWeight ?? "-"}
+                    {formatWeightKgCell(resolveBoxGrossWeightKg(scannedBoxDetails))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 uppercase">Net Weight (kg)</label>
+                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                    {formatWeightKgCell(resolveBoxNetWeightKg(scannedBoxDetails))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 uppercase">Tear Weight (kg)</label>
+                  <div className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded border">
+                    {formatWeightKgCell(resolveBoxTearWeightKg(scannedBoxDetails))}
                   </div>
                 </div>
                 <div>
@@ -1663,7 +1675,10 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                             ST Storage
                           </th>
                           <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
-                            Wt (kg)
+                            Gross (kg)
+                          </th>
+                          <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                            Net (kg)
                           </th>
                         </tr>
                       </thead>
@@ -1677,7 +1692,10 @@ const ShortTermStorage: React.FC<ShortTermStorageProps> = ({
                               {c.coneStorageId || "-"}
                             </td>
                             <td className="px-4 py-2 text-sm text-gray-900 text-right">
-                              {formatKg(c.coneWeight, 4)}
+                              {formatWeightKgCell(c.coneWeight)}
+                            </td>
+                            <td className="px-4 py-2 text-sm text-gray-900 text-right">
+                              {formatWeightKgCell(resolveConeNetWeightKg(c))}
                             </td>
                           </tr>
                         ))}

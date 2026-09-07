@@ -1,12 +1,23 @@
-import { BoxInSlot, ConeInSlot } from "@/shared/services/storageSlotService";
+/** Weight fields shared by YarnBox, BoxInSlot, and transfer-modal payloads. */
+export type BoxWeightSource = {
+  boxWeight?: number | null;
+  tearweight?: number | null;
+  grossWeight?: number | null;
+};
+
+/** Cone weight fields shared by ConeInSlot and ST cone summaries. */
+export type ConeWeightSource = {
+  coneWeight?: number | null;
+  tearWeight?: number | null;
+};
 
 /**
  * Resolves box net weight (kg). `boxWeight` is net in the canonical schema;
  * falls back to boxWeight − tearweight when legacy rows stored gross in boxWeight.
- * @param box - Box in a storage slot
+ * @param box - Box with optional weight fields
  * @returns Net kg or null when no weight data
  */
-export function resolveBoxNetWeightKg(box: Pick<BoxInSlot, "boxWeight" | "tearweight" | "grossWeight">): number | null {
+export function resolveBoxNetWeightKg(box: BoxWeightSource): number | null {
   const bw = box.boxWeight;
   if (typeof bw !== "number" || !Number.isFinite(bw)) {
     return null;
@@ -28,10 +39,10 @@ export function resolveBoxNetWeightKg(box: Pick<BoxInSlot, "boxWeight" | "tearwe
 
 /**
  * Resolves box gross weight (kg) from grossWeight or boxWeight + tearweight.
- * @param box - Box in a storage slot
+ * @param box - Box with optional weight fields
  * @returns Gross kg or null when unavailable
  */
-export function resolveBoxGrossWeightKg(box: Pick<BoxInSlot, "boxWeight" | "tearweight" | "grossWeight">): number | null {
+export function resolveBoxGrossWeightKg(box: BoxWeightSource): number | null {
   const gw = box.grossWeight;
   if (typeof gw === "number" && Number.isFinite(gw) && gw > 0) {
     return gw;
@@ -49,11 +60,35 @@ export function resolveBoxGrossWeightKg(box: Pick<BoxInSlot, "boxWeight" | "tear
 }
 
 /**
+ * Resolves box tear/tare weight (kg) from stored tearweight, or gross − net.
+ * @param box - Box with optional weight fields
+ * @returns Tear kg or null when unavailable
+ */
+export function resolveBoxTearWeightKg(box: BoxWeightSource): number | null {
+  const stored = Number(box.tearweight ?? 0);
+  if (Number.isFinite(stored) && stored > 0) {
+    return stored;
+  }
+  const gross = resolveBoxGrossWeightKg(box);
+  const net = resolveBoxNetWeightKg(box);
+  if (gross != null && net != null && gross >= net) {
+    const derived = gross - net;
+    if (derived > 0.0001) {
+      return derived;
+    }
+  }
+  if (Number.isFinite(stored) && stored === 0) {
+    return 0;
+  }
+  return null;
+}
+
+/**
  * Resolves cone net weight (kg) = coneWeight − tearWeight.
- * @param cone - Cone in a storage slot
+ * @param cone - Cone with optional weight fields
  * @returns Net kg or null
  */
-export function resolveConeNetWeightKg(cone: Pick<ConeInSlot, "coneWeight" | "tearWeight">): number | null {
+export function resolveConeNetWeightKg(cone: ConeWeightSource): number | null {
   const gross = cone.coneWeight;
   if (typeof gross !== "number" || !Number.isFinite(gross)) {
     return null;
