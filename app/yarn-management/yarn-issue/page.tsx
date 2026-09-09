@@ -19,36 +19,17 @@ import AssignmentsCards, {
 } from "@/app/catalog/needle-configuration/components/AssignmentsCards";
 import YarnSummaryDrawer from "@/app/yarn-management/yarn-issue/YarnSummaryDrawer";
 import { YarnIssueActivityLogDrawer } from "@/app/yarn-management/yarn-issue/YarnIssueActivityLogDrawer";
+import {
+  getIssuedQty,
+  getRequirementStatus,
+  getArticleFilterForRequirement,
+  resolveDisplayedBom,
+  transactionMatchesOrder,
+  type IssuedQtyTransaction,
+} from "@/app/yarn-management/yarn-issue/yarnIssueIssuedQty";
+import { fetchYarnIssuedByOrder } from "@/app/yarn-management/yarn-issue/yarnIssueTransactions";
 
 type RequirementStatus = "Not Issued" | "Partially Issued" | "Issued";
-
-interface YarnTransaction {
-  _id: string;
-  yarn: {
-    _id: string;
-    status: string;
-    yarnType: {
-      status: string;
-      _id: string;
-      name: string;
-    };
-    yarnName: string;
-  };
-  yarnName: string;
-  transactionType: string;
-  transactionDate: string;
-  transactionNetWeight: number;
-  transactionTotalWeight: number;
-  transactionTearWeight: number;
-  transactionConeCount: number;
-  orderId?: string;
-  orderno: string;
-  articleId?: string;
-  articleNumber?: string;
-  createdAt: string;
-  updatedAt: string;
-  __v: number;
-}
 
 interface YarnRequirement {
   id: string;
@@ -145,69 +126,7 @@ type YarnSortField =
 
 const ISSUE_TOLERANCE_DEFAULT = 0.2;
 
-/** Optional filter to scope issued qty to a specific article. When omitted, sums across all articles in the order. */
-type ArticleFilter = { articleId?: string; articleNumber?: string } | undefined;
-
-/** Match by production order _id when present; fallback to orderno for legacy transactions.
- * When articleFilter is provided, also filters by articleId (or articleNumber for legacy transactions without articleId).
- */
-const getIssuedQty = (
-  requirement: YarnRequirement,
-  transactions: YarnTransaction[],
-  order: { id: string; orderNumber: string },
-  articleFilter?: ArticleFilter
-) => {
-  return transactions
-    .filter(
-      (t) =>
-        t.yarnName === requirement.yarnName &&
-        t.transactionType === "yarn_issued" &&
-        (t.orderId ? t.orderId === order.id : t.orderno === order.orderNumber) &&
-        (!articleFilter ||
-          (articleFilter.articleId && String(t.articleId) === String(articleFilter.articleId)) ||
-          (articleFilter.articleNumber && String(t.articleNumber) === String(articleFilter.articleNumber)))
-    )
-    .reduce((sum, t) => sum + t.transactionNetWeight, 0);
-};
-
-const getRequirementStatus = (
-  requirement: YarnRequirement,
-  transactions: YarnTransaction[],
-  order: { id: string; orderNumber: string },
-  articleFilter?: ArticleFilter
-): RequirementStatus => {
-  const issued = getIssuedQty(requirement, transactions, order, articleFilter);
-  const issuedInGrams = issued * 1000; // Convert kg to grams for comparison
-  if (issuedInGrams === 0) {
-    return "Not Issued";
-  }
-
-  if (issuedInGrams + 0.0001 < requirement.requiredQty) {
-    return "Partially Issued";
-  }
-
-  return "Issued";
-};
-
-/** Get article filter for a requirement. When single article: use selectedArticleId. When "all": extract articleId from requirement.id (format "articleId-req-..."). */
-const getArticleFilterForRequirement = (
-  requirement: YarnRequirement,
-  selectedArticleId: string | null,
-  selectedOrder: ProductionOrder | null
-): ArticleFilter => {
-  if (!selectedOrder?.articles) return undefined;
-  if (selectedArticleId && selectedArticleId !== "all") {
-    const article = selectedOrder.articles.find((a) => String(a.id || a._id) === String(selectedArticleId));
-    return article ? { articleId: article._id ?? article.id, articleNumber: article.articleNumber } : undefined;
-  }
-  // "all" view: requirement.id is "articleId-req-..." so first segment is articleId
-  const articleId = requirement.id.split("-")[0];
-  if (!articleId) return undefined;
-  const article = selectedOrder.articles.find((a) => String(a.id || a._id) === String(articleId));
-  return { articleId: article?._id ?? article?.id ?? articleId, articleNumber: article?.articleNumber };
-};
-
-const getOrderStatus = (order: ProductionOrder, transactions: YarnTransaction[]): RequirementStatus => {
+const getOrderStatus = (order: ProductionOrder, transactions: IssuedQtyTransaction[]): RequirementStatus => {
   // If BOM is empty, order is not issued yet
   if (!order.bom || order.bom.length === 0) {
     return "Not Issued";
@@ -224,7 +143,7 @@ const getOrderStatus = (order: ProductionOrder, transactions: YarnTransaction[])
 };
 
 // Get total required and issued quantities across all articles in an order
-const getOrderTotals = (order: ProductionOrder, transactions: YarnTransaction[]) => {
+const getOrderTotals = (order: ProductionOrder, transactions: IssuedQtyTransaction[]) => {
   const totals = { issued: 0, required: 0 };
   
   // If articleBoms exists, calculate total across all articles
@@ -434,9 +353,10 @@ const YarnIssuePage = () => {
   const [activityLogRefreshKey, setActivityLogRefreshKey] = useState(0);
   const [showYarnSummaryPanel, setShowYarnSummaryPanel] = useState(false);
   const [completingYarnIssue, setCompletingYarnIssue] = useState(false);
-  const [allYarnTransactions, setAllYarnTransactions] = useState<YarnTransaction[]>([]); // For order status calculations
+  const [allYarnTransactions, setAllYarnTransactions] = useState<IssuedQtyTransaction[]>([]);
   const [fetchingWeight, setFetchingWeight] = useState(false);
   const barcodeInputRef = useRef<HTMLInputElement | null>(null);
+  const selectedArticleIdRef = useRef<string | null>(null);
   const focusBarcodeInput = useCallback(() => {
     const timer = setTimeout(() => {
       barcodeInputRef.current?.focus();
@@ -469,37 +389,7 @@ const YarnIssuePage = () => {
     return () => { cancelled = true; };
   }, [showIssueModal]);
 
-  // Fetch all yarn-issued transactions for order status calculations (on initial load)
-  useEffect(() => {
-    const fetchAllTransactions = async () => {
-      if (!hasPermission) return;
-      
-      try {
-        const token = getAccessToken();
-        const response = await fetch(
-          `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued`,
-          {
-            headers: {
-              "Content-Type": "application/json",
-              ...(token && { Authorization: `Bearer ${token}` }),
-            },
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch yarn transactions");
-        }
-
-        const data = await response.json();
-        setAllYarnTransactions(data || []);
-      } catch (error) {
-        console.error("Error fetching all yarn transactions:", error);
-        // Don't show toast for this as it's a background fetch
-      }
-    };
-
-    fetchAllTransactions();
-  }, [hasPermission]);
+  selectedArticleIdRef.current = selectedArticleId;
 
   // Fetch top-items (machines with active PO items) – single API, all data included
   useEffect(() => {
@@ -533,10 +423,14 @@ const YarnIssuePage = () => {
       setSelectedArticleId(null);
       setSelectedMachineAssignmentId(null);
       setSelectedMachineAssignment(null);
+      setProductLoading(false);
+      setAllYarnTransactions([]);
       return;
     }
     setSelectedMachineAssignmentId(assignment.id);
     setSelectedMachineAssignment(assignment);
+    setProductLoading(true);
+    setAllYarnTransactions([]);
 
     const orderMap = new Map<string, { order: PopulatedOrderRef; articles: { article: PopulatedArticleRef; item: (typeof items)[0] }[] }>();
     for (const item of items) {
@@ -738,98 +632,84 @@ const YarnIssuePage = () => {
   };
 
   // Fetch BOMs for all articles when order is selected (or when machine changes and orders are replaced).
-  // Include `orders` in deps so when we switch machine we read the new orders, not a stale closure.
   useEffect(() => {
+    if (!selectedOrderId) {
+      return;
+    }
+
+    const selectedOrderForFetch = orders.find((o) => o.id === selectedOrderId);
+    if (!selectedOrderForFetch?.articles?.length) {
+      setProductLoading(false);
+      return;
+    }
+
+    // Already attempted BOM fetch for this order (including empty = no BOM) – avoid refetch loop
+    if (selectedOrderForFetch.articleBoms !== undefined) {
+      setProductLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const orderIdAtStart = selectedOrderId;
+    const articlesAtStart = selectedOrderForFetch.articles;
+
+    setProductLoading(true);
+
     const fetchAllArticleBOMs = async () => {
-      if (!selectedOrderId) {
-        return;
-      }
-
-      const selectedOrder = orders.find((o) => o.id === selectedOrderId);
-      if (!selectedOrder || !selectedOrder.articles || selectedOrder.articles.length === 0) {
-        return;
-      }
-
-      // Already attempted BOM fetch for this order (including empty = no BOM) – avoid refetch loop
-      if (selectedOrder.articleBoms !== undefined) {
-        return;
-      }
-
-      setProductLoading(true);
       try {
         const token = getAccessToken();
         const articleBoms = new Map<string, YarnRequirement[]>();
         let firstStyleCode = "";
 
-        // Fetch BOM for all articles in parallel
-        const fetchPromises = selectedOrder.articles.map(async (article) => {
+        const fetchPromises = articlesAtStart.map(async (article) => {
           const result = await fetchArticleBOM(
-            selectedOrderId,
+            orderIdAtStart,
             article.id,
             article.articleNumber,
             article.plannedQuantity || 1,
             token
           );
-          
+
           if (result) {
             articleBoms.set(article.id, result.yarnRequirements);
             if (!firstStyleCode) {
               firstStyleCode = result.styleCode;
             }
           } else {
-            articleBoms.set(article.id, []); // Mark as "no BOM" to avoid re-fetch and show empty state
+            articleBoms.set(article.id, []);
           }
-          
+
           return { articleId: article.id, result };
         });
 
         await Promise.all(fetchPromises);
+        if (cancelled) return;
 
-        // Combine all BOMs for "All" view WITHOUT aggregation
-        const allBoms: YarnRequirement[] = [];
-        articleBoms.forEach((articleBom, articleId) => {
-          articleBom.forEach((requirement) => {
-            allBoms.push({
-              ...requirement,
-              id: `${articleId}-${requirement.id}`,
-            });
-          });
-        });
-
-        // Update the order with all article BOMs
-        setOrders((prev) => {
-          const updated = prev.map((order) => {
-            if (order.id !== selectedOrderId) {
-              return order;
-            }
-            
-            // Use combined BOM by default (for "All" view)
-            const currentBom = selectedArticleId === "all" || !selectedArticleId 
-              ? allBoms 
-              : articleBoms.get(selectedArticleId) || allBoms;
-            
+        setOrders((prev) =>
+          prev.map((order) => {
+            if (order.id !== orderIdAtStart) return order;
             return {
               ...order,
               styleCode: firstStyleCode || order.styleCode,
-              bom: currentBom,
+              bom: resolveDisplayedBom(articleBoms, selectedArticleIdRef.current, order.articles),
               articleBoms,
             };
-          });
-          
-          return updated;
-        });
+          })
+        );
 
-        // Keep no active requirement by default; user must choose explicitly.
         setActiveRequirementId(null);
       } catch (error) {
         console.error("Error fetching article BOMs:", error);
-        toast.error("Failed to load product details");
+        if (!cancelled) toast.error("Failed to load product details");
       } finally {
-        setProductLoading(false);
+        if (!cancelled) setProductLoading(false);
       }
     };
 
     fetchAllArticleBOMs();
+    return () => {
+      cancelled = true;
+    };
   }, [selectedOrderId, orders]);
 
   // Update displayed BOM when article selection changes
@@ -839,62 +719,22 @@ const YarnIssuePage = () => {
     }
 
     setOrders((prev) => {
-      const selectedOrder = prev.find((o) => o.id === selectedOrderId);
-      if (!selectedOrder || !selectedOrder.articleBoms) {
+      const selectedOrderForSlice = prev.find((o) => o.id === selectedOrderId);
+      if (!selectedOrderForSlice?.articleBoms) {
         return prev;
       }
 
-      // Check if "All" is selected
-      if (selectedArticleId === "all") {
-        // Combine all yarn requirements from all articles WITHOUT aggregation
-        const allBoms: YarnRequirement[] = [];
-        
-        selectedOrder.articleBoms.forEach((articleBom, articleId) => {
-          articleBom.forEach((requirement) => {
-            // Keep each requirement separate with unique ID
-            allBoms.push({
-              ...requirement,
-              id: `${articleId}-${requirement.id}`, // Ensure unique ID per article
-            });
-          });
-        });
-        
-        const updated = prev.map((order) => {
-          if (order.id !== selectedOrderId) {
-            return order;
-          }
-          return {
-            ...order,
-            bom: allBoms,
-          };
-        });
+      const nextBom = resolveDisplayedBom(
+        selectedOrderForSlice.articleBoms,
+        selectedArticleId,
+        selectedOrderForSlice.articles
+      );
 
-        // Keep no active requirement by default; user must choose explicitly.
-        setActiveRequirementId(null);
+      setActiveRequirementId(null);
 
-        return updated;
-      } else {
-        // Show BOM for specific article
-        const articleBom = selectedOrder.articleBoms.get(selectedArticleId);
-        if (articleBom) {
-          const updated = prev.map((order) => {
-            if (order.id !== selectedOrderId) {
-              return order;
-            }
-            return {
-              ...order,
-              bom: articleBom,
-            };
-          });
-
-          // Keep no active requirement by default; user must choose explicitly.
-          setActiveRequirementId(null);
-
-          return updated;
-        }
-      }
-
-      return prev;
+      return prev.map((order) =>
+        order.id !== selectedOrderId ? order : { ...order, bom: nextBom }
+      );
     });
   }, [selectedArticleId, selectedOrderId]);
 
@@ -939,6 +779,34 @@ const YarnIssuePage = () => {
     () => filteredOrders.find((order) => order.id === selectedOrderId) ?? null,
     [filteredOrders, selectedOrderId]
   );
+
+  // Issued qty for the selected order only (abort in-flight when order changes)
+  useEffect(() => {
+    if (!hasPermission || !selectedOrder?.id || !selectedOrder.orderNumber) {
+      setAllYarnTransactions([]);
+      return;
+    }
+
+    const orderRef = { id: selectedOrder.id, orderNumber: selectedOrder.orderNumber };
+    let cancelled = false;
+    setAllYarnTransactions([]);
+
+    const loadIssued = async () => {
+      try {
+        const txs = await fetchYarnIssuedByOrder(orderRef.orderNumber, getAccessToken());
+        if (cancelled) return;
+        setAllYarnTransactions(txs.filter((t) => transactionMatchesOrder(t, orderRef)));
+      } catch (error) {
+        console.error("Error fetching yarn transactions:", error);
+        if (!cancelled) setAllYarnTransactions([]);
+      }
+    };
+
+    loadIssued();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasPermission, selectedOrder?.id, selectedOrder?.orderNumber]);
 
   // Debug: Log when selectedOrder changes (removed to prevent console spam)
   // useEffect(() => {
@@ -1344,24 +1212,17 @@ const YarnIssuePage = () => {
         }
       }
 
-      // Refresh all transactions after successful issue
-      const refreshResponse = await fetch(
-        `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued`,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            ...(token && { Authorization: `Bearer ${token}` }),
-          },
-        }
-      );
-
-      if (refreshResponse.ok) {
-        const refreshedData = await refreshResponse.json();
-        setAllYarnTransactions(refreshedData || []);
-        
+      // Refresh issued rows for this order after successful issue
+      try {
+        const refreshed = await fetchYarnIssuedByOrder(selectedOrder.orderNumber, token);
+        setAllYarnTransactions(
+          refreshed.filter((t) => transactionMatchesOrder(t, selectedOrder))
+        );
         if (showActivityLogPanel) {
           setActivityLogRefreshKey((k) => k + 1);
         }
+      } catch (refreshError) {
+        console.error("Error refreshing yarn transactions:", refreshError);
       }
 
       const updatedTotalInGrams = (currentIssued * 1000) + (totalNetWeight * 1000); // Convert both to grams for comparison
@@ -1569,6 +1430,11 @@ const YarnIssuePage = () => {
                             onClick={() => {
                               setSelectedOrderId(order.id);
                               setSelectedArticleId(order?.articles?.[0]?.id ?? null);
+                              setActiveRequirementId(null);
+                              setAllYarnTransactions([]);
+                              if (order.articleBoms === undefined) {
+                                setProductLoading(true);
+                              }
                             }}
                             className={`text-left rounded-lg border-2 p-2.5 transition-all ${
                               isSelected
