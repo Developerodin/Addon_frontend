@@ -80,14 +80,14 @@ function productLabelCss(pageBreak: boolean): string {
     .barcode svg,
     .barcode img {
       width: 44mm;
-      height: 14mm;
+      height: 9mm;
       display: block;
       object-fit: fill;
       object-position: top center;
     }
     .ean {
       margin-top: 0.28mm;
-      font-size: 2.22mm;
+      font-size: 2.35mm;
       font-weight: bold;
       letter-spacing: 0;
       word-spacing: 0.35mm;
@@ -95,20 +95,20 @@ function productLabelCss(pageBreak: boolean): string {
     }
     .legal {
       flex: 0 0 auto;
-      font-size: 1.78mm;
-      line-height: 1.22;
+      font-size: 1.98mm;
+      line-height: 1.24;
       font-weight: normal;
     }
-    .legal p { margin: 0 0 0.55mm; }
-    .legal p:last-child { margin-bottom: 0.7mm; }
+    .legal p { margin: 0 0 0.62mm; }
+    .legal p:last-child { margin-bottom: 0.78mm; }
     .legal b { font-weight: bold; }
     .details {
       flex: 0 0 auto;
-      font-size: 2mm;
-      line-height: 1.26;
+      font-size: 2.18mm;
+      line-height: 1.28;
       font-weight: bold;
     }
-    .details div { margin: 0 0 0.12mm; }
+    .details div { margin: 0 0 0.16mm; }
     .details b { font-weight: bold; }
   `;
 }
