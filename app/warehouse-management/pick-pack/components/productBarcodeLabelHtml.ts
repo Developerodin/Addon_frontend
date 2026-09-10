@@ -51,6 +51,8 @@ function productLabelCss(pageBreak: boolean): string {
     html, body {
       width: ${PRODUCT_LABEL_SIZE_MM.width}mm;
       height: ${PRODUCT_LABEL_SIZE_MM.height}mm;
+      margin: 0 !important;
+      padding: 0 !important;
       overflow: hidden;
       font-family: Arial, Helvetica, sans-serif;
       color: #000;
@@ -61,9 +63,10 @@ function productLabelCss(pageBreak: boolean): string {
     .sticker {
       width: ${PRODUCT_LABEL_SIZE_MM.width}mm;
       height: ${PRODUCT_LABEL_SIZE_MM.height}mm;
-      padding: 2.4mm 2.3mm 1.4mm;
+      padding: 0.55mm 2.1mm 1.1mm;
       display: flex;
       flex-direction: column;
+      justify-content: flex-start;
       overflow: hidden;
     }
     ${breaks}
@@ -72,17 +75,19 @@ function productLabelCss(pageBreak: boolean): string {
       display: flex;
       flex-direction: column;
       align-items: center;
-      margin-bottom: 1.2mm;
+      margin: 0 0 0.7mm;
     }
     .barcode svg,
     .barcode img {
-      width: 42mm;
-      height: 13mm;
+      width: 44mm;
+      height: 14mm;
       display: block;
+      object-fit: fill;
+      object-position: top center;
     }
     .ean {
-      margin-top: 0.45mm;
-      font-size: 2.05mm;
+      margin-top: 0.28mm;
+      font-size: 2.22mm;
       font-weight: bold;
       letter-spacing: 0;
       word-spacing: 0.35mm;
@@ -90,16 +95,16 @@ function productLabelCss(pageBreak: boolean): string {
     }
     .legal {
       flex: 0 0 auto;
-      font-size: 1.62mm;
-      line-height: 1.2;
+      font-size: 1.78mm;
+      line-height: 1.22;
       font-weight: normal;
     }
-    .legal p { margin: 0 0 0.75mm; }
-    .legal p:last-child { margin-bottom: 0.95mm; }
+    .legal p { margin: 0 0 0.55mm; }
+    .legal p:last-child { margin-bottom: 0.7mm; }
     .legal b { font-weight: bold; }
     .details {
-      flex: 1 1 auto;
-      font-size: 1.82mm;
+      flex: 0 0 auto;
+      font-size: 2mm;
       line-height: 1.26;
       font-weight: bold;
     }

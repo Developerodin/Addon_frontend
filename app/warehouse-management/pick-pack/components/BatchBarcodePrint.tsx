@@ -23,7 +23,7 @@ import { PRODUCT_LABEL_SIZE_MM } from "./productBarcodeLabelConstants";
 
 /** Rasterize JsBarcode SVG at ~2× 203dpi so QZ JavaFX HTML print stays sharp. */
 const QZ_BARCODE_PNG_W = 720;
-const QZ_BARCODE_PNG_H = 224;
+const QZ_BARCODE_PNG_H = 258;
 
 export interface BarcodePrintResult {
   batchNumber: string;
@@ -42,10 +42,11 @@ export interface BarcodePrintResult {
 function renderLabelBarcodeSvg(value: string, uid: string): { svg: string; caption: string } {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("id", `ean-${uid}`);
+  svg.setAttribute("preserveAspectRatio", "none");
   const raw = String(value || "").trim() || "0";
   const digits = raw.replace(/\D/g, "");
   const common = {
-    height: 48,
+    height: 56,
     displayValue: false,
     margin: 0,
     marginTop: 0,
