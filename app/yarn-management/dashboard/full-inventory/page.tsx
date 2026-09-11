@@ -11,6 +11,7 @@ import {
   YarnInventoryResponse,
 } from "../services/yarnInventoryService";
 import PaginationControls from "../components/PaginationControls";
+import { storageBucketNetKg } from "../utils/storageBucketNetKg";
 
 type SortField = keyof YarnInventory;
 type SortDirection = "asc" | "desc";
@@ -41,10 +42,10 @@ const FullInventoryPage = () => {
   const transformResults = useCallback(
     (results: YarnInventoryResponse[]): YarnInventory[] =>
       results.map((item) => {
-        const totalWeight =
-          item.longTermStorage.totalWeight + item.shortTermStorage.totalWeight;
-        const totalNetWeight =
-          item.longTermStorage.netWeight + item.shortTermStorage.netWeight;
+        const ltNet = storageBucketNetKg(item.longTermStorage);
+        const stNet = storageBucketNetKg(item.shortTermStorage);
+        const totalWeight = ltNet + stNet;
+        const totalNetWeight = ltNet + stNet;
         const blockedQty = item.overbooked ? totalNetWeight : 0;
         const availableQty = Math.max(0, totalNetWeight - blockedQty);
 
@@ -62,8 +63,8 @@ const FullInventoryPage = () => {
           id: item._id || inventoryYarnId(item) || item.yarnName,
           yarnName: item.yarnName,
           weight: totalWeight,
-          longTermWeight: item.longTermStorage.totalWeight,
-          shortTermWeight: item.shortTermStorage.totalWeight,
+          longTermWeight: ltNet,
+          shortTermWeight: stNet,
           conesLongTerm: item.longTermStorage.numberOfCones,
           conesShortTerm: item.shortTermStorage.numberOfCones,
           blockedQty,

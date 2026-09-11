@@ -19,6 +19,7 @@ import {
   type YarnInventorySummaryQueryParams,
 } from "./services/yarnInventoryService";
 import { useYarnDashboardExports } from "./hooks/useYarnDashboardExports";
+import { storageBucketNetKg } from "./utils/storageBucketNetKg";
 
 const DashboardPage = () => {
   const { hasSubPermission } = useNavigation();
@@ -100,11 +101,11 @@ const DashboardPage = () => {
    * - Total Weight: LT + ST (unallocated is separate)
    */
   const transformInventoryItem = useCallback((item: any): YarnInventory => {
-    const totalWeight =
-      item.longTermStorage.totalWeight + item.shortTermStorage.totalWeight;
-    const totalNetWeight =
-      item.longTermStorage.netWeight + item.shortTermStorage.netWeight;
-    const unallocatedWeight = item.unallocatedStorage?.totalWeight || 0;
+    const ltNet = storageBucketNetKg(item.longTermStorage);
+    const stNet = storageBucketNetKg(item.shortTermStorage);
+    const totalWeight = ltNet + stNet;
+    const totalNetWeight = ltNet + stNet;
+    const unallocatedWeight = storageBucketNetKg(item.unallocatedStorage);
     const blockedQty = item.blockedQty || 0;
     const availableQty = Math.max(0, totalNetWeight - blockedQty);
 
@@ -122,8 +123,8 @@ const DashboardPage = () => {
       id: item._id || inventoryYarnId(item) || item.yarnName,
       yarnName: item.yarnName,
       weight: totalWeight,
-      longTermWeight: item.longTermStorage.totalWeight,
-      shortTermWeight: item.shortTermStorage.totalWeight,
+      longTermWeight: ltNet,
+      shortTermWeight: stNet,
       unallocatedWeight,
       conesLongTerm: item.longTermStorage.numberOfCones,
       conesShortTerm: item.shortTermStorage.numberOfCones,

@@ -9,6 +9,7 @@ import {
   downloadCsvFile,
   rowsToCsv,
 } from "../utils/csvHelpers";
+import { storageBucketNetKg } from "../utils/storageBucketNetKg";
 
 /**
  * Live inventory CSV export + unallocated box-level report (PO / lot / QC).
@@ -39,11 +40,11 @@ export function useYarnDashboardExports(
       const allInventory = await yarnInventoryService.getAllYarnInventories(invParams);
 
       const exportData = allInventory.map((item) => {
-        const totalWeight =
-          item.longTermStorage.totalWeight + item.shortTermStorage.totalWeight;
-        const totalNetWeight =
-          item.longTermStorage.netWeight + item.shortTermStorage.netWeight;
-        const unallocatedWeight = item.unallocatedStorage?.totalWeight || 0;
+        const ltNet = storageBucketNetKg(item.longTermStorage);
+        const stNet = storageBucketNetKg(item.shortTermStorage);
+        const totalWeight = ltNet + stNet;
+        const totalNetWeight = ltNet + stNet;
+        const unallocatedWeight = storageBucketNetKg(item.unallocatedStorage);
         const blockedQty = item.blockedQty || 0;
         const availableQty = Math.max(0, totalNetWeight - blockedQty);
 
@@ -59,8 +60,8 @@ export function useYarnDashboardExports(
 
         return {
           "Yarn Name": item.yarnName,
-          "LTS (kg)": item.longTermStorage.totalWeight,
-          "STS (kg)": item.shortTermStorage.totalWeight,
+          "LTS (kg)": ltNet,
+          "STS (kg)": stNet,
           "Unallocated (kg)": unallocatedWeight,
           Cones: item.shortTermStorage.numberOfCones,
           "Blocked Qty (kg)": blockedQty,

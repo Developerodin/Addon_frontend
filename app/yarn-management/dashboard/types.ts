@@ -2,7 +2,7 @@ export interface YarnInventory {
   id: string;
   yarnName: string;
   weight: number; // in kg (total from LTS + STS)
-  longTermWeight: number; // total weight in long-term storage (boxes in LT)
+  longTermWeight: number; // yarn net kg in long-term storage (not carton gross)
   shortTermWeight: number; // total weight in short-term storage (cones only)
   unallocatedWeight: number; // boxes without storage location
   conesLongTerm: number; // number of cones in long-term storage (always 0)
@@ -29,7 +29,7 @@ export interface InventorySummary {
   pendingDeliveries: number; // number of pending deliveries
   inventoryAlerts: number; // number of alerts
   inventoryValue: number; // total value of inventory
-  /** Net kg in long-term storage (LTS) */
+  /** Yarn net kg in long-term storage (not carton gross) */
   longTermKg: number;
   /** Net kg in short-term storage (STS) */
   shortTermKg: number;

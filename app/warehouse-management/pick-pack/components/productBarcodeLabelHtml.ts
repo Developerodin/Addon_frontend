@@ -106,10 +106,14 @@ function productLabelCss(pageBreak: boolean): string {
       flex: 0 0 auto;
       font-size: 2.18mm;
       line-height: 1.28;
-      font-weight: bold;
+      font-weight: 900;
+      -webkit-text-stroke: 0.22px #000;
     }
     .details div { margin: 0 0 0.16mm; }
-    .details b { font-weight: bold; }
+    .details b {
+      font-weight: 900;
+      -webkit-text-stroke: 0.22px #000;
+    }
   `;
 }
 

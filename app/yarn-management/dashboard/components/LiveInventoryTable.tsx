@@ -293,7 +293,7 @@ const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
                 </th>
                 <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
                   <div>LTS (kg)</div>
-                  <div className="text-[8px] font-normal text-gray-600 normal-case">= boxWeight</div>
+                  <div className="text-[8px] font-normal text-gray-600 normal-case">= yarn net (not carton gross)</div>
                 </th>
                 <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
                   <div>STS (kg)</div>
@@ -301,7 +301,7 @@ const LiveInventoryTable: React.FC<LiveInventoryTableProps> = ({
                 </th>
                 <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
                   <div>Unallocated (kg)</div>
-                  <div className="text-[8px] font-normal text-gray-600 normal-case">= boxWeight</div>
+                  <div className="text-[8px] font-normal text-gray-600 normal-case">= yarn net (not carton gross)</div>
                 </th>
                 <th className="px-1.5 py-2.5 text-left text-[11px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
                   <div>Cones</div>
