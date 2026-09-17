@@ -104,14 +104,14 @@ function productLabelCss(pageBreak: boolean): string {
     .legal b { font-weight: bold; }
     .details {
       flex: 0 0 auto;
-      font-size: 2mm;
+      font-size: 2.4mm;
       line-height: 1.18;
       font-weight: bold;
     }
     .details div { margin: 0 0 0.06mm; }
     .details b { font-weight: bold; }
     .details .size {
-      font-size: 1.72mm;
+      font-size: 2.06mm;
       line-height: 1.16;
     }
   `;
