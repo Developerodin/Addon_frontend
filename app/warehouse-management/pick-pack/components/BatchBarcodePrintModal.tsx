@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import type { PickListBatchBarcodeLabel } from "@/shared/services/whmsPickListBatchService";
 import BatchBarcodeStyleSelector from "./BatchBarcodeStyleSelector";
+import BatchBarcodeLabelSettingsPanel from "./BatchBarcodeLabelSettingsPanel";
 
 import type { BatchBarcodeStyleOption } from "./batchBarcodeStyleListUtils";
 
@@ -61,6 +62,7 @@ export default function BatchBarcodePrintModal({
   const [printScope, setPrintScope] = useState<PrintScope>("single");
   const [selectedStyleCode, setSelectedStyleCode] = useState<string>("");
   const [remarks, setRemarks] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const selectableStyles = useMemo(
     () => styleOptions.filter((item) => Number(item.pickedQty) > 0),
@@ -101,6 +103,7 @@ export default function BatchBarcodePrintModal({
     setMode("all");
     setPrintScope("all");
     setRemarks("");
+    setSettingsOpen(false);
     setSelectedStyleCode(initialStyleCode ?? selectableStyles[0]?.styleCode ?? "");
     setCustomQty(Math.max(1, initialStyleCode
       ? Number(selectableStyles.find((i) => i.styleCode === initialStyleCode)?.pickedQty || maxQty || 1)
@@ -154,21 +157,41 @@ export default function BatchBarcodePrintModal({
       aria-modal="true"
       aria-labelledby="barcode-print-title"
     >
-      <div className="bg-white rounded-lg shadow-xl max-w-lg w-full border border-gray-200 max-h-[90vh] overflow-y-auto">
+      <div className={`bg-white rounded-lg shadow-xl w-full border border-gray-200 max-h-[90vh] overflow-y-auto ${settingsOpen ? "max-w-xl" : "max-w-lg"}`}>
         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
           <h2 id="barcode-print-title" className="text-sm font-bold text-gray-800">
-            Print Barcodes
+            {settingsOpen ? "Label type" : "Print Barcodes"}
           </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500"
-            aria-label="Close"
-          >
-            <i className="ri-close-line" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setSettingsOpen((openSettings) => !openSettings)}
+              className={`w-8 h-8 flex items-center justify-center rounded ${
+                settingsOpen
+                  ? "bg-purple-50 text-purple-700"
+                  : "hover:bg-gray-100 text-gray-500"
+              }`}
+              aria-label="Label type settings"
+              aria-pressed={settingsOpen}
+              title="Font size and boldness for Name → USP"
+            >
+              <i className="ri-settings-3-line" aria-hidden />
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500"
+              aria-label="Close"
+            >
+              <i className="ri-close-line" />
+            </button>
+          </div>
         </div>
 
+        {settingsOpen ? (
+          <BatchBarcodeLabelSettingsPanel onBack={() => setSettingsOpen(false)} />
+        ) : (
+          <>
         <div className="px-4 py-4 space-y-4 text-[12px] text-gray-600">
           <p className="text-[11px] text-gray-500">
             Batch <strong className="text-gray-800">{batchNumber}</strong>
@@ -378,6 +401,8 @@ export default function BatchBarcodePrintModal({
             )}
           </button>
         </div>
+          </>
+        )}
       </div>
     </div>
   );

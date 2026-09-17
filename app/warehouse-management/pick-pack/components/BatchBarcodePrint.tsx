@@ -20,6 +20,7 @@ import {
 } from "./productBarcodeLabelHtml";
 import { printHtmlLabelsViaQz } from "@/shared/utils/qzTrayOther";
 import { PRODUCT_LABEL_SIZE_MM } from "./productBarcodeLabelConstants";
+import { loadProductLabelTypography } from "./productBarcodeLabelSettings";
 
 /** Rasterize JsBarcode SVG at ~2× 203dpi so QZ JavaFX HTML print stays sharp. */
 const QZ_BARCODE_PNG_W = 720;
@@ -168,6 +169,8 @@ export async function printBatchBarcodeLabels(
     return false;
   }
 
+  const typography = loadProductLabelTypography();
+
   if (destination === "browser") {
     const stickers = expandStickerMarkup(labels, (label, index) => {
       const ean = String(label.eanCode || label.barcode || "").trim();
@@ -175,7 +178,11 @@ export async function printBatchBarcodeLabels(
       const { svg, caption } = renderLabelBarcodeSvg(ean, uid);
       return { markup: svg, caption };
     }).join("");
-    const html = buildProductLabelPrintDocument(`Barcodes — ${batchNumber}`, stickers);
+    const html = buildProductLabelPrintDocument(
+      `Barcodes — ${batchNumber}`,
+      stickers,
+      typography,
+    );
     return printHtmlViaHiddenFrame(html, `Print barcodes — ${batchNumber}`);
   }
 
@@ -195,7 +202,7 @@ export async function printBatchBarcodeLabels(
       const row = unique[index];
       const img = `<img src="${pngByIndex[index]}" alt="" />`;
       return { markup: img, caption: row.caption };
-    }).map((sticker) => buildSingleProductLabelDocument(sticker));
+    }).map((sticker) => buildSingleProductLabelDocument(sticker, typography));
 
     const result = await printHtmlLabelsViaQz(pages, {
       widthMm: PRODUCT_LABEL_SIZE_MM.width,

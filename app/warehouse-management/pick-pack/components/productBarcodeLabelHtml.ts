@@ -6,6 +6,11 @@ import {
   PRODUCT_LABEL_SIZE_MM,
 } from "./productBarcodeLabelConstants";
 import {
+  loadProductLabelTypography,
+  productLabelDetailsCss,
+  type ProductLabelTypography,
+} from "./productBarcodeLabelSettings";
+import {
   formatLabelRupees,
   formatManufactureMonthYear,
   formatPackToNetQuantity,
@@ -40,8 +45,9 @@ function eanCaptionHtml(caption: string): string {
 /**
  * Shared 50×70mm sticker CSS for browser print and QZ Tray HTML.
  * @param pageBreak - Insert page breaks between stickers (browser only)
+ * @param typography - Saved Name→USP size/boldness
  */
-function productLabelCss(pageBreak: boolean): string {
+function productLabelCss(pageBreak: boolean, typography: ProductLabelTypography): string {
   const breaks = pageBreak
     ? `.sticker { page-break-after: always; break-after: page; }
     .sticker:last-child { page-break-after: auto; break-after: auto; }`
@@ -104,16 +110,9 @@ function productLabelCss(pageBreak: boolean): string {
     .legal b { font-weight: bold; }
     .details {
       flex: 0 0 auto;
-      font-size: 2.4mm;
-      line-height: 1.18;
-      font-weight: bold;
     }
     .details div { margin: 0 0 0.06mm; }
-    .details b { font-weight: bold; }
-    .details .size {
-      font-size: 2.06mm;
-      line-height: 1.16;
-    }
+    ${productLabelDetailsCss(typography)}
   `;
 }
 
@@ -158,13 +157,13 @@ export function buildProductStickerHtml(
       ${escLabelHtml(l.address)}</p>
     </div>
     <div class="details">
-      <div><b>Name Of Product: ${productName}</b></div>
-      <div><b>Net Quantity: ${netQty}</b></div>
-      <div class="size"><b>Size: ${sizeLine}</b></div>
-      <div><b>Month &amp; Year of Manufacture -&nbsp;${escLabelHtml(mfg)}</b></div>
-      <div><b>STYLE: ${styleLine}</b></div>
-      <div><b>MRP: Rs.${escLabelHtml(mrp)}&nbsp;(Inclusive Of All Taxes)</b></div>
-      <div><b>USP: Rs.&nbsp;${escLabelHtml(mrp)}&nbsp;per pair</b></div>
+      <div class="line-name">Name Of Product: ${productName}</div>
+      <div class="line-net">Net Quantity: ${netQty}</div>
+      <div class="line-size">Size: ${sizeLine}</div>
+      <div class="line-mfg">Month &amp; Year of Manufacture -&nbsp;${escLabelHtml(mfg)}</div>
+      <div class="line-style">STYLE: ${styleLine}</div>
+      <div class="line-mrp">MRP: Rs.${escLabelHtml(mrp)}&nbsp;(Inclusive Of All Taxes)</div>
+      <div class="line-usp">USP: Rs.&nbsp;${escLabelHtml(mrp)}&nbsp;per pair</div>
     </div>
   </div>`;
 }
@@ -173,8 +172,13 @@ export function buildProductStickerHtml(
  * Full print document: one 50×70mm page per sticker.
  * @param title - Document title
  * @param stickersHtml - Concatenated sticker markup
+ * @param typography - Saved Name→USP type (defaults to last saved)
  */
-export function buildProductLabelPrintDocument(title: string, stickersHtml: string): string {
+export function buildProductLabelPrintDocument(
+  title: string,
+  stickersHtml: string,
+  typography: ProductLabelTypography = loadProductLabelTypography(),
+): string {
   const { width, height } = PRODUCT_LABEL_SIZE_MM;
   return `<!doctype html>
 <html>
@@ -183,7 +187,7 @@ export function buildProductLabelPrintDocument(title: string, stickersHtml: stri
   <title>${escLabelHtml(title)}</title>
   <style>
     @page { size: ${width}mm ${height}mm; margin: 0; }
-    ${productLabelCss(true)}
+    ${productLabelCss(true, typography)}
   </style>
 </head>
 <body>${stickersHtml}</body>
@@ -194,13 +198,17 @@ export function buildProductLabelPrintDocument(title: string, stickersHtml: stri
  * One 50×70mm HTML document for a single sticker (QZ Tray pixel print).
  * Same CSS as the browser document, without multi-page breaks.
  * @param stickerHtml - Markup from `buildProductStickerHtml`
+ * @param typography - Saved Name→USP type (defaults to last saved)
  */
-export function buildSingleProductLabelDocument(stickerHtml: string): string {
+export function buildSingleProductLabelDocument(
+  stickerHtml: string,
+  typography: ProductLabelTypography = loadProductLabelTypography(),
+): string {
   return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
-  <style>${productLabelCss(false)}</style>
+  <style>${productLabelCss(false, typography)}</style>
 </head>
 <body>${stickerHtml}</body>
 </html>`;
