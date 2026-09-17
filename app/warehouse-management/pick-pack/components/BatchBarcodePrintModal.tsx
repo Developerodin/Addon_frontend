@@ -157,7 +157,7 @@ export default function BatchBarcodePrintModal({
       aria-modal="true"
       aria-labelledby="barcode-print-title"
     >
-      <div className={`bg-white rounded-lg shadow-xl w-full border border-gray-200 max-h-[90vh] overflow-y-auto ${settingsOpen ? "max-w-xl" : "max-w-lg"}`}>
+      <div className={`bg-white rounded-lg shadow-xl w-full border border-gray-200 max-h-[90vh] overflow-y-auto ${settingsOpen ? "max-w-3xl" : "max-w-lg"}`}>
         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
           <h2 id="barcode-print-title" className="text-sm font-bold text-gray-800">
             {settingsOpen ? "Label type" : "Print Barcodes"}
@@ -173,7 +173,7 @@ export default function BatchBarcodePrintModal({
               }`}
               aria-label="Label type settings"
               aria-pressed={settingsOpen}
-              title="Font size and boldness for Name → USP"
+              title="Font size and boldness for the whole sticker"
             >
               <i className="ri-settings-3-line" aria-hidden />
             </button>

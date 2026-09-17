@@ -1,10 +1,16 @@
 export const PRODUCT_LABEL_TYPE_STORAGE_KEY = "addon.whms.productLabelTypography.v1";
 
 export const LABEL_FONT_MM_MIN = 1.2;
-export const LABEL_FONT_MM_MAX = 3.6;
+export const LABEL_FONT_MM_MAX = 4;
 export const LABEL_FONT_MM_STEP = 0.05;
+export const LABEL_BARCODE_MM_MIN = 5;
+export const LABEL_BARCODE_MM_MAX = 16;
 
 export const LABEL_TYPE_FIELD_IDS = [
+  "barcode",
+  "ean",
+  "legalHeading",
+  "legal",
   "name",
   "net",
   "size",
@@ -16,6 +22,7 @@ export const LABEL_TYPE_FIELD_IDS = [
 
 export type LabelTypeFieldId = (typeof LABEL_TYPE_FIELD_IDS)[number];
 export type LabelBoldness = "regular" | "bold" | "extra";
+export type LabelFieldKind = "text" | "barcode";
 
 export interface LabelTypeStyle {
   fontMm: number;
@@ -24,21 +31,47 @@ export interface LabelTypeStyle {
 
 export type ProductLabelTypography = Record<LabelTypeFieldId, LabelTypeStyle>;
 
-export const LABEL_TYPE_FIELD_META: {
+export interface LabelTypeFieldMeta {
   id: LabelTypeFieldId;
   label: string;
-  cssClass: string;
-}[] = [
-  { id: "name", label: "Name Of Product", cssClass: "line-name" },
-  { id: "net", label: "Net Quantity", cssClass: "line-net" },
-  { id: "size", label: "Size", cssClass: "line-size" },
-  { id: "mfg", label: "Month & Year of Manufacture", cssClass: "line-mfg" },
-  { id: "style", label: "STYLE", cssClass: "line-style" },
-  { id: "mrp", label: "MRP", cssClass: "line-mrp" },
-  { id: "usp", label: "USP", cssClass: "line-usp" },
+  kind: LabelFieldKind;
+  minMm: number;
+  maxMm: number;
+}
+
+export const LABEL_TYPE_FIELD_META: LabelTypeFieldMeta[] = [
+  { id: "barcode", label: "Barcode height", kind: "barcode", minMm: LABEL_BARCODE_MM_MIN, maxMm: LABEL_BARCODE_MM_MAX },
+  { id: "ean", label: "EAN number", kind: "text", minMm: LABEL_FONT_MM_MIN, maxMm: LABEL_FONT_MM_MAX },
+  { id: "legalHeading", label: "Legal headings", kind: "text", minMm: LABEL_FONT_MM_MIN, maxMm: LABEL_FONT_MM_MAX },
+  { id: "legal", label: "Legal body", kind: "text", minMm: LABEL_FONT_MM_MIN, maxMm: LABEL_FONT_MM_MAX },
+  { id: "name", label: "Name Of Product", kind: "text", minMm: LABEL_FONT_MM_MIN, maxMm: LABEL_FONT_MM_MAX },
+  { id: "net", label: "Net Quantity", kind: "text", minMm: LABEL_FONT_MM_MIN, maxMm: LABEL_FONT_MM_MAX },
+  { id: "size", label: "Size", kind: "text", minMm: LABEL_FONT_MM_MIN, maxMm: LABEL_FONT_MM_MAX },
+  { id: "mfg", label: "Month & Year of Manufacture", kind: "text", minMm: LABEL_FONT_MM_MIN, maxMm: LABEL_FONT_MM_MAX },
+  { id: "style", label: "STYLE", kind: "text", minMm: LABEL_FONT_MM_MIN, maxMm: LABEL_FONT_MM_MAX },
+  { id: "mrp", label: "MRP", kind: "text", minMm: LABEL_FONT_MM_MIN, maxMm: LABEL_FONT_MM_MAX },
+  { id: "usp", label: "USP", kind: "text", minMm: LABEL_FONT_MM_MIN, maxMm: LABEL_FONT_MM_MAX },
+];
+
+export const LABEL_TYPE_GROUPS: { title: string; fieldIds: LabelTypeFieldId[] }[] = [
+  { title: "Barcode", fieldIds: ["barcode", "ean"] },
+  { title: "Legal", fieldIds: ["legalHeading", "legal"] },
+  { title: "Product details", fieldIds: ["name", "net", "size", "mfg", "style", "mrp", "usp"] },
 ];
 
 const BOLDNESS_VALUES: LabelBoldness[] = ["regular", "bold", "extra"];
+
+/**
+ * Look up field metadata by id.
+ * @param id - Typography field id
+ */
+export function getLabelTypeFieldMeta(id: LabelTypeFieldId): LabelTypeFieldMeta {
+  const meta = LABEL_TYPE_FIELD_META.find((field) => field.id === id);
+  if (!meta) {
+    return LABEL_TYPE_FIELD_META[4];
+  }
+  return meta;
+}
 
 /**
  * Factory defaults matching the current 50×70mm print CSS.
@@ -46,6 +79,10 @@ const BOLDNESS_VALUES: LabelBoldness[] = ["regular", "bold", "extra"];
 export function createDefaultProductLabelTypography(): ProductLabelTypography {
   const detail: LabelTypeStyle = { fontMm: 2.4, boldness: "bold" };
   return {
+    barcode: { fontMm: 9, boldness: "bold" },
+    ean: { fontMm: 2.35, boldness: "bold" },
+    legalHeading: { fontMm: 1.98, boldness: "bold" },
+    legal: { fontMm: 1.98, boldness: "regular" },
     name: { ...detail },
     net: { ...detail },
     size: { fontMm: 2.06, boldness: "bold" },
@@ -57,13 +94,19 @@ export function createDefaultProductLabelTypography(): ProductLabelTypography {
 }
 
 /**
- * Clamp a font size to the allowed millimetre range.
+ * Clamp a millimetre value to a field's allowed range.
  * @param value - Raw millimetre input
+ * @param minMm - Inclusive minimum
+ * @param maxMm - Inclusive maximum
  */
-export function clampLabelFontMm(value: number): number {
+export function clampLabelFontMm(
+  value: number,
+  minMm = LABEL_FONT_MM_MIN,
+  maxMm = LABEL_FONT_MM_MAX,
+): number {
   const n = Number(value);
-  if (!Number.isFinite(n)) return 2.4;
-  const clamped = Math.min(LABEL_FONT_MM_MAX, Math.max(LABEL_FONT_MM_MIN, n));
+  if (!Number.isFinite(n)) return minMm;
+  const clamped = Math.min(maxMm, Math.max(minMm, n));
   return Number((Math.round(clamped / LABEL_FONT_MM_STEP) * LABEL_FONT_MM_STEP).toFixed(2));
 }
 
@@ -86,8 +129,9 @@ export function normalizeProductLabelTypography(raw: unknown): ProductLabelTypog
   for (const id of LABEL_TYPE_FIELD_IDS) {
     const row = source[id];
     if (!row || typeof row !== "object") continue;
+    const meta = getLabelTypeFieldMeta(id);
     next[id] = {
-      fontMm: clampLabelFontMm(Number(row.fontMm)),
+      fontMm: clampLabelFontMm(Number(row.fontMm), meta.minMm, meta.maxMm),
       boldness: parseLabelBoldness(row.boldness),
     };
   }
@@ -146,15 +190,29 @@ export function boldnessFontWeight(boldness: LabelBoldness): number {
 }
 
 /**
- * Per-line details CSS injected into the 50×70mm print stylesheet.
+ * Print CSS for barcode, EAN, legal, and Name→USP lines.
  * @param typography - Saved or default type settings
  */
 export function productLabelDetailsCss(typography: ProductLabelTypography): string {
-  const rules = LABEL_TYPE_FIELD_META.map(({ id, cssClass }) => {
-    const style = typography[id];
-    return `.details .${cssClass} { font-size: ${style.fontMm}mm; line-height: 1.18; ${boldnessCss(style.boldness)} }`;
+  const barcodeH = typography.barcode.fontMm;
+  const ean = typography.ean;
+  const legal = typography.legal;
+  const heading = typography.legalHeading;
+  const details = LABEL_TYPE_FIELD_META.filter((field) =>
+    ["name", "net", "size", "mfg", "style", "mrp", "usp"].includes(field.id),
+  ).map((field) => {
+    const style = typography[field.id];
+    return `.details .line-${field.id} { font-size: ${style.fontMm}mm; line-height: 1.18; ${boldnessCss(style.boldness)} }`;
   });
-  return rules.join("\n    ");
+  return [
+    `.barcode svg, .barcode img { width: 44mm; height: ${barcodeH}mm; display: block; object-fit: fill; object-position: top center; }`,
+    `.ean { margin-top: 0.28mm; font-size: ${ean.fontMm}mm; line-height: 1; letter-spacing: 0; word-spacing: 0.35mm; ${boldnessCss(ean.boldness)} }`,
+    `.legal { flex: 0 0 auto; font-size: ${legal.fontMm}mm; line-height: 1.24; ${boldnessCss(legal.boldness)} }`,
+    `.legal p { margin: 0 0 0.62mm; }`,
+    `.legal p:last-child { margin-bottom: 0.78mm; }`,
+    `.legal b { font-size: ${heading.fontMm}mm; ${boldnessCss(heading.boldness)} }`,
+    ...details,
+  ].join("\n    ");
 }
 
 /**

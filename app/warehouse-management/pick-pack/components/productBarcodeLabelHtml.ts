@@ -83,31 +83,6 @@ function productLabelCss(pageBreak: boolean, typography: ProductLabelTypography)
       align-items: center;
       margin: 0 0 0.7mm;
     }
-    .barcode svg,
-    .barcode img {
-      width: 44mm;
-      height: 9mm;
-      display: block;
-      object-fit: fill;
-      object-position: top center;
-    }
-    .ean {
-      margin-top: 0.28mm;
-      font-size: 2.35mm;
-      font-weight: bold;
-      letter-spacing: 0;
-      word-spacing: 0.35mm;
-      line-height: 1;
-    }
-    .legal {
-      flex: 0 0 auto;
-      font-size: 1.98mm;
-      line-height: 1.24;
-      font-weight: normal;
-    }
-    .legal p { margin: 0 0 0.62mm; }
-    .legal p:last-child { margin-bottom: 0.78mm; }
-    .legal b { font-weight: bold; }
     .details {
       flex: 0 0 auto;
     }
