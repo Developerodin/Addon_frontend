@@ -104,15 +104,15 @@ function productLabelCss(pageBreak: boolean): string {
     .legal b { font-weight: bold; }
     .details {
       flex: 0 0 auto;
-      font-size: 2.18mm;
-      line-height: 1.28;
-      font-weight: 900;
-      -webkit-text-stroke: 0.22px #000;
+      font-size: 2mm;
+      line-height: 1.18;
+      font-weight: bold;
     }
-    .details div { margin: 0 0 0.16mm; }
-    .details b {
-      font-weight: 900;
-      -webkit-text-stroke: 0.22px #000;
+    .details div { margin: 0 0 0.06mm; }
+    .details b { font-weight: bold; }
+    .details .size {
+      font-size: 1.72mm;
+      line-height: 1.16;
     }
   `;
 }
@@ -160,7 +160,7 @@ export function buildProductStickerHtml(
     <div class="details">
       <div><b>Name Of Product: ${productName}</b></div>
       <div><b>Net Quantity: ${netQty}</b></div>
-      <div><b>Size: ${sizeLine}</b></div>
+      <div class="size"><b>Size: ${sizeLine}</b></div>
       <div><b>Month &amp; Year of Manufacture -&nbsp;${escLabelHtml(mfg)}</b></div>
       <div><b>STYLE: ${styleLine}</b></div>
       <div><b>MRP: Rs.${escLabelHtml(mrp)}&nbsp;(Inclusive Of All Taxes)</b></div>
