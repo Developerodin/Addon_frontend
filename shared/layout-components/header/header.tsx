@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 const assetBase = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 import { authActions } from '@/shared/redux/actions/authActions';
 import { toggleSidebar as applySidebarToggle } from './sidebarToggle';
+import { syncThemeToDocument } from './syncThemeToDocument';
 
 const Header = ({ local_varaiable, ThemeChanger }:any) => {
   const dispatch = useDispatch();
@@ -159,31 +160,38 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
     };
   }, []);
 
-  // Sync Redux state with the real documentElement (nested <html> is a no-op in prod)
+  // Nested layout <html> is dropped by the browser, so theme attrs must live on documentElement.
   useEffect(() => {
-    if (local_varaiable.dataToggled !== undefined) {
-      if (local_varaiable.dataToggled) {
-        document.documentElement.setAttribute('data-toggled', local_varaiable.dataToggled);
-      } else {
-        document.documentElement.removeAttribute('data-toggled');
-      }
-    }
-    if (local_varaiable.iconOverlay !== undefined) {
-      if (local_varaiable.iconOverlay) {
-        document.documentElement.setAttribute('data-icon-overlay', local_varaiable.iconOverlay);
-      } else {
-        document.documentElement.removeAttribute('data-icon-overlay');
-      }
-    }
-    
-    // Ensure overlay is only active on mobile
+    syncThemeToDocument(local_varaiable);
+
     const overlay = document.querySelector("#responsive-overlay");
-    if (overlay) {
-      if (window.innerWidth >= 992) {
-        overlay.classList.remove("active");
-      }
+    if (overlay && window.innerWidth >= 992) {
+      overlay.classList.remove("active");
     }
-  }, [local_varaiable.dataToggled, local_varaiable.iconOverlay]);
+  }, [
+    local_varaiable.class,
+    local_varaiable.dir,
+    local_varaiable.dataHeaderStyles,
+    local_varaiable.dataVerticalStyle,
+    local_varaiable.dataNavLayout,
+    local_varaiable.dataMenuStyles,
+    local_varaiable.dataToggled,
+    local_varaiable.dataNavStyle,
+    local_varaiable.horStyle,
+    local_varaiable.dataPageStyle,
+    local_varaiable.dataWidth,
+    local_varaiable.dataMenuPosition,
+    local_varaiable.dataHeaderPosition,
+    local_varaiable.iconOverlay,
+    local_varaiable.bgImg,
+    local_varaiable.iconText,
+    local_varaiable.colorPrimaryRgb,
+    local_varaiable.colorPrimary,
+    local_varaiable.darkBg,
+    local_varaiable.bodyBg,
+    local_varaiable.inputBorder,
+    local_varaiable.Light,
+  ]);
 
 
   /**

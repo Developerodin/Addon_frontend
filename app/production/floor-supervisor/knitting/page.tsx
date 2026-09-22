@@ -1795,8 +1795,13 @@ const KnittingFloorSupervisorPage = () => {
       {(showUpdateModal || showViewModal) && selectedOrder && (
         <>
           <div className="fixed inset-0 bg-black/50 z-40" onClick={() => { closeUpdateModal(); closeViewModal(); }} aria-hidden />
-          <div className="fixed inset-y-0 right-0 w-full max-w-4xl bg-white shadow-2xl z-50 flex flex-col animate-slide-in-right overflow-hidden">
-            <div className="flex-1 overflow-y-auto flex flex-col p-4">
+          <div
+            className="fixed inset-y-0 right-0 z-50 flex h-dvh max-h-dvh w-full min-h-0 max-w-4xl flex-col overflow-hidden bg-white shadow-2xl animate-slide-in-right"
+            role="dialog"
+            aria-modal="true"
+            aria-label={showUpdateModal ? `Update order ${selectedOrder.orderNumber}` : `View order ${selectedOrder.orderNumber}`}
+          >
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain p-4 touch-pan-y">
               {/* Update Order content */}
               {showUpdateModal && (
                 <>
@@ -1878,9 +1883,9 @@ const KnittingFloorSupervisorPage = () => {
               </p>
             )}
             {/* Main row 8 cols; second row = Remarks (full height) + Status / Yarn when from machine */}
-            <div className="border border-gray-300 rounded overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse border border-gray-300 text-[10px] table-fixed">
+            <div className="min-w-0 border border-gray-300 rounded">
+              <div className="overflow-x-auto overscroll-x-contain">
+                <table className="w-full min-w-[720px] border-collapse border border-gray-300 text-[10px] table-fixed">
                   <colgroup>
                     <col className="w-[16%]" />
                     <col className="w-[8%]" />

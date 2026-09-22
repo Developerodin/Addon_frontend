@@ -1,25 +1,7 @@
 import store from "@/shared/redux/store";
+import { syncThemeToDocument } from "./syncThemeToDocument";
 
 type ThemeChangerFn = (theme: Record<string, unknown>) => void;
-
-/**
- * Writes sidebar attributes onto the real <html> node.
- * Nested layout <html> tags are ignored by the browser in production,
- * so CSS [data-toggled] would never apply without this.
- */
-function syncToggleAttrs(dataToggled: string, iconOverlay = ""): void {
-  const root = document.documentElement;
-  if (dataToggled) {
-    root.setAttribute("data-toggled", dataToggled);
-  } else {
-    root.removeAttribute("data-toggled");
-  }
-  if (iconOverlay) {
-    root.setAttribute("data-icon-overlay", iconOverlay);
-  } else {
-    root.removeAttribute("data-icon-overlay");
-  }
-}
 
 /**
  * Toggles the mobile overlay class used below the 992px breakpoint.
@@ -44,8 +26,9 @@ export function toggleSidebar(ThemeChanger: ThemeChangerFn): void {
   if (!isDesktop) {
     const opening = current === "close" || current === "";
     const dataToggled = opening ? "open" : "close";
-    ThemeChanger({ ...theme, dataToggled });
-    syncToggleAttrs(dataToggled);
+    const next = { ...theme, dataToggled, iconOverlay: "" };
+    ThemeChanger(next);
+    syncThemeToDocument(next);
     setMobileOverlay(opening);
     return;
   }
@@ -67,12 +50,7 @@ export function toggleSidebar(ThemeChanger: ThemeChangerFn): void {
 
   const closedValue = closedByNav[navStyle] || closedByStyle[verticalStyle] || "icon-overlay-close";
   const dataToggled = current === closedValue ? "" : closedValue;
-
-  ThemeChanger({
-    ...theme,
-    dataToggled,
-    iconOverlay: "",
-    ...(navStyle ? {} : { dataNavStyle: theme.dataNavStyle }),
-  });
-  syncToggleAttrs(dataToggled, "");
+  const next = { ...theme, dataToggled, iconOverlay: "" };
+  ThemeChanger(next);
+  syncThemeToDocument(next);
 }
