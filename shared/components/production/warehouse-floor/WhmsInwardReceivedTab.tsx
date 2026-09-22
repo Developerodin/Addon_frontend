@@ -301,7 +301,7 @@ export default function WhmsInwardReceivedTab({
                         {(r.QuantityFromFactory ?? 0).toLocaleString()}
                       </td>
                       <td
-                        className="px-2 py-1.5 border-r border-gray-300 max-w-[120px] truncate font-medium text-gray-900"
+                        className="px-2 py-1.5 border-r border-gray-300 whitespace-nowrap font-medium text-gray-900"
                         title={
                           isMongoObjectIdString(r.styleCode)
                             ? `${inwardReceiveDisplayStyleCode(r, styleCodeMaps)} · id ${r.styleCode}`
@@ -310,7 +310,7 @@ export default function WhmsInwardReceivedTab({
                       >
                         {inwardReceiveDisplayStyleCode(r, styleCodeMaps)}
                       </td>
-                      <td className="px-2 py-1.5 border-r border-gray-300 max-w-[100px] truncate text-gray-800" title={r.brand}>
+                      <td className="px-2 py-1.5 border-r border-gray-300 whitespace-nowrap text-gray-800" title={r.brand}>
                         {r.brand || "—"}
                       </td>
                       <td className="px-2 py-1.5 border-r border-gray-300 text-gray-600 whitespace-nowrap text-[10px]">
