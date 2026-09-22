@@ -114,6 +114,10 @@ export async function printVendorBoxLabels(
     toast.error("No barcodes on boxes");
     return;
   }
+  const missingBarcode = boxesToPrint.length - conesToPrint.length;
+  if (missingBarcode > 0) {
+    toast.error(`${missingBarcode} box(es) have no barcode and were skipped`);
+  }
   const result = await printCones(conesToPrint, { customSettings: defaultVendorLabelPrintSettings() });
   const scope = opts?.scopeLabel ? ` for ${opts.scopeLabel}` : "";
   if (result.success) toast.success(`Printed ${result.printed} label(s)${scope}`);

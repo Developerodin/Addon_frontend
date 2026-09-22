@@ -217,3 +217,23 @@ export function groupVendorBoxesByLot(
   });
   return { grouped, sortedLots, unassigned };
 }
+
+/**
+ * Toggle box ids in a selection map.
+ * One missing id selects the whole group; if every id is already selected, the group is cleared.
+ * @param selected - Current id → selected map
+ * @param ids - Box ids to toggle together
+ */
+export function toggleVendorBoxIds(
+  selected: Record<string, boolean>,
+  ids: string[]
+): Record<string, boolean> {
+  const next = { ...selected };
+  const selectAll = ids.some((id) => id && !selected[id]);
+  for (const id of ids) {
+    if (!id) continue;
+    if (selectAll) next[id] = true;
+    else delete next[id];
+  }
+  return next;
+}

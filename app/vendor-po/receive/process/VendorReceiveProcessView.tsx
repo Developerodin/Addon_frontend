@@ -9,12 +9,11 @@ import { QZTrayLoader, QZTrayStatus, QZTrayUntrustedWarning, QZTrayRequestBlocke
 import vendorPurchaseOrderService, { VendorPurchaseOrder } from "@/shared/services/vendorPurchaseOrderService";
 import vendorBoxService, { VendorBox } from "@/shared/services/vendorBoxService";
 import { lotDetailsForBulkBoxes } from "../../utils/vendorPoFlow";
-import { dashOr, vendorCodeFromPoLineItem } from "../../components/vendorPacklistHelpers";
 import {
   getVendorBoxId,
-  getVendorLotReceivedLines,
   MAX_VENDOR_BOX_UNITS,
   resolveVendorBoxArticleFromPo,
+  toggleVendorBoxIds,
 } from "./vendorReceiveProcessHelpers";
 import {
   exportVendorBoxesExcel,
@@ -23,6 +22,7 @@ import {
   type VendorBoxFormRow,
 } from "./vendorReceiveProcessPrintExport";
 import { VendorReceiveProcessBoxTables } from "./VendorReceiveProcessBoxTables";
+import { VendorReceiveProcessSummaryTables } from "./VendorReceiveProcessSummaryTables";
 
 function readVendorName(v: VendorPurchaseOrder["vendor"]): string {
   if (!v || typeof v === "string") return typeof v === "string" ? v : "";
@@ -44,7 +44,9 @@ export function VendorReceiveProcessView({ orderId }: Props) {
   const [rawInput, setRawInput] = useState<Record<string, string>>({});
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [printingSelected, setPrintingSelected] = useState(false);
   const [printingLot, setPrintingLot] = useState<string | null>(null);
+  const [selectedBoxIds, setSelectedBoxIds] = useState<Record<string, boolean>>({});
   const [isExporting, setIsExporting] = useState(false);
   const [itemsOpen, setItemsOpen] = useState(false);
   const [qz, setQz] = useState({ connected: false, printer: null as { name: string } | null });
@@ -225,6 +227,25 @@ export function VendorReceiveProcessView({ orderId }: Props) {
     }
   };
 
+  const handlePrintSelected = async () => {
+    if (!apiPo) return;
+    const picked = boxes.filter((b) => selectedBoxIds[getVendorBoxId(b)]);
+    if (!picked.length) {
+      toast.error("Select at least one box");
+      return;
+    }
+    setPrintingSelected(true);
+    try {
+      await printVendorBoxLabels(apiPo, picked, boxData, {
+        scopeLabel: `${picked.length} selected box${picked.length === 1 ? "" : "es"}`,
+      });
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Print failed");
+    } finally {
+      setPrintingSelected(false);
+    }
+  };
+
   const handlePrintLot = async (lot: string, lotBoxes: VendorBox[]) => {
     if (!apiPo) return;
     if (!lotBoxes.length) {
@@ -335,10 +356,28 @@ export function VendorReceiveProcessView({ orderId }: Props) {
               {boxes.length > 0 && (
                 <button
                   type="button"
+                  onClick={() => void handlePrintSelected()}
+                  disabled={!qz.connected || !qz.printer || isPrinting || printingSelected || !boxes.some((b) => selectedBoxIds[getVendorBoxId(b)])}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded transition-colors shadow-sm ${
+                    qz.connected && qz.printer && !isPrinting && !printingSelected && boxes.some((b) => selectedBoxIds[getVendorBoxId(b)])
+                      ? "bg-white text-purple-700 border border-purple-300 hover:bg-purple-50"
+                      : "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed"
+                  }`}
+                  title="Print barcodes for the checked boxes only"
+                >
+                  {printingSelected ? <i className="ri-loader-4-line animate-spin text-xs" /> : <i className="ri-checkbox-multiple-line text-xs" />}
+                  {printingSelected
+                    ? "Printing selected..."
+                    : `Print selected (${boxes.filter((b) => selectedBoxIds[getVendorBoxId(b)]).length})`}
+                </button>
+              )}
+              {boxes.length > 0 && (
+                <button
+                  type="button"
                   onClick={() => void handlePrintAll()}
-                  disabled={!qz.connected || !qz.printer || isPrinting}
+                  disabled={!qz.connected || !qz.printer || isPrinting || printingSelected}
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-white text-[11px] font-bold rounded transition-colors shadow-sm ${
-                    qz.connected && qz.printer && !isPrinting ? "bg-purple-600 hover:bg-purple-700" : "bg-gray-400 cursor-not-allowed"
+                    qz.connected && qz.printer && !isPrinting && !printingSelected ? "bg-purple-600 hover:bg-purple-700" : "bg-gray-400 cursor-not-allowed"
                   }`}
                   title={!qz.connected ? "Start QZ Tray" : !qz.printer ? "Select printer" : "Print all labels"}
                 >
@@ -382,170 +421,7 @@ export function VendorReceiveProcessView({ orderId }: Props) {
             </div>
           </div>
 
-          {poItems.length > 0 && (
-            <div className="mb-4 bg-gray-50 rounded-lg border border-gray-200 overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setItemsOpen(!itemsOpen)}
-                className="w-full px-3 py-2.5 flex items-center justify-between hover:bg-gray-100 transition-colors"
-              >
-                <span className="text-xs font-bold text-gray-800">Order lines</span>
-                <i className={`ri-arrow-${itemsOpen ? "up" : "down"}-s-line text-gray-600 text-sm transition-transform`} />
-              </button>
-              {itemsOpen && (
-                <div className="px-3 pb-3 overflow-x-auto">
-                  <table className="w-full border-collapse border border-gray-200">
-                    <thead>
-                      <tr className="bg-gray-50/30">
-                        <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                          Product
-                        </th>
-                        <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                          Vendor code
-                        </th>
-                        <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                          Type
-                        </th>
-                        <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                          Color
-                        </th>
-                        <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                          Pattern
-                        </th>
-                        <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">
-                          Qty
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {poItems.map((it, i) => (
-                        <tr key={i} className="hover:bg-gray-50/50">
-                          <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200">{it.productName || "—"}</td>
-                          <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200">
-                            {vendorCodeFromPoLineItem(it) || "no vendor code"}
-                          </td>
-                          <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200">{dashOr(it.type)}</td>
-                          <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200">{dashOr(it.color)}</td>
-                          <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200">{dashOr(it.pattern)}</td>
-                          <td className="px-1.5 py-2 text-[11px] text-right text-gray-700 border border-gray-200">
-                            {Number(it.quantity || 0)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {hasLots && (
-            <div className="mb-4 rounded-md border border-gray-200 overflow-x-auto">
-              <table className="w-full border-collapse border border-gray-200">
-                <thead>
-                  <tr className="bg-gray-50/30">
-                    <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Invoice</th>
-                    <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Product</th>
-                    <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Vendor code</th>
-                    <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Type</th>
-                    <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Color</th>
-                    <th className="px-1.5 py-2 text-left text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Pattern</th>
-                    <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Received qty</th>
-                    <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Boxes</th>
-                    <th className="px-1.5 py-2 text-right text-[10px] font-bold text-[#495057] uppercase tracking-wider border border-gray-200">Total boxes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lotRows.map((l) => {
-                    const lines = getVendorLotReceivedLines(apiPo, l);
-                    return (
-                    <tr key={l.lotNumber} className="hover:bg-gray-50/50">
-                      <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200 align-top">{l.lotNumber}</td>
-                      <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200 align-top">
-                        {lines.length === 0 ? (
-                          "—"
-                        ) : (
-                          <div className="flex flex-col gap-0.5">
-                            {lines.map((row, i) => (
-                              <span key={i}>{row.productName.trim() || "—"}</span>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200 align-top">
-                        {lines.length === 0 ? (
-                          "—"
-                        ) : (
-                          <div className="flex flex-col gap-0.5">
-                            {lines.map((row, i) => (
-                              <span key={i}>{row.vendorCode || "no vendor code"}</span>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200 align-top">
-                        {lines.length === 0 ? (
-                          "—"
-                        ) : (
-                          <div className="flex flex-col gap-0.5">
-                            {lines.map((row, i) => (
-                              <span key={i}>{dashOr(row.type)}</span>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200 align-top">
-                        {lines.length === 0 ? (
-                          "—"
-                        ) : (
-                          <div className="flex flex-col gap-0.5">
-                            {lines.map((row, i) => (
-                              <span key={i}>{dashOr(row.color)}</span>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-1.5 py-2 text-[11px] text-gray-700 border border-gray-200 align-top">
-                        {lines.length === 0 ? (
-                          "—"
-                        ) : (
-                          <div className="flex flex-col gap-0.5">
-                            {lines.map((row, i) => (
-                              <span key={i}>{dashOr(row.pattern)}</span>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-1.5 py-2 text-[11px] text-right text-gray-700 border border-gray-200 tabular-nums align-top">
-                        {lines.length === 0 ? (
-                          "—"
-                        ) : (
-                          <div className="flex flex-col gap-0.5 items-end">
-                            {lines.map((row, i) => (
-                              <span key={i}>{row.quantity}</span>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-1.5 py-2 text-[11px] text-right text-gray-700 border border-gray-200 tabular-nums align-top">
-                        {lines.length === 0 ? (
-                          "—"
-                        ) : (
-                          <div className="flex flex-col gap-0.5 items-end">
-                            {lines.map((row, i) => (
-                              <span key={i}>{row.boxes}</span>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-1.5 py-2 text-[11px] text-right text-gray-700 border border-gray-200 align-top">{l.numberOfBoxes}</td>
-                    </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <VendorReceiveProcessSummaryTables apiPo={apiPo} itemsOpen={itemsOpen} setItemsOpen={setItemsOpen} />
 
           {boxes.length === 0 && hasLots && (
             <button
@@ -575,6 +451,9 @@ export function VendorReceiveProcessView({ orderId }: Props) {
             resyncingLot={resyncingLot}
             onPrintLot={handlePrintLot}
             printingLot={printingLot}
+            selectedBoxIds={selectedBoxIds}
+            onToggleBox={(id) => setSelectedBoxIds((prev) => toggleVendorBoxIds(prev, [id]))}
+            onToggleBoxes={(list) => setSelectedBoxIds((prev) => toggleVendorBoxIds(prev, list.map(getVendorBoxId)))}
             qzReady={qz.connected && !!qz.printer}
             barcodeRef={barcodeRef}
             barcodeScanValue={barcodeScanValue}

@@ -1767,6 +1767,21 @@ export const printRacks = async (
 };
 
 /**
+ * Send ZPL labels in small jobs.
+ * One `qz.print` of every label is a single spool job; this printer stops partway
+ * (40 box labels in, about 33 out) once that job gets too large.
+ * @param config - QZ config from `getQZConfig`
+ * @param labels - Complete `^XA`…`^XZ` documents
+ */
+const sendZplLabels = async (config: unknown, labels: string[]): Promise<void> => {
+  const LABELS_PER_JOB = 8;
+  for (let i = 0; i < labels.length; i += LABELS_PER_JOB) {
+    const job = labels.slice(i, i + LABELS_PER_JOB).join("");
+    await window.qz.print(config, [job]);
+  }
+};
+
+/**
  * Print Cone QR Labels using QZ Tray
  * Supports custom settings for paper size, labels per page, columns, cut lines, etc.
  */
@@ -1887,7 +1902,7 @@ export const printCones = async (
         labels.push(zpl);
       }
 
-      await window.qz.print(config, labels);
+      await sendZplLabels(config, labels);
       return { success: true, printed: cones.length };
     } else {
       const labels = cones.map(cone =>
@@ -1902,7 +1917,7 @@ export const printCones = async (
           shadePrefix: cone.shadePrefix,
         })
       );
-      await window.qz.print(config, labels);
+      await sendZplLabels(config, labels);
       return { success: true, printed: labels.length };
     }
   } catch (error: any) {
