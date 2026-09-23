@@ -131,7 +131,9 @@ export function VendorSecondaryCheckingScanDrawer({
       const result = await vendorBoxService.lookupForSecondaryChecking(trimmed);
       setLookup(result);
       if (result.alreadyAccepted) {
-        toast.error("This box has already been accepted on secondary checking");
+        toast(
+          "Already accepted — use Sync to floor if this box is missing from the article list.",
+        );
       } else if (!result.canAccept) {
         toast.error("Box has no units to accept");
       }
@@ -145,18 +147,23 @@ export function VendorSecondaryCheckingScanDrawer({
 
   const handleAccept = useCallback(async () => {
     const trimmed = barcode.trim();
-    if (!trimmed || !lookup?.canAccept) return;
+    const canRepairAccepted = Boolean(
+      lookup?.alreadyAccepted && Number(lookup.box?.numberOfUnits) > 0,
+    );
+    if (!trimmed || (!lookup?.canAccept && !canRepairAccepted)) return;
 
     setAccepting(true);
     try {
       const result = await vendorBoxService.scanAccept(trimmed);
       const vpoNumber = result.vpoNumber || result.box.vpoNumber || "—";
       const productName = result.productName || result.box.productName || "—";
-      const groupingLabel = result.isNewOrder
-        ? "New order started"
-        : result.isNewArticle
-          ? "New article in order"
-          : "Added to existing order";
+      const groupingLabel = lookup?.alreadyAccepted
+        ? "Synced to floor"
+        : result.isNewOrder
+          ? "New order started"
+          : result.isNewArticle
+            ? "New article in order"
+            : "Added to existing order";
 
       toast.success(
         `${vpoNumber} · ${productName} · ${result.acceptedUnits} units — ${groupingLabel}`,
@@ -181,7 +188,7 @@ export function VendorSecondaryCheckingScanDrawer({
     } finally {
       setAccepting(false);
     }
-  }, [barcode, closeOnAccept, lookup?.canAccept, onAccepted, onClose, resetForm]);
+  }, [barcode, closeOnAccept, lookup, onAccepted, onClose, resetForm]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
@@ -193,6 +200,10 @@ export function VendorSecondaryCheckingScanDrawer({
   if (!open) return null;
 
   const detailRows = lookup ? buildDetailRows(lookup) : null;
+  const canRepairAccepted = Boolean(
+    lookup?.alreadyAccepted && Number(lookup.box?.numberOfUnits) > 0,
+  );
+  const canSubmitScan = Boolean(lookup?.canAccept || canRepairAccepted);
 
   return (
     <>
@@ -313,7 +324,8 @@ export function VendorSecondaryCheckingScanDrawer({
               </div>
               {lookup.alreadyAccepted && (
                 <div className="mx-3 mb-3 px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-[10px] font-bold text-amber-800">
-                  Already accepted — scan a different box.
+                  Already accepted — Sync to floor re-applies this box onto
+                  the article list. It does not add quantity twice.
                 </div>
               )}
             </section>
@@ -332,19 +344,26 @@ export function VendorSecondaryCheckingScanDrawer({
           <button
             type="button"
             onClick={() => void handleAccept()}
-            disabled={!lookup?.canAccept || accepting || lookingUp}
+            disabled={!canSubmitScan || accepting || lookingUp}
             className="inline-flex items-center gap-1.5 px-4 py-2 bg-purple-600 text-white text-[11px] font-bold rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label="Accept box on secondary checking"
+            aria-label={
+              lookup?.alreadyAccepted
+                ? "Sync already-accepted box to secondary checking floor"
+                : "Accept box on secondary checking"
+            }
           >
             {accepting ? (
               <>
                 <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white" />
-                Accepting…
+                {lookup?.alreadyAccepted ? "Syncing…" : "Accepting…"}
               </>
             ) : (
               <>
-                <i className="ri-check-double-line text-xs" aria-hidden="true" />
-                Accept Box
+                <i
+                  className={`${lookup?.alreadyAccepted ? "ri-refresh-line" : "ri-check-double-line"} text-xs`}
+                  aria-hidden="true"
+                />
+                {lookup?.alreadyAccepted ? "Sync to floor" : "Accept Box"}
               </>
             )}
           </button>
