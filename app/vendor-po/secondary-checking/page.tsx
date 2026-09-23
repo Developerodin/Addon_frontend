@@ -56,10 +56,21 @@ const SecondaryCheckingPage = () => {
   const loadFlows = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true);
     try {
-      const data = await vendorProductionFlowService.list(
-        productionFlowListParams("secondaryChecking"),
-      );
-      setFlows(data.results || []);
+      const params = productionFlowListParams("secondaryChecking");
+      const collected: VendorProductionFlow[] = [];
+      let page = 1;
+      let total = Number.POSITIVE_INFINITY;
+      // The list API is oldest-first and capped at 100. A newly accepted
+      // article is the newest row, so page 1 never contains it.
+      while (collected.length < total && page <= 20) {
+        const data = await vendorProductionFlowService.list({ ...params, page });
+        const batch = data.results || [];
+        total = data.totalResults ?? collected.length + batch.length;
+        collected.push(...batch);
+        if (batch.length === 0 || batch.length < params.limit) break;
+        page += 1;
+      }
+      setFlows(collected);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to load production flows");
     } finally {
@@ -216,34 +227,34 @@ const SecondaryCheckingPage = () => {
 
   const handleBoxScanAccepted = useCallback(
     async (result: ScanAcceptResponse) => {
-      if (result.flow) {
-        const raw = result.flow as VendorProductionFlow & { _id?: string };
-        const incoming: VendorProductionFlow = {
-          ...raw,
-          id: raw.id || String(raw._id || ""),
-        };
-        const fId = getFlowId(incoming);
-        setFlows((prev) => {
-          const exists = prev.some((f) => getFlowId(f) === fId);
-          if (exists) {
-            return prev.map((f) =>
-              getFlowId(f) === fId
-                ? mergeProductionFlowPreservePopulatedRefs(f, incoming)
-                : f,
-            );
-          }
-          return [incoming, ...prev];
-        });
-        setHighlightFlowId(fId);
-        setHighlightVpoId(getVpoId(incoming));
-        if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-        highlightTimerRef.current = setTimeout(() => {
-          setHighlightFlowId(null);
-          setHighlightVpoId(null);
-        }, 5000);
-      }
       setUpcomingRefreshKey((k) => k + 1);
       await loadFlows({ silent: true });
+      if (!result.flow) return;
+
+      const raw = result.flow as VendorProductionFlow & { _id?: string };
+      const incoming: VendorProductionFlow = {
+        ...raw,
+        id: raw.id || String(raw._id || ""),
+      };
+      const fId = getFlowId(incoming);
+      setFlows((prev) => {
+        const exists = prev.some((f) => getFlowId(f) === fId);
+        if (exists) {
+          return prev.map((f) =>
+            getFlowId(f) === fId
+              ? mergeProductionFlowPreservePopulatedRefs(f, incoming)
+              : f,
+          );
+        }
+        return [incoming, ...prev];
+      });
+      setHighlightFlowId(fId);
+      setHighlightVpoId(getVpoId(incoming));
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+      highlightTimerRef.current = setTimeout(() => {
+        setHighlightFlowId(null);
+        setHighlightVpoId(null);
+      }, 5000);
     },
     [loadFlows],
   );
