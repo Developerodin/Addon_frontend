@@ -17,7 +17,7 @@ import {
   buildBrandOptionsFromProduct,
   collapseLinesByBrand,
   formatBrandLine,
-  toBrandOnlyTransferItems,
+  toBrandingFloorTransferItems,
   validateBrandTransferItems,
 } from "@/shared/utils/brandTransfer.util";
 import { HALF_STEP_QTY_ERROR } from "@/shared/utils/halfStepQuantity";
@@ -582,11 +582,15 @@ const BrandingFloorSupervisorPage = () => {
         const update = updateData[articleId];
         const brandingTransferredQuantity = article.floorQuantities?.branding?.transferred || 0;
         const newTransferQty = getTransferTotal(update?.transferItems ?? []);
+        const hasCatalogBrands = (articleBrandOptions[articleId]?.length ?? 0) > 0;
         const hasChanges =
           newTransferQty > 0 ||
           update?.remarks !== (article.remarks || "");
         if (update && hasChanges) {
-          const validItems = toBrandOnlyTransferItems(update.transferItems ?? []);
+          const validItems = toBrandingFloorTransferItems(update.transferItems ?? [], hasCatalogBrands);
+          if (newTransferQty > 0 && validItems.length === 0) {
+            throw new Error(`${article.articleNumber ?? articleId}: select a brand for the transfer qty`);
+          }
           const userId = user?.id ?? user?._id;
           const floorSupervisorId = user?.id ?? user?._id;
           if (!userId || !floorSupervisorId) {
@@ -627,7 +631,9 @@ const BrandingFloorSupervisorPage = () => {
       const failedUpdates = results.filter(result => result.status === 'rejected');
       if (failedUpdates.length > 0) {
         console.error('Some updates failed:', failedUpdates);
-        toast.error(`${failedUpdates.length} article(s) failed to update`);
+        const firstReason = failedUpdates[0].status === "rejected" ? failedUpdates[0].reason : null;
+        const message = firstReason instanceof Error ? firstReason.message : `${failedUpdates.length} article(s) failed to update`;
+        toast.error(message);
       } else {
         toast.success('Order updated successfully');
       }
@@ -1359,6 +1365,8 @@ const BrandingFloorSupervisorPage = () => {
                 const transferredQty = article.floorQuantities?.branding?.transferred || 0;
                 const remainingQty = receivedQty - transferredQty;
                 const isFullyTransferred = remainingQty <= 0;
+                const brandOptions = articleBrandOptions[articleId] ?? [];
+                const noCatalogBrands = !articleBrandsLoading && brandOptions.length === 0;
 
                 return (
                   <div key={articleId} className="border border-gray-300 rounded overflow-hidden bg-white">
@@ -1454,17 +1462,23 @@ const BrandingFloorSupervisorPage = () => {
                           <span className="text-green-600 text-xs font-medium">✓ All transferred</span>
                         )}
                       </div>
+                      {noCatalogBrands && !isFullyTransferred && (
+                        <p className="text-[11px] text-amber-800 mb-1.5">
+                          Product {article.articleNumber || "this article"} has no brands in catalog. Enter transfer qty only.
+                        </p>
+                      )}
                       <BrandTransferItemsInput
                         value={currentUpdateData.transferItems ?? [{ transferred: 0, styleCode: "", brand: "" }]}
                         onChange={(items) => handleTransferItemsChange(articleId, items)}
                         maxTotal={remainingQty}
-                        disabled={isFullyTransferred || articleBrandsLoading || (articleBrandOptions[articleId]?.length ?? 0) === 0}
-                        brandOptions={articleBrandOptions[articleId] ?? []}
+                        disabled={isFullyTransferred || articleBrandsLoading}
+                        unbranded={noCatalogBrands}
+                        brandOptions={brandOptions}
                         placeholder={
                           articleBrandsLoading
                             ? "Loading brands..."
-                            : (articleBrandOptions[articleId]?.length ?? 0) === 0
-                              ? "No brands for this product"
+                            : noCatalogBrands
+                              ? "Enter transfer qty (max: remaining)"
                               : "Add new transfer lines (max: remaining)"
                         }
                       />

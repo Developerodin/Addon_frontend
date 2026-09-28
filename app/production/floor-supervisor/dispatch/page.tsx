@@ -30,6 +30,7 @@ import {
 import { HALF_STEP_QTY_ERROR } from "@/shared/utils/halfStepQuantity";
 import {
   containersMasterService,
+  containerAcceptMessage,
   hasActiveItems,
   buildStagedActiveItemsPayload,
   groupContainerArticlesForDisplay,
@@ -785,15 +786,9 @@ const DispatchFloorSupervisorPage = () => {
     try {
       const barcode = containerScanned.container.barcode;
       const acceptResult = await containersMasterService.acceptByBarcode(barcode);
-      const updatedCount = Array.isArray((acceptResult as { articles?: unknown[] })?.articles)
-        ? (acceptResult as { articles: unknown[] }).articles.length
-        : 0;
-      if (updatedCount === 0) {
-        throw new Error('Container accept did not update any articles');
-      }
       const first = containerScanned.articles.find((a) => a.article);
       if (first?.article) setActiveArticleId(String((first.article as any)._id ?? (first.article as any).id ?? ""));
-      toast.success("Article quantity accepted on Dispatch.");
+      toast.success(containerAcceptMessage(acceptResult, "Dispatch"));
       setShowContainerScanDrawer(false);
       setContainerScanned(null);
       setContainerScanBarcode("");

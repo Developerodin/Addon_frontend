@@ -18,6 +18,8 @@ interface BrandTransferItemsInputProps {
   placeholder?: string;
   /** Per-brand max: sum of transferred for each brand must not exceed this. */
   brandMaxQuantities?: Record<string, number>;
+  /** Product has no catalog brands — qty is editable, brand column is not a picker. */
+  unbranded?: boolean;
 }
 
 /**
@@ -31,6 +33,7 @@ export default function BrandTransferItemsInput({
   brandOptions,
   placeholder = "Add transfer lines",
   brandMaxQuantities,
+  unbranded = false,
 }: BrandTransferItemsInputProps) {
   const { valid: isValid, totalValid, brandValid, halfStepValid, total } = validateBrandTransferItems(
     value,
@@ -99,33 +102,39 @@ export default function BrandTransferItemsInput({
                       />
                     </td>
                     <td className="px-2 py-1 border-b border-gray-200">
-                      <select
-                        className="py-1 px-2 text-xs h-7 w-full border border-gray-200 rounded focus:ring-0 focus:border-amber-300 bg-white"
-                        value={brandDisplayKey(item.brand)}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          const next = [...value];
-                          next[idx] = {
-                            ...next[idx],
-                            brand: v || "",
-                            styleCode: "",
-                          };
-                          onChange(next);
-                        }}
-                        disabled={disabled}
-                        aria-label="Select brand"
-                      >
-                        <option value="">— Select —</option>
-                        {item.brand &&
-                          !brandOptions.some((o) => brandDisplayKey(o.brand) === brandDisplayKey(item.brand)) && (
-                            <option value={brandDisplayKey(item.brand)}>{brandDisplayKey(item.brand)}</option>
-                          )}
-                        {brandOptions.map((o) => (
-                          <option key={o.brand} value={o.brand}>
-                            {o.brand}
-                          </option>
-                        ))}
-                      </select>
+                      {unbranded ? (
+                        <span className="text-[11px] text-gray-500" aria-label="No brand on product">
+                          No brand on product
+                        </span>
+                      ) : (
+                        <select
+                          className="py-1 px-2 text-xs h-7 w-full border border-gray-200 rounded focus:ring-0 focus:border-amber-300 bg-white"
+                          value={brandDisplayKey(item.brand)}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            const next = [...value];
+                            next[idx] = {
+                              ...next[idx],
+                              brand: v || "",
+                              styleCode: "",
+                            };
+                            onChange(next);
+                          }}
+                          disabled={disabled}
+                          aria-label="Select brand"
+                        >
+                          <option value="">— Select —</option>
+                          {item.brand &&
+                            !brandOptions.some((o) => brandDisplayKey(o.brand) === brandDisplayKey(item.brand)) && (
+                              <option value={brandDisplayKey(item.brand)}>{brandDisplayKey(item.brand)}</option>
+                            )}
+                          {brandOptions.map((o) => (
+                            <option key={o.brand} value={o.brand}>
+                              {o.brand}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </td>
                     {!disabled && (
                       <td className="px-1 py-1 border-b border-gray-200">

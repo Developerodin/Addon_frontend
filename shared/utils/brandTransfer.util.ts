@@ -240,6 +240,27 @@ export function toBrandOnlyTransferItems(items: TransferItem[]): TransferItem[] 
 }
 
 /**
+ * Branding floor PATCH rows.
+ * Catalog brands: only lines with a selected brand.
+ * No catalog brands: qty-only lines (brand left blank) so remaining can still move.
+ */
+export function toBrandingFloorTransferItems(
+  items: TransferItem[],
+  hasCatalogBrands: boolean
+): TransferItem[] {
+  if (!hasCatalogBrands) {
+    return items
+      .filter((i) => (i.transferred ?? 0) > 0)
+      .map((i) => ({
+        transferred: i.transferred ?? 0,
+        brand: "",
+        styleCode: "",
+      }));
+  }
+  return toBrandOnlyTransferItems(items);
+}
+
+/**
  * Per-brand budget from receivedData minus already-transferred amounts.
  */
 export function buildBrandBudgetFromReceived(

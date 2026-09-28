@@ -337,6 +337,44 @@ export type PostContainerAcceptBody = {
   vendorReceive?: VendorReceiveAcceptPayload;
 };
 
+/** Line whose bag qty was above what the previous floor still had left. */
+export interface ContainerAcceptAdjustment {
+  articleNumber: string;
+  onBag: number;
+  credited: number;
+  prevFloorKey?: string | null;
+}
+
+/** POST …/accept response. Bag is cleared. `credited` is what was actually received. */
+export interface ContainerAcceptResult {
+  container?: ContainerMaster;
+  articles?: unknown[];
+  vendorProductionFlows?: unknown[];
+  acceptAdjustments?: ContainerAcceptAdjustment[];
+}
+
+/**
+ * Toast copy after a container accept. Extra bag qty is not received again.
+ * @param result - Accept API body
+ * @param floorLabel - Floor name shown to the user
+ */
+export function containerAcceptMessage(result: ContainerAcceptResult | null | undefined, floorLabel: string): string {
+  const adjustments = result?.acceptAdjustments ?? [];
+  const skipped = adjustments.filter((row) => row.credited <= 0.001);
+  const capped = adjustments.filter((row) => row.credited > 0.001 && row.credited + 0.001 < row.onBag);
+  if (!skipped.length && !capped.length) {
+    return `Article quantity accepted on ${floorLabel}.`;
+  }
+  const parts = [`Accepted on ${floorLabel}.`];
+  if (skipped.length) {
+    parts.push(`${skipped.length} line(s) were already on this floor and were not added again.`);
+  }
+  if (capped.length) {
+    parts.push(`${capped.length} line(s) were limited to the qty still left from the previous floor.`);
+  }
+  return parts.join(" ");
+}
+
 export interface ContainersListParams {
   status?: ContainerStatus;
   type?: ContainerType;
@@ -573,9 +611,9 @@ class ContainersMasterService {
    * POST /barcode/:barcode/accept — updates received data for active items.
    * Optional body: e.g. `{ vendorReceive: { quantity, transferItems?, vendorProductionFlow? } }` on vendor floors.
    */
-  async acceptByBarcode(barcode: string, body?: PostContainerAcceptBody): Promise<ContainerMaster> {
+  async acceptByBarcode(barcode: string, body?: PostContainerAcceptBody): Promise<ContainerAcceptResult> {
     if (!barcode || !barcode.trim()) throw new Error('barcode is required');
-    return this.request<ContainerMaster>(`/barcode/${encodeURIComponent(barcode.trim())}/accept`, {
+    return this.request<ContainerAcceptResult>(`/barcode/${encodeURIComponent(barcode.trim())}/accept`, {
       method: 'POST',
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });

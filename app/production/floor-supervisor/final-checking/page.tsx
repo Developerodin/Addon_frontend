@@ -43,6 +43,7 @@ import {
 } from "@/shared/utils/containerHandoff.util";
 import {
   containersMasterService,
+  containerAcceptMessage,
   hasActiveItems,
   buildStagedActiveItemsPayload,
   groupContainerArticlesForDisplay,
@@ -1116,15 +1117,9 @@ const FinalCheckingFloorSupervisorPage = () => {
     try {
       const barcode = containerScanned.container.barcode;
       const acceptResult = await containersMasterService.acceptByBarcode(barcode);
-      const updatedCount = Array.isArray((acceptResult as { articles?: unknown[] })?.articles)
-        ? (acceptResult as { articles: unknown[] }).articles.length
-        : 0;
-      if (updatedCount === 0) {
-        throw new Error('Container accept did not update any articles');
-      }
       const first = containerScanned.articles.find((a) => a.article);
       if (first?.article) setActiveArticleId(String((first.article as any)._id ?? (first.article as any).id ?? ""));
-      toast.success("Article quantity accepted on Final Checking.");
+      toast.success(containerAcceptMessage(acceptResult, "Final Checking"));
       setShowContainerScanDrawer(false);
       setContainerScanned(null);
       setContainerScanBarcode("");
