@@ -1287,7 +1287,13 @@ const PurchaseOrderReceivedPage = () => {
 
                                     // Format lot details for process page - ensure proper structure
                                     const lotDetails = mappedOrder.receivedLotDetails
-                                      .filter(lot => lot.lotNumber && lot.numberOfBoxes > 0) // Filter out invalid lots
+                                      .filter(
+                                        (lot) =>
+                                          lot.lotNumber &&
+                                          lot.numberOfBoxes > 0 &&
+                                          lot.status !== 'lot_rejected' &&
+                                          lot.status !== 'lot_returned_to_vendor'
+                                      )
                                       .map(lot => ({
                                         lotNumber: lot.lotNumber.trim(),
                                         numberOfBoxes: lot.numberOfBoxes
