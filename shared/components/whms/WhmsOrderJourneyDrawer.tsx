@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import { toast } from "react-hot-toast";
 import {
   whmsWarehouseOrders,
   warehouseOrderFlowStatusLabel,
@@ -15,6 +16,7 @@ import {
 } from "@/shared/services/whmsFulfilmentService";
 import WhmsFlowTimeline from "./WhmsFlowTimeline";
 import { getDispatchActorFromHistory } from "./flowHistoryUtils";
+import { downloadOrderJourneyScanExcel } from "./orderJourneyScanExcel";
 
 export interface WhmsOrderJourneyDrawerProps {
   orderId: string;
@@ -36,6 +38,7 @@ export default function WhmsOrderJourneyDrawer({
   const [scanSession, setScanSession] = useState<ScanSession | null>(null);
   const [invoice, setInvoice] = useState<WhmsInvoice | null>(null);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,6 +66,26 @@ export default function WhmsOrderJourneyDrawer({
   }, [load]);
 
   const dispatchActor = getDispatchActorFromHistory(history);
+
+  /**
+   * Download this order's client details and scanned style quantities as Excel.
+   */
+  const handleDownloadExcel = async () => {
+    if (!order || exporting) return;
+    setExporting(true);
+    try {
+      const count = await downloadOrderJourneyScanExcel(order);
+      toast.success(
+        count
+          ? `Excel downloaded — ${count} scanned style line${count === 1 ? "" : "s"}`
+          : "Excel downloaded — no scanned quantity on this order",
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to download Excel");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <div
@@ -94,9 +117,24 @@ export default function WhmsOrderJourneyDrawer({
             <div>
               <p className="text-[15px] font-bold text-gray-900">{order.orderNumber || order.id}</p>
               <p className="text-[12px] text-gray-600 mt-1">{order.clientName || "—"}</p>
-              <span className="inline-flex mt-2 px-2 py-1 text-[11px] font-bold rounded bg-violet-100 text-violet-800">
-                {warehouseOrderFlowStatusLabel(order.flowStatus)}
-              </span>
+              <div className="mt-2 flex flex-col items-start gap-3">
+                <span className="inline-flex px-2 py-1 text-[11px] font-bold rounded bg-violet-100 text-violet-800">
+                  {warehouseOrderFlowStatusLabel(order.flowStatus)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void handleDownloadExcel()}
+                  disabled={exporting}
+                  className="inline-flex items-center gap-1.5 rounded border border-emerald-600/40 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 shadow-sm transition-colors hover:bg-emerald-50 disabled:opacity-50"
+                  aria-label="Download this order's client details and scanned style quantities as Excel"
+                >
+                <i
+                  className={`ri-file-excel-2-line text-sm ${exporting ? "animate-pulse" : ""}`}
+                  aria-hidden
+                />
+                {exporting ? "Downloading…" : "Download Excel"}
+                </button>
+              </div>
             </div>
 
             {scanSession ? (
