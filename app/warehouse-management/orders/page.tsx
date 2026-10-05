@@ -13,17 +13,12 @@ import {
   type WarehouseOrderStatus,
   type WarehouseClientType,
 } from "@/shared/services/whmsWarehouseOrderService";
-import { whmsWarehouseClients } from "@/shared/services/whmsWarehouseClientService";
 import WarehouseOrdersTable from "./components/WarehouseOrdersTable";
 import WarehouseOrderDetailDrawer from "./components/WarehouseOrderDetailDrawer";
 import OrderFlowModal from "./components/OrderFlowModal";
 import GeneratePickListModal from "./components/GeneratePickListModal";
 import { whmsPickListBatches } from "@/shared/services/whmsPickListBatchService";
-import {
-  downloadWarehouseOrdersBulkTemplate,
-  fetchAllWarehouseClientsForReference,
-  parseWarehouseOrdersBulkImportFile,
-} from "./components/warehouseOrderBulkImport";
+import { useWarehouseOrderExcel } from "./components/useWarehouseOrderExcel";
 
 const STATUS_TABS: Array<{ id: "all" | WarehouseOrderStatus; label: string }> = [
   { id: "all", label: "All" },
@@ -59,13 +54,10 @@ export default function WarehouseOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [flowOrderId, setFlowOrderId] = useState<string | null>(null);
-  const [isImporting, setIsImporting] = useState(false);
-  const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
   const [websiteTradeOnly, setWebsiteTradeOnly] = useState(false);
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
   const [pickListModalOpen, setPickListModalOpen] = useState(false);
   const [creatingPickList, setCreatingPickList] = useState(false);
-  const importRef = useRef<HTMLInputElement>(null);
   const knownWebOrderIdsRef = useRef<Set<string>>(new Set());
   const pollInitializedRef = useRef(false);
 
@@ -199,63 +191,15 @@ export default function WarehouseOrdersPage() {
     }
   };
 
-  const downloadTemplate = async () => {
-    setIsDownloadingTemplate(true);
-    try {
-      const clients = await fetchAllWarehouseClientsForReference(whmsWarehouseClients.listByType);
-      downloadWarehouseOrdersBulkTemplate(clients);
-      toast.success(
-        clients.length
-          ? `Template downloaded (${clients.length} clients in ClientReference sheet)`
-          : "Template downloaded",
-      );
-    } catch (e) {
-      console.error(e);
-      downloadWarehouseOrdersBulkTemplate([]);
-      toast.error(e instanceof Error ? e.message : "Could not load client list; template downloaded without reference");
-    } finally {
-      setIsDownloadingTemplate(false);
-    }
-  };
-
-  const handleBulkImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setIsImporting(true);
-    try {
-      const buf = await file.arrayBuffer();
-      const { orders, errors: parseErrors } = parseWarehouseOrdersBulkImportFile(buf);
-
-      if (parseErrors.length) {
-        parseErrors.slice(0, 5).forEach((msg) => toast.error(msg, { duration: 6000 }));
-        if (parseErrors.length > 5) toast(`+${parseErrors.length - 5} parse error(s)`, { icon: "⚠️" });
-      }
-
-      if (!orders.length) {
-        if (!parseErrors.length) toast.error("No valid orders parsed. Fill clientType + clientId (or clientName) on header rows.");
-        return;
-      }
-
-      const summary = await whmsWarehouseOrders.bulkImport({ orders });
-      if (summary.created > 0) toast.success(`${summary.created} order(s) created successfully`);
-      if (summary.failed > 0) toast.error(`${summary.failed} order(s) failed`);
-      if (summary.errors?.length) {
-        summary.errors.slice(0, 5).forEach((err) => {
-          const msg = err.reason || err.error || "Unknown error";
-          const prefix = err.row != null ? `Order ${err.row}: ` : err.index != null ? `Order ${err.index + 1}: ` : "";
-          toast.error(`${prefix}${msg}`, { duration: 8000 });
-        });
-        if (summary.errors.length > 5) toast(`+${summary.errors.length - 5} more error(s)`, { icon: "⚠️" });
-      }
-      await fetchRows();
-    } catch (err) {
-      console.error(err);
-      toast.error(err instanceof Error ? err.message : "Bulk import failed");
-    } finally {
-      setIsImporting(false);
-    }
-  };
+  const {
+    isImporting,
+    isDownloadingTemplate,
+    isDownloadingStoreTemplate,
+    importRef,
+    downloadTemplate,
+    downloadStoreTemplate,
+    handleBulkImport,
+  } = useWarehouseOrderExcel(() => fetchRows());
 
   return (
     <>
@@ -379,6 +323,19 @@ export default function WarehouseOrdersPage() {
                   <><i className="ri-loader-4-line text-xs animate-spin" /> Loading...</>
                 ) : (
                   <><i className="ri-download-2-line text-xs" /> Template</>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => void downloadStoreTemplate()}
+                disabled={isDownloadingStoreTemplate}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-[11px] font-bold rounded hover:bg-gray-50 disabled:opacity-50 transition-colors shadow-sm"
+                aria-label="Download store order template"
+              >
+                {isDownloadingStoreTemplate ? (
+                  <><i className="ri-loader-4-line text-xs animate-spin" /> Loading...</>
+                ) : (
+                  <><i className="ri-store-2-line text-xs" /> Store Template</>
                 )}
               </button>
               <button

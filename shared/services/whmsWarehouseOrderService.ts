@@ -321,8 +321,8 @@ export type WarehouseOrdersListParams = {
 
 export interface BulkImportSinglePairItem {
   styleCode: string;
-  colour: string;
-  pattern: string;
+  colour?: string;
+  pattern?: string;
   quantity: number;
 }
 
@@ -339,11 +339,19 @@ export interface BulkImportOrderRow {
   /** MongoDB client id — preferred when names collide. */
   clientId?: string;
   /** Fallback lookup when clientId is omitted; must be unique per type. */
-  clientName: string;
+  clientName?: string;
+  /** Store pickup sheet — exact storeProfile.billCode. */
+  storeBillCode?: string;
+  /** Store pickup sheet — exact storeProfile.sapCode. */
+  storeSapCode?: string;
+  /** Store pickup sheet — exact storeProfile.retekCode. */
+  storeRetekCode?: string;
   date: string;
   status: string;
   /** Optional external / customer reference (e.g. Addon order number). */
   addonOrderId?: string;
+  /** Pickup batch ref and source. Not used as addonOrderId (that field is unique per order). */
+  meta?: { source?: string; storePickupRef?: string };
   styleCodeSinglePair?: BulkImportSinglePairItem[];
   styleCodeMultiPair?: BulkImportMultiPairItem[];
 }
