@@ -18,6 +18,13 @@ import {
   WhmsOrderJourneyDrawer,
 } from "@/shared/components/whms";
 import ScanningLiveSession from "./components/ScanningLiveSession";
+import { downloadOrdersScanExcel } from "@/shared/components/whms/orderJourneyScanExcel";
+import {
+  fetchAllActiveScanOrders,
+  fetchAllHistoryScanOrders,
+  resolveOrders,
+  sessionOrderId,
+} from "./scanningBulkDownload";
 
 type ScanTab = "active" | "history";
 
@@ -40,6 +47,9 @@ export default function ScanningPage() {
   const [journeyOrderId, setJourneyOrderId] = useState<string | null>(null);
   const [scannerByOrder, setScannerByOrder] = useState<Record<string, string>>({});
   const [batchByOrder, setBatchByOrder] = useState<Record<string, string>>({});
+  /** Checked orders. Value is the row we already have, or null when it still needs a fetch. */
+  const [selected, setSelected] = useState<Map<string, WarehouseOrder | null>>(new Map());
+  const [exporting, setExporting] = useState<"selected" | "all" | null>(null);
 
   const activeList = useWhmsPaginatedList<WarehouseOrder, { flowStatusIn: string; sortBy: string }>({
     fetchFn: fetchActiveOrders,
@@ -108,8 +118,77 @@ export default function ScanningPage() {
 
   const handleTabChange = (next: ScanTab) => {
     setTab(next);
+    setSelected(new Map());
     activeList.setPage(1);
     historyList.setPage(1);
+  };
+
+  /**
+   * Toggle one order checkbox. Pass the loaded order when the row already has it.
+   * @param id - Warehouse order id
+   * @param order - Order from the active queue, when available
+   */
+  const toggleSelected = (id: string, order?: WarehouseOrder) => {
+    if (!id) return;
+    setSelected((prev) => {
+      const next = new Map(prev);
+      if (next.has(id)) next.delete(id);
+      else next.set(id, order ?? null);
+      return next;
+    });
+  };
+
+  /**
+   * Select or clear every order on the current page.
+   * @param rows - Page rows as id plus optional order
+   * @param allChecked - True when every row on the page is already checked
+   */
+  const togglePage = (rows: Array<{ id: string; order?: WarehouseOrder }>, allChecked: boolean) => {
+    setSelected((prev) => {
+      const next = new Map(prev);
+      rows.forEach((row) => {
+        if (!row.id) return;
+        if (allChecked) next.delete(row.id);
+        else next.set(row.id, row.order ?? next.get(row.id) ?? null);
+      });
+      return next;
+    });
+  };
+
+  /**
+   * Download scanned-qty Excel for the checked orders, or every order in the current tab.
+   * @param scope - Checked rows, or the full filtered list
+   */
+  const downloadExcel = async (scope: "selected" | "all") => {
+    if (exporting) return;
+    if (scope === "selected" && selected.size === 0) {
+      toast.error("Select at least one order");
+      return;
+    }
+    setExporting(scope);
+    try {
+      const orders =
+        scope === "selected"
+          ? await resolveOrders([...selected.entries()])
+          : tab === "active"
+            ? await fetchAllActiveScanOrders(activeList.q)
+            : await fetchAllHistoryScanOrders(historyList.q);
+      if (!orders.length) {
+        toast.error("No orders to download");
+        return;
+      }
+      const lineCount = await downloadOrdersScanExcel(
+        orders,
+        scope === "selected" ? "scanning-selected-scanned-qty.xlsx" : "scanning-all-scanned-qty.xlsx",
+      );
+      toast.success(
+        `Excel downloaded — ${orders.length} order${orders.length === 1 ? "" : "s"}, ${lineCount} scanned lines`,
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to download Excel");
+    } finally {
+      setExporting(null);
+    }
   };
 
   const refreshLists = () => {
@@ -134,6 +213,13 @@ export default function ScanningPage() {
   }
 
   const list = tab === "active" ? activeList : historyList;
+  const activePageRows = activeList.results.map((order) => ({ id: order.id, order }));
+  const historyPageRows = historyList.results.map((session) => ({ id: sessionOrderId(session) }));
+  const pageRows = tab === "active" ? activePageRows : historyPageRows;
+  const pageIds = pageRows.map((row) => row.id).filter(Boolean);
+  const allPageChecked = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+  const excelButtonClass =
+    "inline-flex items-center gap-1.5 rounded border border-emerald-600/40 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 shadow-sm transition-colors hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed";
 
   return (
     <>
@@ -175,6 +261,30 @@ export default function ScanningPage() {
             limit={list.limit}
             onLimitChange={list.setLimit}
             showDates={tab === "history"}
+            actions={
+              <>
+                <button
+                  type="button"
+                  onClick={() => void downloadExcel("selected")}
+                  disabled={exporting !== null || selected.size === 0}
+                  className={excelButtonClass}
+                  aria-label="Download Excel for the checked orders"
+                >
+                  <i className={`ri-file-excel-2-line text-sm ${exporting === "selected" ? "animate-pulse" : ""}`} aria-hidden />
+                  {exporting === "selected" ? "Downloading…" : `Download selected${selected.size ? ` (${selected.size})` : ""}`}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void downloadExcel("all")}
+                  disabled={exporting !== null || list.totalResults === 0}
+                  className={excelButtonClass}
+                  aria-label="Download Excel for every order in this list"
+                >
+                  <i className={`ri-file-excel-2-line text-sm ${exporting === "all" ? "animate-pulse" : ""}`} aria-hidden />
+                  {exporting === "all" ? "Downloading…" : "Download all"}
+                </button>
+              </>
+            }
           />
 
           {list.error ? <p className="text-sm text-red-600 mb-3">{list.error}</p> : null}
@@ -191,6 +301,15 @@ export default function ScanningPage() {
                 <table className="w-full border-collapse border border-gray-200">
                   <thead>
                     <tr className="bg-gray-50/30">
+                      <th className="px-1.5 py-3 text-center border border-gray-200 w-8">
+                        <input
+                          type="checkbox"
+                          checked={allPageChecked}
+                          onChange={() => togglePage(activePageRows, allPageChecked)}
+                          className="h-3.5 w-3.5 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                          aria-label="Select all orders on this page"
+                        />
+                      </th>
                       <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Order #</th>
                       <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Addon Order ID</th>
                       <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Client</th>
@@ -204,6 +323,15 @@ export default function ScanningPage() {
                   <tbody>
                     {activeList.results.map((order) => (
                       <tr key={order.id} className="hover:bg-gray-50/50">
+                        <td className="px-1.5 py-2.5 text-center border border-gray-200">
+                          <input
+                            type="checkbox"
+                            checked={selected.has(order.id)}
+                            onChange={() => toggleSelected(order.id, order)}
+                            className="h-3.5 w-3.5 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                            aria-label={`Select order ${order.orderNumber || order.id}`}
+                          />
+                        </td>
                         <td className="px-1.5 py-2.5 text-[12px] font-bold border border-gray-200">{order.orderNumber || order.id}</td>
                         <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">{order.addonOrderId?.trim() || "—"}</td>
                         <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">{order.clientName || "—"}</td>
@@ -240,6 +368,15 @@ export default function ScanningPage() {
               <table className="w-full border-collapse border border-gray-200">
                 <thead>
                   <tr className="bg-gray-50/30">
+                    <th className="px-1.5 py-3 text-center border border-gray-200 w-8">
+                      <input
+                        type="checkbox"
+                        checked={allPageChecked}
+                        onChange={() => togglePage(historyPageRows, allPageChecked)}
+                        className="h-3.5 w-3.5 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                        aria-label="Select all orders on this page"
+                      />
+                    </th>
                     <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Order #</th>
                     <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Addon Order ID</th>
                     <th className="px-1.5 py-3 text-left text-[11px] font-bold uppercase border border-gray-200">Completed by</th>
@@ -249,8 +386,20 @@ export default function ScanningPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {historyList.results.map((s) => (
+                  {historyList.results.map((s) => {
+                    const orderId = sessionOrderId(s);
+                    return (
                     <tr key={s.id} className="hover:bg-gray-50/50">
+                      <td className="px-1.5 py-2.5 text-center border border-gray-200">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(orderId) && selected.has(orderId)}
+                          onChange={() => toggleSelected(orderId)}
+                          disabled={!orderId}
+                          className="h-3.5 w-3.5 rounded border-gray-300 text-violet-600 focus:ring-violet-500 disabled:opacity-40"
+                          aria-label={`Select order ${s.orderNumber || orderId || s.id}`}
+                        />
+                      </td>
                       <td className="px-1.5 py-2.5 text-[12px] font-bold border border-gray-200">{s.orderNumber || "—"}</td>
                       <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">{s.addonOrderId?.trim() || "—"}</td>
                       <td className="px-1.5 py-2.5 text-[12px] border border-gray-200">{s.completedByName || s.startedByName || "—"}</td>
@@ -268,7 +417,8 @@ export default function ScanningPage() {
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

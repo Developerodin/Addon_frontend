@@ -184,27 +184,74 @@ function scanRows(order: WarehouseOrder, lines: ScanSessionItem[]): (string | nu
 }
 
 /**
+ * Run async work in small batches so a multi-order export does not fire every request at once.
+ * @param items - Work items
+ * @param size - Batch size
+ * @param fn - Mapper
+ */
+async function mapInChunks<T, R>(items: T[], size: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = [];
+  for (let index = 0; index < items.length; index += size) {
+    const chunk = await Promise.all(items.slice(index, index + size).map(fn));
+    out.push(...chunk);
+  }
+  return out;
+}
+
+/**
+ * One order block: client details, then scanned style qty only.
+ * @param order - Warehouse order to export
+ */
+async function orderBlock(order: WarehouseOrder): Promise<{ rows: (string | number)[][]; lineCount: number }> {
+  const clientResult = await loadClient(order);
+  let session: ScanSession | null = null;
+  let sessionNote = "";
+  try {
+    session = await whmsScanning.getLatestScanSessionForOrder(order.id);
+  } catch (error) {
+    sessionNote = error instanceof Error ? error.message : "Could not load scan session";
+  }
+  const lines = scannedLines(session);
+  const rows = [
+    ...detailRows(order, clientResult.client, clientResult.note, session),
+    ...(sessionNote ? [["Scan lookup", sessionNote]] : []),
+    ...scanRows(order, lines),
+  ];
+  return { rows, lineCount: lines.length };
+}
+
+/**
+ * Download one workbook for one or more orders. Each order is its own block and ends on its scanned total.
+ * @param orders - Orders to include, in list order
+ * @param filename - Download filename
+ * @returns Count of style lines that had a scanned quantity
+ */
+export async function downloadOrdersScanExcel(orders: WarehouseOrder[], filename: string): Promise<number> {
+  if (!orders.length) throw new Error("No orders to download");
+  const blocks = await mapInChunks(orders, 6, orderBlock);
+  const aoa: (string | number)[][] = [];
+  let lineCount = 0;
+  blocks.forEach((block, index) => {
+    if (index > 0) aoa.push([]);
+    aoa.push(...block.rows);
+    lineCount += block.lineCount;
+  });
+
+  const sheet = XLSX.utils.aoa_to_sheet(aoa);
+  sheet["!cols"] = [{ wch: 18 }, { wch: 36 }, { wch: 14 }, { wch: 18 }, { wch: 14 }];
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, sheet, "Scanned Qty");
+  XLSX.writeFile(workbook, filename);
+  return lineCount;
+}
+
+/**
  * Download one workbook for the open order: order details, client details, then scanned style qty.
  * Expected / order quantity is not included.
  * @param order - Order currently open in the journey drawer
  * @returns Count of style lines that had a scanned quantity
  */
 export async function downloadOrderJourneyScanExcel(order: WarehouseOrder): Promise<number> {
-  const [{ client, note }, session] = await Promise.all([
-    loadClient(order),
-    whmsScanning.getLatestScanSessionForOrder(order.id),
-  ]);
-  const lines = scannedLines(session);
-  const sheet = XLSX.utils.aoa_to_sheet([
-    ...detailRows(order, client, note, session),
-    ...scanRows(order, lines),
-  ]);
-  sheet["!cols"] = [{ wch: 18 }, { wch: 36 }, { wch: 14 }, { wch: 18 }, { wch: 14 }];
-
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, sheet, "Scanned Qty");
-
   const safeName = (order.orderNumber || order.id).replace(/[^\w-]+/g, "_").slice(0, 60);
-  XLSX.writeFile(workbook, `${safeName || "order"}-scanned-qty.xlsx`);
-  return lines.length;
+  return downloadOrdersScanExcel([order], `${safeName || "order"}-scanned-qty.xlsx`);
 }

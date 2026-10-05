@@ -16,6 +16,8 @@ export interface WhmsListToolbarProps {
   onStatusFilterChange?: (value: string) => void;
   statusOptions?: Array<{ value: string; label: string }>;
   showDates?: boolean;
+  /** Extra controls aligned to the end of the filter row (page-specific actions). */
+  actions?: React.ReactNode;
 }
 
 /**
@@ -35,6 +37,7 @@ export default function WhmsListToolbar({
   onStatusFilterChange,
   statusOptions,
   showDates = true,
+  actions,
 }: WhmsListToolbarProps) {
   return (
     <div className="flex flex-wrap items-end gap-3 mb-4">
@@ -103,6 +106,7 @@ export default function WhmsListToolbar({
           <option value={50}>50</option>
         </select>
       </div>
+      {actions ? <div className="ml-auto flex flex-wrap items-end gap-2">{actions}</div> : null}
     </div>
   );
 }
