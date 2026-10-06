@@ -12,6 +12,7 @@ import {
   syncStoreProfileCombinedFields,
   warehouseClientImportHeaderKey,
 } from './warehouseClientFieldConfig';
+import { parseOpeningDateCell } from './warehouseClientImportDates';
 
 const STORE_TEMPLATE = 'warehouse-clients-import-store-template.xlsx';
 const TRADE_TEMPLATE = 'warehouse-clients-import-trade-dept-ecom-template.xlsx';
@@ -28,21 +29,49 @@ function parseSlNo(v: unknown): number | undefined {
   return n;
 }
 
-function parseOpeningDate(v: unknown): string | null | undefined {
-  if (v === undefined || v === null || v === '') return undefined;
-  if (v instanceof Date && !Number.isNaN(v.getTime())) {
-    return v.toISOString();
-  }
-  const s = str(v);
-  if (!s) return undefined;
-  const serial = Number(s);
-  if (Number.isFinite(serial) && serial > 1000 && serial < 600000) {
-    const d = new Date(Math.round((serial - 25569) * 86400 * 1000));
-    if (!Number.isNaN(d.getTime())) return d.toISOString();
-  }
-  const d = new Date(s);
-  if (!Number.isNaN(d.getTime())) return d.toISOString();
-  return s;
+/**
+ * Row plus the column that failed. No cell value — the user checks that cell themselves.
+ */
+function importColumnIssue(line: number, row: Map<string, unknown>, column: string): string {
+  const bits = [`Row ${line}`];
+  const sl = str(row.get('slNo'));
+  if (sl) bits.push(`Sr.No. ${sl}`);
+  bits.push(column);
+  return bits.join(' · ');
+}
+
+/**
+ * Spreadsheet location plus Sr.No. / Bill Code / party so the user can find the row.
+ */
+function importRowLabel(line: number, row: Map<string, unknown>): string {
+  const bits = [`Row ${line}`];
+  const sl = str(row.get('slNo'));
+  const bill = str(row.get('billCode'));
+  const party = str(row.get('retailerName'));
+  if (sl) bits.push(`Sr.No. ${sl}`);
+  if (bill) bits.push(`Bill Code ${bill}`);
+  else if (party) bits.push(party);
+  return bits.join(' · ');
+}
+
+/**
+ * Read Status. Returns undefined when the cell is blank.
+ * Pushes a user-facing error and returns null when the value is not active/inactive.
+ */
+function readImportStatus(
+  row: Map<string, unknown>,
+  line: number,
+  errors: string[],
+): 'active' | 'inactive' | undefined | null {
+  if (!row.has('status')) return undefined;
+  const raw = str(row.get('status'));
+  if (!raw) return undefined;
+  const status = raw.toLowerCase();
+  if (status === 'active' || status === 'inactive') return status;
+  errors.push(
+    `${importRowLabel(line, row)}: Status "${raw}" is not allowed. Use active or inactive.`,
+  );
+  return null;
 }
 
 /**
@@ -196,10 +225,16 @@ export function parseWarehouseClientStoreImportFile(buf: ArrayBuffer): {
 
     const typeCell = str(m.get('type'));
     if (typeCell && typeCell !== 'Store') {
-      errors.push(`Row ${line}: Channel must be Store or empty (got "${typeCell}")`);
+      const where = importRowLabel(line, m);
+      const hint =
+        typeCell === 'Trade' || typeCell === 'Departmental' || typeCell === 'Ecom'
+          ? ` Use Import Trade / Dept / Ecom for Channel "${typeCell}".`
+          : ` Channel must be Store.`;
+      errors.push(`${where}: Channel is "${typeCell}".${hint}`);
       return;
     }
 
+    let rowFailed = false;
     const storeProfile: WarehouseClientStoreProfile = {};
     const profileKeys: (keyof WarehouseClientStoreProfile)[] = [
       'billCode', 'sapCode', 'retekCode', 'classification', 'city', 'state', 'brand', 'brandSub',
@@ -212,14 +247,21 @@ export function parseWarehouseClientStoreImportFile(buf: ArrayBuffer): {
       if (!m.has(key)) return;
       const val = m.get(key);
       if (key === 'openingDate') {
-        const parsed = parseOpeningDate(val);
-        if (parsed !== undefined) storeProfile.openingDate = parsed;
+        const parsed = parseOpeningDateCell(val);
+        if (!parsed.ok) {
+          errors.push(importColumnIssue(line, m, 'Opening Date'));
+          rowFailed = true;
+          return;
+        }
+        if (parsed.iso) storeProfile.openingDate = parsed.iso;
         return;
       }
       const s = str(val);
       if (s === '') return;
       (storeProfile as Record<string, unknown>)[key] = s;
     });
+
+    if (rowFailed) return;
 
     const body: CreateWarehouseClientBody = {
       type: 'Store',
@@ -228,8 +270,9 @@ export function parseWarehouseClientStoreImportFile(buf: ArrayBuffer): {
       ),
     };
 
-    const st = str(m.get('status'));
-    if (st === 'active' || st === 'inactive') body.status = st;
+    const st = readImportStatus(m, line, errors);
+    if (st === null) return;
+    if (st) body.status = st;
 
     const rm = str(m.get('remarks'));
     if (rm !== '') body.remarks = rm;
@@ -268,11 +311,21 @@ export function parseWarehouseClientTradeImportFile(buf: ArrayBuffer): {
 
     const typeCell = str(m.get('type')) as WarehouseClientType;
     if (!typeCell || !TRADE_TYPES.has(typeCell)) {
-      errors.push(`Row ${line}: Channel must be Trade, Departmental, or Ecom`);
+      const where = importRowLabel(line, m);
+      const shown = typeCell || 'blank';
+      const hint =
+        typeCell === 'Store'
+          ? ' This is a Store row. Use the Import Store button.'
+          : ' Channel must be Trade, Departmental, or Ecom.';
+      errors.push(`${where}: Channel is "${shown}".${hint}`);
       return;
     }
 
+    const status = readImportStatus(m, line, errors);
+    if (status === null) return;
+
     const body: CreateWarehouseClientBody = { type: typeCell };
+    if (status) body.status = status;
 
     const tradeKeys = [
       'slNo', 'status', 'remarks', 'parentKeyCode', 'retailerName', 'contactPerson',
@@ -287,11 +340,7 @@ export function parseWarehouseClientTradeImportFile(buf: ArrayBuffer): {
         if (sl !== undefined) body.slNo = sl;
         return;
       }
-      if (key === 'status') {
-        const st = str(val);
-        if (st === 'active' || st === 'inactive') body.status = st;
-        return;
-      }
+      if (key === 'status') return;
       if (key === 'remarks') {
         body.remarks = str(val);
         return;

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Seo from "@/shared/layout-components/seo/seo";
@@ -16,10 +16,11 @@ import WarehouseClientDetailDrawer from "./components/WarehouseClientDetailDrawe
 import {
   downloadWarehouseClientStoreTemplate,
   downloadWarehouseClientTradeTemplate,
-  parseWarehouseClientStoreImportFile,
-  parseWarehouseClientTradeImportFile,
 } from "./components/warehouseClientBulkImport";
 import { exportAllWarehouseClients } from "./components/warehouseClientExport";
+import WarehouseClientImportIssues from "./components/WarehouseClientImportIssues";
+import { useWarehouseClientImport } from "./components/useWarehouseClientImport";
+import { getWarehouseClientPagination } from "./components/warehouseClientPagination";
 
 const TYPE_TABS: { id: WarehouseClientType; label: string }[] = [
   { id: "Store", label: "Store" },
@@ -27,26 +28,6 @@ const TYPE_TABS: { id: WarehouseClientType; label: string }[] = [
   { id: "Departmental", label: "Departmental" },
   { id: "Ecom", label: "Ecom" },
 ];
-
-function getPagination(currentPage: number, totalPages: number) {
-  const pages: (number | string)[] = [];
-  if (totalPages <= 7) {
-    for (let i = 1; i <= totalPages; i++) pages.push(i);
-  } else {
-    pages.push(1);
-    if (currentPage > 4) pages.push("...");
-    for (
-      let i = Math.max(2, currentPage - 2);
-      i <= Math.min(totalPages - 1, currentPage + 2);
-      i++
-    ) {
-      pages.push(i);
-    }
-    if (currentPage < totalPages - 3) pages.push("...");
-    pages.push(totalPages);
-  }
-  return pages;
-}
 
 export default function WarehouseManagementClientsPage() {
   const router = useRouter();
@@ -67,10 +48,7 @@ export default function WarehouseManagementClientsPage() {
   const [totalResults, setTotalResults] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [isBulkImporting, setIsBulkImporting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const storeBulkInputRef = useRef<HTMLInputElement>(null);
-  const tradeBulkInputRef = useRef<HTMLInputElement>(null);
 
   const hasPermission = hasSubPermission("/warehouse-management", "Clients");
 
@@ -138,55 +116,17 @@ export default function WarehouseManagementClientsPage() {
     }
   };
 
-  const handleStoreBulkFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setIsBulkImporting(true);
-    try {
-      const buf = await file.arrayBuffer();
-      const { items, errors } = parseWarehouseClientStoreImportFile(buf);
-      if (errors.length) {
-        toast.error(errors.slice(0, 5).join(" · ") + (errors.length > 5 ? "…" : ""));
-      }
-      if (!items.length) {
-        if (!errors.length) toast.error("No valid rows to import");
-        return;
-      }
-      await whmsWarehouseClients.bulkImport({ items });
-      toast.success(`Imported ${items.length} Store row(s)`);
-      await fetchClients();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Bulk import failed");
-    } finally {
-      setIsBulkImporting(false);
-    }
-  };
-
-  const handleTradeBulkFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setIsBulkImporting(true);
-    try {
-      const buf = await file.arrayBuffer();
-      const { items, errors } = parseWarehouseClientTradeImportFile(buf);
-      if (errors.length) {
-        toast.error(errors.slice(0, 5).join(" · ") + (errors.length > 5 ? "…" : ""));
-      }
-      if (!items.length) {
-        if (!errors.length) toast.error("No valid rows to import");
-        return;
-      }
-      await whmsWarehouseClients.bulkImport({ items });
-      toast.success(`Imported ${items.length} row(s)`);
-      await fetchClients();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Bulk import failed");
-    } finally {
-      setIsBulkImporting(false);
-    }
-  };
+  const {
+    isBulkImporting,
+    importIssues,
+    dismissImportIssues,
+    storeBulkInputRef,
+    tradeBulkInputRef,
+    openStoreImport,
+    openTradeImport,
+    handleStoreBulkFile,
+    handleTradeBulkFile,
+  } = useWarehouseClientImport(fetchClients);
 
   const handleExportAll = async () => {
     setIsExporting(true);
@@ -246,6 +186,7 @@ export default function WarehouseManagementClientsPage() {
 
       <div className="bg-white shadow-sm border border-gray-100 overflow-hidden mx-0">
         <div className="p-[10px]">
+          <WarehouseClientImportIssues errors={importIssues} onDismiss={dismissImportIssues} />
           <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
             <div className="flex items-center gap-2">
               <div className="w-[3px] h-5 bg-purple-600 rounded-full" />
@@ -403,7 +344,7 @@ export default function WarehouseManagementClientsPage() {
               <button
                 type="button"
                 disabled={isBulkImporting}
-                onClick={() => storeBulkInputRef.current?.click()}
+                onClick={openStoreImport}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-purple-200 text-purple-700 text-[11px] font-bold rounded hover:bg-purple-50 transition-colors shadow-sm disabled:opacity-50"
               >
                 {isBulkImporting ? (
@@ -416,7 +357,7 @@ export default function WarehouseManagementClientsPage() {
               <button
                 type="button"
                 disabled={isBulkImporting}
-                onClick={() => tradeBulkInputRef.current?.click()}
+                onClick={openTradeImport}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-purple-200 text-purple-700 text-[11px] font-bold rounded hover:bg-purple-50 transition-colors shadow-sm disabled:opacity-50"
               >
                 {isBulkImporting ? (
@@ -508,7 +449,7 @@ export default function WarehouseManagementClientsPage() {
                 Prev
               </button>
               <div className="flex items-center gap-1 mx-2">
-                {getPagination(currentPage, totalPages).map((page, idx) =>
+                {getWarehouseClientPagination(currentPage, totalPages).map((page, idx) =>
                   page === "..." ? (
                     <span key={`e-${idx}`} className="text-gray-300 text-[10px]">
                       ...
