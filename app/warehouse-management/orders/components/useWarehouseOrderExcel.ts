@@ -9,11 +9,8 @@ import {
   fetchAllWarehouseClientsForReference,
   parseWarehouseOrdersBulkImportFile,
 } from "./warehouseOrderBulkImport";
-import {
-  downloadStoreOrderTemplate,
-  parseSimpleStoreOrderSheet,
-  parseStorePickupSheet,
-} from "./warehouseOrderStoreTemplate";
+import { parseSimpleStoreOrderSheet } from "./warehouseOrderFlatStoreSheet";
+import { downloadStoreOrderTemplate, parseStorePickupSheet } from "./warehouseOrderStoreTemplate";
 
 /**
  * Template downloads and bulk import for the warehouse orders list.
@@ -48,7 +45,7 @@ export function useWarehouseOrderExcel(onImported: () => Promise<void>) {
   };
 
   /**
-   * Download the flat store template: client, date, style code, addon order id, qty.
+   * Download the store pickup grid. Stores are columns. Extra catalogue columns are omitted.
    */
   const downloadStoreTemplate = async () => {
     setIsDownloadingStoreTemplate(true);

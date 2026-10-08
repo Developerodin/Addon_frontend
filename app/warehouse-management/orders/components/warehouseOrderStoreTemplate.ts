@@ -1,18 +1,17 @@
 import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
 import type { BulkImportOrderRow } from '@/shared/services/whmsWarehouseOrderService';
-import type { WarehouseClient } from '@/shared/services/whmsWarehouseClientService';
-import { warehouseClientReferenceLabel, warehouseOrderImportHeaderKey } from './warehouseOrderBulkImport';
+import { warehouseOrderImportHeaderKey } from './warehouseOrderBulkImport';
 
-const TEMPLATE_FILENAME = 'store-orders-template.xlsx';
-const SIMPLE_HEADERS = ['client', 'date', 'styleCode', 'addonOrderId', 'qty'] as const;
-const BLANK_ROWS = 20;
+export { downloadStoreOrderTemplate } from './warehouseOrderStoreTemplateDownload';
 
 const STYLE_HEADER_KEYS = new Set(['stecodenew', 'stylecode', 'stylecodenew']);
 const BILL_HEADER_KEYS = new Set(['billedcode', 'billcode']);
 const SAP_HEADER_KEY = 'sapcode';
 const RETEK_HEADER_KEY = 'retekcode';
 const TOTAL_HEADER_KEY = 'total';
+const PAIR_HEADER_KEY = 'pairtype';
+const TYPE_HEADER_KEY = 'type';
+const ADDON_HEADER_KEY = 'addonorderid';
 
 export interface StorePickupParseResult {
   orders: BulkImportOrderRow[];
@@ -24,12 +23,20 @@ interface CellPos {
   col: number;
 }
 
+interface StyleQty {
+  styleCode: string;
+  pairType: 'single' | 'multi';
+  type: string;
+  qty: number;
+}
+
 interface StoreColumn {
   col: number;
   bill: string;
   sap: string;
   retek: string;
-  qtyByStyle: Map<string, number>;
+  addonOrderId: string;
+  qtyByStyle: Map<string, StyleQty>;
 }
 
 type QtyParse = { kind: 'empty' } | { kind: 'invalid' } | { kind: 'qty'; qty: number };
@@ -38,7 +45,7 @@ type QtyParse = { kind: 'empty' } | { kind: 'invalid' } | { kind: 'qty'; qty: nu
  * Coerce a pickup-sheet cell to trimmed text. Numbers stay without a decimal tail.
  * @param value - Raw cell
  */
-function cellText(value: unknown): string {
+export function cellText(value: unknown): string {
   if (value == null) return '';
   if (value instanceof Date) return '';
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -64,7 +71,7 @@ function formatSheetDate(value: Date): string {
  * True when the cell is a calendar date or a DD/MM/YYYY string.
  * @param value - Raw cell
  */
-function readDateCell(value: unknown): string {
+export function readDateCell(value: unknown): string {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return formatSheetDate(value);
   const raw = typeof value === 'string' ? value.trim() : '';
   if (/^\d{1,2}[/\-]\d{1,2}[/\-]\d{4}$/.test(raw)) return raw.replace(/-/g, '/');
@@ -75,7 +82,7 @@ function readDateCell(value: unknown): string {
  * Parse a refill cell. Blank and 0 are empty. Negatives and fractions are invalid.
  * @param value - Raw cell
  */
-function parseQty(value: unknown): QtyParse {
+export function parseQty(value: unknown): QtyParse {
   if (value == null) return { kind: 'empty' };
   if (typeof value === 'string' && !value.trim()) return { kind: 'empty' };
   const n = typeof value === 'number' ? value : Number(String(value).trim());
@@ -177,6 +184,7 @@ function collectStoreColumns(
 ): StoreColumn[] {
   const width = rows.reduce((max, row) => Math.max(max, row?.length || 0), 0);
   const stores: StoreColumn[] = [];
+  const addonRow = findInColumn(rows, labelCol, ADDON_HEADER_KEY);
 
   for (let col = labelCol + 1; col < width; col += 1) {
     const headerKey = warehouseOrderImportHeaderKey(rows[headerRow]?.[col]);
@@ -185,6 +193,7 @@ function collectStoreColumns(
     const bill = cellText(rows[billRow]?.[col]);
     const sap = sapRow == null ? '' : cellText(rows[sapRow]?.[col]);
     const retek = retekRow == null ? '' : cellText(rows[retekRow]?.[col]);
+    const addonOrderId = addonRow == null ? '' : cellText(rows[addonRow]?.[col]);
     if (!bill && !sap && !retek) {
       if (columnHasQty(rows, headerRow, col)) {
         errors.push(`Column ${col + 1}: refill quantity but no bill, SAP, or retek code`);
@@ -192,7 +201,7 @@ function collectStoreColumns(
       continue;
     }
 
-    stores.push({ col, bill, sap, retek, qtyByStyle: new Map() });
+    stores.push({ col, bill, sap, retek, addonOrderId, qtyByStyle: new Map() });
   }
 
   return stores;
@@ -215,12 +224,16 @@ function columnHasQty(rows: unknown[][], headerRow: number, col: number): boolea
  * Fill per-store style quantities from data rows under the style header.
  * @param rows - Sheet matrix
  * @param header - Style-code header position
+ * @param pairCol - PAIR TYPE column, when the sheet has one
+ * @param typeCol - TYPE column, when the sheet has one
  * @param stores - Store columns
  * @param errors - Parse errors to append
  */
 function fillStoreQuantities(
   rows: unknown[][],
   header: CellPos,
+  pairCol: number | null,
+  typeCol: number | null,
   stores: StoreColumn[],
   errors: string[],
 ): void {
@@ -234,6 +247,13 @@ function fillStoreQuantities(
       continue;
     }
 
+    const pairType = readPairType(pairCol == null ? '' : cellText(rows[row]?.[pairCol]));
+    if (pairType === 'invalid') {
+      errors.push(`Row ${row + 1}: pair type must be single or multi`);
+      continue;
+    }
+
+    const type = typeCol == null ? '' : cellText(rows[row]?.[typeCol]);
     stores.forEach((store) => {
       const parsed = parseQty(rows[row]?.[store.col]);
       if (parsed.kind === 'empty') return;
@@ -242,7 +262,14 @@ function fillStoreQuantities(
         errors.push(`Row ${row + 1}: quantity for store ${label} must be a whole number of at least 0`);
         return;
       }
-      store.qtyByStyle.set(style, (store.qtyByStyle.get(style) || 0) + parsed.qty);
+      const key = `${pairType}\0${style}\0${type}`;
+      const prev = store.qtyByStyle.get(key);
+      store.qtyByStyle.set(key, {
+        styleCode: style,
+        pairType,
+        type,
+        qty: (prev?.qty || 0) + parsed.qty,
+      });
     });
   }
 }
@@ -266,10 +293,21 @@ function ordersFromStores(stores: StoreColumn[], date: string, storePickupRef: s
         ...(store.bill ? { storeBillCode: store.bill } : {}),
         ...(store.sap ? { storeSapCode: store.sap } : {}),
         ...(store.retek ? { storeRetekCode: store.retek } : {}),
-        styleCodeSinglePair: [...store.qtyByStyle.entries()].map(([styleCode, quantity]) => ({
-          styleCode,
-          quantity,
-        })),
+        ...(store.addonOrderId ? { addonOrderId: store.addonOrderId } : {}),
+        styleCodeSinglePair: [...store.qtyByStyle.values()]
+          .filter((item) => item.pairType === 'single')
+          .map((item) => ({
+            styleCode: item.styleCode,
+            quantity: item.qty,
+            ...(item.type ? { type: item.type } : {}),
+          })),
+        styleCodeMultiPair: [...store.qtyByStyle.values()]
+          .filter((item) => item.pairType === 'multi')
+          .map((item) => ({
+            styleCode: item.styleCode,
+            quantity: item.qty,
+            ...(item.type ? { type: item.type } : {}),
+          })),
         meta: {
           source: 'store-pickup-sheet',
           ...(storePickupRef ? { storePickupRef } : {}),
@@ -279,127 +317,25 @@ function ordersFromStores(stores: StoreColumn[], date: string, storePickupRef: s
 }
 
 /**
- * Sort store clients by bill code so template columns follow the pickup sheet.
- * @param stores - Store clients
+ * Map a pairType cell to single or multi. Blank is single.
+ * @param raw - Cell text
  */
-function sortStores(stores: WarehouseClient[]): WarehouseClient[] {
-  return [...stores].sort((a, b) => {
-    const left = a.storeProfile?.billCode?.trim() || '';
-    const right = b.storeProfile?.billCode?.trim() || '';
-    return left.localeCompare(right, undefined, { numeric: true });
-  });
+export function readPairType(raw: string): 'single' | 'multi' | 'invalid' {
+  const value = raw.toLowerCase().replace(/[\s_-]+/g, '');
+  if (!value || value === 'single' || value === 'singlepair') return 'single';
+  if (value === 'multi' || value === 'multipair') return 'multi';
+  return 'invalid';
 }
 
 /**
- * True when the first row is the flat store template (client, style code, qty).
- * @param row - First sheet row
+ * Find a header cell on the style header row.
+ * @param rows - Sheet matrix
+ * @param headerRow - Style header row index
+ * @param key - Normalized header
  */
-function isSimpleStoreHeader(row: Record<string, unknown> | undefined): boolean {
-  const keys = new Set(Object.keys(row || {}).map((key) => warehouseOrderImportHeaderKey(key)));
-  const hasStyle = keys.has('stylecode') || keys.has('stecodenew');
-  const hasQty = keys.has('qty') || keys.has('quantity');
-  return keys.has('client') && hasStyle && hasQty;
-}
-
-/**
- * Group flat store rows into one pending order per client + addon order id, or client + date when the id is blank.
- * Blank client rows (prefilled stores with no style) are skipped.
- * @param rows - Sheet objects
- */
-function ordersFromSimpleRows(rows: Record<string, unknown>[]): StorePickupParseResult {
-  const errors: string[] = [];
-  const grouped = new Map<string, BulkImportOrderRow>();
-
-  rows.forEach((row, index) => {
-    const line = index + 2;
-    const mapped = new Map<string, unknown>();
-    Object.entries(row).forEach(([key, value]) => mapped.set(warehouseOrderImportHeaderKey(key), value));
-
-    const client = cellText(mapped.get('client'));
-    const date = readDateCell(mapped.get('date'));
-    const styleCode = cellText(mapped.get('stylecode') ?? mapped.get('stecodenew'));
-    const addonOrderId = cellText(mapped.get('addonorderid'));
-    const qtyCell = mapped.get('qty') ?? mapped.get('quantity');
-    if (!client && !date && !styleCode && !addonOrderId && cellText(qtyCell) === '') return;
-    if (!client) {
-      errors.push(`Row ${line}: client is required`);
-      return;
-    }
-    if (!styleCode) return;
-
-    const parsed = parseQty(qtyCell);
-    if (parsed.kind !== 'qty') {
-      errors.push(`Row ${line}: qty for style ${styleCode} must be a whole number of at least 1`);
-      return;
-    }
-
-    const key = addonOrderId
-      ? `${client.toLowerCase()}\0${addonOrderId.toLowerCase()}`
-      : `${client.toLowerCase()}\0\0${date}`;
-    const current = grouped.get(key) ?? {
-      clientType: 'Store',
-      clientName: client,
-      date,
-      status: 'pending',
-      ...(addonOrderId ? { addonOrderId } : {}),
-      styleCodeSinglePair: [],
-    };
-    if (date && !current.date) current.date = date;
-    current.styleCodeSinglePair = [...(current.styleCodeSinglePair || []), { styleCode, quantity: parsed.qty }];
-    grouped.set(key, current);
-  });
-
-  return { orders: [...grouped.values()], errors };
-}
-
-/**
- * Parse the flat store template. Returns null when the sheet is not that layout.
- * @param buf - File array buffer
- */
-export function parseSimpleStoreOrderSheet(buf: ArrayBuffer): StorePickupParseResult | null {
-  const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-  const named = wb.SheetNames.find((name) => warehouseOrderImportHeaderKey(name) === 'orders');
-  const sheet = wb.Sheets[named ?? wb.SheetNames[0] ?? ''];
-  if (!sheet) return null;
-
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '', raw: true });
-  if (!isSimpleStoreHeader(rows[0])) return null;
-  return ordersFromSimpleRows(rows);
-}
-
-/**
- * One empty store-template row. Client can be prefilled from an active store.
- * @param client - Bill code, SAP, retek, or brand
- */
-function blankStoreRow(client = ''): Record<(typeof SIMPLE_HEADERS)[number], string> {
-  return { client, date: '', styleCode: '', addonOrderId: '', qty: '' };
-}
-
-/**
- * Download the store order template. Columns: client, date, style code, addon order id, qty.
- * Active stores are prefilled in the client column. Pack, EAN, and shade come from the catalogue on import.
- * @param stores - Active store clients to prefill
- */
-export function downloadStoreOrderTemplate(stores: WarehouseClient[]): void {
-  const prefilled = sortStores(stores).map((store) => blankStoreRow(warehouseClientReferenceLabel(store)));
-  const blanks = Array.from({ length: BLANK_ROWS }, () => blankStoreRow());
-
-  const wb = XLSX.utils.book_new();
-  const sheet = XLSX.utils.json_to_sheet([...prefilled, ...blanks], { header: [...SIMPLE_HEADERS] });
-  sheet['!cols'] = SIMPLE_HEADERS.map((name) => ({ wch: Math.max(name.length + 4, 18) }));
-  XLSX.utils.book_append_sheet(wb, sheet, 'Orders');
-
-  const instructions = [
-    { Field: 'client', Description: 'Required. Store bill code, SAP code, retek code, or brand.' },
-    { Field: 'date', Description: 'Optional. DD/MM/YYYY. Blank uses today. Same client + date (when addonOrderId is blank) becomes one order.' },
-    { Field: 'styleCode', Description: 'Required on each line. Pack, EAN, shade, and brand come from the style catalogue.' },
-    { Field: 'addonOrderId', Description: 'Optional. Unique per order. When set, lines with that id are one order.' },
-    { Field: 'qty', Description: 'Required. Whole number of at least 1. Rows with no style code are skipped.' },
-  ];
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(instructions), 'Instructions');
-
-  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  saveAs(new Blob([wbout], { type: 'application/octet-stream' }), TEMPLATE_FILENAME);
+function findHeaderCol(rows: unknown[][], headerRow: number, key: string): number | null {
+  const col = (rows[headerRow] || []).findIndex((cell) => warehouseOrderImportHeaderKey(cell) === key);
+  return col >= 0 ? col : null;
 }
 
 /**
@@ -433,7 +369,14 @@ export function parseStorePickupSheet(buf: ArrayBuffer): StorePickupParseResult 
   const retekRow = findInColumn(rows, bill.col, RETEK_HEADER_KEY);
   const { date, storePickupRef } = readSheetContext(rows, header, bill.col);
   const stores = collectStoreColumns(rows, header.row, bill.col, bill.row, sapRow, retekRow, errors);
-  fillStoreQuantities(rows, header, stores, errors);
+  fillStoreQuantities(
+    rows,
+    header,
+    findHeaderCol(rows, header.row, PAIR_HEADER_KEY),
+    findHeaderCol(rows, header.row, TYPE_HEADER_KEY),
+    stores,
+    errors,
+  );
 
   return {
     orders: ordersFromStores(stores, date, storePickupRef),

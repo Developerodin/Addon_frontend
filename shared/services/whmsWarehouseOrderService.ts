@@ -321,6 +321,8 @@ export type WarehouseOrdersListParams = {
 
 export interface BulkImportSinglePairItem {
   styleCode: string;
+  /** Optional line type. Blank uses the style catalogue brand. */
+  type?: string;
   colour?: string;
   pattern?: string;
   quantity: number;
