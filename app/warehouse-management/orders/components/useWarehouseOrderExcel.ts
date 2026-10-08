@@ -9,7 +9,11 @@ import {
   fetchAllWarehouseClientsForReference,
   parseWarehouseOrdersBulkImportFile,
 } from "./warehouseOrderBulkImport";
-import { downloadStoreOrderTemplate, parseStorePickupSheet } from "./warehouseOrderStoreTemplate";
+import {
+  downloadStoreOrderTemplate,
+  parseSimpleStoreOrderSheet,
+  parseStorePickupSheet,
+} from "./warehouseOrderStoreTemplate";
 
 /**
  * Template downloads and bulk import for the warehouse orders list.
@@ -44,7 +48,7 @@ export function useWarehouseOrderExcel(onImported: () => Promise<void>) {
   };
 
   /**
-   * Download the store pickup grid. Columns are active Store clients (bill, SAP, retek).
+   * Download the flat store template: client, date, style code, addon order id, qty.
    */
   const downloadStoreTemplate = async () => {
     setIsDownloadingStoreTemplate(true);
@@ -77,7 +81,8 @@ export function useWarehouseOrderExcel(onImported: () => Promise<void>) {
     setIsImporting(true);
     try {
       const buf = await file.arrayBuffer();
-      const storeParsed = parseStorePickupSheet(buf);
+      const simpleParsed = parseSimpleStoreOrderSheet(buf);
+      const storeParsed = simpleParsed ?? parseStorePickupSheet(buf);
       const { orders, errors: parseErrors } = storeParsed ?? parseWarehouseOrdersBulkImportFile(buf);
 
       if (parseErrors.length) {
@@ -88,9 +93,11 @@ export function useWarehouseOrderExcel(onImported: () => Promise<void>) {
       if (!orders.length) {
         if (!parseErrors.length) {
           toast.error(
-            storeParsed
-              ? "No store orders in this sheet. Enter a style code and a refill quantity above 0."
-              : "No valid orders parsed. Fill clientType + clientId (or clientName) on header rows.",
+            simpleParsed
+              ? "No store orders. Fill client, style code, and a qty above 0."
+              : storeParsed
+                ? "No store orders in this sheet. Enter a style code and a refill quantity above 0."
+                : "No valid orders parsed. Fill clientType + clientId (or clientName) on header rows.",
           );
         }
         return;

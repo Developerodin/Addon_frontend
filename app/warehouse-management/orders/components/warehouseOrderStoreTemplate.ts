@@ -2,18 +2,17 @@ import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import type { BulkImportOrderRow } from '@/shared/services/whmsWarehouseOrderService';
 import type { WarehouseClient } from '@/shared/services/whmsWarehouseClientService';
-import { warehouseOrderImportHeaderKey } from './warehouseOrderBulkImport';
+import { warehouseClientReferenceLabel, warehouseOrderImportHeaderKey } from './warehouseOrderBulkImport';
 
 const TEMPLATE_FILENAME = 'store-orders-template.xlsx';
-const BLANK_STYLE_ROWS = 20;
+const SIMPLE_HEADERS = ['client', 'date', 'styleCode', 'addonOrderId', 'qty'] as const;
+const BLANK_ROWS = 20;
 
 const STYLE_HEADER_KEYS = new Set(['stecodenew', 'stylecode', 'stylecodenew']);
 const BILL_HEADER_KEYS = new Set(['billedcode', 'billcode']);
 const SAP_HEADER_KEY = 'sapcode';
 const RETEK_HEADER_KEY = 'retekcode';
 const TOTAL_HEADER_KEY = 'total';
-
-const FIXED_HEADERS = ['SIZE', 'SEASON', 'STE CODE NEW', 'EAN CODE', 'SHADE', 'NIH', 'NET BALANCE'];
 
 export interface StorePickupParseResult {
   orders: BulkImportOrderRow[];
@@ -292,49 +291,110 @@ function sortStores(stores: WarehouseClient[]): WarehouseClient[] {
 }
 
 /**
- * Download the store pickup template. Active stores become columns. Style rows are blank.
- * @param stores - Store clients to place in the header (bill, SAP, retek)
+ * True when the first row is the flat store template (client, style code, qty).
+ * @param row - First sheet row
+ */
+function isSimpleStoreHeader(row: Record<string, unknown> | undefined): boolean {
+  const keys = new Set(Object.keys(row || {}).map((key) => warehouseOrderImportHeaderKey(key)));
+  const hasStyle = keys.has('stylecode') || keys.has('stecodenew');
+  const hasQty = keys.has('qty') || keys.has('quantity');
+  return keys.has('client') && hasStyle && hasQty;
+}
+
+/**
+ * Group flat store rows into one pending order per client + addon order id, or client + date when the id is blank.
+ * Blank client rows (prefilled stores with no style) are skipped.
+ * @param rows - Sheet objects
+ */
+function ordersFromSimpleRows(rows: Record<string, unknown>[]): StorePickupParseResult {
+  const errors: string[] = [];
+  const grouped = new Map<string, BulkImportOrderRow>();
+
+  rows.forEach((row, index) => {
+    const line = index + 2;
+    const mapped = new Map<string, unknown>();
+    Object.entries(row).forEach(([key, value]) => mapped.set(warehouseOrderImportHeaderKey(key), value));
+
+    const client = cellText(mapped.get('client'));
+    const date = readDateCell(mapped.get('date'));
+    const styleCode = cellText(mapped.get('stylecode') ?? mapped.get('stecodenew'));
+    const addonOrderId = cellText(mapped.get('addonorderid'));
+    const qtyCell = mapped.get('qty') ?? mapped.get('quantity');
+    if (!client && !date && !styleCode && !addonOrderId && cellText(qtyCell) === '') return;
+    if (!client) {
+      errors.push(`Row ${line}: client is required`);
+      return;
+    }
+    if (!styleCode) return;
+
+    const parsed = parseQty(qtyCell);
+    if (parsed.kind !== 'qty') {
+      errors.push(`Row ${line}: qty for style ${styleCode} must be a whole number of at least 1`);
+      return;
+    }
+
+    const key = addonOrderId
+      ? `${client.toLowerCase()}\0${addonOrderId.toLowerCase()}`
+      : `${client.toLowerCase()}\0\0${date}`;
+    const current = grouped.get(key) ?? {
+      clientType: 'Store',
+      clientName: client,
+      date,
+      status: 'pending',
+      ...(addonOrderId ? { addonOrderId } : {}),
+      styleCodeSinglePair: [],
+    };
+    if (date && !current.date) current.date = date;
+    current.styleCodeSinglePair = [...(current.styleCodeSinglePair || []), { styleCode, quantity: parsed.qty }];
+    grouped.set(key, current);
+  });
+
+  return { orders: [...grouped.values()], errors };
+}
+
+/**
+ * Parse the flat store template. Returns null when the sheet is not that layout.
+ * @param buf - File array buffer
+ */
+export function parseSimpleStoreOrderSheet(buf: ArrayBuffer): StorePickupParseResult | null {
+  const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+  const named = wb.SheetNames.find((name) => warehouseOrderImportHeaderKey(name) === 'orders');
+  const sheet = wb.Sheets[named ?? wb.SheetNames[0] ?? ''];
+  if (!sheet) return null;
+
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '', raw: true });
+  if (!isSimpleStoreHeader(rows[0])) return null;
+  return ordersFromSimpleRows(rows);
+}
+
+/**
+ * One empty store-template row. Client can be prefilled from an active store.
+ * @param client - Bill code, SAP, retek, or brand
+ */
+function blankStoreRow(client = ''): Record<(typeof SIMPLE_HEADERS)[number], string> {
+  return { client, date: '', styleCode: '', addonOrderId: '', qty: '' };
+}
+
+/**
+ * Download the store order template. Columns: client, date, style code, addon order id, qty.
+ * Active stores are prefilled in the client column. Pack, EAN, and shade come from the catalogue on import.
+ * @param stores - Active store clients to prefill
  */
 export function downloadStoreOrderTemplate(stores: WarehouseClient[]): void {
-  const ordered = sortStores(stores);
-  const title = ordered.length ? `${ordered.length} SC STORES` : 'STORE PICKUP';
-  const today = new Date();
-  const sheetDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const prefilled = sortStores(stores).map((store) => blankStoreRow(warehouseClientReferenceLabel(store)));
+  const blanks = Array.from({ length: BLANK_ROWS }, () => blankStoreRow());
 
-  const blankLeft = () => Array<unknown>(FIXED_HEADERS.length).fill(null);
-  const rowTitle = blankLeft();
-  rowTitle[2] = title;
-  ordered.forEach((_, index) => rowTitle.push(index + 1));
-
-  const rowBill = blankLeft();
-  rowBill[2] = sheetDate;
-  rowBill[6] = 'BILLED CODE';
-  ordered.forEach((store) => rowBill.push(store.storeProfile?.billCode?.trim() || ''));
-
-  const rowSap = blankLeft();
-  rowSap[6] = 'SAP CODE';
-  ordered.forEach((store) => rowSap.push(store.storeProfile?.sapCode?.trim() || ''));
-
-  const rowRetek = blankLeft();
-  rowRetek[6] = 'RETEK CODE';
-  ordered.forEach((store) => rowRetek.push(store.storeProfile?.retekCode?.trim() || ''));
-
-  const header = [...FIXED_HEADERS, ...ordered.map(() => 'REFILL'), 'TOTAL'];
-  const styleRows = Array.from({ length: BLANK_STYLE_ROWS }, () => Array<unknown>(header.length).fill(null));
-
-  const aoa = [rowTitle, rowBill, rowSap, rowRetek, header, ...styleRows];
   const wb = XLSX.utils.book_new();
-  const sheet = XLSX.utils.aoa_to_sheet(aoa);
-  sheet['!cols'] = header.map((name) => ({ wch: Math.max(String(name).length + 2, 14) }));
-  XLSX.utils.book_append_sheet(wb, sheet, 'PICK UP SHEET');
+  const sheet = XLSX.utils.json_to_sheet([...prefilled, ...blanks], { header: [...SIMPLE_HEADERS] });
+  sheet['!cols'] = SIMPLE_HEADERS.map((name) => ({ wch: Math.max(name.length + 4, 18) }));
+  XLSX.utils.book_append_sheet(wb, sheet, 'Orders');
 
   const instructions = [
-    { Field: 'Date', Description: 'Row 2, STE CODE NEW column. DD/MM/YYYY. Used as the order date for every store.' },
-    { Field: 'Pickup ref', Description: 'Optional. Row 3, STE CODE NEW column (under the date). Saved on the order. Each store still gets its own WO number.' },
-    { Field: 'BILLED CODE / SAP CODE / RETEK CODE', Description: 'Filled from active stores. Do not paste Mongo ids. A column with no quantity is skipped.' },
-    { Field: 'STE CODE NEW', Description: 'Required on each item row. Pack, EAN, shade, and brand come from the style catalogue.' },
-    { Field: 'REFILL', Description: 'Whole-number quantity for that store. Blank or 0 creates no line. One pending order per store that has a quantity.' },
-    { Field: 'SIZE, SEASON, EAN, SHADE, NIH, NET BALANCE, TOTAL', Description: 'Ignored on import.' },
+    { Field: 'client', Description: 'Required. Store bill code, SAP code, retek code, or brand.' },
+    { Field: 'date', Description: 'Optional. DD/MM/YYYY. Blank uses today. Same client + date (when addonOrderId is blank) becomes one order.' },
+    { Field: 'styleCode', Description: 'Required on each line. Pack, EAN, shade, and brand come from the style catalogue.' },
+    { Field: 'addonOrderId', Description: 'Optional. Unique per order. When set, lines with that id are one order.' },
+    { Field: 'qty', Description: 'Required. Whole number of at least 1. Rows with no style code are skipped.' },
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(instructions), 'Instructions');
 
