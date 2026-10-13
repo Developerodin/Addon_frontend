@@ -47,6 +47,35 @@ function statusPill(status?: string) {
   );
 }
 
+/**
+ * Client id from a list row. The API populates clientId, so it may be an object.
+ * @param order - Warehouse order row
+ */
+function orderClientId(order: WarehouseOrder): string {
+  const client = order.clientId as unknown;
+  if (client && typeof client === "object" && "id" in client) {
+    return String((client as { id?: string }).id || "");
+  }
+  return String(client || "");
+}
+
+/**
+ * Bill code for store orders. Other client types have none.
+ * @param order - Warehouse order row
+ */
+function storeBillCode(order: WarehouseOrder): string {
+  if (order.clientType !== "Store") return "";
+  const direct = order.billCode?.trim();
+  if (direct) return direct;
+  const client = order.clientId as unknown;
+  if (client && typeof client === "object" && "storeProfile" in client) {
+    return String(
+      (client as { storeProfile?: { billCode?: string } }).storeProfile?.billCode || "",
+    ).trim();
+  }
+  return "";
+}
+
 function hasIncompleteClient(o: WarehouseOrder): boolean {
   const meta = o.meta as Record<string, unknown> | undefined;
   return Array.isArray(meta?.clientIncompleteFields) && meta.clientIncompleteFields.length > 0;
@@ -117,7 +146,7 @@ type Props = {
   onFlow?: (id: string) => void;
 };
 
-const COLUMN_COUNT = 11;
+const COLUMN_COUNT = 12;
 
 export default function WarehouseOrdersTable({
   rows,
@@ -190,6 +219,7 @@ export default function WarehouseOrdersTable({
           <th className={thFirst}>Order #</th>
           <th className={th}>Addon order ID</th>
           <th className={th}>Client</th>
+          <th className={th}>Bill code</th>
           <th className={th}>Client type</th>
           <th className={th}>Qty</th>
           <th className={th}>Single rows</th>
@@ -215,6 +245,8 @@ export default function WarehouseOrdersTable({
             {orders.map((o) => {
               const selectable = isOrderSelectableForPickBatch(o);
               const flow = effectiveWarehouseOrderFlowStatus(o);
+              const clientId = orderClientId(o);
+              const billCode = storeBillCode(o);
               return (
               <tr key={o.id} className="hover:bg-gray-50/50 transition-colors group">
                 <td className={`${tdBold} w-10`}>
@@ -247,9 +279,9 @@ export default function WarehouseOrdersTable({
                 </td>
                 <td className={td}>{o.addonOrderId?.trim() || "—"}</td>
                 <td className={td}>
-                  {o.clientId ? (
+                  {clientId ? (
                     <Link
-                      href={clientEditHref(o.clientId, o.id)}
+                      href={clientEditHref(clientId, o.id)}
                       className="text-purple-700 hover:text-purple-900 hover:underline"
                     >
                       {o.clientName?.trim() || "—"}
@@ -263,6 +295,7 @@ export default function WarehouseOrdersTable({
                     </span>
                   )}
                 </td>
+                <td className={td}>{billCode || "—"}</td>
                 <td className={td}>{o.clientType}</td>
                 <td className={td}>{totalQty(o)}</td>
                 <td className={td}>{o.styleCodeSinglePair?.length ?? 0}</td>

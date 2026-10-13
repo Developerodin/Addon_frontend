@@ -254,6 +254,8 @@ export interface WarehouseOrder {
   clientType: WarehouseClientType;
   clientId: string;
   clientName?: string;
+  /** Store client bill code. Empty unless the order client is a store. */
+  billCode?: string;
   date?: string;
   /** API value: kebab-case; may include legacy values normalized in UI. */
   status?: WarehouseOrderStatus | string;
@@ -352,7 +354,7 @@ export interface BulkImportOrderRow {
   status: string;
   /** Optional external / customer reference (e.g. Addon order number). */
   addonOrderId?: string;
-  /** Pickup batch ref and source. Not used as addonOrderId (that field is unique per order). */
+  /** Pickup batch ref and source. Separate from addonOrderId, which may be shared across orders. */
   meta?: { source?: string; storePickupRef?: string };
   styleCodeSinglePair?: BulkImportSinglePairItem[];
   styleCodeMultiPair?: BulkImportMultiPairItem[];

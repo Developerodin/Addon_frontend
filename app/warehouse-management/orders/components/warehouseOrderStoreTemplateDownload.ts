@@ -129,7 +129,7 @@ export function downloadStoreOrderTemplate(stores: WarehouseClient[]): void {
     { Field: 'Samples', Description: 'The first 3 store columns and the first 3 style rows are examples. Replace EXAMPLE- bill, SAP, retek, addon ids, and style codes before import.' },
     { Field: 'Date', Description: 'Row 2, STE CODE NEW column. DD/MM/YYYY. Used as the order date for every store. Blank uses today.' },
     { Field: 'BILLED CODE / SAP CODE / RETEK CODE', Description: 'One column per store. Example columns show the shape. A column with no quantity is skipped.' },
-    { Field: 'ADDON ORDER ID', Description: 'Optional. One id per store column. Must be unique. Leave blank if you do not have one.' },
+    { Field: 'ADDON ORDER ID', Description: 'Optional. One id per store column. The same id can be used on other orders. Leave blank if you do not have one.' },
     { Field: 'STE CODE NEW', Description: 'Style code on each item row. Pack, EAN, colour, and pattern come from the catalogue.' },
     { Field: 'PAIR TYPE', Description: 'single or multi. Blank means single. Multi uses the pair style code.' },
     { Field: 'REFILL', Description: 'Whole-number quantity for that store. Blank or 0 creates no line.' },
