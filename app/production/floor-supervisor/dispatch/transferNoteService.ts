@@ -38,6 +38,39 @@ export interface DispatchTransferNote {
   createdAt?: string;
 }
 
+/** One article row still waiting on warehouse inward, taken from an existing note. */
+export interface AlreadyPrintedNoteLine {
+  articleNumber: string;
+  sapArticleNo?: string;
+  articleName: string;
+  brand?: string;
+  qtyInPairs: number;
+}
+
+/** Active note on the current reprint page that still has uninwarded quantity. */
+export interface AlreadyPrintedNote {
+  transferNoteId: string;
+  stnSerial: string;
+  stnDate: string;
+  lines: AlreadyPrintedNoteLine[];
+}
+
+export interface AlreadyPrintedNotePage {
+  results: AlreadyPrintedNote[];
+  page: number;
+  limit: number;
+  totalResults: number;
+  totalPages: number;
+}
+
+export interface AlreadyPrintedNoteFilters {
+  startDate?: string;
+  endDate?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
 export interface DispatchTransferNotePreview {
   lines: DispatchTransferNoteLine[];
   totalQty: number;
@@ -107,6 +140,37 @@ export async function previewDispatchTransferNote(
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err?.message || 'Failed to load transfer note preview');
+  }
+  return res.json();
+}
+
+/**
+ * Loads one page of already-printed notes for a date window. Defaults are applied by the API.
+ * @param filters - Date range, serial or article search, and page
+ */
+export async function fetchAlreadyPrintedNotes(
+  filters: AlreadyPrintedNoteFilters = {}
+): Promise<AlreadyPrintedNotePage> {
+  const token = getToken();
+  const params = new URLSearchParams();
+  if (filters.startDate) params.set('startDate', filters.startDate);
+  if (filters.endDate) params.set('endDate', filters.endDate);
+  if (filters.search) params.set('search', filters.search);
+  params.set('page', String(filters.page ?? 1));
+  params.set('limit', String(filters.limit ?? 20));
+
+  const res = await fetch(
+    `${API_BASE_URL}/production/floors/Dispatch/transfer-notes/already-printed?${params.toString()}`,
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.message || 'Failed to load already-printed notes');
   }
   return res.json();
 }

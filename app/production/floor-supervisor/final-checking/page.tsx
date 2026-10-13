@@ -1214,6 +1214,7 @@ const FinalCheckingFloorSupervisorPage = () => {
     try {
       const response = await fetch('/templates/stock-transfer-note.html');
       let htmlTemplate = await response.text();
+      htmlTemplate = htmlTemplate.replaceAll('{{REPRINT_BANNER}}', '');
 
       const printWindow = window.open('', '_blank');
       if (printWindow) {
