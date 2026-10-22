@@ -14,11 +14,13 @@
     "sass-min": "sass ./public/assets/scss/:./public/assets/css/ --style compressed"
   },
   "dependencies": {
+    "@ai-sdk/react": "4.0.147",
     "@aws-sdk/client-s3": "^3.817.0",
     "@aws-sdk/s3-request-presigner": "^3.817.0",
     "@reduxjs/toolkit": "1.9.7",
     "@simonwep/pickr": "^1.9.1",
     "@tailwindcss/forms": "^0.5.7",
+    "ai": "7.0.143",
     "apexcharts": "^3.49.1",
     "autoprefixer": "^10.4.19",
     "axios": "1.8.4",
@@ -44,6 +46,7 @@
     "react-dropzone": "^14.2.3",
     "react-filepond": "^7.1.2",
     "react-hot-toast": "2.5.2",
+    "react-markdown": "10.1.0",
     "react-perfect-scrollbar": "^1.5.8",
     "react-quill": "2.0.0",
     "react-redux": "8.1.3",
