@@ -5,11 +5,11 @@ import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { CRM } from "../vendor-list/crmUiClasses";
-import vendorProductionFlowService, {
+import {
   mergeProductionFlowPreservePopulatedRefs,
   type VendorProductionFlow,
 } from "@/shared/services/vendorProductionFlowService";
-import { productionFlowListParams } from "../utils/vendorPoProductionFlowList";
+import { listAllProductionFlowsForFloor } from "../utils/vendorPoProductionFlowList";
 import { VendorBrandingProcessDrawer } from "./components/VendorBrandingProcessDrawer";
 import {
   VendorBrandingStagingModal,
@@ -45,10 +45,8 @@ const BrandingPage = () => {
   const loadFlows = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await vendorProductionFlowService.list(
-        productionFlowListParams("branding"),
-      );
-      setFlows(data.results || []);
+      const data = await listAllProductionFlowsForFloor("branding");
+      setFlows(data);
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : "Failed to load branding flows";
