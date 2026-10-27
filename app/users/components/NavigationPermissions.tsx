@@ -1,6 +1,7 @@
 "use client"
 import React from 'react'
 import { User } from '@/shared/services/userService'
+import { mergeTasksPermissions } from '@/shared/contextapi/navigationContext'
 
 type NavigationState = Partial<User['navigation']>
 
@@ -178,10 +179,8 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
               { key: 'Task Manager', label: 'Task Manager' },
               { key: 'My Tasks', label: 'My Tasks' },
             ].map((item) => {
-              const tasksNav = navigation.Tasks;
-              const checked = tasksNav === undefined
-                || tasksNav === true
-                || (tasksNav && typeof tasksNav === 'object' && tasksNav[item.key as 'Task Manager' | 'My Tasks'] === true);
+              const tasksNav = mergeTasksPermissions(navigation.Tasks);
+              const checked = tasksNav[item.key as 'Task Manager' | 'My Tasks'] === true;
               return (
                 <label key={item.key} className="flex items-center">
                   <input

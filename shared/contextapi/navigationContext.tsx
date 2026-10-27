@@ -303,7 +303,7 @@ export function mergeReportsPermissions(
 }
 
 /**
- * True when either task screen is allowed. A legacy boolean true opens both.
+ * True when either task screen is allowed. A legacy boolean true opens My Tasks only.
  * @param tasks - Stored Tasks permission
  */
 export function hasAnyTaskAccess(
@@ -319,14 +319,14 @@ export function hasAnyTaskAccess(
 
 /**
  * Expand a missing or boolean Tasks flag into the two screen checkboxes.
- * Missing means both screens, matching users who never had the flag stored.
+ * Missing or legacy true is My Tasks only. Task Manager stays off unless stored true.
  * @param raw - Stored Tasks value
  */
 export function mergeTasksPermissions(
   raw: NavigationPermissions['Tasks'] | undefined
 ): { 'Task Manager': boolean; 'My Tasks': boolean } {
   if (raw === false) return { 'Task Manager': false, 'My Tasks': false };
-  if (raw === undefined || raw === true) return { 'Task Manager': true, 'My Tasks': true };
+  if (raw === undefined || raw === true) return { 'Task Manager': false, 'My Tasks': true };
   return {
     'Task Manager': raw['Task Manager'] === true,
     'My Tasks': raw['My Tasks'] === true,

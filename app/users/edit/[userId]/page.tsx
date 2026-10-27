@@ -126,10 +126,10 @@ const EditUserPage = () => {
                 }
             } else if (subsection) {
                 if (section === 'Tasks' && (typeof newNav.Tasks !== 'object' || newNav.Tasks === null)) {
-                    const legacy = newNav.Tasks !== false;
+                    const myTasks = newNav.Tasks !== false;
                     newNav.Tasks = {
-                        'Task Manager': legacy,
-                        'My Tasks': legacy,
+                        'Task Manager': false,
+                        'My Tasks': myTasks,
                         [subsection]: value,
                     } as User['navigation']['Tasks'];
                     return newNav;
