@@ -125,6 +125,15 @@ const EditUserPage = () => {
                     sectionObj[subsection][subsubsection] = value;
                 }
             } else if (subsection) {
+                if (section === 'Tasks' && (typeof newNav.Tasks !== 'object' || newNav.Tasks === null)) {
+                    const legacy = newNav.Tasks !== false;
+                    newNav.Tasks = {
+                        'Task Manager': legacy,
+                        'My Tasks': legacy,
+                        [subsection]: value,
+                    } as User['navigation']['Tasks'];
+                    return newNav;
+                }
                 // Handle nested sections like Catalog.Items
                 if (!newNav[section as keyof typeof newNav] || typeof newNav[section as keyof typeof newNav] !== 'object') {
                     newNav[section as keyof typeof newNav] = {} as any;

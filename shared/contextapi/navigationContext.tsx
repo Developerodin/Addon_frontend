@@ -46,6 +46,10 @@ export interface NavigationPermissions {
   'Replenishment Agent': boolean;
   'File Manager': boolean;
   'Help & Support': boolean;
+  Tasks: boolean | {
+    'Task Manager': boolean;
+    'My Tasks': boolean;
+  };
   Users: boolean;
   'Production Planning': {
     'Production Orders': boolean;
@@ -299,6 +303,37 @@ export function mergeReportsPermissions(
 }
 
 /**
+ * True when either task screen is allowed. A legacy boolean true opens both.
+ * @param tasks - Stored Tasks permission
+ */
+export function hasAnyTaskAccess(
+  tasks: NavigationPermissions['Tasks'] | undefined
+): boolean {
+  if (tasks === undefined || tasks === true) return true;
+  if (tasks === false) return false;
+  if (typeof tasks === 'object') {
+    return tasks['Task Manager'] === true || tasks['My Tasks'] === true;
+  }
+  return false;
+}
+
+/**
+ * Expand a missing or boolean Tasks flag into the two screen checkboxes.
+ * Missing means both screens, matching users who never had the flag stored.
+ * @param raw - Stored Tasks value
+ */
+export function mergeTasksPermissions(
+  raw: NavigationPermissions['Tasks'] | undefined
+): { 'Task Manager': boolean; 'My Tasks': boolean } {
+  if (raw === false) return { 'Task Manager': false, 'My Tasks': false };
+  if (raw === undefined || raw === true) return { 'Task Manager': true, 'My Tasks': true };
+  return {
+    'Task Manager': raw['Task Manager'] === true,
+    'My Tasks': raw['My Tasks'] === true,
+  };
+}
+
+/**
  * True if the user may see the Reports sidebar group (any nested flag or legacy boolean).
  * @param reports - Reports permission value from navigation
  */
@@ -375,6 +410,7 @@ export function mergeNavigationWithDefaults(
       ...defaultPermissions['Vendor PO'],
       ...(partial['Vendor PO'] || {}),
     },
+    Tasks: mergeTasksPermissions(partial.Tasks),
   };
 }
 
@@ -406,6 +442,10 @@ const defaultPermissions: NavigationPermissions = {
   'Replenishment Agent': false,
   'File Manager': false,
   'Help & Support': false,
+  Tasks: {
+    'Task Manager': false,
+    'My Tasks': false,
+  },
   Users: false,
   'Production Planning': {
     'Production Orders': false,
@@ -495,7 +535,7 @@ export const EMPTY_YARN_ISSUE_NAV_DEFAULTS = defaultPermissions['Yarn Management
 const NAVIGATION_CACHE_KEY = 'navigationPermissions';
 const NAVIGATION_CACHE_VERSION_KEY = 'navigationPermissionsVersion';
 /** Bump when permission semantics change (e.g. Help & Support opt-in). */
-const NAVIGATION_CACHE_VERSION = '5';
+const NAVIGATION_CACHE_VERSION = '7';
 
 interface NavigationProviderProps {
   children: ReactNode;
@@ -598,6 +638,10 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
         return permissions[permissionKey] === true;
       }
       return permissions[permissionKey] as boolean;
+    }
+
+    if (path === '/tasks') {
+      return hasAnyTaskAccess(permissions.Tasks);
     }
 
     if (path === '/dashboard' || path === '/dashboards' || path === '/dashboards/main') {
@@ -793,6 +837,11 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
         }
       }
       return false;
+    }
+
+    if (parent === '/tasks') {
+      const tasks = mergeTasksPermissions(permissions.Tasks);
+      return tasks[child as 'Task Manager' | 'My Tasks'] === true;
     }
 
     // Map parent paths to permission objects

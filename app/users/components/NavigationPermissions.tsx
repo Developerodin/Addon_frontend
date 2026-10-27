@@ -172,6 +172,33 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
         </div>
 
         <div>
+          <h4 className="text-md font-medium text-gray-900 mb-3">Tasks</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-4">
+            {[
+              { key: 'Task Manager', label: 'Task Manager' },
+              { key: 'My Tasks', label: 'My Tasks' },
+            ].map((item) => {
+              const tasksNav = navigation.Tasks;
+              const checked = tasksNav === undefined
+                || tasksNav === true
+                || (tasksNav && typeof tasksNav === 'object' && tasksNav[item.key as 'Task Manager' | 'My Tasks'] === true);
+              return (
+                <label key={item.key} className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => onChange('Tasks', item.key, null, e.target.checked)}
+                    className="rounded border-gray-300 text-primary focus:ring-primary"
+                    aria-label={item.label}
+                  />
+                  <span className="ml-2 text-sm text-gray-700">{item.label}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
           <h4 className="text-md font-medium text-gray-900 mb-3">Dashboard</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 ml-4">
             {dashboardSections.map((subsection) => (

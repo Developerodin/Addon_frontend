@@ -1,0 +1,122 @@
+/*
+ * Task board tokens. Named by role so light and dark come from one place.
+ * Dark follows the app's `html.dark` class. Contrast is noted against the surface each pair sits on.
+ */
+.tk-scope,
+.tk-layer {
+  --tk-canvas: #f4f6fb;
+  --tk-surface: #ffffff;
+  --tk-sunken: #f7f9fc;
+  --tk-line: #e6eaf2;
+  --tk-line-strong: #d5ddea;
+  --tk-ink: #1c2434; /* 15.6:1 on surface */
+  --tk-ink-2: #3d4a63; /* 9.4:1 */
+  --tk-ink-3: #5c6b82; /* 5.1:1 on sunken */
+  --tk-accent: #2563eb; /* white label 5.2:1 */
+  --tk-accent-hover: #1d4ed8;
+  --tk-accent-ink: #1d4ed8;
+  --tk-accent-soft: #e8f1ff;
+  --tk-danger: #b91c1c;
+  --tk-danger-soft: #fde8e8;
+  --tk-scrim: rgba(15, 20, 28, 0.32);
+  --tk-shadow: 0 1px 2px rgba(28, 36, 52, 0.06);
+  --tk-shadow-raised: 0 12px 32px rgba(28, 36, 52, 0.14);
+
+  /* Status tones: one color per status, used by columns, pills, and the timeline. */
+  --tk-open-bg: #e8f1ff;
+  --tk-open-ink: #1d4ed8; /* 5.9:1 */
+  --tk-follow-bg: #fff1e6;
+  --tk-follow-ink: #c2410c; /* 4.7:1 */
+  --tk-hold-bg: #f3eeff;
+  --tk-hold-ink: #6d28d9; /* 6.3:1 */
+  --tk-done-bg: #e7f8ee;
+  --tk-done-ink: #047857; /* 5.0:1 */
+  --tk-neutral-bg: #eef2f7;
+  --tk-neutral-ink: #3d4a63;
+
+  /* Priority tones. */
+  --tk-med-bg: #fff4d6;
+  --tk-med-ink: #92400e; /* 6.5:1 */
+  --tk-high-bg: #fde8e8;
+  --tk-high-ink: #b91c1c; /* 5.5:1 */
+}
+
+.dark .tk-scope,
+.dark .tk-layer {
+  --tk-canvas: #0f141c;
+  --tk-surface: #171d27;
+  --tk-sunken: #1d2430;
+  --tk-line: #2a3341;
+  --tk-line-strong: #364152;
+  --tk-ink: #e8ecf3; /* 14.3:1 */
+  --tk-ink-2: #b8c2d3; /* 9.4:1 */
+  --tk-ink-3: #94a0b5; /* 5.9:1 on sunken */
+  --tk-accent: #2563eb;
+  --tk-accent-hover: #3b6fe0;
+  --tk-accent-ink: #8db4ff; /* 8.1:1 */
+  --tk-accent-soft: #1b2a45;
+  --tk-danger: #fca5a5; /* 8.9:1 */
+  --tk-danger-soft: #3d1c1f;
+  --tk-scrim: rgba(0, 0, 0, 0.55);
+  --tk-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --tk-shadow-raised: 0 16px 40px rgba(0, 0, 0, 0.5);
+
+  --tk-open-bg: #1b2a45;
+  --tk-open-ink: #93b8ff; /* 7.2:1 */
+  --tk-follow-bg: #3a2418;
+  --tk-follow-ink: #fdba8c; /* 8.7:1 */
+  --tk-hold-bg: #2a2142;
+  --tk-hold-ink: #c4b5fd; /* 8.2:1 */
+  --tk-done-bg: #12322a;
+  --tk-done-ink: #6ee7b7; /* 9.1:1 */
+  --tk-neutral-bg: #252d3a;
+  --tk-neutral-ink: #c7d0dd; /* 8.9:1 */
+
+  --tk-med-bg: #3a2e12;
+  --tk-med-ink: #fcd34d; /* 9.2:1 */
+  --tk-high-bg: #3d1c1f;
+  --tk-high-ink: #fca5a5; /* 8.0:1 */
+}
+
+@media (forced-colors: active) {
+  .tk-scope,
+  .tk-layer {
+    --tk-scrim: transparent;
+  }
+}
+
+/* Drawer entrance. Skipped entirely under Reduce Motion. */
+@keyframes tk-drawer-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes tk-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.tk-drawer-enter {
+  animation: tk-drawer-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.tk-scrim-enter {
+  animation: tk-fade-in 160ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tk-drawer-enter,
+  .tk-scrim-enter {
+    animation: none;
+  }
+}

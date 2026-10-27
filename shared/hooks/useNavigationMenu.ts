@@ -280,6 +280,9 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
           }
 
           if (child.type === 'link' && child.path) {
+            if (child.path === '/tasks' || child.path === '/tasks/my') {
+              return hasSubPermission('/tasks', child.title);
+            }
             // Map paths to parent/child structure
             if (child.path.startsWith('/dashboards/')) {
               return hasSubPermission('/dashboards', child.title);
@@ -518,6 +521,9 @@ export const useNavigationMenu = (menuItems: MenuItem[]): MenuItem[] => {
           }
           
           if (child.type === 'link' && child.path) {
+            if (child.path === '/tasks' || child.path === '/tasks/my') {
+              return hasSubPermission('/tasks', child.title);
+            }
             if (child.path.startsWith('/dashboards/')) {
               return hasSubPermission('/dashboards', child.title);
             }

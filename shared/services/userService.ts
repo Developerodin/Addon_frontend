@@ -41,6 +41,10 @@ export interface NavigationPermissions {
   'Replenishment Agent': boolean;
   'File Manager': boolean;
   'Help & Support': boolean;
+  Tasks: boolean | {
+    'Task Manager': boolean;
+    'My Tasks': boolean;
+  };
   Users: boolean;
   'Production Planning': {
     'Production Orders': boolean;

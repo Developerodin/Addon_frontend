@@ -68,9 +68,37 @@ const badge = (
   </span>
 );
 
+const TasksIcon = <i className="ri ri-task-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+
 const BaseMenuItems: any = [
   {
     menutitle: "MAIN",
+  },
+  {
+    icon: TasksIcon,
+    title: "Tasks",
+    type: "sub",
+    active: false,
+    selected: false,
+    path: "/tasks",
+    children: [
+      {
+        icon: TasksIcon,
+        path: "/tasks",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "Task Manager",
+      },
+      {
+        icon: TasksIcon,
+        path: "/tasks/my",
+        type: "link",
+        active: false,
+        selected: false,
+        title: "My Tasks",
+      },
+    ],
   },
   {
     icon: DashboardIcon,

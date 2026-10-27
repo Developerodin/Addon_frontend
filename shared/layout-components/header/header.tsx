@@ -322,7 +322,7 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
 
                 <button id="dropdown-profile" type="button"
                   className="hs-dropdown-toggle ti-dropdown-toggle !gap-2 !p-0 flex-shrink-0 sm:me-2 me-0 !rounded-full !shadow-none text-xs align-middle !border-0 !shadow-transparent ">
-                  <img className="inline-block rounded-full " src={`${assetBase}/assets/images/faces/9.jpg`} width="32" height="32" alt="Image Description" />
+                  <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-[1.35rem] leading-none" role="img" aria-label="Profile">👨🏻</span>
                 </button>
                 <div className="md:block hidden dropdown-profile">
                   <p className="font-semibold mb-0 leading-none text-[#536485] text-[0.813rem] ">{user?.name || user?.username || 'Admin'}</p>
