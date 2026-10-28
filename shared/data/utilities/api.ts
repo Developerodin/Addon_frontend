@@ -37,13 +37,13 @@ function defaultApiBaseUrl(): string {
   }
 
   // 3) Production default.
-  return "https://addon-api.theodin.in/v1";
+  return "addon-api.addonops.com/v1";
 }
 
 function defaultRServiceBaseUrl(): string {
   const env = (process.env.NEXT_PUBLIC_RSERVICE_BASE_URL || "").trim();
   if (env) return env.replace(/\/+$/, "");
-  return "https://addons.theodin.in/api/v1";
+  return "addon-api.addonops.com/api/v1";
 }
 
 export const API_BASE_URL = defaultApiBaseUrl();
