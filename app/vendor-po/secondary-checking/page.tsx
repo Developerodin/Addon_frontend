@@ -21,7 +21,7 @@ import {
 import { VendorSecondaryCheckingOrderTab } from "./components/VendorSecondaryCheckingOrderTab";
 import { VendorSecondaryCheckingArticleTab } from "./components/VendorSecondaryCheckingArticleTab";
 import { VendorSecondaryCheckingUpcomingTab } from "./components/VendorSecondaryCheckingUpcomingTab";
-import { productionFlowListParams } from "../utils/vendorPoProductionFlowList";
+import { listAllProductionFlowsForFloor } from "../utils/vendorPoProductionFlowList";
 import { getFlowId, getVpoId } from "./utils/groupVendorScFlows";
 import { m1RemainingForTransfer } from "./utils/m1Staging";
 import { evaluateSecondaryCheckingSave } from "./utils/evaluateSecondaryCheckingSave";
@@ -56,21 +56,8 @@ const SecondaryCheckingPage = () => {
   const loadFlows = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true);
     try {
-      const params = productionFlowListParams("secondaryChecking");
-      const collected: VendorProductionFlow[] = [];
-      let page = 1;
-      let total = Number.POSITIVE_INFINITY;
-      // The list API is oldest-first and capped at 100. A newly accepted
-      // article is the newest row, so page 1 never contains it.
-      while (collected.length < total && page <= 20) {
-        const data = await vendorProductionFlowService.list({ ...params, page });
-        const batch = data.results || [];
-        total = data.totalResults ?? collected.length + batch.length;
-        collected.push(...batch);
-        if (batch.length === 0 || batch.length < params.limit) break;
-        page += 1;
-      }
-      setFlows(collected);
+      const data = await listAllProductionFlowsForFloor("secondaryChecking");
+      setFlows(data);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to load production flows");
     } finally {

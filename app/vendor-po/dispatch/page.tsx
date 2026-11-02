@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Seo from "@/shared/layout-components/seo/seo";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { toast } from "react-hot-toast";
-import vendorProductionFlowService, {
+import {
   mergeProductionFlowPreservePopulatedRefs,
   VendorProductionFlow,
   type VendorTransferItem,
@@ -21,7 +21,7 @@ import {
 } from "./components/VendorDispatchWarehouseStagingModal";
 import { VendorTransferNotePrintModal } from "./components/VendorTransferNotePrintModal";
 import { VendorTransferNoteHistoryTab } from "./components/VendorTransferNoteHistoryTab";
-import { productionFlowListParams } from "../utils/vendorPoProductionFlowList";
+import { listAllProductionFlowsForFloor } from "../utils/vendorPoProductionFlowList";
 import {
   filterDispatchFlowsForView,
 } from "../utils/groupVendorProductionFlows";
@@ -66,10 +66,8 @@ function DispatchPageContent() {
   const loadFlows = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await vendorProductionFlowService.list(
-        productionFlowListParams("dispatch"),
-      );
-      setFlows(data.results || []);
+      const data = await listAllProductionFlowsForFloor("dispatch");
+      setFlows(data);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to load dispatch batches";
       toast.error(msg);

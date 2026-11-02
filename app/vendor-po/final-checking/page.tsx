@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
-import vendorProductionFlowService, {
+import {
   mergeProductionFlowPreservePopulatedRefs,
   type VendorProductionFlow,
 } from "@/shared/services/vendorProductionFlowService";
@@ -17,7 +17,7 @@ import { VendorFinalCheckingOrderTab } from "./components/VendorFinalCheckingOrd
 import { VendorFinalCheckingArticleTab } from "./components/VendorFinalCheckingArticleTab";
 import { VendorScanContainerDrawer } from "../components/VendorScanContainerDrawer";
 import { VendorFloorUpcomingContainersTab } from "../components/VendorFloorUpcomingContainersTab";
-import { productionFlowListParams } from "../utils/vendorPoProductionFlowList";
+import { listAllProductionFlowsForFloor } from "../utils/vendorPoProductionFlowList";
 
 type FinalCheckingTab = "orders" | "article-view" | "upcoming";
 
@@ -44,10 +44,8 @@ const FinalCheckingPage = () => {
   const loadFlows = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await vendorProductionFlowService.list(
-        productionFlowListParams("finalChecking"),
-      );
-      setFlows(data.results || []);
+      const data = await listAllProductionFlowsForFloor("finalChecking");
+      setFlows(data);
     } catch (err: unknown) {
       const msg =
         err instanceof Error
