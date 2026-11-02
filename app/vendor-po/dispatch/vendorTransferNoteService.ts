@@ -83,6 +83,40 @@ export interface VendorTransferNotePrintFilters {
   search?: string;
 }
 
+/** One line still waiting on warehouse inward, taken from an existing vendor note. */
+export interface VendorAlreadyPrintedNoteLine {
+  vpoNumber?: string;
+  articleNumber: string;
+  sapArticleNo?: string;
+  articleName: string;
+  brand?: string;
+  qtyInPairs: number;
+}
+
+/** Active vendor note on the current reprint page that still has uninwarded quantity. */
+export interface VendorAlreadyPrintedNote {
+  transferNoteId: string;
+  stnSerial: string;
+  stnDate: string;
+  lines: VendorAlreadyPrintedNoteLine[];
+}
+
+export interface VendorAlreadyPrintedNotePage {
+  results: VendorAlreadyPrintedNote[];
+  page: number;
+  limit: number;
+  totalResults: number;
+  totalPages: number;
+}
+
+export interface VendorAlreadyPrintedNoteFilters {
+  startDate?: string;
+  endDate?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
 /**
  * Builds query string for vendor transfer note print scope.
  * @param filters - Optional search filter
@@ -114,6 +148,37 @@ export async function previewVendorDispatchTransferNote(
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err?.message || 'Failed to load transfer note preview');
+  }
+  return res.json();
+}
+
+/**
+ * Loads one page of already-printed vendor notes for a date window. Defaults are applied by the API.
+ * @param filters - Date range, serial, VPO, or article search, and page
+ */
+export async function fetchVendorAlreadyPrintedNotes(
+  filters: VendorAlreadyPrintedNoteFilters = {}
+): Promise<VendorAlreadyPrintedNotePage> {
+  const token = getToken();
+  const params = new URLSearchParams();
+  if (filters.startDate) params.set('startDate', filters.startDate);
+  if (filters.endDate) params.set('endDate', filters.endDate);
+  if (filters.search) params.set('search', filters.search);
+  params.set('page', String(filters.page ?? 1));
+  params.set('limit', String(filters.limit ?? 20));
+
+  const res = await fetch(
+    `${API_BASE_URL}/vendor-management/dispatch/transfer-notes/already-printed?${params.toString()}`,
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.message || 'Failed to load already-printed notes');
   }
   return res.json();
 }
