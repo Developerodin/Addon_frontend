@@ -26,14 +26,39 @@ function localApiBaseUrl(hostname: string): string {
   return `http://${hostname}:8000/v1`;
 }
 
+/** localStorage key read by the header "API target" switch (localhost / 127.0.0.1 only). */
+export const API_TARGET_STORAGE_KEY = "addon-api-target";
+export type ApiTarget = "ec2-copy" | "factory-docker";
+
+/** Only plain localhost / 127.0.0.1. LAN IPs (factory tablets) and prod hosts never see the switch. */
+export function isLoopbackHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1";
+}
+
+/** Browser-only. Returns the stored API target, defaulting to the EC2 copy on port 8000. */
+export function readApiTarget(): ApiTarget {
+  try {
+    return window.localStorage.getItem(API_TARGET_STORAGE_KEY) === "factory-docker"
+      ? "factory-docker"
+      : "ec2-copy";
+  } catch {
+    return "ec2-copy";
+  }
+}
+
 function defaultApiBaseUrl(): string {
   // 1) Explicit override for all envs.
   const env = (process.env.NEXT_PUBLIC_API_BASE_URL || "").trim();
   if (env) return env.replace(/\/+$/, "");
 
   // 2) Browser on localhost or LAN IP → hit backend on same machine/IP.
+  //    On localhost / 127.0.0.1 only, the header switch can point at the local factory Docker backend (8001).
   if (isBrowser() && isLocalDevHost(window.location.hostname)) {
-    return localApiBaseUrl(window.location.hostname);
+    const host = window.location.hostname;
+    if (isLoopbackHost(host) && readApiTarget() === "factory-docker") {
+      return `http://${host}:8001/v1`;
+    }
+    return localApiBaseUrl(host);
   }
 
   // 3) Production default.

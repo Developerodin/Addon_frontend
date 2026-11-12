@@ -18,6 +18,7 @@ const AnalyticsIcon = <i className="bx bx-bar-chart side-menu__icon"></i>;
 const ReplenishmentIcon = <i className="bx bx-refresh side-menu__icon"></i>;
 const FilemanagerIcon = <i className="ri ri-file-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
 const UsersIcon = <i className="ri ri-user-line side-menu__icon" style={{ marginTop: "-10px" }}></i>;
+const SyncIcon = <i className="bx bx-transfer side-menu__icon"></i>;
 const SupervisorIcon = <i className="bx bx-user-check side-menu__icon"></i>;
 const ProductionIcon = <i className="bx bx-cog side-menu__icon"></i>;
 const FloorIcon = <i className="bx bx-building side-menu__icon"></i>;
@@ -427,6 +428,14 @@ const BaseMenuItems: any = [
     active: false,
     selected: false,
     path: "/users",
+  },
+  {
+    icon: SyncIcon,
+    title: "Sync conflicts",
+    type: "link",
+    active: false,
+    selected: false,
+    path: "/sync/conflicts",
   },
   {
     icon: SupervisorIcon,

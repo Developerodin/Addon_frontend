@@ -12,6 +12,7 @@ const assetBase = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 import { authActions } from '@/shared/redux/actions/authActions';
 import { toggleSidebar as applySidebarToggle } from './sidebarToggle';
 import { syncThemeToDocument } from './syncThemeToDocument';
+import HeaderApiTarget from './HeaderApiTarget';
 
 const Header = ({ local_varaiable, ThemeChanger }:any) => {
   const dispatch = useDispatch();
@@ -303,6 +304,7 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
               </div>
             </div>
             <div className="header-content-right">
+              <HeaderApiTarget />
 
             
               <div className="header-element header-fullscreen py-[1rem] md:px-[0.65rem] px-2">

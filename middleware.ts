@@ -19,6 +19,8 @@ const protectedPaths = [
   '/inventory/*',
   '/reports',
   '/reports/*',
+  '/sync',
+  '/sync/*',
   
   // Add any other protected paths here
 ]

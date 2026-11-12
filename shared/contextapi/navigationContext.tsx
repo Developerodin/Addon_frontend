@@ -624,6 +624,7 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
     // Map paths to permission keys
     const pathMap: { [key: string]: keyof NavigationPermissions } = {
       '/users': 'Users',
+      '/sync/conflicts': 'Users',
       '/stores': 'Stores',
       '/analytics': 'Analytics',
       '/replenishment': 'Replenishment Agent',
