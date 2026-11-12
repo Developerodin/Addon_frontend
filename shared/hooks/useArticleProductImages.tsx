@@ -92,7 +92,7 @@ export function useArticleProductImages(factoryCodes: string[]) {
       try {
         for (let i = 0; i < normalizedCodes.length; i += CHUNK_SIZE) {
           const chunk = normalizedCodes.slice(i, i + CHUNK_SIZE);
-          const products = await getProductsByFactoryCodes(chunk);
+          const products = await getProductsByFactoryCodes(chunk, { view: 'card' });
           for (const p of products) {
             const fc = (p.factoryCode ?? "").trim();
             if (!fc) continue;

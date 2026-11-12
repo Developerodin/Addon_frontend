@@ -1,10 +1,11 @@
 "use client";
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSelector } from "react-redux";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { productionService, ProductionOrder, FloorOrderFilters } from "@/shared/services/productionService";
+import { isAbortError } from "@/shared/services/floorCatalogLoad";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import ReceivedQuantityDisplay from "@/shared/components/production/ReceivedQuantityDisplay";
 import BrandTransferItemsInput from "@/shared/components/production/BrandTransferItemsInput";
@@ -41,7 +42,8 @@ const FLOOR_CATALOG_LIMIT = 2000;
 const ReBoardingFloorSupervisorPage = () => {
   const user = useSelector((state: any) => state.auth?.user);
   const [floorCatalog, setFloorCatalog] = useState<ProductionOrder[]>([]);
-  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const catalogAbortRef = useRef<AbortController | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -97,30 +99,36 @@ const ReBoardingFloorSupervisorPage = () => {
 
   /** Loads re-boarding floor orders for both tabs; filter + paginate client-side. */
   const loadFloorOrdersCatalog = useCallback(async () => {
+    catalogAbortRef.current?.abort();
+    const controller = new AbortController();
+    catalogAbortRef.current = controller;
     setCatalogLoading(true);
     try {
       const apiFilters: FloorOrderFilters = {
         page: 1,
         limit: FLOOR_CATALOG_LIMIT,
+        articleView: true,
         ...(filters.status && { status: filters.status }),
         ...(filters.priority && { priority: filters.priority }),
         ...(searchQuery && { search: searchQuery }),
       };
 
-      const response = await productionService.getFloorOrders("Re-Boarding", apiFilters);
+      const response = await productionService.getFloorOrders("Re-Boarding", apiFilters, { signal: controller.signal });
+      if (controller.signal.aborted) return;
 
       if (response.success) {
         setFloorCatalog(response.data.results);
-      } else {
+      } else if (response.error?.code !== "ABORTED") {
         console.error("Failed to load re-boarding floor orders:", response.error);
         toast.error("Failed to load re-boarding orders");
       }
     } catch (error: unknown) {
+      if (isAbortError(error) || controller.signal.aborted) return;
       const msg = error instanceof Error ? error.message : "Failed to load re-boarding orders";
       console.error("Error loading re-boarding floor orders:", error);
       toast.error(msg);
     } finally {
-      setCatalogLoading(false);
+      if (!controller.signal.aborted) setCatalogLoading(false);
     }
   }, [filters.status, filters.priority, searchQuery]);
 
@@ -129,7 +137,10 @@ const ReBoardingFloorSupervisorPage = () => {
     const timeoutId = setTimeout(() => {
       void loadFloorOrdersCatalog();
     }, searchQuery ? 300 : 0);
-    return () => clearTimeout(timeoutId);
+    return () => {
+      clearTimeout(timeoutId);
+      catalogAbortRef.current?.abort();
+    };
   }, [activeTab, loadFloorOrdersCatalog, searchQuery]);
 
   useEffect(() => {

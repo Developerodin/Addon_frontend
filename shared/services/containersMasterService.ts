@@ -561,6 +561,22 @@ class ContainersMasterService {
     return this.request<ContainersByFloorWithArticlesResponse>(path);
   }
 
+  /**
+   * GET /floors/upcoming-summary — container count and qty per floor, no article documents.
+   */
+  async getUpcomingFloorSummary(params?: {
+    status?: string;
+    contentDomain?: 'vendor' | 'production';
+    floors?: string[];
+  }): Promise<{ results: Array<{ floor: string; containerCount: number; totalQty: number }> }> {
+    const sp = new URLSearchParams();
+    if (params?.status) sp.append('status', params.status);
+    if (params?.contentDomain) sp.append('contentDomain', params.contentDomain);
+    if (params?.floors?.length) sp.append('floors', params.floors.join(','));
+    const q = sp.toString() ? `?${sp.toString()}` : '';
+    return this.request(`/floors/upcoming-summary${q}`);
+  }
+
   async create(body: CreateContainerBody): Promise<ContainerMaster> {
     return this.request<ContainerMaster>('', {
       method: 'POST',

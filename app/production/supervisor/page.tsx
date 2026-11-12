@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import Link from "next/link";
 import { toast } from "react-hot-toast";
@@ -69,9 +69,11 @@ const ProductionSupervisorPage = () => {
   const [articleViewTotalPages, setArticleViewTotalPages] = useState(1);
   const [articleViewTotal, setArticleViewTotal] = useState(0);
   const [articleFilter, setArticleFilter] = useState('');
+  const loadSeq = useRef(0);
 
   // Load orders from API
-  const loadOrders = async () => {
+  const loadOrders = async (signal?: AbortSignal) => {
+    const seq = ++loadSeq.current;
     setIsLoading(true);
     try {
       const apiFilters: OrderFilters = {
@@ -82,69 +84,41 @@ const ProductionSupervisorPage = () => {
         ...(filters.floor && { currentFloor: filters.floor }),
         ...(searchQuery && { search: searchQuery }),
         sortBy,
-        populate: 'articles'
+        view: 'list'
       };
 
-      const response = await productionService.getOrders(apiFilters);
-      
+      const response = await productionService.getOrders(apiFilters, { signal });
+      if (seq !== loadSeq.current || response.error?.code === 'ABORTED') return;
+
       if (response.success) {
-        console.log('Orders loaded:', response.data.results);
-        let filteredOrders = response.data.results;
-        
-        // If we have a search query and no results from backend search,
-        // try client-side filtering by article numbers
-        let effectiveTotalPages = response.data.totalPages;
-        let effectiveTotalResults = response.data.totalResults ?? filteredOrders.length;
-
-        if (searchQuery && filteredOrders.length === 0) {
-          // Get all orders without search filter to do client-side filtering
-          const allOrdersResponse = await productionService.getOrders({
-            page: 1,
-            limit: 1000, // Get a large number to search through all orders
-            ...(filters.status && { status: filters.status }),
-            ...(filters.priority && { priority: filters.priority }),
-            ...(filters.floor && { currentFloor: filters.floor }),
-            sortBy,
-            populate: 'articles'
-          });
-
-          if (allOrdersResponse.success) {
-            // Filter orders that contain articles with matching article numbers
-            filteredOrders = allOrdersResponse.data.results.filter(order => {
-              return order.articles.some(article =>
-                article.articleNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                order.orderNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                order.id.toLowerCase().includes(searchQuery.toLowerCase())
-              );
-            });
-            effectiveTotalResults = filteredOrders.length;
-            effectiveTotalPages = Math.max(1, Math.ceil(filteredOrders.length / itemsPerPage));
-          }
-        }
-
-        setOrders(filteredOrders);
-        setTotalPages(effectiveTotalPages);
-        setTotalResults(effectiveTotalResults);
+        setOrders(response.data.results);
+        setTotalPages(response.data.totalPages);
+        setTotalResults(response.data.totalResults ?? response.data.results.length);
       } else {
         console.error('Failed to load orders:', response.error);
         toast.error('Failed to load orders');
       }
     } catch (error: any) {
+      if (seq !== loadSeq.current || error?.name === 'AbortError') return;
       console.error('Error loading orders:', error);
       toast.error(error.message || 'Failed to load orders');
     } finally {
-      setIsLoading(false);
+      if (seq === loadSeq.current) setIsLoading(false);
     }
   };
 
   // Load orders only on Orders tab (Article view uses its own API — not tied to order pagination)
   useEffect(() => {
     if (activeTab !== 'orders') return;
+    const controller = new AbortController();
     const timeoutId = setTimeout(() => {
-      loadOrders();
+      void loadOrders(controller.signal);
     }, 500);
 
-    return () => clearTimeout(timeoutId);
+    return () => {
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
   }, [activeTab, currentPage, itemsPerPage, filters, searchQuery, sortBy]);
 
   // Load article-wise report when on Article view tab
@@ -216,27 +190,29 @@ const ProductionSupervisorPage = () => {
   };
 
   const handleDeleteOrder = async (orderId: string) => {
-    if (window.confirm('Are you sure you want to delete this order?')) {
-      try {
-        setIsLoading(true);
-        const response = await productionService.deleteOrder(orderId);
-        
-        if (response.success) {
-          toast.success('Order deleted successfully');
-          // Remove the deleted order from the current state immediately
-          setOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
-          setTotalResults(prev => prev - 1);
-          // Also remove from selected orders if it was selected
-          setSelectedOrders(prev => prev.filter(id => id !== orderId));
-        } else {
-          toast.error(response.error?.message || 'Failed to delete order');
-        }
-      } catch (error: any) {
-        console.error('Error deleting order:', error);
-        toast.error(error.message || 'Failed to delete order');
-      } finally {
-        setIsLoading(false);
+    if (!window.confirm('Are you sure you want to delete this order?')) return;
+    const previousOrders = orders;
+    const previousTotal = totalResults;
+    const previousSelected = selectedOrders;
+    setOrders((prev) => prev.filter((order) => order.id !== orderId));
+    setTotalResults((prev) => Math.max(0, prev - 1));
+    setSelectedOrders((prev) => prev.filter((id) => id !== orderId));
+    try {
+      const response = await productionService.deleteOrder(orderId);
+      if (!response.success) {
+        setOrders(previousOrders);
+        setTotalResults(previousTotal);
+        setSelectedOrders(previousSelected);
+        toast.error(response.error?.message || 'Failed to delete order');
+        return;
       }
+      toast.success('Order deleted successfully');
+    } catch (error: any) {
+      setOrders(previousOrders);
+      setTotalResults(previousTotal);
+      setSelectedOrders(previousSelected);
+      console.error('Error deleting order:', error);
+      toast.error(error.message || 'Failed to delete order');
     }
   };
 
@@ -246,42 +222,38 @@ const ProductionSupervisorPage = () => {
       return;
     }
 
-    if (window.confirm(`Are you sure you want to delete ${selectedOrders.length} orders?`)) {
-      try {
-        setIsLoading(true);
-        // Delete orders one by one
-        const deletePromises = selectedOrders.map(orderId => productionService.deleteOrder(orderId));
-        const results = await Promise.allSettled(deletePromises);
-        
-        // Check which deletions were successful
-        const successfulDeletions = results.filter(result => 
-          result.status === 'fulfilled' && result.value.success
-        );
-        const failedDeletions = results.filter(result => 
-          result.status === 'rejected' || !result.value.success
-        );
-        
-        if (successfulDeletions.length > 0) {
-          // Remove successfully deleted orders from state
-          setOrders(prevOrders => 
-            prevOrders.filter(order => !selectedOrders.includes(order.id))
-          );
-          setTotalResults(prev => prev - successfulDeletions.length);
-          toast.success(`${successfulDeletions.length} orders deleted successfully`);
-        }
-        
-        if (failedDeletions.length > 0) {
-          toast.error(`${failedDeletions.length} orders failed to delete`);
-        }
-        
-        setSelectedOrders([]);
-        setSelectAll(false);
-      } catch (error: any) {
-        console.error('Error in bulk delete:', error);
-        toast.error(error.message || 'Failed to delete orders');
-      } finally {
-        setIsLoading(false);
+    if (!window.confirm(`Are you sure you want to delete ${selectedOrders.length} orders?`)) return;
+
+    const ids = [...selectedOrders];
+    const previousOrders = orders;
+    const previousTotal = totalResults;
+    setOrders((prev) => prev.filter((order) => !ids.includes(order.id)));
+    setTotalResults((prev) => Math.max(0, prev - ids.length));
+    setSelectedOrders([]);
+    setSelectAll(false);
+
+    try {
+      const results = await Promise.allSettled(ids.map((orderId) => productionService.deleteOrder(orderId)));
+      const failedIds = ids.filter((id, index) => {
+        const result = results[index];
+        return result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.success);
+      });
+      const successCount = ids.length - failedIds.length;
+      if (failedIds.length > 0) {
+        const failed = new Set(failedIds);
+        setOrders(previousOrders.filter((order) => !ids.includes(order.id) || failed.has(order.id)));
+        setTotalResults(Math.max(0, previousTotal - successCount));
+        toast.error(`${failedIds.length} orders failed to delete`);
       }
+      if (successCount > 0) {
+        toast.success(`${successCount} orders deleted successfully`);
+      }
+    } catch (error: any) {
+      setOrders(previousOrders);
+      setTotalResults(previousTotal);
+      setSelectedOrders(ids);
+      console.error('Error in bulk delete:', error);
+      toast.error(error.message || 'Failed to delete orders');
     }
   };
 
@@ -331,6 +303,26 @@ const ProductionSupervisorPage = () => {
   const handleViewOrder = (order: ProductionOrder) => {
     setSelectedOrder(order);
     setShowViewModal(true);
+    void productionService.getOrder(order.id).then((response) => {
+      if (!response.success || !response.data) {
+        toast.error(response.error?.message || 'Failed to load order details');
+        setSelectedOrder((current) => (
+          current && current.id === order.id
+            ? { ...current, articles: current.articles.map((article) => ({ ...article, floorQuantities: article.floorQuantities || {} })) }
+            : current
+        ));
+        return;
+      }
+      setSelectedOrder((current) => (current && current.id === order.id ? (response.data as ProductionOrder) : current));
+    }).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : 'Failed to load order details';
+      toast.error(message);
+      setSelectedOrder((current) => (
+        current && current.id === order.id
+          ? { ...current, articles: current.articles.map((article) => ({ ...article, floorQuantities: article.floorQuantities || {} })) }
+          : current
+      ));
+    });
   };
 
   const closeViewModal = () => {

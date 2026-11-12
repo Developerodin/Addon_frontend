@@ -1,9 +1,10 @@
 "use client";
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Seo from "@/shared/layout-components/seo/seo";
 import { toast } from "react-hot-toast";
 import HelpIcon from "@/shared/components/HelpIcon";
 import { productionService, ProductionOrder, FloorOrderFilters, type Article } from "@/shared/services/productionService";
+import { isAbortError } from "@/shared/services/floorCatalogLoad";
 import { API_BASE_URL } from "@/shared/data/utilities/api";
 import { getArticleMongoId, resolveNextFloorFromProcesses } from "@/shared/utils/productionUtils";
 import NumericInput from "@/shared/utils/numericInput";
@@ -62,7 +63,8 @@ const LinkingFloorSupervisorPage = () => {
   const [logsLoading, setLogsLoading] = useState(false);
   /** Wide linking-floor order fetch shared by Orders + Article tabs. */
   const [articleViewOrders, setArticleViewOrders] = useState<ProductionOrder[]>([]);
-  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const catalogAbortRef = useRef<AbortController | null>(null);
 
   // Scan container flow (Article view): barcode -> get container -> show article details -> Accept Article Quantity
   const [showContainerScanDrawer, setShowContainerScanDrawer] = useState(false);
@@ -105,19 +107,24 @@ const LinkingFloorSupervisorPage = () => {
    * Loads linking floor orders for both tabs; client-side filter/pagination matches Article view rules.
    */
   const loadFloorOrdersCatalog = useCallback(async () => {
+    catalogAbortRef.current?.abort();
+    const controller = new AbortController();
+    catalogAbortRef.current = controller;
     setCatalogLoading(true);
     try {
       const apiFilters: FloorOrderFilters = {
         page: 1,
         limit: LINKING_ARTICLE_VIEW_ORDER_LIMIT,
+        articleView: true,
         ...(filters.status && { status: filters.status }),
         ...(filters.priority && { priority: filters.priority }),
         ...(searchQuery && { search: searchQuery }),
       };
-      const response = await productionService.getFloorOrders("Linking", apiFilters);
+      const response = await productionService.getFloorOrders("Linking", apiFilters, { signal: controller.signal });
+      if (controller.signal.aborted) return;
       if (response.success) {
         setArticleViewOrders(response.data.results);
-      } else {
+      } else if (response.error?.code !== "ABORTED") {
         console.error("Failed to load linking floor orders:", response.error);
         toast.error(
           typeof response.error === "object" && response.error && "message" in response.error
@@ -126,11 +133,12 @@ const LinkingFloorSupervisorPage = () => {
         );
       }
     } catch (error: unknown) {
+      if (isAbortError(error) || controller.signal.aborted) return;
       const msg = error instanceof Error ? error.message : "Failed to load linking orders";
       console.error("Error loading linking floor orders:", error);
       toast.error(msg);
     } finally {
-      setCatalogLoading(false);
+      if (!controller.signal.aborted) setCatalogLoading(false);
     }
   }, [filters.status, filters.priority, searchQuery]);
 
@@ -140,7 +148,10 @@ const LinkingFloorSupervisorPage = () => {
     const timeoutId = setTimeout(() => {
       void loadFloorOrdersCatalog();
     }, searchQuery ? 300 : 0);
-    return () => clearTimeout(timeoutId);
+    return () => {
+      clearTimeout(timeoutId);
+      catalogAbortRef.current?.abort();
+    };
   }, [activeTab, loadFloorOrdersCatalog, searchQuery]);
 
   // When user enters/scans barcode in update container modal, fetch container (multi-article allowed on same floor)

@@ -443,6 +443,8 @@ export interface OrderFilters {
   search?: string;
   sortBy?: string;
   populate?: string;
+  /** `list` asks the API for the lean supervisor table projection. */
+  view?: 'list';
 }
 
 export interface FloorOrderFilters {
@@ -726,6 +728,21 @@ export interface DailyProductionSummaryResponse {
   warnings: string[];
 }
 
+/** One in-flight list per floor query. A second caller waits on it instead of opening another 2MB download. */
+const floorOrderRequests = new Map<string, Promise<ApiResponse<PaginatedResponse<ProductionOrder>>>>();
+
+/**
+ * Stable key for an in-flight floor order list.
+ * @param floor Floor route key
+ * @param filters Query filters
+ */
+function floorOrderRequestKey(floor: string, filters: FloorOrderFilters): string {
+  const entries = Object.entries(filters)
+    .filter(([, value]) => value !== undefined && value !== '')
+    .sort(([left], [right]) => left.localeCompare(right));
+  return `${floor}:${JSON.stringify(entries)}`;
+}
+
 class ProductionService {
   private baseUrl = `${API_BASE_URL}/production`;
 
@@ -807,12 +824,13 @@ class ProductionService {
     const token = localStorage.getItem('token');
     
     const config: RequestInit = {
+      ...options,
+      cache: options.cache ?? 'no-store',
       headers: {
         'Content-Type': 'application/json',
         ...(token && { Authorization: `Bearer ${token}` }),
         ...options.headers,
       },
-      ...options,
     };
 
     try {
@@ -898,7 +916,10 @@ class ProductionService {
     });
   }
 
-  async getOrders(filters: OrderFilters = {}): Promise<ApiResponse<PaginatedResponse<ProductionOrder>>> {
+  async getOrders(
+    filters: OrderFilters = {},
+    init?: { signal?: AbortSignal }
+  ): Promise<ApiResponse<PaginatedResponse<ProductionOrder>>> {
     const queryParams = new URLSearchParams();
     
     Object.entries(filters).forEach(([key, value]) => {
@@ -911,7 +932,7 @@ class ProductionService {
     const endpoint = queryString ? `/orders?${queryString}` : '/orders';
     
     try {
-      const response = await this.request<any>(endpoint);
+      const response = await this.request<any>(endpoint, { signal: init?.signal });
       
       // Handle both wrapped and direct response formats
       const responseData = response.success ? response.data : response;
@@ -927,6 +948,25 @@ class ProductionService {
         data: transformedData
       };
     } catch (error) {
+      if (
+        (error instanceof DOMException && error.name === 'AbortError') ||
+        (error instanceof Error && error.name === 'AbortError')
+      ) {
+        return {
+          success: false,
+          data: {
+            results: [],
+            page: 1,
+            limit: 10,
+            totalPages: 0,
+            totalResults: 0
+          },
+          error: {
+            code: 'ABORTED',
+            message: 'Request aborted'
+          }
+        };
+      }
       console.error('Error in getOrders:', error);
       return {
         success: false,
@@ -1004,6 +1044,28 @@ class ProductionService {
     filters: FloorOrderFilters = {},
     options?: { cache?: RequestCache; signal?: AbortSignal }
   ): Promise<ApiResponse<PaginatedResponse<ProductionOrder>>> {
+    if (options?.signal) return this.fetchFloorOrders(floor, filters, options);
+    const key = floorOrderRequestKey(floor, filters);
+    const existing = floorOrderRequests.get(key);
+    if (existing) return existing;
+    const pending = this.fetchFloorOrders(floor, filters, options).finally(() => {
+      floorOrderRequests.delete(key);
+    });
+    floorOrderRequests.set(key, pending);
+    return pending;
+  }
+
+  /**
+   * GET /production/floors/:floor/orders. Retries once when the socket drops before a response.
+   * @param floor Floor route key
+   * @param filters Query filters
+   * @param options Cache and abort signal
+   */
+  private async fetchFloorOrders(
+    floor: string,
+    filters: FloorOrderFilters = {},
+    options?: { cache?: RequestCache; signal?: AbortSignal }
+  ): Promise<ApiResponse<PaginatedResponse<ProductionOrder>>> {
     const queryParams = new URLSearchParams();
 
     Object.entries(filters).forEach(([key, value]) => {
@@ -1015,10 +1077,19 @@ class ProductionService {
     const queryString = queryParams.toString();
     const endpoint = queryString ? `/floors/${floor}/orders?${queryString}` : `/floors/${floor}/orders`;
 
-    const response = await this.request<any>(endpoint, {
-      cache: options?.cache ?? "default",
+    const requestInit = {
+      // "default" makes the browser send If-None-Match. A later 304 shows up as a CORS error.
+      cache: options?.cache ?? "no-store",
       ...(options?.signal ? { signal: options.signal } : {}),
-    });
+    };
+    let response = await this.request<any>(endpoint, requestInit);
+    if (
+      !response.success &&
+      response.error?.code === 'NETWORK_ERROR' &&
+      !options?.signal?.aborted
+    ) {
+      response = await this.request<any>(endpoint, requestInit);
+    }
 
     if (!response.success) {
       return {

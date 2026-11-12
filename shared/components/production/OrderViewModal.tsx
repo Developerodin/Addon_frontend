@@ -140,6 +140,9 @@ const OrderViewModal: React.FC<OrderViewModalProps> = ({ order, onClose, embedIn
           <div>
             <h2 className="text-sm font-bold text-gray-900">Order Details</h2>
             <p className="text-[11px] text-gray-600">Order Number: {order.orderNumber || order.id}</p>
+            {!order.articles?.some((article) => article.floorQuantities) && (
+              <p className="text-[10px] font-medium text-purple-600" role="status">Loading floor quantities…</p>
+            )}
           </div>
           <button
             onClick={onClose}

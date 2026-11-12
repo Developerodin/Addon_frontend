@@ -4,7 +4,6 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-hot-toast";
 import {
   containersMasterService,
-  type ContainerMaster,
 } from "@/shared/services/containersMasterService";
 import { PRODUCTION_FLOORS } from "@/shared/services/teamMasterService";
 
@@ -14,33 +13,6 @@ export interface FloorUpcomingSummary {
   totalQty: number;
   loading: boolean;
   error?: string;
-}
-
-/**
- * Sums active line quantities across containers on a floor.
- */
-function computeContainerTotals(containers: ContainerMaster[]): {
-  containerCount: number;
-  totalQty: number;
-} {
-  let totalQty = 0;
-
-  for (const container of containers) {
-    const items = container.activeItems?.length
-      ? container.activeItems
-      : container.activeArticle
-        ? [{ quantity: container.quantity ?? 0 }]
-        : [];
-
-    for (const item of items) {
-      totalQty += item.quantity ?? 0;
-    }
-  }
-
-  return {
-    containerCount: containers.length,
-    totalQty,
-  };
 }
 
 /**
@@ -68,55 +40,39 @@ export default function SupervisorUpcomingViewTab() {
       })),
     );
 
-    const results = await Promise.allSettled(
-      PRODUCTION_FLOORS.map(async (floor) => {
-        const data = await containersMasterService.getByFloorWithArticles(floor, {
-          status: "ACTIVE",
-          contentDomain: "production",
-        });
-        const totals = computeContainerTotals(data.containers ?? []);
-        return {
+    try {
+      const data = await containersMasterService.getUpcomingFloorSummary({
+        status: "ACTIVE",
+        contentDomain: "production",
+        floors: [...PRODUCTION_FLOORS],
+      });
+      const byFloor = new Map((data.results || []).map((row) => [row.floor, row]));
+      setSummaries(
+        PRODUCTION_FLOORS.map((floor) => {
+          const row = byFloor.get(floor);
+          return {
+            floor,
+            containerCount: row?.containerCount ?? 0,
+            totalQty: row?.totalQty ?? 0,
+            loading: false,
+          };
+        }),
+      );
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to load upcoming data";
+      toast.error(message);
+      setSummaries(
+        PRODUCTION_FLOORS.map((floor) => ({
           floor,
-          containerCount: data.count ?? totals.containerCount,
-          totalQty: totals.totalQty,
-        };
-      }),
-    );
-
-    const nextSummaries: FloorUpcomingSummary[] = results.map((result, index) => {
-      const floor = PRODUCTION_FLOORS[index];
-      if (result.status === "fulfilled") {
-        return {
-          floor,
-          containerCount: result.value.containerCount,
-          totalQty: result.value.totalQty,
+          containerCount: 0,
+          totalQty: 0,
           loading: false,
-        };
-      }
-
-      const message =
-        result.reason instanceof Error
-          ? result.reason.message
-          : "Failed to load upcoming data";
-
-      return {
-        floor,
-        containerCount: 0,
-        totalQty: 0,
-        loading: false,
-        error: message,
-      };
-    });
-
-    const failedCount = nextSummaries.filter((row) => row.error).length;
-    if (failedCount > 0 && failedCount < PRODUCTION_FLOORS.length) {
-      toast.error(`${failedCount} floor(s) failed to load`);
-    } else if (failedCount === PRODUCTION_FLOORS.length) {
-      toast.error("Failed to load upcoming view");
+          error: message,
+        })),
+      );
+    } finally {
+      setLoading(false);
     }
-
-    setSummaries(nextSummaries);
-    setLoading(false);
   }, []);
 
   useEffect(() => {

@@ -146,7 +146,7 @@ const AddOrderPage = () => {
         // continue with empty map; we'll still use machine.activeNeedle from API
       }
 
-      const response = await fetch(`${API_BASE_URL}/machines?page=1&limit=1000`, {
+      const response = await fetch(`${API_BASE_URL}/machines?page=1&limit=1000&fields=machineCode,machineNumber,model,floor,status,needleSizeConfig,isActive`, {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
@@ -256,7 +256,7 @@ const AddOrderPage = () => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/product-attributes?page=1&limit=500`, {
+        const res = await fetch(`${API_BASE_URL}/product-attributes?name=Needles&limit=5`, {
           headers: { Accept: 'application/json' },
         });
         if (!res.ok || cancelled) return;
@@ -271,8 +271,8 @@ const AddOrderPage = () => {
           if (v._id) map[String(v._id)] = name;
         });
         if (!cancelled) setNeedlesValueIdToName(map);
-      } catch {
-        // ignore
+      } catch (error) {
+        console.error('Failed to load Needles attribute:', error);
       }
     })();
     return () => { cancelled = true; };
@@ -343,10 +343,13 @@ const AddOrderPage = () => {
       setIsLoadingProducts(true);
       const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
       const response = await axios.get(
-        `${API_BASE_URL}/products?page=${page}&limit=${productLimit}${searchParam}`
+        `${API_BASE_URL}/products?page=${page}&limit=${productLimit}${searchParam}&fields=name,factoryCode,knittingCode,attributes`
       );
       const data = response.data;
-      const productsData = data.results || [];
+      const productsData = (data.results || []).map((p: Product & { _id?: string }) => ({
+        ...p,
+        id: p.id || p._id || '',
+      }));
       const totalResults = data.totalResults ?? data.total ?? productsData.length;
       const totalPages = data.totalPages ?? Math.max(1, Math.ceil(totalResults / productLimit));
       const productsWithFactoryCode = productsData.filter(

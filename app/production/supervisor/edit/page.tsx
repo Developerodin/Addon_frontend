@@ -21,6 +21,7 @@ import { API_BASE_URL } from "@/shared/data/utilities/api";
 import NumericInput from "@/shared/utils/numericInput";
 import axios from "axios";
 import yarnCatalogService, { YarnCatalog } from "@/shared/services/yarnCatalogService";
+import { loadArticleProductDetails, type ArticleProductAttachment } from "@/shared/components/production/supervisorArticleProducts";
 
 interface Article {
   id: string;
@@ -241,11 +242,11 @@ const EditOrderContent = () => {
     
     setIsLoading(true);
     try {
-      const [_, __, assignmentsMap] = await Promise.all([
+      const [_, assignmentsMap] = await Promise.all([
         fetchMachines(),
-        fetchYarnCatalogs(),
         fetchAssignments(),
       ]);
+      void fetchYarnCatalogs();
       await loadOrder(assignmentsMap);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -276,7 +277,7 @@ const EditOrderContent = () => {
         // continue with empty map; we'll still use machine.activeNeedle from API
       }
 
-      const response = await fetch(`${API_BASE_URL}/machines?page=1&limit=1000`, {
+      const response = await fetch(`${API_BASE_URL}/machines?page=1&limit=1000&fields=machineCode,machineNumber,model,floor,status,needleSizeConfig,isActive`, {
         headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
       });
       if (!response.ok) throw new Error('Failed to fetch machines');
@@ -376,7 +377,7 @@ const EditOrderContent = () => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/product-attributes?page=1&limit=500`, {
+        const res = await fetch(`${API_BASE_URL}/product-attributes?name=Needles&limit=5`, {
           headers: { Accept: 'application/json' },
         });
         if (!res.ok || cancelled) return;
@@ -391,8 +392,8 @@ const EditOrderContent = () => {
           if (v._id) map[String(v._id)] = name;
         });
         if (!cancelled) setNeedlesValueIdToName(map);
-      } catch {
-        // ignore
+      } catch (error) {
+        console.error('Failed to load Needles attribute:', error);
       }
     })();
     return () => { cancelled = true; };
@@ -439,10 +440,13 @@ const EditOrderContent = () => {
       setIsLoadingProducts(true);
       const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
       const response = await axios.get(
-        `${API_BASE_URL}/products?page=${page}&limit=${productLimit}${searchParam}`
+        `${API_BASE_URL}/products?page=${page}&limit=${productLimit}${searchParam}&fields=name,factoryCode,knittingCode,attributes`
       );
       const data = response.data;
-      const productsData = data.results || [];
+      const productsData = (data.results || []).map((p: Product & { _id?: string }) => ({
+        ...p,
+        id: p.id || p._id || '',
+      }));
       const totalResults = data.totalResults ?? data.total ?? productsData.length;
       const totalPages = data.totalPages ?? Math.max(1, Math.ceil(totalResults / productLimit));
       const productsWithFactoryCode = productsData.filter(
@@ -601,25 +605,6 @@ const EditOrderContent = () => {
         setOrder(orderData);
         const map = assignmentsMap ?? assignmentsByMachineId;
 
-        let needlesMap: Record<string, string> = {};
-        try {
-          const attrRes = await fetch(`${API_BASE_URL}/product-attributes?page=1&limit=500`, { headers: { Accept: 'application/json' } });
-          if (attrRes.ok) {
-            const attrData = await attrRes.json();
-            const results = attrData.results || [];
-            const needlesAttr = results.find((a: { name: string }) => a.name?.toLowerCase() === 'needles');
-            (needlesAttr?.optionValues || []).forEach((v: { id?: number; _id?: string; name?: string }) => {
-              if (v.name) {
-                if (v.id != null) needlesMap[String(v.id)] = v.name;
-                if (v._id) needlesMap[String(v._id)] = v.name;
-              }
-            });
-          }
-        } catch {
-          // ignore
-        }
-
-        // Resolve queue priority from machine-order-assignment for this order/article/machine
         const getQueuePriority = (articleId: string, machineId: string): number | undefined => {
           if (!machineId || !map.size) return undefined;
           const assn = map.get(String(machineId));
@@ -630,77 +615,32 @@ const EditOrderContent = () => {
           return item?.priority != null && item.priority >= 1 ? item.priority : undefined;
         };
 
-        const articlesWithBOM = await Promise.all(orderData.articles.map(async (article: any) => {
+        let productDetails = new Map<string, ArticleProductAttachment>();
+        try {
+          const loaded = await loadArticleProductDetails(
+            orderData.articles.map((article: { articleNumber?: string }) => article.articleNumber || ''),
+            yarnCatalogs
+          );
+          productDetails = loaded.byFactoryCode;
+          if (loaded.yarns.length > 0) {
+            setYarnCatalogs((prev) => {
+              const next = { ...prev };
+              loaded.yarns.forEach((yarn) => {
+                if (yarn.id) next[yarn.id] = yarn;
+              });
+              return next;
+            });
+          }
+        } catch (error) {
+          console.error('Failed to load article products:', error);
+          toast.error('Could not load article BOM. Quantities are still editable.');
+        }
+
+        const articlesWithBOM = orderData.articles.map((article: any) => {
           const articleId = article.id ?? article._id;
           const machineId = typeof article.machineId === "object" && article.machineId ? article.machineId.id || article.machineId._id : article.machineId || "";
           const queuePriority = getQueuePriority(articleId, machineId);
-
-          try {
-            const productResponse = await axios.get(`${API_BASE_URL}/products?page=1&limit=1000&search=${encodeURIComponent(article.articleNumber)}`);
-            const products = productResponse.data.results || [];
-            const matchingProduct = products.find((p: Product) => p.factoryCode === article.articleNumber);
-            
-            if (matchingProduct) {
-              const fullProductResponse = await axios.get(`${API_BASE_URL}/products/${matchingProduct.id}`);
-              const fullProduct = fullProductResponse.data?.data ?? fullProductResponse.data;
-              
-              // Normalize BOM structure
-              const normalizedBOM = await Promise.all((fullProduct.bom || []).map(async (bomItem: any) => {
-                let yarnCatalogId = bomItem.yarnCatalogId || bomItem.materialId || '';
-                let yarnName = bomItem.yarnName || bomItem.materialName || '';
-                
-                if (typeof yarnCatalogId === 'object' && yarnCatalogId !== null) {
-                  yarnCatalogId = yarnCatalogId.id || yarnCatalogId._id || '';
-                }
-                
-                if (!yarnName && yarnCatalogId) {
-                  if (yarnCatalogs[yarnCatalogId]) {
-                    yarnName = yarnCatalogs[yarnCatalogId].yarnName;
-                  } else {
-                    try {
-                      const yarnResponse = await yarnCatalogService.getYarnCatalogById(yarnCatalogId);
-                      if (yarnResponse) {
-                        yarnName = yarnResponse.yarnName;
-                        setYarnCatalogs(prev => ({ ...prev, [yarnCatalogId]: yarnResponse }));
-                      }
-                    } catch (error) {
-                      console.warn(`Failed to fetch yarn catalog ${yarnCatalogId}:`, error);
-                    }
-                  }
-                }
-                
-                return {
-                  yarnCatalogId,
-                  quantity: bomItem.quantity || 0,
-                  yarnName: yarnName || 'Unknown Yarn'
-                };
-              }));
-
-              const attrs = fullProduct.attributes || {};
-              const needlesRaw = attrs.Needles ?? attrs.needles;
-              const needleSizeFromProduct =
-                needlesRaw != null && needlesRaw !== '' ? String(needlesRaw).trim() : undefined;
-              const knittingCode = fullProduct.knittingCode ?? undefined;
-
-              return {
-                id: article._id ?? article.id,
-                articleNumber: article.articleNumber,
-                plannedQuantity: article.plannedQuantity,
-                linkingType: article.linkingType,
-                priority: article.priority,
-                machineId,
-                queuePriority,
-                remarks: article.remarks || '',
-                productId: matchingProduct.id,
-                needleSizeFromProduct,
-                knittingCode,
-                bom: normalizedBOM
-              };
-            }
-          } catch (error) {
-            console.warn(`Failed to fetch BOM for article ${article.articleNumber}:`, error);
-          }
-          
+          const detail = productDetails.get(String(article.articleNumber || '').trim().toLowerCase());
           return {
             id: article._id ?? article.id,
             articleNumber: article.articleNumber,
@@ -709,9 +649,17 @@ const EditOrderContent = () => {
             priority: article.priority,
             machineId,
             queuePriority,
-            remarks: article.remarks || ''
+            remarks: article.remarks || '',
+            ...(detail
+              ? {
+                  productId: detail.productId,
+                  needleSizeFromProduct: detail.needleSizeFromProduct,
+                  knittingCode: detail.knittingCode,
+                  bom: detail.bom,
+                }
+              : {}),
           };
-        }));
+        });
 
         setFormData({
           orderPriority: orderData.priority,
@@ -991,15 +939,14 @@ const EditOrderContent = () => {
       const response = await productionService.updateOrder(orderId, updateData);
       
       if (response.success) {
-        // Refetch order so we have all articles (including newly added) with Mongo _ids for machine-assignment sync
-        let createdArticles: any[] = [];
-        const orderRes = await productionService.getOrder(orderId);
-        if (orderRes.success && orderRes.data?.articles?.length) {
-          createdArticles = orderRes.data.articles;
-        }
-        if (createdArticles.length === 0) {
-          const raw = response.data as any;
-          createdArticles = raw?.articles ?? raw?.data?.articles ?? raw?.order?.articles ?? [];
+        const raw = response.data as { articles?: any[] };
+        let createdArticles: any[] = Array.isArray(raw?.articles) ? raw.articles : [];
+        const hasIds = createdArticles.some((article) => article && (article._id || article.id));
+        if (!hasIds) {
+          const orderRes = await productionService.getOrder(orderId);
+          if (orderRes.success && orderRes.data?.articles?.length) {
+            createdArticles = orderRes.data.articles;
+          }
         }
         const MONGO_ID_REGEX = /^[a-fA-F0-9]{24}$/;
         const getRealArticleId = (formArticle: Article, formIndex: number): string | null => {
@@ -1122,74 +1069,43 @@ const EditOrderContent = () => {
 
   const handleReset = async () => {
     if (order) {
-      // Reload articles with BOM data
-      const articlesWithBOM = await Promise.all(order.articles.map(async (article: any) => {
-        try {
-          const productResponse = await axios.get(`${API_BASE_URL}/products?page=1&limit=1000&search=${encodeURIComponent(article.articleNumber)}`);
-          const products = productResponse.data.results || [];
-          const matchingProduct = products.find((p: Product) => p.factoryCode === article.articleNumber);
-          
-          if (matchingProduct) {
-            const fullProductResponse = await axios.get(`${API_BASE_URL}/products/${matchingProduct.id}`);
-            const fullProduct = fullProductResponse.data;
-            
-            const normalizedBOM = await Promise.all((fullProduct.bom || []).map(async (bomItem: any) => {
-              let yarnCatalogId = bomItem.yarnCatalogId || bomItem.materialId || '';
-              let yarnName = bomItem.yarnName || bomItem.materialName || '';
-              
-              if (typeof yarnCatalogId === 'object' && yarnCatalogId !== null) {
-                yarnCatalogId = yarnCatalogId.id || yarnCatalogId._id || '';
-              }
-              
-              if (!yarnName && yarnCatalogId) {
-                if (yarnCatalogs[yarnCatalogId]) {
-                  yarnName = yarnCatalogs[yarnCatalogId].yarnName;
-                } else {
-                  try {
-                    const yarnResponse = await yarnCatalogService.getYarnCatalogById(yarnCatalogId);
-                    if (yarnResponse) {
-                      yarnName = yarnResponse.yarnName;
-                      setYarnCatalogs(prev => ({ ...prev, [yarnCatalogId]: yarnResponse }));
-                    }
-                  } catch (error) {
-                    console.warn(`Failed to fetch yarn catalog ${yarnCatalogId}:`, error);
-                  }
-                }
-              }
-              
-              return {
-                yarnCatalogId,
-                quantity: bomItem.quantity || 0,
-                yarnName: yarnName || 'Unknown Yarn'
-              };
-            }));
-            
-            return {
-              id: article._id ?? article.id,
-              articleNumber: article.articleNumber,
-              plannedQuantity: article.plannedQuantity,
-              linkingType: article.linkingType,
-              priority: article.priority,
-              machineId: typeof article.machineId === 'object' && article.machineId ? article.machineId.id || article.machineId._id : article.machineId || '',
-              remarks: article.remarks || '',
-              productId: matchingProduct.id,
-              bom: normalizedBOM
-            };
-          }
-        } catch (error) {
-          console.warn(`Failed to fetch BOM for article ${article.articleNumber}:`, error);
+      const machineIdOf = (article: { machineId?: string | { id?: string; _id?: string } }) =>
+        typeof article.machineId === 'object' && article.machineId
+          ? article.machineId.id || article.machineId._id || ''
+          : article.machineId || '';
+      let productDetails = new Map<string, ArticleProductAttachment>();
+      try {
+        const loaded = await loadArticleProductDetails(
+          order.articles.map((article) => article.articleNumber || ''),
+          yarnCatalogs
+        );
+        productDetails = loaded.byFactoryCode;
+        if (loaded.yarns.length > 0) {
+          setYarnCatalogs((prev) => {
+            const next = { ...prev };
+            loaded.yarns.forEach((yarn) => {
+              if (yarn.id) next[yarn.id] = yarn;
+            });
+            return next;
+          });
         }
-        
+      } catch (error) {
+        console.error('Failed to reload article products:', error);
+        toast.error('Could not reload article BOM');
+      }
+      const articlesWithBOM = order.articles.map((article) => {
+        const detail = productDetails.get(String(article.articleNumber || '').trim().toLowerCase());
         return {
-          id: article._id ?? article.id,
+          id: article.id,
           articleNumber: article.articleNumber,
           plannedQuantity: article.plannedQuantity,
           linkingType: article.linkingType,
           priority: article.priority,
-          machineId: typeof article.machineId === 'object' && article.machineId ? article.machineId.id || article.machineId._id : article.machineId || '',
-          remarks: article.remarks || ''
+          machineId: machineIdOf(article),
+          remarks: article.remarks || '',
+          ...(detail ? { productId: detail.productId, bom: detail.bom, knittingCode: detail.knittingCode, needleSizeFromProduct: detail.needleSizeFromProduct } : {}),
         };
-      }));
+      });
 
       setFormData({
         orderPriority: order.priority,
@@ -1689,6 +1605,7 @@ const EditOrderContent = () => {
                       type="submit"
                       className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded shadow-sm disabled:opacity-60 bg-purple-600 text-white hover:bg-purple-700"
                       disabled={isSubmitting || hasArticleWithoutBOM}
+                      aria-busy={isSubmitting}
                       title={
                         hasArticleWithoutBOM 
                           ? "Lin BOM is missing for one or more articles" 

@@ -191,20 +191,52 @@ export interface ProductByFactoryCode {
   [key: string]: unknown;
 }
 
+/** In-flight factory-code lookups. Strict mode and two tabs were opening the same POST twice and the extra socket died as net::ERR. */
+const factoryCodeRequests = new Map<string, Promise<ProductByFactoryCode[]>>();
+
+/**
+ * True when fetch failed before a response (connection reset, server restart). A refresh succeeds.
+ * @param error Thrown fetch error
+ */
+function isTransientNetworkError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.name === 'AbortError') return false;
+  return error instanceof TypeError || /failed to fetch|network|err_connection|load failed/i.test(error.message);
+}
+
 /**
  * POST /v1/products/by-factory-codes
- * Body: { factoryCodes: string[] } (max 500)
- * Returns array of products with attributes (Type, Season, etc.)
+ * Body: { factoryCodes: string[], view?: 'bom' | 'card' } (max 500)
+ * `card` returns factoryCode, name, and image only. The default returns the full product.
+ * Identical in-flight calls share one request. A dropped connection is retried once.
+ * @param factoryCodes Factory codes to load
+ * @param options.view `card` for image/name, `bom` for supervisor BOM, omit for the full document
  */
 export async function getProductsByFactoryCodes(
-  factoryCodes: string[]
+  factoryCodes: string[],
+  options?: { view?: 'bom' | 'card' }
 ): Promise<ProductByFactoryCode[]> {
   if (!factoryCodes.length) return [];
+  const view = options?.view;
+  const key = `${view || 'full'}:${[...factoryCodes].map((code) => code.trim()).filter(Boolean).sort().join('\0')}`;
+  const existing = factoryCodeRequests.get(key);
+  if (existing) return existing;
+
   const url = `${API_BASE_URL}/products/by-factory-codes`;
-  return request<ProductByFactoryCode[]>(url, {
-    method: 'POST',
-    body: JSON.stringify({ factoryCodes }),
+  const body = JSON.stringify(view ? { factoryCodes, view } : { factoryCodes });
+  const pending = (async () => {
+    try {
+      return await request<ProductByFactoryCode[]>(url, { method: 'POST', body });
+    } catch (error) {
+      if (!isTransientNetworkError(error)) throw error;
+      return request<ProductByFactoryCode[]>(url, { method: 'POST', body });
+    }
+  })().finally(() => {
+    factoryCodeRequests.delete(key);
   });
+
+  factoryCodeRequests.set(key, pending);
+  return pending;
 }
 
 /** Product from GET /v1/products/by-code?factoryCode=... */
