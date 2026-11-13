@@ -10,11 +10,12 @@ function isBrowser(): boolean {
   return typeof window !== "undefined";
 }
 
-/** True when the page is served from a local/LAN dev host (not prod domain). */
+/** True when the page is served from a local/LAN host (not the public prod domain). */
 function isLocalDevHost(hostname: string): boolean {
   return (
     /^(localhost|127\.0\.0\.1)$/.test(hostname) ||
-    /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)
+    /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) ||
+    hostname.endsWith(".sslip.io")
   );
 }
 
