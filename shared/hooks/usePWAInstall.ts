@@ -1,45 +1,39 @@
 "use client"
 import { useState, useEffect, useCallback } from 'react';
-
-interface BeforeInstallPromptEvent extends Event {
-  prompt(): Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
-}
+import {
+  getStoredInstallPrompt,
+  subscribePWAInstallable,
+  triggerPWAInstall,
+  isPWAStandalone,
+} from '@/shared/utils/pwaInstall';
 
 export function usePWAInstall() {
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstallable, setIsInstallable] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
 
+  const syncFromStore = useCallback(() => {
+    setIsInstallable(!!getStoredInstallPrompt());
+    setIsInstalled(isPWAStandalone());
+  }, []);
+
   useEffect(() => {
-    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
+    if (isPWAStandalone()) {
       setIsInstalled(true);
       return;
     }
-
-    const handler = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
-      setIsInstallable(true);
-    };
-
-    window.addEventListener('beforeinstallprompt', handler);
-
-    return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, []);
+    syncFromStore();
+    return subscribePWAInstallable(syncFromStore);
+  }, [syncFromStore]);
 
   const install = useCallback(async () => {
-    if (!deferredPrompt) return false;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    setDeferredPrompt(null);
-    setIsInstallable(false);
+    const outcome = await triggerPWAInstall();
+    syncFromStore();
     if (outcome === 'accepted') {
       setIsInstalled(true);
       return true;
     }
-    return false;
-  }, [deferredPrompt]);
+    return outcome === 'dismissed' ? false : false;
+  }, [syncFromStore]);
 
   return { isInstallable, isInstalled, install };
 }

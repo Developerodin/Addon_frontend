@@ -22,7 +22,12 @@ const RootLayout = ({children}:any) => {
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Addons" />
-        <link rel="apple-touch-icon" href="/assets/images/brand-logos/desktop-logo.png" />
+        <link rel="apple-touch-icon" href="/pwa/icon-192.png" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){window.__addonsPWA=window.__addonsPWA||{deferredPrompt:null};window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__addonsPWA.deferredPrompt=e;window.dispatchEvent(new Event('addons-pwa-installable'));});window.addEventListener('appinstalled',function(){window.__addonsPWA.deferredPrompt=null;window.dispatchEvent(new Event('addons-pwa-installed'));});})();`,
+          }}
+        />
       </head>
       <body>
         <Provider store={store}>
