@@ -58,6 +58,10 @@ function defaultApiBaseUrl(): string {
     if (isLoopbackHost(host) && readApiTarget() === "factory-docker") {
       return `http://${host}:8001/v1`;
     }
+    // When served over HTTPS (Nginx reverse proxy), backend is at /v1 on the same origin.
+    if (window.location.protocol === "https:") {
+      return `${window.location.origin}/v1`;
+    }
     return localApiBaseUrl(host);
   }
 

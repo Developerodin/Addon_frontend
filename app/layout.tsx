@@ -17,6 +17,12 @@ const RootLayout = ({children}:any) => {
       <head>
         <title>Addons</title>
         <meta name="description" content="Addons - Your AI Assistant" />
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#845adf" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="Addons" />
+        <link rel="apple-touch-icon" href="/assets/images/brand-logos/desktop-logo.png" />
       </head>
       <body>
         <Provider store={store}>
@@ -29,6 +35,11 @@ const RootLayout = ({children}:any) => {
           </AuthProvider>
         </Provider>
         <PrelineScript />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js')}`,
+          }}
+        />
       </body>
     </html>
   );
