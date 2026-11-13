@@ -13,8 +13,7 @@ import { authActions } from '@/shared/redux/actions/authActions';
 import { toggleSidebar as applySidebarToggle } from './sidebarToggle';
 import { syncThemeToDocument } from './syncThemeToDocument';
 import HeaderApiTarget from './HeaderApiTarget';
-import FactoryDesktopAppLink from './FactoryDesktopAppLink';
-import FactoryTabAppButton from './FactoryTabAppButton';
+import FactoryInstallHeaderButtons from './FactoryInstallHeaderButtons';
 
 const Header = ({ local_varaiable, ThemeChanger }:any) => {
   const dispatch = useDispatch();
@@ -307,8 +306,7 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
             </div>
             <div className="header-content-right">
               <HeaderApiTarget />
-              <FactoryDesktopAppLink />
-              <FactoryTabAppButton />
+              <FactoryInstallHeaderButtons />
 
               <div className="header-element header-fullscreen py-[1rem] md:px-[0.65rem] px-2">
               <button
