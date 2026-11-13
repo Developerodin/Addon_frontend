@@ -46,6 +46,7 @@ export interface NavigationPermissions {
     'My Tasks': boolean;
   };
   Users: boolean;
+  'Sync Conflicts': boolean;
   'Production Planning': {
     'Production Orders': boolean;
     'Knitting Floor': boolean;

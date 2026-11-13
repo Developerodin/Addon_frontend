@@ -51,6 +51,7 @@ export interface NavigationPermissions {
     'My Tasks': boolean;
   };
   Users: boolean;
+  'Sync Conflicts': boolean;
   'Production Planning': {
     'Production Orders': boolean;
     'Knitting Floor': boolean;
@@ -141,6 +142,13 @@ export function canAccessHelpSupport(
   permissions: { 'Help & Support'?: boolean } | null | undefined
 ): boolean {
   return permissions?.['Help & Support'] === true;
+}
+
+/** Whether Sync conflicts screen is explicitly enabled for this user. */
+export function canAccessSyncConflicts(
+  permissions: { 'Sync Conflicts'?: boolean } | null | undefined
+): boolean {
+  return permissions?.['Sync Conflicts'] === true;
 }
 
 interface NavigationContextType {
@@ -447,6 +455,7 @@ const defaultPermissions: NavigationPermissions = {
     'My Tasks': false,
   },
   Users: false,
+  'Sync Conflicts': false,
   'Production Planning': {
     'Production Orders': false,
     'Knitting Floor': false,
@@ -535,7 +544,7 @@ export const EMPTY_YARN_ISSUE_NAV_DEFAULTS = defaultPermissions['Yarn Management
 const NAVIGATION_CACHE_KEY = 'navigationPermissions';
 const NAVIGATION_CACHE_VERSION_KEY = 'navigationPermissionsVersion';
 /** Bump when permission semantics change (e.g. Help & Support opt-in). */
-const NAVIGATION_CACHE_VERSION = '7';
+const NAVIGATION_CACHE_VERSION = '8';
 
 interface NavigationProviderProps {
   children: ReactNode;
@@ -624,7 +633,7 @@ export const NavigationProvider: React.FC<NavigationProviderProps> = ({ children
     // Map paths to permission keys
     const pathMap: { [key: string]: keyof NavigationPermissions } = {
       '/users': 'Users',
-      '/sync/conflicts': 'Users',
+      '/sync/conflicts': 'Sync Conflicts',
       '/stores': 'Stores',
       '/analytics': 'Analytics',
       '/replenishment': 'Replenishment Agent',

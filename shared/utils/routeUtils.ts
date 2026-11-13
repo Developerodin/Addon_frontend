@@ -50,6 +50,7 @@ export const getFirstAvailableRoute = (permissions: NavigationPermissions | null
     { path: '/filemanager', permission: permissions['File Manager'] },
     { path: '/help-and-support', permission: permissions['Help & Support'] },
     { path: '/users', permission: permissions.Users },
+    { path: '/sync/conflicts', permission: permissions['Sync Conflicts'] },
     { path: '/production/supervisor', permission: permissions['Production Planning']?.['Production Orders'] },
     { path: '/production/floor-supervisor/knitting', permission: permissions['Production Planning']?.['Knitting Floor'] },
     { path: '/production/floor-supervisor/linking', permission: permissions['Production Planning']?.['Linking Floor'] },

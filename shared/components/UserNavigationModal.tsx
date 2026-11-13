@@ -120,6 +120,7 @@ const UserNavigationModal: React.FC<UserNavigationModalProps> = ({
             <div className="space-y-2">
               {[
                 { key: 'Users', label: 'Users Management' },
+                { key: 'Sync Conflicts', label: 'Sync conflicts' },
                 { key: 'Stores', label: 'Stores' },
                 { key: 'Analytics', label: 'Analytics' },
                 { key: 'Replenishment Agent', label: 'Replenishment Agent' },

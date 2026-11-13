@@ -17,7 +17,8 @@ const NavigationPermissions: React.FC<NavigationPermissionsProps> = ({ navigatio
     { key: 'Replenishment Agent', label: 'Replenishment Agent' },
     { key: 'File Manager', label: 'File Manager' },
     { key: 'Help & Support', label: 'Help & Support' },
-    { key: 'Users', label: 'Users Management' }
+    { key: 'Users', label: 'Users Management' },
+    { key: 'Sync Conflicts', label: 'Sync conflicts' },
   ]
 
   const dashboardSections = [

@@ -1,197 +1,60 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import Cookies from 'js-cookie';
-import Seo from '@/shared/layout-components/seo/seo';
-import { API_BASE_URL } from '@/shared/data/utilities/api';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import toast, { Toaster } from 'react-hot-toast';
+import {
+  syncReviewService,
+  type ReviewConflict,
+  type ReviewQueue,
+  type SyncDecision,
+} from '@/shared/services/syncReviewService';
+import SyncConflictsShell from './components/SyncConflictsShell';
+import QueueSummary from './components/QueueSummary';
+import ConflictList from './components/ConflictList';
+import ConflictDetailPanel from './components/ConflictDetailPanel';
+import ResolveConflictModal from './components/ResolveConflictModal';
+import DecisionLogTable from './components/DecisionLogTable';
 
-/**
- * Sync conflict review. Lists open same-field conflicts (Base / Factory / Cloud) and records an admin decision.
- * The decision is intent only: the backend does not apply it to orders, floors, PO, GRN, or any business data.
- * API: GET/POST `${API_BASE_URL}/sync-review/conflicts` (Bearer, manageUsers).
- */
+type TabId = 'open' | 'history';
 
-type Decision = 'KEEP_LOCAL' | 'KEEP_REMOTE' | 'MANUAL';
-
-type ReviewConflict = {
-  id: string;
-  entityType: string;
-  aggregateId: string;
-  aggregateVersion: number | null;
-  reason: string;
-  base: Record<string, unknown>;
-  factory: Record<string, unknown>;
-  cloud: Record<string, unknown>;
-  factorySiteId: string | null;
-  cloudSiteId: string | null;
-  changedKeys: string[];
-  nonOverlappingKeys: string[];
-  createdAt: string;
-};
-
-type ReviewQueue = {
-  openConflicts: number;
-  rebased: number;
-  inboxPending: number;
-  inboxProbe: number;
-  inboxLive: number;
-  outboxPending: number;
-};
-
-const HIDDEN_UNLESS_CHANGED = new Set(['base', 'probe', 'flowId']);
-
-const DECISIONS: { value: Decision; label: string; help: string }[] = [
-  { value: 'KEEP_LOCAL', label: 'Keep local', help: 'Record that this server’s version should win' },
-  { value: 'KEEP_REMOTE', label: 'Keep remote', help: 'Record that the other site’s version should win' },
-  { value: 'MANUAL', label: 'Manual', help: 'Record that someone will fix this by hand' },
-];
-
-const REVIEW_BASE = `${API_BASE_URL}/sync-review/conflicts`;
-
-function getAccessToken(): string | null {
-  if (typeof document === 'undefined') return null;
-  try {
-    return Cookies.get('accessToken') || localStorage.getItem('token');
-  } catch {
-    return null;
-  }
-}
-
-async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const token = getAccessToken();
-  if (!token) throw new Error('No access token found. Please login again.');
-  const res = await fetch(url, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body?.message || `Request failed (HTTP ${res.status})`);
-  return body as T;
-}
-
-/** Display value for one payload key. `undefined` means the key is absent on that side. */
-function formatValue(value: unknown): string {
-  if (value === undefined || value === null) return '—';
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
-  if (typeof value === 'object' && !Array.isArray(value)) {
-    return Object.entries(value as Record<string, unknown>)
-      .filter(([key]) => key !== 'base')
-      .map(([key, item]) => `${key}: ${formatValue(item)}`)
-      .join(', ');
-  }
-  return JSON.stringify(value);
-}
-
-function ConflictCard({
-  conflict,
-  busy,
-  onDecide,
-}: {
-  conflict: ReviewConflict;
-  busy: boolean;
-  onDecide: (id: string, decision: Decision) => void;
-}) {
-  const changed = new Set(conflict.changedKeys);
-  const keys = Array.from(
-    new Set([
-      ...Object.keys(conflict.base || {}),
-      ...Object.keys(conflict.factory || {}),
-      ...Object.keys(conflict.cloud || {}),
-    ])
-  )
-    .filter((k) => k !== 'base' && (changed.has(k) || !HIDDEN_UNLESS_CHANGED.has(k)))
-    .sort((a, b) => Number(changed.has(b)) - Number(changed.has(a)) || a.localeCompare(b));
-  const headingId = `conflict-${conflict.id}-title`;
-
-  return (
-    <article aria-labelledby={headingId} className="box mb-4">
-      <header className="box-header flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 id={headingId} className="box-title text-base font-semibold">
-            {conflict.entityType} · {conflict.aggregateId}
-          </h2>
-          <p className="text-xs text-gray-500 dark:text-white/50">
-            Version {conflict.aggregateVersion ?? '—'} · opened {new Date(conflict.createdAt).toLocaleString()}
-          </p>
-        </div>
-        <p className="text-xs">
-          <span className="font-medium">Changed on both sides:</span>{' '}
-          {conflict.changedKeys.length ? conflict.changedKeys.join(', ') : '—'}
-        </p>
-      </header>
-
-      <div className="box-body overflow-x-auto">
-        <table className="min-w-full text-sm" aria-label={`Base, factory and cloud values for ${conflict.aggregateId}`}>
-          <thead>
-            <tr className="border-b border-defaultborder text-left">
-              <th scope="col" className="py-2 pe-4">Field</th>
-              <th scope="col" className="py-2 pe-4">Base</th>
-              <th scope="col" className="py-2 pe-4">Factory{conflict.factorySiteId ? ` (${conflict.factorySiteId})` : ''}</th>
-              <th scope="col" className="py-2 pe-4">Cloud{conflict.cloudSiteId ? ` (${conflict.cloudSiteId})` : ''}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {keys.map((key) => {
-              const isChanged = changed.has(key);
-              return (
-                <tr
-                  key={key}
-                  className={`border-b border-defaultborder ${isChanged ? 'bg-warning/10 font-semibold' : ''}`}
-                  aria-label={isChanged ? `${key}: changed on both sides` : undefined}
-                >
-                  <th scope="row" className="py-2 pe-4 text-left font-medium">
-                    {key}
-                    {isChanged && <span className="sr-only"> (changed on both sides)</span>}
-                  </th>
-                  <td className="py-2 pe-4 break-all">{formatValue(conflict.base?.[key])}</td>
-                  <td className="py-2 pe-4 break-all">{formatValue(conflict.factory?.[key])}</td>
-                  <td className="py-2 pe-4 break-all">{formatValue(conflict.cloud?.[key])}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      <footer className="box-footer">
-        <div role="group" aria-label={`Decision for ${conflict.aggregateId}`} className="flex flex-wrap gap-2">
-          {DECISIONS.map((d) => (
-            <button
-              key={d.value}
-              type="button"
-              disabled={busy}
-              onClick={() => onDecide(conflict.id, d.value)}
-              aria-label={`${d.label} for ${conflict.aggregateId}. ${d.help}. Recorded only, not applied.`}
-              title={d.help}
-              className="ti-btn ti-btn-primary disabled:opacity-50"
-            >
-              {d.label}
-            </button>
-          ))}
-        </div>
-        <p className="mt-2 text-xs text-gray-500 dark:text-white/50">
-          The decision is recorded only. No quantity, order, or floor is changed.
-        </p>
-      </footer>
-    </article>
-  );
-}
+const OPEN_LIST_LIMIT = 50;
 
 export default function SyncConflictsPage() {
+  const [activeTab, setActiveTab] = useState<TabId>('open');
   const [conflicts, setConflicts] = useState<ReviewConflict[]>([]);
   const [queue, setQueue] = useState<ReviewQueue | null>(null);
+  const [serverSiteId, setServerSiteId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [listLimit, setListLimit] = useState(OPEN_LIST_LIMIT);
+  const [canLoadMore, setCanLoadMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [filterText, setFilterText] = useState('');
+  const [debouncedFilter, setDebouncedFilter] = useState('');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [resolveBusy, setResolveBusy] = useState(false);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedFilter(filterText.trim().toLowerCase()), 200);
+    return () => window.clearTimeout(t);
+  }, [filterText]);
+
+  const loadOpen = useCallback(async (limit: number) => {
     setLoading(true);
     setError(null);
     try {
-      const body = await request<{ conflicts: ReviewConflict[]; queue?: ReviewQueue }>(REVIEW_BASE);
-      setConflicts(body.conflicts || []);
+      const body = await syncReviewService.listOpenConflicts(limit);
+      const list = body.conflicts || [];
+      setConflicts(list);
       setQueue(body.queue || null);
+      setServerSiteId(body.siteId);
+      setCanLoadMore(list.length >= limit);
+      setListLimit(limit);
+      setSelectedId((prev) => {
+        if (prev && list.some((c) => c.id === prev)) return prev;
+        return list[0]?.id ?? null;
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load conflicts');
     } finally {
@@ -200,106 +63,150 @@ export default function SyncConflictsPage() {
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (activeTab === 'open') {
+      void loadOpen(OPEN_LIST_LIMIT);
+    }
+  }, [activeTab, loadOpen]);
 
-  const decide = useCallback(
-    async (id: string, decision: Decision) => {
-      setBusyId(id);
-      setError(null);
-      setMessage(null);
-      try {
-        await request(`${REVIEW_BASE}/${encodeURIComponent(id)}/resolve`, {
-          method: 'POST',
-          body: JSON.stringify({ decision }),
-        });
-        setMessage(`Decision ${decision} recorded. Nothing was applied.`);
-        setConflicts((rows) => rows.filter((r) => r.id !== id));
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Could not record the decision');
-      } finally {
-        setBusyId(null);
-      }
-    },
-    []
+  const filteredConflicts = useMemo(() => {
+    if (!debouncedFilter) return conflicts;
+    return conflicts.filter(
+      (c) =>
+        c.aggregateId.toLowerCase().includes(debouncedFilter) ||
+        c.entityType.toLowerCase().includes(debouncedFilter) ||
+        c.changedKeys.some((k) => k.toLowerCase().includes(debouncedFilter))
+    );
+  }, [conflicts, debouncedFilter]);
+
+  const selectedConflict = useMemo(
+    () => filteredConflicts.find((c) => c.id === selectedId) ?? conflicts.find((c) => c.id === selectedId) ?? null,
+    [filteredConflicts, conflicts, selectedId]
   );
+
+  useEffect(() => {
+    if (selectedId && !filteredConflicts.some((c) => c.id === selectedId) && filteredConflicts[0]) {
+      setSelectedId(filteredConflicts[0].id);
+    }
+  }, [filteredConflicts, selectedId]);
+
+  const handleRefresh = () => {
+    if (activeTab === 'open') {
+      void loadOpen(listLimit);
+    } else {
+      setHistoryRefreshKey((k) => k + 1);
+    }
+  };
+
+  const handleConfirmResolve = async (decision: SyncDecision, note: string) => {
+    if (!selectedConflict) return;
+    setResolveBusy(true);
+    try {
+      await syncReviewService.resolveConflict(selectedConflict.id, decision, note);
+      toast.success('Decision recorded (intent only — nothing applied).');
+      setModalOpen(false);
+      setConflicts((rows) => {
+        const next = rows.filter((r) => r.id !== selectedConflict.id);
+        setSelectedId(next[0]?.id ?? null);
+        return next;
+      });
+      setHistoryRefreshKey((k) => k + 1);
+      if (queue) {
+        setQueue({ ...queue, openConflicts: Math.max(0, queue.openConflicts - 1) });
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not record decision');
+    } finally {
+      setResolveBusy(false);
+    }
+  };
+
+  const openCount = queue?.openConflicts ?? conflicts.length;
 
   return (
     <>
-      <Seo title="Sync conflicts" />
-      <main aria-labelledby="sync-conflicts-title" className="mt-4">
-        <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h1 id="sync-conflicts-title" className="text-lg font-semibold">
-              Sync conflicts
-            </h1>
-            <p className="text-sm text-[#8c9097] dark:text-white/60">
-              Only a field changed on both sides is a conflict. A recorded decision does not change a floor, an order, or a quantity.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={load}
-            disabled={loading}
-            aria-label="Reload open conflicts"
-            className="ti-btn ti-btn-light disabled:opacity-50"
-          >
-            Reload
-          </button>
-        </header>
+      <Toaster position="top-right" />
+      <SyncConflictsShell
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        openCount={openCount}
+        serverSiteId={serverSiteId}
+        onRefresh={handleRefresh}
+        refreshing={loading && activeTab === 'open'}
+      >
+        {activeTab === 'open' && (
+          <>
+            <div className="mb-3 rounded border border-blue-100 bg-blue-50/60 px-3 py-2 text-[10px] text-blue-900">
+              Conflicts appear when the same field was edited on factory and cloud. Choosing an option only saves your
+              intent for later — it does not update production data.
+            </div>
 
-        <div aria-live="polite" role="status" className="mb-3 text-sm">
-          {message && <p className="text-success">{message}</p>}
-        </div>
-        {error && (
-          <p role="alert" className="mb-3 text-sm text-danger">
-            {error}
-          </p>
+            <QueueSummary queue={queue} />
+
+            {error && (
+              <p role="alert" className="mb-3 text-[11px] text-red-600">
+                {error}{' '}
+                <button type="button" className="underline font-bold" onClick={() => void loadOpen(listLimit)}>
+                  Retry
+                </button>
+              </p>
+            )}
+
+            <div className="flex flex-wrap gap-2 mb-3 items-center">
+              <div className="relative flex-1 min-w-[160px] max-w-xs">
+                <input
+                  type="search"
+                  value={filterText}
+                  onChange={(e) => setFilterText(e.target.value)}
+                  placeholder="Filter by aggregate, entity, or field…"
+                  className="w-full border border-gray-200 pl-8 pr-3 py-1.5 text-[11px] rounded"
+                />
+                <i className="ri-search-line absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
+              </div>
+              {loading && <span className="text-[10px] text-gray-500">Loading…</span>}
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-[minmax(220px,280px)_1fr]">
+              <ConflictList
+                conflicts={filteredConflicts}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+              />
+              <ConflictDetailPanel
+                conflict={selectedConflict}
+                onRecordDecision={() => {
+                  if (selectedConflict) setModalOpen(true);
+                }}
+              />
+            </div>
+
+            {canLoadMore && (
+              <div className="mt-3 flex justify-center">
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => void loadOpen(listLimit + OPEN_LIST_LIMIT)}
+                  className="text-[11px] font-bold text-purple-600 hover:underline disabled:opacity-50"
+                >
+                  Load more open conflicts
+                </button>
+              </div>
+            )}
+          </>
         )}
 
-        {queue && (
-          <section aria-label="Sync queue" className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <article className="box mb-0 border border-danger/20">
-              <div className="box-body">
-                <p className="text-xs font-medium uppercase tracking-wide text-[#8c9097]">Open conflicts</p>
-                <p className="mt-1 text-2xl font-semibold">{queue.openConflicts}</p>
-                <p className="mt-1 text-xs text-[#8c9097] dark:text-white/60">Same field edited on both sides. Decide below.</p>
-              </div>
-            </article>
-            <article className="box mb-0">
-              <div className="box-body">
-                <p className="text-xs font-medium uppercase tracking-wide text-[#8c9097]">Live inbox</p>
-                <p className="mt-1 text-2xl font-semibold">{queue.inboxLive}</p>
-                <p className="mt-1 text-xs text-[#8c9097] dark:text-white/60">Real events received and not applied.</p>
-              </div>
-            </article>
-            <article className="box mb-0">
-              <div className="box-body">
-                <p className="text-xs font-medium uppercase tracking-wide text-[#8c9097]">Waiting to send</p>
-                <p className="mt-1 text-2xl font-semibold">{queue.outboxPending}</p>
-                <p className="mt-1 text-xs text-[#8c9097] dark:text-white/60">Events this server still has to push.</p>
-              </div>
-            </article>
-            <article className="box mb-0">
-              <div className="box-body">
-                <p className="text-xs font-medium uppercase tracking-wide text-[#8c9097]">Test leftovers</p>
-                <p className="mt-1 text-2xl font-semibold">{queue.inboxProbe}</p>
-                <p className="mt-1 text-xs text-[#8c9097] dark:text-white/60">
-                  From the local test script. Not factory work. {queue.rebased} rebased row{queue.rebased === 1 ? '' : 's'} stored, not applied.
-                </p>
-              </div>
-            </article>
-          </section>
+        {activeTab === 'history' && (
+          <DecisionLogTable serverSiteId={serverSiteId} refreshKey={historyRefreshKey} />
         )}
+      </SyncConflictsShell>
 
-        <section aria-label="Open conflicts" aria-busy={loading}>
-          {loading && <p className="text-sm">Loading…</p>}
-          {!loading && !error && conflicts.length === 0 && <p className="text-sm">No open conflicts.</p>}
-          {conflicts.map((c) => (
-            <ConflictCard key={c.id} conflict={c} busy={busyId === c.id} onDecide={decide} />
-          ))}
-        </section>
-      </main>
+      <ResolveConflictModal
+        open={modalOpen}
+        conflict={selectedConflict}
+        serverSiteId={serverSiteId}
+        busy={resolveBusy}
+        onClose={() => setModalOpen(false)}
+        onConfirm={handleConfirmResolve}
+      />
     </>
   );
 }
