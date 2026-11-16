@@ -14,6 +14,7 @@ import { getHalfStepQuantityError, HALF_STEP_QTY_ERROR } from "@/shared/utils/ha
 import MachineViewTab from "./components/MachineViewTab";
 import ArticleViewTab from "./components/ArticleViewTab";
 import MachineArticlePlanningTab from "./components/MachineArticlePlanningTab";
+import MachineArticleKnittingReportTab from "./components/MachineArticleKnittingReportTab";
 import {
   checkKnittingQuantityBuffer,
 } from "./utils/knittingQuantityValidation";
@@ -42,7 +43,8 @@ type KnittingTab =
   | "orders"
   | "machine-view"
   | "article-view"
-  | "planning";
+  | "planning"
+  | "report-data";
 
 /** 50×70mm ZPL preset — aligned with Containers Master default for thermal QR labels */
 const KNITTING_CONTAINER_LABEL_QZ_SETTINGS = {
@@ -1601,6 +1603,13 @@ const KnittingFloorSupervisorPage = () => {
             >
               Planning
             </button>
+            <button
+              type="button"
+              className={`px-3 py-2 text-[11px] font-bold border-b-2 transition-colors ${activeTab === "report-data" ? "border-purple-600 text-purple-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              onClick={() => setActiveTab("report-data")}
+            >
+              Report & Data
+            </button>
           </div>
         </div>
 
@@ -1615,6 +1624,8 @@ const KnittingFloorSupervisorPage = () => {
             />
           ) : activeTab === "planning" ? (
             <MachineArticlePlanningTab refreshTrigger={machineViewRefreshTrigger} />
+          ) : activeTab === "report-data" ? (
+            <MachineArticleKnittingReportTab refreshTrigger={machineViewRefreshTrigger} />
           ) : activeTab === "article-view" ? (
             <ArticleViewTab
               orders={articleTabOrders}

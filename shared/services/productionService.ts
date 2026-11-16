@@ -728,6 +728,36 @@ export interface DailyProductionSummaryResponse {
   warnings: string[];
 }
 
+/** One row of GET /production/reports/knitting-floor-report (IST date range). */
+export interface KnittingFloorReportRow {
+  orderId: string;
+  orderNumber: string;
+  articleId: string;
+  articleNumber: string;
+  machineId: string;
+  machineCode: string;
+  plannedQuantity: number;
+  knittingOutput: number;
+  m4Qty: number;
+}
+
+export interface KnittingFloorReportColumnTotals {
+  plannedQuantity: number;
+  knittingOutput: number;
+  m4Qty: number;
+}
+
+export interface KnittingFloorReportData {
+  results: KnittingFloorReportRow[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  startDate: string;
+  endDate: string;
+  columnTotals?: KnittingFloorReportColumnTotals;
+}
+
 /** One in-flight list per floor query. A second caller waits on it instead of opening another 2MB download. */
 const floorOrderRequests = new Map<string, Promise<ApiResponse<PaginatedResponse<ProductionOrder>>>>();
 
@@ -1504,6 +1534,24 @@ class ProductionService {
       ? `/reports/daily-production-summary?${queryString}`
       : "/reports/daily-production-summary";
     return this.request<DailyProductionSummaryResponse>(endpoint);
+  }
+
+  /** Knitting floor report: in-period knit output and M4 by order, article, and machine. */
+  async getKnittingFloorReport(filters: {
+    startDate: string;
+    endDate: string;
+    page?: number;
+    limit?: number;
+    search?: string;
+  }): Promise<ApiResponse<KnittingFloorReportData>> {
+    const queryParams = new URLSearchParams();
+    queryParams.set("startDate", filters.startDate);
+    queryParams.set("endDate", filters.endDate);
+    if (filters.page != null) queryParams.set("page", String(filters.page));
+    if (filters.limit != null) queryParams.set("limit", String(filters.limit));
+    if (filters.search?.trim()) queryParams.set("search", filters.search.trim());
+    const endpoint = `/reports/knitting-floor-report?${queryParams.toString()}`;
+    return this.request<KnittingFloorReportData>(endpoint);
   }
 
   // Logging & Audit APIs
