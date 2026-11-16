@@ -15,11 +15,12 @@ import {
 import { printHtmlViaHiddenFrame } from "./printHtmlViaHiddenFrame";
 import {
   buildProductLabelPrintDocument,
+  buildProductLabelSheetDocument,
   buildProductStickerHtml,
-  buildSingleProductLabelDocument,
+  chunkProductLabelSheets,
 } from "./productBarcodeLabelHtml";
 import { printHtmlLabelsViaQz } from "@/shared/utils/qzTrayOther";
-import { PRODUCT_LABEL_SIZE_MM } from "./productBarcodeLabelConstants";
+import { PRODUCT_LABEL_SIZE_MM, productLabelSheetWidthMm } from "./productBarcodeLabelConstants";
 import { loadProductLabelTypography } from "./productBarcodeLabelSettings";
 
 /** Rasterize JsBarcode SVG at ~2× 203dpi so QZ JavaFX HTML print stays sharp. */
@@ -154,7 +155,7 @@ function expandStickerMarkup(
 }
 
 /**
- * Print 50×70mm statutory MRP stickers via QZ Tray (pixel HTML) or browser dialog.
+ * Print 50×70mm statutory MRP stickers, two per row, via QZ Tray or the browser dialog.
  * @param batchNumber - Display batch number for print title
  * @param labels - Label payloads from the API
  * @param destination - QZ Tray thermal print or browser fallback
@@ -177,7 +178,7 @@ export async function printBatchBarcodeLabels(
       const uid = `${index}-${String(label.styleCode || "").replace(/[^a-zA-Z0-9]/g, "")}-${ean}`;
       const { svg, caption } = renderLabelBarcodeSvg(ean, uid);
       return { markup: svg, caption };
-    }).join("");
+    });
     const html = buildProductLabelPrintDocument(
       `Barcodes — ${batchNumber}`,
       stickers,
@@ -198,14 +199,17 @@ export async function printBatchBarcodeLabels(
       unique.map((row) => svgMarkupToPngDataUrl(row.svg, QZ_BARCODE_PNG_W, QZ_BARCODE_PNG_H)),
     );
 
-    const pages = expandStickerMarkup(labels, (_label, index) => {
+    const stickers = expandStickerMarkup(labels, (_label, index) => {
       const row = unique[index];
       const img = `<img src="${pngByIndex[index]}" alt="" />`;
       return { markup: img, caption: row.caption };
-    }).map((sticker) => buildSingleProductLabelDocument(sticker, typography));
+    });
+    const pages = chunkProductLabelSheets(stickers).map((row) =>
+      buildProductLabelSheetDocument(row, typography),
+    );
 
     const result = await printHtmlLabelsViaQz(pages, {
-      widthMm: PRODUCT_LABEL_SIZE_MM.width,
+      widthMm: productLabelSheetWidthMm(),
       heightMm: PRODUCT_LABEL_SIZE_MM.height,
     });
 

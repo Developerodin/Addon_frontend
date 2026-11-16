@@ -1,9 +1,12 @@
 import type { PickListBatchBarcodeLabel } from "@/shared/services/whmsPickListBatchService";
 import {
+  PRODUCT_LABEL_COLUMN_GAP_MM,
+  PRODUCT_LABEL_COLUMNS,
   PRODUCT_LABEL_CUSTOMER_CARE,
   PRODUCT_LABEL_LICENSOR,
   PRODUCT_LABEL_MANUFACTURER,
   PRODUCT_LABEL_SIZE_MM,
+  productLabelSheetWidthMm,
 } from "./productBarcodeLabelConstants";
 import {
   loadProductLabelTypography,
@@ -43,32 +46,53 @@ function eanCaptionHtml(caption: string): string {
 }
 
 /**
- * Shared 50×70mm sticker CSS for browser print and QZ Tray HTML.
- * @param pageBreak - Insert page breaks between stickers (browser only)
+ * Shared sticker CSS for browser print and QZ Tray HTML.
+ * A printed row is two 50×70mm labels side by side, so the other column is not blank.
+ * @param pageBreak - Insert page breaks between rows (browser only)
+ * @param lockPage - Fix the document to one row (QZ Tray). Browser print stays multi-page.
  * @param typography - Saved Name→USP size/boldness
  */
-function productLabelCss(pageBreak: boolean, typography: ProductLabelTypography): string {
+function productLabelCss(
+  pageBreak: boolean,
+  lockPage: boolean,
+  typography: ProductLabelTypography,
+): string {
+  const { width, height } = PRODUCT_LABEL_SIZE_MM;
+  const sheetWidth = productLabelSheetWidthMm();
   const breaks = pageBreak
-    ? `.sticker { page-break-after: always; break-after: page; }
-    .sticker:last-child { page-break-after: auto; break-after: auto; }`
+    ? `.sheet { page-break-after: always; break-after: page; }
+    .sheet:last-child { page-break-after: auto; break-after: auto; }`
+    : "";
+  const pageLock = lockPage
+    ? `height: ${height}mm; overflow: hidden;`
     : "";
   return `
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
-      width: ${PRODUCT_LABEL_SIZE_MM.width}mm;
-      height: ${PRODUCT_LABEL_SIZE_MM.height}mm;
+      width: ${sheetWidth}mm;
+      ${pageLock}
       margin: 0 !important;
       padding: 0 !important;
-      overflow: hidden;
       font-family: Arial, Helvetica, sans-serif;
       color: #000;
       background: #fff;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
+    .sheet {
+      width: ${sheetWidth}mm;
+      height: ${height}mm;
+      display: flex;
+      flex-direction: row;
+      justify-content: flex-start;
+      align-items: flex-start;
+      gap: ${PRODUCT_LABEL_COLUMN_GAP_MM}mm;
+      overflow: hidden;
+    }
     .sticker {
-      width: ${PRODUCT_LABEL_SIZE_MM.width}mm;
-      height: ${PRODUCT_LABEL_SIZE_MM.height}mm;
+      width: ${width}mm;
+      height: ${height}mm;
+      flex: 0 0 ${width}mm;
       padding: 0.55mm 2.1mm 1.1mm;
       display: flex;
       flex-direction: column;
@@ -144,47 +168,69 @@ export function buildProductStickerHtml(
 }
 
 /**
- * Full print document: one 50×70mm page per sticker.
+ * Group sticker markup into printed rows. Each row holds one label per column.
+ * @param stickers - One fragment per physical sticker, in print order
+ */
+export function chunkProductLabelSheets(stickers: string[]): string[][] {
+  const sheets: string[][] = [];
+  for (let i = 0; i < stickers.length; i += PRODUCT_LABEL_COLUMNS) {
+    sheets.push(stickers.slice(i, i + PRODUCT_LABEL_COLUMNS));
+  }
+  return sheets;
+}
+
+/**
+ * One printed row: stickers side by side, left column first.
+ * @param stickers - One or two sticker fragments
+ */
+export function buildProductLabelSheetHtml(stickers: string[]): string {
+  return `<div class="sheet">${stickers.join("")}</div>`;
+}
+
+/**
+ * Full print document: one row per page, both columns filled before the next row.
  * @param title - Document title
- * @param stickersHtml - Concatenated sticker markup
+ * @param stickers - One fragment per physical sticker
  * @param typography - Saved Name→USP type (defaults to last saved)
  */
 export function buildProductLabelPrintDocument(
   title: string,
-  stickersHtml: string,
+  stickers: string[],
   typography: ProductLabelTypography = loadProductLabelTypography(),
 ): string {
-  const { width, height } = PRODUCT_LABEL_SIZE_MM;
+  const sheetWidth = productLabelSheetWidthMm();
+  const { height } = PRODUCT_LABEL_SIZE_MM;
+  const sheets = chunkProductLabelSheets(stickers).map(buildProductLabelSheetHtml).join("");
   return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
   <title>${escLabelHtml(title)}</title>
   <style>
-    @page { size: ${width}mm ${height}mm; margin: 0; }
-    ${productLabelCss(true, typography)}
+    @page { size: ${sheetWidth}mm ${height}mm; margin: 0; }
+    ${productLabelCss(true, false, typography)}
   </style>
 </head>
-<body>${stickersHtml}</body>
+<body>${sheets}</body>
 </html>`;
 }
 
 /**
- * One 50×70mm HTML document for a single sticker (QZ Tray pixel print).
- * Same CSS as the browser document, without multi-page breaks.
- * @param stickerHtml - Markup from `buildProductStickerHtml`
+ * One HTML document for a single printed row (QZ Tray pixel print).
+ * Same CSS as the browser document, without a page break.
+ * @param stickers - One or two sticker fragments for this row
  * @param typography - Saved Name→USP type (defaults to last saved)
  */
-export function buildSingleProductLabelDocument(
-  stickerHtml: string,
+export function buildProductLabelSheetDocument(
+  stickers: string[],
   typography: ProductLabelTypography = loadProductLabelTypography(),
 ): string {
   return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
-  <style>${productLabelCss(false, typography)}</style>
+  <style>${productLabelCss(false, true, typography)}</style>
 </head>
-<body>${stickerHtml}</body>
+<body>${buildProductLabelSheetHtml(stickers)}</body>
 </html>`;
 }

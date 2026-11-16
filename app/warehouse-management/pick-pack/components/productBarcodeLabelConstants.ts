@@ -21,3 +21,19 @@ export const PRODUCT_LABEL_LICENSOR = {
 
 /** Thermal sticker size used by warehouse barcode printers. */
 export const PRODUCT_LABEL_SIZE_MM = { width: 50, height: 70 } as const;
+
+/** Labels across the warehouse roll. One print row fills every column. */
+export const PRODUCT_LABEL_COLUMNS = 2;
+
+/** Gap between the two die-cut labels on that roll. */
+export const PRODUCT_LABEL_COLUMN_GAP_MM = 2;
+
+/**
+ * Width of one printed row: both labels plus the gap between them.
+ */
+export function productLabelSheetWidthMm(): number {
+  return (
+    PRODUCT_LABEL_SIZE_MM.width * PRODUCT_LABEL_COLUMNS +
+    PRODUCT_LABEL_COLUMN_GAP_MM * (PRODUCT_LABEL_COLUMNS - 1)
+  );
+}
