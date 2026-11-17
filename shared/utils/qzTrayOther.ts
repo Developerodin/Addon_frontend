@@ -375,6 +375,7 @@ export const printHtmlLabelsViaQz = async (
     pixelPerfectLabels?: boolean;
     /** Print one row per QZ job instead of batching (e.g. if the driver over-feeds) */
     oneJobPerPage?: boolean;
+    orientation?: "portrait" | "landscape";
   } = {}
 ): Promise<{ success: boolean; printed: number; error?: string }> => {
   try {
@@ -410,6 +411,7 @@ export const printHtmlLabelsViaQz = async (
     const heightMm = options.heightMm ?? 70;
     const pixelPerfect = options.pixelPerfectLabels ?? false;
 
+    const orientation = options.orientation ?? "portrait";
     const config = window.qz.configs.create(printer, {
       size: { width: widthMm, height: heightMm },
       units: "mm",
@@ -417,6 +419,7 @@ export const printHtmlLabelsViaQz = async (
       colorType: "blackwhite",
       interpolation: "nearest-neighbor",
       margins: 0,
+      orientation,
       scaleContent: !pixelPerfect,
       rasterize: true,
     });

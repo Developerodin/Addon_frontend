@@ -6,8 +6,12 @@ import {
   PRODUCT_LABEL_CUSTOMER_CARE,
   PRODUCT_LABEL_LICENSOR,
   PRODUCT_LABEL_MANUFACTURER,
-  PRODUCT_LABEL_SIZE_MM,
 } from "./productBarcodeLabelConstants";
+import {
+  productLabelRollPageSizeMm,
+  productLabelStickerLeftMm,
+  type ProductLabelLayout,
+} from "./productBarcodeLabelLayoutSettings";
 import {
   boldnessFontWeight,
   type LabelTypeFieldId,
@@ -20,6 +24,7 @@ const BARCODE_WIDTH_MM = 44;
 
 export interface BatchBarcodeLabelPreviewProps {
   typography: ProductLabelTypography;
+  layout: ProductLabelLayout;
 }
 
 /**
@@ -78,9 +83,19 @@ function previewBarcodeSvg(): string {
 /**
  * True-to-size 50×70mm MRP sticker so barcode height vs remaining copy is obvious.
  */
-export default function BatchBarcodeLabelPreview({ typography }: BatchBarcodeLabelPreviewProps) {
-  const [barcodeSvg, setBarcodeSvg] = useState("");
-  const { width, height } = PRODUCT_LABEL_SIZE_MM;
+function SingleStickerPreview({
+  typography,
+  layout,
+  barcodeSvg,
+  columnIndex,
+}: {
+  typography: ProductLabelTypography;
+  layout: ProductLabelLayout;
+  barcodeSvg: string;
+  columnIndex: number;
+}) {
+  const width = layout.stickerWidthMm;
+  const height = layout.stickerHeightMm;
   const m = PRODUCT_LABEL_MANUFACTURER;
   const c = PRODUCT_LABEL_CUSTOMER_CARE;
   const l = PRODUCT_LABEL_LICENSOR;
@@ -88,111 +103,144 @@ export default function BatchBarcodeLabelPreview({ typography }: BatchBarcodeLab
   const legalStyle = { ...typeStyle(typography, "legal"), lineHeight: 1.24 };
   const eanStyle = { ...typeStyle(typography, "ean"), lineHeight: 1, wordSpacing: "0.35mm" };
 
+  return (
+    <div
+      className="box-border bg-white border border-gray-400 overflow-hidden text-black font-[Arial,Helvetica,sans-serif] absolute"
+      style={{
+        left: `${productLabelStickerLeftMm(layout, columnIndex)}mm`,
+        top: `${layout.offsetYMm}mm`,
+        width: `${width}mm`,
+        height: `${height}mm`,
+        minWidth: `${width}mm`,
+        minHeight: `${height}mm`,
+        padding: "0.55mm 2.1mm 1.1mm",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "flex-start",
+      }}
+    >
+      <div className="flex flex-col items-center shrink-0" style={{ marginBottom: "0.7mm" }}>
+        {barcodeSvg ? (
+          <div
+            className="overflow-hidden [&_svg]:block [&_svg]:h-full [&_svg]:w-full"
+            style={{ width: `${BARCODE_WIDTH_MM}mm`, height: `${typography.barcode.fontMm}mm` }}
+            dangerouslySetInnerHTML={{ __html: barcodeSvg }}
+            aria-hidden
+          />
+        ) : (
+          <div
+            className="bg-black"
+            style={{ width: `${BARCODE_WIDTH_MM}mm`, height: `${typography.barcode.fontMm}mm` }}
+            aria-hidden
+          />
+        )}
+        <p className="m-0 text-center" style={{ ...eanStyle, marginTop: "0.28mm" }}>
+          {PREVIEW_EAN_CAPTION}
+        </p>
+      </div>
+
+      <div className="shrink-0" style={legalStyle}>
+        <p className="m-0" style={{ marginBottom: "0.62mm" }}>
+          <b style={headingStyle}>{m.heading}</b>
+          <br />
+          <b style={headingStyle}>{m.name}</b>
+          <br />
+          {m.address}
+        </p>
+        <p className="m-0" style={{ marginBottom: "0.62mm" }}>
+          {c.intro}
+          <br />
+          Email: {c.email}
+          <br />
+          Phone: {c.phone}
+        </p>
+        <p className="m-0" style={{ marginBottom: "0.78mm" }}>
+          {l.heading}
+          <br />
+          <b style={headingStyle}>{l.name}</b>
+          <br />
+          {l.address}
+        </p>
+      </div>
+
+      <div className="shrink-0">
+        <p className="m-0" style={{ ...typeStyle(typography, "name"), lineHeight: 1.18, marginBottom: "0.06mm" }}>
+          Name Of Product: Socks(Ankle Length)
+        </p>
+        <p className="m-0" style={{ ...typeStyle(typography, "net"), lineHeight: 1.18, marginBottom: "0.06mm" }}>
+          Net Quantity: 01 Pair (2N)
+        </p>
+        <p className="m-0" style={{ ...typeStyle(typography, "size"), lineHeight: 1.18, marginBottom: "0.06mm" }}>
+          Size: Foot Length non-stretch: 30cm / stretch: 42 cm
+        </p>
+        <p className="m-0" style={{ ...typeStyle(typography, "mfg"), lineHeight: 1.18, marginBottom: "0.06mm" }}>
+          Month & Year of Manufacture - 09/2026
+        </p>
+        <p className="m-0" style={{ ...typeStyle(typography, "style"), lineHeight: 1.18, marginBottom: "0.06mm" }}>
+          STYLE: PEC1SALFQ00021 White
+        </p>
+        <p className="m-0" style={{ ...typeStyle(typography, "mrp"), lineHeight: 1.18, marginBottom: "0.06mm" }}>
+          MRP: Rs.129.00 (Inclusive Of All Taxes)
+        </p>
+        <p className="m-0" style={{ ...typeStyle(typography, "usp"), lineHeight: 1.18 }}>
+          USP: Rs. 129.00 per pair
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export default function BatchBarcodeLabelPreview({ typography, layout }: BatchBarcodeLabelPreviewProps) {
+  const [barcodeSvg, setBarcodeSvg] = useState("");
+  const roll = productLabelRollPageSizeMm(layout);
+
   useEffect(() => {
     setBarcodeSvg(previewBarcodeSvg());
   }, []);
 
+  const cols = layout.columnsPerRow;
+
   return (
     <div className="shrink-0">
       <p className="text-[10px] font-bold uppercase text-gray-500 mb-1.5">
-        Preview · {width}×{height} mm
+        Roll row · {roll.widthMm}×{roll.heightMm} mm
+        {layout.orientation === "landscape" ? " · landscape" : ""}
       </p>
-      <p className="text-center text-[10px] text-gray-400 mb-0.5" style={{ width: `${width}mm` }}>
-        {width} mm
+      <p className="text-center text-[10px] text-gray-400 mb-0.5" style={{ width: `${roll.widthMm}mm` }}>
+        {roll.widthMm} mm roll width
       </p>
       <div className="flex items-stretch gap-1.5">
         <div
-          className="box-border bg-white border border-gray-300 shadow-sm overflow-hidden text-black font-[Arial,Helvetica,sans-serif] shrink-0"
+          className="relative box-border bg-gray-100 border border-dashed border-gray-400 shrink-0"
           style={{
-            width: `${width}mm`,
-            height: `${height}mm`,
-            minWidth: `${width}mm`,
-            minHeight: `${height}mm`,
-            padding: "0.55mm 2.1mm 1.1mm",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "flex-start",
+            width: `${roll.widthMm}mm`,
+            height: `${roll.heightMm}mm`,
+            minWidth: `${roll.widthMm}mm`,
+            minHeight: `${roll.heightMm}mm`,
           }}
-          aria-label={`${width} by ${height} millimetre sticker preview`}
+          aria-label="Roll row preview"
         >
-          <div className="flex flex-col items-center shrink-0" style={{ marginBottom: "0.7mm" }}>
-            {barcodeSvg ? (
-              <div
-                className="overflow-hidden [&_svg]:block [&_svg]:h-full [&_svg]:w-full"
-                style={{ width: `${BARCODE_WIDTH_MM}mm`, height: `${typography.barcode.fontMm}mm` }}
-                dangerouslySetInnerHTML={{ __html: barcodeSvg }}
-                aria-hidden
-              />
-            ) : (
-              <div
-                className="bg-black"
-                style={{ width: `${BARCODE_WIDTH_MM}mm`, height: `${typography.barcode.fontMm}mm` }}
-                aria-hidden
-              />
-            )}
-            <p className="m-0 text-center" style={{ ...eanStyle, marginTop: "0.28mm" }}>
-              {PREVIEW_EAN_CAPTION}
-            </p>
-          </div>
-
-          <div className="shrink-0" style={legalStyle}>
-            <p className="m-0" style={{ marginBottom: "0.62mm" }}>
-              <b style={headingStyle}>{m.heading}</b>
-              <br />
-              <b style={headingStyle}>{m.name}</b>
-              <br />
-              {m.address}
-            </p>
-            <p className="m-0" style={{ marginBottom: "0.62mm" }}>
-              {c.intro}
-              <br />
-              Email: {c.email}
-              <br />
-              Phone: {c.phone}
-            </p>
-            <p className="m-0" style={{ marginBottom: "0.78mm" }}>
-              {l.heading}
-              <br />
-              <b style={headingStyle}>{l.name}</b>
-              <br />
-              {l.address}
-            </p>
-          </div>
-
-          <div className="shrink-0">
-            <p className="m-0" style={{ ...typeStyle(typography, "name"), lineHeight: 1.18, marginBottom: "0.06mm" }}>
-              Name Of Product: Socks(Ankle Length)
-            </p>
-            <p className="m-0" style={{ ...typeStyle(typography, "net"), lineHeight: 1.18, marginBottom: "0.06mm" }}>
-              Net Quantity: 01 Pair (2N)
-            </p>
-            <p className="m-0" style={{ ...typeStyle(typography, "size"), lineHeight: 1.18, marginBottom: "0.06mm" }}>
-              Size: Foot Length non-stretch: 30cm / stretch: 42 cm
-            </p>
-            <p className="m-0" style={{ ...typeStyle(typography, "mfg"), lineHeight: 1.18, marginBottom: "0.06mm" }}>
-              Month & Year of Manufacture - 09/2026
-            </p>
-            <p className="m-0" style={{ ...typeStyle(typography, "style"), lineHeight: 1.18, marginBottom: "0.06mm" }}>
-              STYLE: PEC1SALFQ00021 White
-            </p>
-            <p className="m-0" style={{ ...typeStyle(typography, "mrp"), lineHeight: 1.18, marginBottom: "0.06mm" }}>
-              MRP: Rs.129.00 (Inclusive Of All Taxes)
-            </p>
-            <p className="m-0" style={{ ...typeStyle(typography, "usp"), lineHeight: 1.18 }}>
-              USP: Rs. 129.00 per pair
-            </p>
-          </div>
+          {Array.from({ length: cols }, (_, i) => (
+            <SingleStickerPreview
+              key={i}
+              typography={typography}
+              layout={layout}
+              barcodeSvg={barcodeSvg}
+              columnIndex={i}
+            />
+          ))}
         </div>
         <span
           className="flex items-center justify-center text-[10px] text-gray-400"
           style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
         >
-          {height} mm
+          {roll.heightMm} mm
         </span>
       </div>
-      <p className="mt-1.5 text-[10px] text-gray-500" style={{ maxWidth: `${width}mm` }}>
-        Printed sticker size. Barcode is {typography.barcode.fontMm} mm tall × {BARCODE_WIDTH_MM} mm
-        wide — overflow clips like the printer.
+      <p className="mt-1.5 text-[10px] text-gray-500" style={{ maxWidth: `${roll.widthMm}mm` }}>
+        Sticker {layout.stickerWidthMm}×{layout.stickerHeightMm} mm
+        {cols === 2 ? " · two across" : " · single"}.
+        Barcode {typography.barcode.fontMm} mm × {BARCODE_WIDTH_MM} mm.
       </p>
     </div>
   );

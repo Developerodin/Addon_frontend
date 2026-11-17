@@ -20,7 +20,10 @@ import {
   chunkProductLabelSheets,
 } from "./productBarcodeLabelHtml";
 import { printHtmlLabelsViaQz } from "@/shared/utils/qzTrayOther";
-import { PRODUCT_LABEL_SIZE_MM, productLabelSheetWidthMm } from "./productBarcodeLabelConstants";
+import {
+  loadProductLabelLayout,
+  productLabelRollPageSizeMm,
+} from "./productBarcodeLabelLayoutSettings";
 import { loadProductLabelTypography } from "./productBarcodeLabelSettings";
 
 /** Rasterize JsBarcode SVG at ~2× 203dpi so QZ JavaFX HTML print stays sharp. */
@@ -171,6 +174,8 @@ export async function printBatchBarcodeLabels(
   }
 
   const typography = loadProductLabelTypography();
+  const layout = loadProductLabelLayout();
+  const page = productLabelRollPageSizeMm(layout);
 
   if (destination === "browser") {
     const stickers = expandStickerMarkup(labels, (label, index) => {
@@ -183,6 +188,7 @@ export async function printBatchBarcodeLabels(
       `Barcodes — ${batchNumber}`,
       stickers,
       typography,
+      layout,
     );
     return printHtmlViaHiddenFrame(html, `Print barcodes — ${batchNumber}`);
   }
@@ -204,14 +210,16 @@ export async function printBatchBarcodeLabels(
       const img = `<img src="${pngByIndex[index]}" alt="" />`;
       return { markup: img, caption: row.caption };
     });
-    const pages = chunkProductLabelSheets(stickers).map((row) =>
-      buildProductLabelSheetDocument(row, typography),
+    const pages = chunkProductLabelSheets(stickers, layout).map((row) =>
+      buildProductLabelSheetDocument(row, typography, layout),
     );
 
     const result = await printHtmlLabelsViaQz(pages, {
-      widthMm: productLabelSheetWidthMm(),
-      heightMm: PRODUCT_LABEL_SIZE_MM.height,
-      pixelPerfectLabels: true,
+      widthMm: page.widthMm,
+      heightMm: page.heightMm,
+      pixelPerfectLabels: layout.qzPixelPerfect,
+      oneJobPerPage: layout.qzOneJobPerPage,
+      orientation: layout.orientation,
     });
 
     if (!result.success) {

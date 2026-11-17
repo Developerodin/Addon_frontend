@@ -1,4 +1,4 @@
-/** Static legal copy printed on every 50×70mm MRP sticker. */
+/** Static legal copy printed on every statutory MRP sticker. */
 export const PRODUCT_LABEL_MANUFACTURER = {
   heading: "Manufactured, Packed & Marketed by:",
   name: "Addon Holdings Private Limited",
@@ -19,24 +19,5 @@ export const PRODUCT_LABEL_LICENSOR = {
     "Piramal Agastya Corporate Park, Building 'A', 401, 403, 501, 502, L.B.S. Road. Kurla. Mumbai - 400 070. Maharashtra.",
 } as const;
 
-/** Thermal sticker size used by warehouse barcode printers. */
+/** Fallback sticker size when layout is unavailable (SSR). */
 export const PRODUCT_LABEL_SIZE_MM = { width: 50, height: 70 } as const;
-
-/** Labels across the warehouse roll. One print row fills every column. */
-export const PRODUCT_LABEL_COLUMNS = 2;
-
-/**
- * Gap between the two die-cut labels on that roll (non-printable liner).
- * Must match the physical roll; use 0 or 3 if left/right alignment is off.
- */
-export const PRODUCT_LABEL_COLUMN_GAP_MM = 2;
-
-/**
- * Width of one printed row: both labels plus the gap between them.
- */
-export function productLabelSheetWidthMm(): number {
-  return (
-    PRODUCT_LABEL_SIZE_MM.width * PRODUCT_LABEL_COLUMNS +
-    PRODUCT_LABEL_COLUMN_GAP_MM * (PRODUCT_LABEL_COLUMNS - 1)
-  );
-}

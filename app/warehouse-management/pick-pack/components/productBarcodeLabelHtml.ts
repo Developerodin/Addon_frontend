@@ -1,13 +1,15 @@
 import type { PickListBatchBarcodeLabel } from "@/shared/services/whmsPickListBatchService";
 import {
-  PRODUCT_LABEL_COLUMN_GAP_MM,
-  PRODUCT_LABEL_COLUMNS,
   PRODUCT_LABEL_CUSTOMER_CARE,
   PRODUCT_LABEL_LICENSOR,
   PRODUCT_LABEL_MANUFACTURER,
-  PRODUCT_LABEL_SIZE_MM,
-  productLabelSheetWidthMm,
 } from "./productBarcodeLabelConstants";
+import {
+  loadProductLabelLayout,
+  productLabelRollPageSizeMm,
+  productLabelStickerLeftMm,
+  type ProductLabelLayout,
+} from "./productBarcodeLabelLayoutSettings";
 import {
   loadProductLabelTypography,
   productLabelDetailsCss,
@@ -47,38 +49,34 @@ function eanCaptionHtml(caption: string): string {
 
 /**
  * Shared sticker CSS for browser print and QZ Tray HTML.
- * A printed row is two 50×70mm labels side by side, so the other column is not blank.
  * @param pageBreak - Insert page breaks between rows (browser only)
  * @param lockPage - Fix the document to one row (QZ Tray). Browser print stays multi-page.
  * @param typography - Saved Name→USP size/boldness
+ * @param layout - Roll and column layout
  */
 function productLabelCss(
   pageBreak: boolean,
   lockPage: boolean,
   typography: ProductLabelTypography,
+  layout: ProductLabelLayout,
 ): string {
-  const { width, height } = PRODUCT_LABEL_SIZE_MM;
-  const sheetWidth = productLabelSheetWidthMm();
-  const secondColumnLeft = width + PRODUCT_LABEL_COLUMN_GAP_MM;
+  const { widthMm: pageW, heightMm: pageH } = productLabelRollPageSizeMm(layout);
+  const w = layout.stickerWidthMm;
+  const h = layout.stickerHeightMm;
   const breaks = pageBreak
-  ? `.sheet:not(:last-child) {
+    ? `.sheet:not(:last-child) {
       page-break-after: always;
       break-after: page;
     }
     .sheet { page-break-inside: avoid; break-inside: avoid; }`
     : "";
   const pageLock = lockPage
-    ? `height: ${height}mm; overflow: hidden;`
+    ? `height: ${pageH}mm; max-height: ${pageH}mm; overflow: hidden;`
     : "";
   return `
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html {
-      width: ${sheetWidth}mm;
-      margin: 0 !important;
-      padding: 0 !important;
-    }
-    body {
-      width: ${sheetWidth}mm;
+    html, body {
+      width: ${pageW}mm;
       ${pageLock}
       margin: 0 !important;
       padding: 0 !important;
@@ -90,8 +88,8 @@ function productLabelCss(
     }
     .sheet {
       position: relative;
-      width: ${sheetWidth}mm;
-      height: ${height}mm;
+      width: ${pageW}mm;
+      height: ${pageH}mm;
       overflow: hidden;
       page-break-inside: avoid;
       break-inside: avoid;
@@ -99,16 +97,14 @@ function productLabelCss(
     .sticker {
       position: absolute;
       top: 0;
-      width: ${width}mm;
-      height: ${height}mm;
+      width: ${w}mm;
+      height: ${h}mm;
       padding: 0.55mm 2.1mm 1.1mm;
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
       overflow: hidden;
     }
-    .sticker:nth-child(1) { left: 0; }
-    .sticker:nth-child(2) { left: ${secondColumnLeft}mm; }
     ${breaks}
     .barcode {
       flex: 0 0 auto;
@@ -126,10 +122,23 @@ function productLabelCss(
 }
 
 /**
- * Build one 50×70mm statutory MRP sticker.
- * @param label - Catalogue-enriched barcode payload
- * @param barcodeSvg - JsBarcode SVG markup (bars only)
- * @param barcodeCaption - Centered human-readable code
+ * Place one sticker fragment at its column offset on the roll.
+ */
+function positionStickerHtml(
+  stickerHtml: string,
+  layout: ProductLabelLayout,
+  columnIndex: number,
+): string {
+  const left = productLabelStickerLeftMm(layout, columnIndex);
+  const top = layout.offsetYMm;
+  return stickerHtml.replace(
+    '<div class="sticker">',
+    `<div class="sticker" style="left:${left}mm;top:${top}mm">`,
+  );
+}
+
+/**
+ * Build one statutory MRP sticker.
  */
 export function buildProductStickerHtml(
   label: PickListBatchBarcodeLabel,
@@ -178,47 +187,52 @@ export function buildProductStickerHtml(
 }
 
 /**
- * Group sticker markup into printed rows. Each row holds one label per column.
- * @param stickers - One fragment per physical sticker, in print order
+ * Group sticker markup into printed rows.
  */
-export function chunkProductLabelSheets(stickers: string[]): string[][] {
+export function chunkProductLabelSheets(
+  stickers: string[],
+  layout: ProductLabelLayout = loadProductLabelLayout(),
+): string[][] {
+  const cols = layout.columnsPerRow;
   const sheets: string[][] = [];
-  for (let i = 0; i < stickers.length; i += PRODUCT_LABEL_COLUMNS) {
-    sheets.push(stickers.slice(i, i + PRODUCT_LABEL_COLUMNS));
+  for (let i = 0; i < stickers.length; i += cols) {
+    sheets.push(stickers.slice(i, i + cols));
   }
   return sheets;
 }
 
 /**
- * One printed row: stickers side by side, left column first.
- * @param stickers - One or two sticker fragments
+ * One printed row with stickers positioned on the roll.
  */
-export function buildProductLabelSheetHtml(stickers: string[]): string {
-  return `<div class="sheet">${stickers.join("")}</div>`;
+export function buildProductLabelSheetHtml(
+  stickers: string[],
+  layout: ProductLabelLayout = loadProductLabelLayout(),
+): string {
+  const positioned = stickers.map((html, i) => positionStickerHtml(html, layout, i));
+  return `<div class="sheet">${positioned.join("")}</div>`;
 }
 
 /**
- * Full print document: one row per page, both columns filled before the next row.
- * @param title - Document title
- * @param stickers - One fragment per physical sticker
- * @param typography - Saved Name→USP type (defaults to last saved)
+ * Full print document: one roll row per page.
  */
 export function buildProductLabelPrintDocument(
   title: string,
   stickers: string[],
   typography: ProductLabelTypography = loadProductLabelTypography(),
+  layout: ProductLabelLayout = loadProductLabelLayout(),
 ): string {
-  const sheetWidth = productLabelSheetWidthMm();
-  const { height } = PRODUCT_LABEL_SIZE_MM;
-  const sheets = chunkProductLabelSheets(stickers).map(buildProductLabelSheetHtml).join("");
+  const { widthMm, heightMm } = productLabelRollPageSizeMm(layout);
+  const sheets = chunkProductLabelSheets(stickers, layout)
+    .map((row) => buildProductLabelSheetHtml(row, layout))
+    .join("");
   return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
   <title>${escLabelHtml(title)}</title>
   <style>
-    @page { size: ${sheetWidth}mm ${height}mm; margin: 0; }
-    ${productLabelCss(true, false, typography)}
+    @page { size: ${widthMm}mm ${heightMm}mm; margin: 0; }
+    ${productLabelCss(true, false, typography, layout)}
   </style>
 </head>
 <body>${sheets}</body>
@@ -226,26 +240,23 @@ export function buildProductLabelPrintDocument(
 }
 
 /**
- * One HTML document for a single printed row (QZ Tray pixel print).
- * Same CSS as the browser document, without a page break.
- * @param stickers - One or two sticker fragments for this row
- * @param typography - Saved Name→USP type (defaults to last saved)
+ * One HTML document for a single printed row (QZ Tray).
  */
 export function buildProductLabelSheetDocument(
   stickers: string[],
   typography: ProductLabelTypography = loadProductLabelTypography(),
+  layout: ProductLabelLayout = loadProductLabelLayout(),
 ): string {
-  const sheetWidth = productLabelSheetWidthMm();
-  const { height } = PRODUCT_LABEL_SIZE_MM;
+  const { widthMm, heightMm } = productLabelRollPageSizeMm(layout);
   return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
   <style>
-    @page { size: ${sheetWidth}mm ${height}mm; margin: 0; }
-    ${productLabelCss(false, true, typography)}
+    @page { size: ${widthMm}mm ${heightMm}mm; margin: 0; }
+    ${productLabelCss(false, true, typography, layout)}
   </style>
 </head>
-<body>${buildProductLabelSheetHtml(stickers)}</body>
+<body>${buildProductLabelSheetHtml(stickers, layout)}</body>
 </html>`;
 }

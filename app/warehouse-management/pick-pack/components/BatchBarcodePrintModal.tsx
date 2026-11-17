@@ -4,6 +4,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import type { PickListBatchBarcodeLabel } from "@/shared/services/whmsPickListBatchService";
 import BatchBarcodeStyleSelector from "./BatchBarcodeStyleSelector";
 import BatchBarcodeLabelSettingsPanel from "./BatchBarcodeLabelSettingsPanel";
+import {
+  formatProductLabelLayoutSummary,
+  loadProductLabelLayout,
+} from "./productBarcodeLabelLayoutSettings";
 
 import type { BatchBarcodeStyleOption } from "./batchBarcodeStyleListUtils";
 
@@ -63,6 +67,10 @@ export default function BatchBarcodePrintModal({
   const [selectedStyleCode, setSelectedStyleCode] = useState<string>("");
   const [remarks, setRemarks] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const layoutSummary = useMemo(
+    () => formatProductLabelLayoutSummary(loadProductLabelLayout()),
+    [open, settingsOpen],
+  );
 
   const selectableStyles = useMemo(
     () => styleOptions.filter((item) => Number(item.pickedQty) > 0),
@@ -157,7 +165,7 @@ export default function BatchBarcodePrintModal({
       aria-modal="true"
       aria-labelledby="barcode-print-title"
     >
-      <div className={`bg-white rounded-lg shadow-xl w-full border border-gray-200 max-h-[90vh] overflow-y-auto ${settingsOpen ? "max-w-3xl" : "max-w-lg"}`}>
+      <div className={`bg-white rounded-lg shadow-xl w-full border border-gray-200 max-h-[90vh] overflow-y-auto ${settingsOpen ? "max-w-5xl" : "max-w-lg"}`}>
         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
           <h2 id="barcode-print-title" className="text-sm font-bold text-gray-800">
             {settingsOpen ? "Label type" : "Print Barcodes"}
@@ -173,7 +181,7 @@ export default function BatchBarcodePrintModal({
               }`}
               aria-label="Label type settings"
               aria-pressed={settingsOpen}
-              title="Font size and boldness for the whole sticker"
+              title="Roll size, layout, fonts — saved for the next print"
             >
               <i className="ri-settings-3-line" aria-hidden />
             </button>
@@ -195,7 +203,7 @@ export default function BatchBarcodePrintModal({
         <div className="px-4 py-4 space-y-4 text-[12px] text-gray-600">
           <p className="text-[11px] text-gray-500">
             Batch <strong className="text-gray-800">{batchNumber}</strong>
-            <span className="text-gray-400"> · 50×70mm MRP sticker</span>
+            <span className="text-gray-400"> · {layoutSummary}</span>
           </p>
           <p className="text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded px-2 py-1.5">
             {qzReady ? (
