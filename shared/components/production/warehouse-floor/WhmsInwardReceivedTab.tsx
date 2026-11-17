@@ -52,6 +52,7 @@ export default function WhmsInwardReceivedTab({
   const [sourceFilter, setSourceFilter] = useState<"all" | "vendor" | "production">(
     () => initialSourceFilter ?? "all",
   );
+  const [sortBy, setSortBy] = useState("receivedAt:desc");
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailRow, setDetailRow] = useState<WhmsInwardReceiveRow | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -139,7 +140,7 @@ export default function WhmsInwardReceivedTab({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const listParams: Record<string, string | number | undefined> = { page, limit };
+      const listParams: Record<string, string | number | undefined> = { page, limit, sortBy };
       if (sourceFilter === "vendor") listParams.inwardSource = "vendor";
       if (sourceFilter === "production") listParams.inwardSource = "production";
       const data = await whmsInwardReceive.list(listParams);
@@ -160,7 +161,7 @@ export default function WhmsInwardReceivedTab({
     } finally {
       setLoading(false);
     }
-  }, [page, limit, sourceFilter]);
+  }, [page, limit, sourceFilter, sortBy]);
 
   useEffect(() => {
     load();
@@ -237,6 +238,8 @@ export default function WhmsInwardReceivedTab({
         sourceFilter={sourceFilter}
         onSourceFilterChange={setSourceFilter}
         onResetPage={() => setPage(1)}
+        sortBy={sortBy}
+        onSortByChange={setSortBy}
         limit={limit}
         onLimitChange={setLimit}
         totalResults={totalResults}

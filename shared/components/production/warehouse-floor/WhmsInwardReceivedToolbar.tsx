@@ -16,6 +16,8 @@ type Props = {
   sourceFilter: InwardSourceFilter;
   onSourceFilterChange: (value: InwardSourceFilter) => void;
   onResetPage: () => void;
+  sortBy: string;
+  onSortByChange: (value: string) => void;
   limit: number;
   onLimitChange: (value: number) => void;
   totalResults: number;
@@ -34,6 +36,8 @@ export default function WhmsInwardReceivedToolbar({
   sourceFilter,
   onSourceFilterChange,
   onResetPage,
+  sortBy,
+  onSortByChange,
   limit,
   onLimitChange,
   totalResults,
@@ -91,6 +95,19 @@ export default function WhmsInwardReceivedToolbar({
         <option value="all">All sources</option>
         <option value="vendor">Vendor dispatch</option>
         <option value="production">Production</option>
+      </select>
+      <select
+        value={sortBy}
+        onChange={(e) => {
+          onSortByChange(e.target.value);
+          onResetPage();
+        }}
+        className="bg-white border border-gray-300 text-[#495057] text-[11px] font-medium rounded px-2 py-1.5"
+        title="Sort by received date"
+        aria-label="Sort by received date"
+      >
+        <option value="receivedAt:desc">Received date, newest</option>
+        <option value="receivedAt:asc">Received date, oldest</option>
       </select>
       <select
         value={limit}
