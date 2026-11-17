@@ -59,16 +59,25 @@ function productLabelCss(
 ): string {
   const { width, height } = PRODUCT_LABEL_SIZE_MM;
   const sheetWidth = productLabelSheetWidthMm();
+  const secondColumnLeft = width + PRODUCT_LABEL_COLUMN_GAP_MM;
   const breaks = pageBreak
-    ? `.sheet { page-break-after: always; break-after: page; }
-    .sheet:last-child { page-break-after: auto; break-after: auto; }`
+  ? `.sheet:not(:last-child) {
+      page-break-after: always;
+      break-after: page;
+    }
+    .sheet { page-break-inside: avoid; break-inside: avoid; }`
     : "";
   const pageLock = lockPage
     ? `height: ${height}mm; overflow: hidden;`
     : "";
   return `
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body {
+    html {
+      width: ${sheetWidth}mm;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    body {
       width: ${sheetWidth}mm;
       ${pageLock}
       margin: 0 !important;
@@ -80,25 +89,26 @@ function productLabelCss(
       print-color-adjust: exact;
     }
     .sheet {
+      position: relative;
       width: ${sheetWidth}mm;
       height: ${height}mm;
-      display: flex;
-      flex-direction: row;
-      justify-content: flex-start;
-      align-items: flex-start;
-      gap: ${PRODUCT_LABEL_COLUMN_GAP_MM}mm;
       overflow: hidden;
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
     .sticker {
+      position: absolute;
+      top: 0;
       width: ${width}mm;
       height: ${height}mm;
-      flex: 0 0 ${width}mm;
       padding: 0.55mm 2.1mm 1.1mm;
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
       overflow: hidden;
     }
+    .sticker:nth-child(1) { left: 0; }
+    .sticker:nth-child(2) { left: ${secondColumnLeft}mm; }
     ${breaks}
     .barcode {
       flex: 0 0 auto;
@@ -225,11 +235,16 @@ export function buildProductLabelSheetDocument(
   stickers: string[],
   typography: ProductLabelTypography = loadProductLabelTypography(),
 ): string {
+  const sheetWidth = productLabelSheetWidthMm();
+  const { height } = PRODUCT_LABEL_SIZE_MM;
   return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
-  <style>${productLabelCss(false, true, typography)}</style>
+  <style>
+    @page { size: ${sheetWidth}mm ${height}mm; margin: 0; }
+    ${productLabelCss(false, true, typography)}
+  </style>
 </head>
 <body>${buildProductLabelSheetHtml(stickers)}</body>
 </html>`;

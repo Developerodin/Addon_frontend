@@ -361,10 +361,9 @@ function qzBlockedOrMessage(err: unknown): string {
 
 /**
  * Print pre-rendered HTML label pages via QZ Tray pixel printing.
- * One HTML document per physical sticker. Does not use ZPL/forceRaw so the
- * existing 50×70mm MRP layout is preserved.
- * @param htmlPages - Full HTML documents, one per sticker
- * @param options - Printer and physical label size in mm
+ * One HTML document per printed row (1–2 stickers). Does not use ZPL/forceRaw.
+ * @param htmlPages - Full HTML documents, one per row
+ * @param options - Printer and physical row size in mm
  */
 export const printHtmlLabelsViaQz = async (
   htmlPages: string[],
@@ -372,6 +371,10 @@ export const printHtmlLabelsViaQz = async (
     printerName?: string;
     widthMm?: number;
     heightMm?: number;
+    /** Fixed row size without scaling; recommended for 2-up warehouse labels */
+    pixelPerfectLabels?: boolean;
+    /** Print one row per QZ job instead of batching (e.g. if the driver over-feeds) */
+    oneJobPerPage?: boolean;
   } = {}
 ): Promise<{ success: boolean; printed: number; error?: string }> => {
   try {
@@ -405,6 +408,7 @@ export const printHtmlLabelsViaQz = async (
 
     const widthMm = options.widthMm ?? 50;
     const heightMm = options.heightMm ?? 70;
+    const pixelPerfect = options.pixelPerfectLabels ?? false;
 
     const config = window.qz.configs.create(printer, {
       size: { width: widthMm, height: heightMm },
@@ -413,7 +417,7 @@ export const printHtmlLabelsViaQz = async (
       colorType: "blackwhite",
       interpolation: "nearest-neighbor",
       margins: 0,
-      scaleContent: true,
+      scaleContent: !pixelPerfect,
       rasterize: true,
     });
 
@@ -429,8 +433,14 @@ export const printHtmlLabelsViaQz = async (
       },
     }));
 
-    for (let i = 0; i < data.length; i += HTML_LABEL_CHUNK) {
-      await window.qz.print(config, data.slice(i, i + HTML_LABEL_CHUNK));
+    if (options.oneJobPerPage) {
+      for (const row of data) {
+        await window.qz.print(config, [row]);
+      }
+    } else {
+      for (let i = 0; i < data.length; i += HTML_LABEL_CHUNK) {
+        await window.qz.print(config, data.slice(i, i + HTML_LABEL_CHUNK));
+      }
     }
 
     return { success: true, printed: htmlPages.length };

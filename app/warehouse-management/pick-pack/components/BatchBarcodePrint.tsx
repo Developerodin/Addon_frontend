@@ -211,6 +211,7 @@ export async function printBatchBarcodeLabels(
     const result = await printHtmlLabelsViaQz(pages, {
       widthMm: productLabelSheetWidthMm(),
       heightMm: PRODUCT_LABEL_SIZE_MM.height,
+      pixelPerfectLabels: true,
     });
 
     if (!result.success) {

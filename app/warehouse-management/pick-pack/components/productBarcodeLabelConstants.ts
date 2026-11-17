@@ -25,7 +25,10 @@ export const PRODUCT_LABEL_SIZE_MM = { width: 50, height: 70 } as const;
 /** Labels across the warehouse roll. One print row fills every column. */
 export const PRODUCT_LABEL_COLUMNS = 2;
 
-/** Gap between the two die-cut labels on that roll. */
+/**
+ * Gap between the two die-cut labels on that roll (non-printable liner).
+ * Must match the physical roll; use 0 or 3 if left/right alignment is off.
+ */
 export const PRODUCT_LABEL_COLUMN_GAP_MM = 2;
 
 /**
