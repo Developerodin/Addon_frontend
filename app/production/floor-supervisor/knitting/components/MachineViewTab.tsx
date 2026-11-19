@@ -558,7 +558,21 @@ export default function MachineViewTab({ onOpenEditModal, refreshTrigger, canSho
                                     if (editingRowId || !onOpenEditModal) return;
                                     setEditingRowId(row.id);
                                     try {
-                                      await onOpenEditModal(row);
+                                      const OPEN_MS = 45_000;
+                                      await Promise.race([
+                                        onOpenEditModal(row),
+                                        new Promise<never>((_, reject) =>
+                                          setTimeout(
+                                            () =>
+                                              reject(
+                                                new Error(
+                                                  "Loading edit timed out (45s). Check Wi‑Fi or refresh, then try again."
+                                                )
+                                              ),
+                                            OPEN_MS
+                                          )
+                                        ),
+                                      ]);
                                     } catch (err) {
                                       toast.error(err instanceof Error ? err.message : "Failed to open edit modal");
                                     } finally {

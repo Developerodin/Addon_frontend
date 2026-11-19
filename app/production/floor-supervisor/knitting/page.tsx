@@ -176,6 +176,8 @@ const KnittingFloorSupervisorPage = () => {
   const [activeTab, setActiveTab] = useState<KnittingTab>("machine-view");
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  /** Progress submit only — must not blank the Orders table or block other tabs. */
+  const [submittingProgress, setSubmittingProgress] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [searchQuery, setSearchQuery] = useState('');
@@ -604,23 +606,26 @@ const KnittingFloorSupervisorPage = () => {
       toast.error(msg);
       throw new Error(msg);
     }
-    const orders: ProductionOrder[] = [];
-    for (const oid of orderIds) {
-      try {
+    const orderSettled = await Promise.allSettled(
+      orderIds.map(async (oid) => {
         const res = await productionService.getOrder(oid);
-        if (res.success && res.data) {
-          orders.push(res.data);
-        } else {
-          const msg = res.message || `Failed to fetch order ${oid}`;
-          toast.error(msg);
-          throw new Error(msg);
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Failed to fetch order data";
-        toast.error(msg);
-        throw new Error(msg);
-      }
+        if (res.success && res.data) return res.data;
+        throw new Error(res.message || `Failed to fetch order ${oid}`);
+      })
+    );
+    const orderFailures = orderSettled.filter((r) => r.status === "rejected");
+    if (orderFailures.length > 0) {
+      const first = orderFailures[0] as PromiseRejectedResult;
+      const msg =
+        orderFailures.length === 1
+          ? (first.reason instanceof Error ? first.reason.message : "Failed to load order")
+          : `${orderFailures.length} order(s) failed to load`;
+      toast.error(msg);
+      throw new Error(msg);
     }
+    const orders: ProductionOrder[] = orderSettled
+      .filter((r): r is PromiseFulfilledResult<ProductionOrder> => r.status === "fulfilled")
+      .map((r) => r.value);
     if (orders.length === 0) {
       const msg = "Could not load order data";
       toast.error(msg);
@@ -1054,11 +1059,10 @@ const KnittingFloorSupervisorPage = () => {
     try {
       setM4ConfirmSubmitting(true);
 
-      const updatePromises = pendingM4OnlyEntries.map(async (entry) => {
-        const article = selectedOrder.articles.find(
-          (a) => (a.id || a._id) === entry.articleId
-        );
-        if (!article) return null;
+      const savedM4: string[] = [];
+      for (const entry of pendingM4OnlyEntries) {
+        const article = selectedOrder.articles.find((a) => (a.id || a._id) === entry.articleId);
+        if (!article) continue;
 
         const update = updateData[entry.articleId];
         const progressData: {
@@ -1080,33 +1084,34 @@ const KnittingFloorSupervisorPage = () => {
           progressData.machineId = machineIdFromModal;
         }
 
-        const response = await productionService.updateArticleProgress(
-          'Knitting',
-          selectedOrder.id,
-          article._id || article.id,
-          progressData
-        );
-
-        if (!response.success) {
-          throw new Error(response.error?.message || 'Failed to update M4 quantity');
+        const label = article.articleNumber ?? entry.articleId;
+        try {
+          const response = await productionService.updateArticleProgress(
+            'Knitting',
+            selectedOrder.id,
+            article._id || article.id,
+            progressData
+          );
+          if (!response.success) {
+            throw new Error(response.error?.message || 'Failed to update M4 quantity');
+          }
+          savedM4.push(label);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Failed to update M4 quantity';
+          if (savedM4.length > 0) {
+            throw new Error(
+              `M4 saved for ${savedM4.join(', ')} but failed on ${label}: ${msg}. Supervisor may need to correct.`
+            );
+          }
+          throw err;
         }
-
-        return response.data;
-      });
-
-      const results = await Promise.allSettled(updatePromises);
-      const failedUpdates = results.filter((result) => result.status === 'rejected');
-
-      if (failedUpdates.length > 0) {
-        console.error('Some M4 updates failed:', failedUpdates);
-        toast.error(`${failedUpdates.length} article(s) failed to update M4 quantity`);
-      } else {
-        toast.success('M4 quantity saved successfully');
-        closeUpdateModal();
-        loadOrders();
-        if (activeTab === 'article-view') void loadArticleViewOrders();
-        setMachineViewRefreshTrigger((prev) => prev + 1);
       }
+
+      toast.success('M4 quantity saved successfully');
+      closeUpdateModal();
+      if (activeTab === 'orders') void loadOrders();
+      if (activeTab === 'article-view') void loadArticleViewOrders();
+      setMachineViewRefreshTrigger((prev) => prev + 1);
     } catch (error: unknown) {
       console.error('Error saving M4 quantity:', error);
       const message = error instanceof Error ? error.message : 'Failed to save M4 quantity';
@@ -1117,34 +1122,121 @@ const KnittingFloorSupervisorPage = () => {
     }
   };
 
-  const handleUpdateSubmit = async (weight?: number) => {
-    if (!selectedOrder) return;
+  /** One article after another; stops on first failure (no parallel partial commits). */
+  const persistKnittingProgressUpdates = async (weight?: number): Promise<boolean> => {
+    if (!selectedOrder) return false;
 
-    console.log('Update button clicked');
-    console.log('Current updateData:', updateData);
-    console.log('Selected order:', selectedOrder);
+    setSubmittingProgress(true);
+    try {
+      const userId = user?.id ?? user?._id;
+      const floorSupervisorId = user?.id ?? user?._id;
+      if (!userId || !floorSupervisorId) {
+        toast.error('User session required to update order.');
+        return false;
+      }
 
-    // Validate that at least one article has completed quantity > 0
+      const readOnlyFrom = updateModalReadOnlyFromIndex ?? selectedOrder.articles.length;
+      const machineIdFromModal = updateModalAssignment
+        ? machineIdFromAssignmentMachine(updateModalAssignment.machine)
+        : null;
+
+      type ProgressQueueItem = {
+        article: (typeof selectedOrder.articles)[0];
+        update: { completedQuantity: number; remarks: string; m4Quantity: number };
+        articleId: string;
+      };
+      const queue: ProgressQueueItem[] = [];
+      for (let idx = 0; idx < readOnlyFrom; idx++) {
+        const article = selectedOrder.articles[idx];
+        const articleId = article?.id || article?._id;
+        if (!articleId) continue;
+        const update = updateData[articleId];
+        if (!update) continue;
+        const knitInc = update.completedQuantity ?? 0;
+        const m4Inc = update.m4Quantity ?? 0;
+        if (knitInc <= 0 && m4Inc <= 0) continue;
+        queue.push({ article, update, articleId });
+      }
+
+      if (queue.length === 0) {
+        toast.error('No knitting quantity to save.');
+        return false;
+      }
+
+      let weightApplied = false;
+      const savedLabels: string[] = [];
+      for (const { article, update } of queue) {
+        const label = article.articleNumber ?? (article.id || article._id || '');
+        const currentM4Quantity = article.floorQuantities?.knitting?.m4Quantity || 0;
+        const m4QuantityToSend = currentM4Quantity + (update.m4Quantity ?? 0);
+        const previousWeight = article.floorQuantities?.knitting?.weight ?? 0;
+        const userEnteredWeight =
+          !weightApplied && weight != null && !Number.isNaN(weight) ? weight : 0;
+        if (userEnteredWeight > 0) weightApplied = true;
+        const totalWeightToSend = previousWeight + userEnteredWeight;
+
+        const progressData = {
+          completedQuantity: update.completedQuantity,
+          remarks: update.remarks,
+          m4Quantity: m4QuantityToSend,
+          weight: totalWeightToSend,
+          userId,
+          floorSupervisorId,
+          ...(machineIdFromModal ? { machineId: machineIdFromModal } : {}),
+        };
+
+        const response = await productionService.updateArticleProgress(
+          'Knitting',
+          selectedOrder.id,
+          article._id || article.id,
+          progressData
+        );
+        if (!response.success) {
+          const apiMsg = response.error?.message || 'Failed to update article';
+          if (savedLabels.length > 0) {
+            throw new Error(
+              `Saved ${savedLabels.join(', ')} but failed on ${label}: ${apiMsg}. Supervisor may need to correct quantities.`
+            );
+          }
+          throw new Error(apiMsg);
+        }
+        savedLabels.push(label);
+      }
+
+      return true;
+    } catch (error: unknown) {
+      console.error('Error updating order:', error);
+      const message = error instanceof Error ? error.message : 'Failed to update order';
+      toast.error(
+        message.includes('Saved ') && message.includes('but failed on')
+          ? message
+          : `Update failed — nothing was saved. ${message}`
+      );
+      return false;
+    } finally {
+      setSubmittingProgress(false);
+    }
+  };
+
+  const handleUpdateSubmit = async (
+    weight?: number,
+    options?: { deferClose?: boolean }
+  ): Promise<boolean> => {
+    if (!selectedOrder) return false;
+
     let hasValidCompletedQuantity = false;
-    
     for (const article of selectedOrder.articles) {
       const articleId = article.id || article._id;
-      if (articleId && updateData[articleId]) {
-        const completedQty = updateData[articleId].completedQuantity;
-        console.log(`Article ${articleId} completed quantity:`, completedQty);
-        if (completedQty > 0) {
-          hasValidCompletedQuantity = true;
-          break;
-        }
+      if (articleId && updateData[articleId] && (updateData[articleId].completedQuantity ?? 0) > 0) {
+        hasValidCompletedQuantity = true;
+        break;
       }
     }
-
-    console.log('Has valid completed quantity:', hasValidCompletedQuantity);
-
     if (!hasValidCompletedQuantity) {
-      console.log('Validation failed - showing error');
-      toast.error('Knitting completed quantity cannot be empty. Please enter a value greater than 0 for at least one article.');
-      return;
+      toast.error(
+        'Knitting completed quantity cannot be empty. Please enter a value greater than 0 for at least one article.'
+      );
+      return false;
     }
 
     if (hasQuantityBufferViolation) {
@@ -1152,7 +1244,7 @@ const KnittingFloorSupervisorPage = () => {
       toast.error(
         `${first.articleNumber}: transfer/knit done exceeds planned + 15% buffer (max ${Math.round(first.check.maxAllowed).toLocaleString()}).`
       );
-      return;
+      return false;
     }
 
     for (const article of selectedOrder.articles) {
@@ -1163,108 +1255,26 @@ const KnittingFloorSupervisorPage = () => {
       const completedError = getHalfStepQuantityError(update.completedQuantity, 'Knit done');
       if (completedError) {
         toast.error(`${article.articleNumber ?? articleId}: ${HALF_STEP_QTY_ERROR}`);
-        return;
+        return false;
       }
       const m4Error = getHalfStepQuantityError(update.m4Quantity ?? 0, 'M4 quantity');
       if (m4Error && (update.m4Quantity ?? 0) > 0) {
         toast.error(`${article.articleNumber ?? articleId}: ${HALF_STEP_QTY_ERROR}`);
-        return;
+        return false;
       }
     }
 
-    try {
-      setIsLoading(true);
+    const ok = await persistKnittingProgressUpdates(weight);
+    if (!ok) return false;
 
-      const userId = user?.id ?? user?._id;
-      const floorSupervisorId = user?.id ?? user?._id;
-      if (!userId || !floorSupervisorId) {
-        toast.error('User session required to update order.');
-        return;
-      }
-      
-      // Update each article that has changes
-      const updatePromises = selectedOrder.articles.map(async (article) => {
-        const articleId = article.id || article._id;
-        if (!articleId) return null;
-        
-        const update = updateData[articleId];
-        if (!update) return null;
-        const currentM4Quantity = article.floorQuantities?.knitting?.m4Quantity || 0;
-        // Send previous M4 + new input combined to backend
-        const m4QuantityToSend = currentM4Quantity + (update.m4Quantity ?? 0);
-        // Send previous weight + user-entered weight as cumulative weight
-        const previousWeight = article.floorQuantities?.knitting?.weight ?? 0;
-        const userEnteredWeight = weight != null && !Number.isNaN(weight) ? weight : 0;
-        const totalWeightToSend = previousWeight + userEnteredWeight;
-
-        const progressData: {
-          completedQuantity: number;
-          remarks: string;
-          m4Quantity: number;
-          weight: number;
-          userId: string;
-          floorSupervisorId: string;
-          machineId?: string;
-        } = {
-          completedQuantity: update.completedQuantity,
-          remarks: update.remarks,
-          m4Quantity: m4QuantityToSend,
-          weight: totalWeightToSend,
-          userId,
-          floorSupervisorId,
-        };
-
-        const machineIdFromModal = updateModalAssignment
-          ? machineIdFromAssignmentMachine(updateModalAssignment.machine)
-          : null;
-        if (machineIdFromModal) {
-          progressData.machineId = machineIdFromModal;
-        }
-
-          try {
-            const response = await productionService.updateArticleProgress(
-              'Knitting',
-              selectedOrder.id,
-              article._id || article.id,
-              progressData
-            );
-            
-            if (!response.success) {
-              throw new Error(response.error?.message || 'Failed to update article');
-            }
-            
-            return response.data;
-          } catch (error) {
-            console.error(`Error updating article ${articleId}:`, error);
-            throw error;
-          }
-    
-        return null;
-      }).filter(Boolean);
-
-      const results = await Promise.allSettled(updatePromises);
-      
-      // Check if any updates failed
-      const failedUpdates = results.filter(result => result.status === 'rejected');
-      if (failedUpdates.length > 0) {
-        console.error('Some updates failed:', failedUpdates);
-        toast.error(`${failedUpdates.length} article(s) failed to update`);
-      } else {
-        toast.success('Order updated successfully');
-      }
-
+    if (!options?.deferClose) {
+      toast.success('Order updated successfully');
       closeUpdateModal();
-
-      // Reload orders list and refresh machine view so both show updated data
-      loadOrders();
-      if (activeTab === "article-view") void loadArticleViewOrders();
+      if (activeTab === 'orders') void loadOrders();
+      else if (activeTab === 'article-view') void loadArticleViewOrders();
       setMachineViewRefreshTrigger((prev) => prev + 1);
-    } catch (error: any) {
-      console.error('Error updating order:', error);
-      toast.error(error.message || 'Failed to update order');
-    } finally {
-      setIsLoading(false);
     }
+    return true;
   };
 
   const handlePageChange = (page: number) => {
@@ -1543,7 +1553,7 @@ const KnittingFloorSupervisorPage = () => {
                   loadOrders();
                   if (activeTab === "article-view") void loadArticleViewOrders();
                 }}
-                disabled={isLoading || (activeTab === "article-view" && articleViewLoading)}
+                disabled={isLoading || submittingProgress || (activeTab === "article-view" && articleViewLoading)}
                 title="Refresh Orders"
               >
                 <i className={`ri-refresh-line text-xs ${isLoading || articleViewLoading ? 'animate-spin' : ''}`}></i> Refresh
@@ -2669,7 +2679,12 @@ const KnittingFloorSupervisorPage = () => {
                         }
                         setContainerSubmitting(true);
                         try {
-                          // Multi-article: if container already has items for same floor, append; else full replace
+                          const w = pendingWeightForContainer;
+                          const progressOk = await handleUpdateSubmit(w, { deferClose: true });
+                          if (!progressOk) {
+                            return;
+                          }
+
                           if (containerFetched?.activeItems?.length) {
                             await containersMasterService.updateByBarcode(barcode, {
                               addItem: { article: activeArticleMongoId, quantity: qty },
@@ -2680,24 +2695,24 @@ const KnittingFloorSupervisorPage = () => {
                               activeItems: [{ article: activeArticleMongoId, quantity: qty }],
                             });
                           }
-                          toast.success('Container updated');
-                          setShowContainerModal(false);
-                          setContainerBarcode('');
-                          setContainerQuantity(0);
-                          setContainerArticleId('');
-                          setContainerNextFloor('');
-                          setContainerCheckStatus('idle');
-                          setContainerFetched(null);
-                          const w = pendingWeightForContainer;
-                          setPendingWeightForContainer(undefined);
-                          setContainerSubmitting(false);
-                          handleUpdateSubmit(w);
+                          toast.success('Knitting saved and container updated');
+                          closeUpdateModal();
+                          if (activeTab === 'orders') void loadOrders();
+                          else if (activeTab === 'article-view') void loadArticleViewOrders();
+                          setMachineViewRefreshTrigger((prev) => prev + 1);
                         } catch (err) {
-                          setContainerSubmitting(false);
                           const msg = err instanceof Error ? err.message : String(err);
-                          if (msg.includes('404') || msg.includes('not found')) toast.error('Container not found for this barcode');
-                          else if (msg.includes('400') || msg.includes('Validation')) toast.error('Invalid data (check article id and floor)');
-                          else toast.error(msg);
+                          if (msg.includes('404') || msg.includes('not found')) {
+                            toast.error('Container not found for this barcode');
+                          } else if (msg.includes('400') || msg.includes('Validation')) {
+                            toast.error('Invalid data (check article id and floor)');
+                          } else {
+                            toast.error(
+                              `Knitting was saved but container update failed: ${msg}. Re-open this machine and fix the container.`
+                            );
+                          }
+                        } finally {
+                          setContainerSubmitting(false);
                         }
                       }}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-[11px] font-bold rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"

@@ -104,6 +104,16 @@ function productionOrderNoForApi(order: ProductionOrder): string {
   return String(order.productionOrder ?? order.orderNumber ?? "").trim();
 }
 
+/** Light query: yarn_returned only (avoids loading every txn type per order). */
+function yarnReturnedTransactionsUrl(orderId: string): string {
+  const params = new URLSearchParams({
+    order_id: orderId,
+    transaction_type: "yarn_returned",
+    light: "true",
+  });
+  return `${API_BASE_URL}/yarn-management/yarn-transactions?${params.toString()}`;
+}
+
 /** Gross scale weight at or below this (kg) treats the batch as empty return (no short-term rack). */
 const EMPTY_CONE_MAX_GROSS_WEIGHT_KG = 0.125;
 
@@ -1371,10 +1381,9 @@ const YarnReturnPage = () => {
             `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued-by-order/${encodeURIComponent(orderNumber)}`,
             { headers: { "Content-Type": "application/json", ...(token && { Authorization: `Bearer ${token}` }) } }
           ),
-          fetch(
-            `${API_BASE_URL}/yarn-management/yarn-transactions?order_id=${orderId}`,
-            { headers: { "Content-Type": "application/json", ...(token && { Authorization: `Bearer ${token}` }) } }
-          ),
+          fetch(yarnReturnedTransactionsUrl(orderId), {
+            headers: { "Content-Type": "application/json", ...(token && { Authorization: `Bearer ${token}` }) },
+          }),
         ]);
         if (issuedRes.ok) {
           const d = await issuedRes.json();
@@ -2571,10 +2580,9 @@ const YarnReturnPage = () => {
           orderCtx = loaded;
           setQuickReturnOrder(loaded);
           try {
-            const res = await fetch(
-              `${API_BASE_URL}/yarn-management/yarn-transactions?order_id=${ids.orderId}`,
-              { headers: { "Content-Type": "application/json", ...(token && { Authorization: `Bearer ${token}` }) } }
-            );
+            const res = await fetch(yarnReturnedTransactionsUrl(ids.orderId), {
+              headers: { "Content-Type": "application/json", ...(token && { Authorization: `Bearer ${token}` }) },
+            });
             if (res.ok) {
               const data = await res.json();
               const txs = extractTransactions(data).filter(
@@ -3367,15 +3375,12 @@ const YarnReturnPage = () => {
             // Fetch returned transactions
             let returnedTransactions: any[] = [];
             try {
-              const allTransactionsResponse = await fetch(
-                `${API_BASE_URL}/yarn-management/yarn-transactions?order_id=${orderForSubmit.id}`,
-                {
-                  headers: {
-                    "Content-Type": "application/json",
-                    ...(token && { Authorization: `Bearer ${token}` }),
-                  },
-                }
-              );
+              const allTransactionsResponse = await fetch(yarnReturnedTransactionsUrl(orderForSubmit.id), {
+                headers: {
+                  "Content-Type": "application/json",
+                  ...(token && { Authorization: `Bearer ${token}` }),
+                },
+              });
               if (allTransactionsResponse.ok) {
                 const allTransactions = await allTransactionsResponse.json();
                 returnedTransactions = extractTransactions(allTransactions);
@@ -3435,48 +3440,6 @@ const YarnReturnPage = () => {
         } catch (error) {
           console.error("Error refetching transactions:", error);
           // Don't show error to user, local state is already updated
-        }
-
-        // Also refresh all return transactions to ensure we have the latest data
-        try {
-          const token = getAccessToken();
-          const allOrderIds = Array.from(
-            new Set(
-              [...orders.map((o) => o.id), orderForSubmit.id].filter(Boolean) as string[]
-            )
-          );
-          const allReturnTransactions: ReturnTransaction[] = [];
-          
-          await Promise.all(
-            allOrderIds.map(async (orderId) => {
-              try {
-                const transactionsResponse = await fetch(
-                  `${API_BASE_URL}/yarn-management/yarn-transactions?order_id=${orderId}`,
-                  {
-                    headers: {
-                      "Content-Type": "application/json",
-                      ...(token && { Authorization: `Bearer ${token}` }),
-                    },
-                  }
-                );
-
-                if (transactionsResponse.ok) {
-                  const transactionsData = await transactionsResponse.json();
-                  const transactions = extractTransactions(transactionsData);
-                  const returnedTxs = transactions.filter(
-                    (tx: any) => tx.transactionType === "yarn_returned"
-                  ) as ReturnTransaction[];
-                  allReturnTransactions.push(...returnedTxs);
-                }
-              } catch (err) {
-                console.warn(`Failed to refresh return transactions for order ${orderId}:`, err);
-              }
-            })
-          );
-
-          setReturnTransactions(allReturnTransactions);
-        } catch (error) {
-          console.error("Error refreshing return transactions:", error);
         }
 
         // Reload orders and return transactions from API so pending counts (Orders Awaiting, Cones Pending, etc.) are correct
