@@ -18,7 +18,16 @@ export interface IssuedQtyTransaction {
   orderno?: string;
   articleId?: unknown;
   articleNumber?: string;
+  machineId?: unknown;
 }
+
+/**
+ * Machine scope for issued qty on the yarn-issue screen.
+ * - `undefined` — no machine filter (only non–machine-centric callers).
+ * - `null` — machine context active but id missing: count 0 (never credit whole PO).
+ * - `string` — only `yarn_issued` rows for this machine (legacy rows without machineId excluded).
+ */
+export type MachineFilter = string | null | undefined;
 
 export interface IssuedQtyOrder {
   id: string;
@@ -79,8 +88,25 @@ export function transactionMatchesArticle(
 
   const txNumber = String(transaction.articleNumber ?? "").trim();
   const filterNumber = String(articleFilter.articleNumber ?? "").trim();
-  if (filterNumber && txNumber) return txNumber === filterNumber;
+  if (filterNumber && txNumber) {
+    return txNumber.toLowerCase() === filterNumber.toLowerCase();
+  }
   return false;
+}
+
+/**
+ * Yarn-issue screen is machine-centric: count only `yarn_issued` rows for the selected machine.
+ * Legacy transactions without machineId are omitted to avoid crediting another machine on the same PO.
+ */
+export function transactionMatchesMachine(
+  transaction: Pick<IssuedQtyTransaction, "machineId">,
+  machineFilter?: MachineFilter
+): boolean {
+  if (machineFilter === undefined) return true;
+  if (machineFilter === null || machineFilter === "") return false;
+  const txMachineId = normalizeRefId(transaction.machineId);
+  if (!txMachineId) return false;
+  return txMachineId === String(machineFilter);
 }
 
 /**
@@ -90,7 +116,8 @@ export function getIssuedQty(
   requirement: IssuedQtyRequirement,
   transactions: IssuedQtyTransaction[],
   order: IssuedQtyOrder,
-  articleFilter?: ArticleFilter
+  articleFilter?: ArticleFilter,
+  machineFilter?: MachineFilter
 ): number {
   return transactions
     .filter(
@@ -98,7 +125,8 @@ export function getIssuedQty(
         t.yarnName === requirement.yarnName &&
         t.transactionType === "yarn_issued" &&
         transactionMatchesOrder(t, order) &&
-        transactionMatchesArticle(t, articleFilter)
+        transactionMatchesArticle(t, articleFilter) &&
+        transactionMatchesMachine(t, machineFilter)
     )
     .reduce((sum, t) => sum + (t.transactionNetWeight || 0), 0);
 }
@@ -110,9 +138,10 @@ export function getRequirementStatus(
   requirement: IssuedQtyRequirement & { requiredQty: number },
   transactions: IssuedQtyTransaction[],
   order: IssuedQtyOrder,
-  articleFilter?: ArticleFilter
+  articleFilter?: ArticleFilter,
+  machineFilter?: MachineFilter
 ): RequirementStatus {
-  const issued = getIssuedQty(requirement, transactions, order, articleFilter);
+  const issued = getIssuedQty(requirement, transactions, order, articleFilter, machineFilter);
   const issuedInGrams = issued * 1000;
   if (issuedInGrams === 0) return "Not Issued";
   if (issuedInGrams + 0.0001 < requirement.requiredQty) return "Partially Issued";

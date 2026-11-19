@@ -26,6 +26,7 @@ import {
   resolveDisplayedBom,
   transactionMatchesOrder,
   type IssuedQtyTransaction,
+  type MachineFilter,
 } from "@/app/yarn-management/yarn-issue/yarnIssueIssuedQty";
 import { fetchYarnIssuedByOrder } from "@/app/yarn-management/yarn-issue/yarnIssueTransactions";
 
@@ -126,79 +127,6 @@ type YarnSortField =
 
 const ISSUE_TOLERANCE_DEFAULT = 0.2;
 
-const getOrderStatus = (order: ProductionOrder, transactions: IssuedQtyTransaction[]): RequirementStatus => {
-  // If BOM is empty, order is not issued yet
-  if (!order.bom || order.bom.length === 0) {
-    return "Not Issued";
-  }
-  
-  const requirementStatuses = order.bom.map((req) => getRequirementStatus(req, transactions, order));
-  if (requirementStatuses.every((status) => status === "Issued")) {
-    return "Issued";
-  }
-  if (requirementStatuses.some((status) => status === "Partially Issued")) {
-    return "Partially Issued";
-  }
-  return "Not Issued";
-};
-
-// Get total required and issued quantities across all articles in an order
-const getOrderTotals = (order: ProductionOrder, transactions: IssuedQtyTransaction[]) => {
-  const totals = { issued: 0, required: 0 };
-  
-  // If articleBoms exists, calculate total across all articles
-  if (order.articleBoms && order.articleBoms.size > 0) {
-    // Create a map to aggregate yarn requirements by yarn name
-    const aggregatedYarns = new Map<string, { required: number; requirement: YarnRequirement }>();
-    
-    // First, aggregate all requirements by yarn name (sum up required quantities)
-    order.articleBoms.forEach((articleBom) => {
-      articleBom.forEach((requirement) => {
-        const existing = aggregatedYarns.get(requirement.yarnName);
-        if (existing) {
-          // Add to existing required quantity
-          aggregatedYarns.set(requirement.yarnName, {
-            required: existing.required + requirement.requiredQty,
-            requirement: existing.requirement, // Keep the first requirement for getting issued qty
-          });
-        } else {
-          // First time seeing this yarn
-          aggregatedYarns.set(requirement.yarnName, {
-            required: requirement.requiredQty,
-            requirement: requirement,
-          });
-        }
-      });
-    });
-    
-    // Now calculate issued quantity ONCE per unique yarn name and sum up
-    aggregatedYarns.forEach((value) => {
-      totals.required += value.required;
-      // Get issued qty only once per yarn name (not per article)
-      totals.issued += getIssuedQty(value.requirement, transactions, order);
-    });
-  } else if (order.bom && order.bom.length > 0) {
-    // Fallback to current BOM if articleBoms not available
-    // Create a map to avoid double counting issued qty for same yarn
-    const yarnMap = new Map<string, YarnRequirement>();
-    
-    order.bom.forEach((requirement) => {
-      totals.required += requirement.requiredQty;
-      // Store unique yarn names to avoid counting issued qty multiple times
-      if (!yarnMap.has(requirement.yarnName)) {
-        yarnMap.set(requirement.yarnName, requirement);
-      }
-    });
-    
-    // Get issued qty once per unique yarn name
-    yarnMap.forEach((requirement) => {
-      totals.issued += getIssuedQty(requirement, transactions, order);
-    });
-  }
-  
-  return totals;
-};
-
 const formatKg = (value: number) => {
   // For very small values, show up to 4 decimal places
   // Remove trailing zeros but keep at least 2 decimal places
@@ -246,19 +174,6 @@ const requirementStatusBadge = (status: RequirementStatus) => {
       return "bg-gray-100 text-gray-800";
     case "Partially Issued":
       return "bg-yellow-100 text-yellow-800";
-    case "Issued":
-      return "bg-green-100 text-green-800";
-    default:
-      return "bg-gray-100 text-gray-800";
-  }
-};
-
-const orderStatusBadge = (status: RequirementStatus) => {
-  switch (status) {
-    case "Not Issued":
-      return "bg-gray-100 text-gray-800";
-    case "Partially Issued":
-      return "bg-blue-100 text-blue-800";
     case "Issued":
       return "bg-green-100 text-green-800";
     default:
@@ -780,6 +695,22 @@ const YarnIssuePage = () => {
     [filteredOrders, selectedOrderId]
   );
 
+  /** Machine id for scoping issued qty to this machine card (not the whole PO). */
+  const selectedMachineId = useMemo(() => {
+    const machine = selectedMachineAssignment?.machine;
+    if (typeof machine === "object" && machine) {
+      return (machine as { _id?: string; id?: string })._id ?? (machine as { id?: string }).id ?? null;
+    }
+    if (typeof machine === "string") return machine;
+    return null;
+  }, [selectedMachineAssignment]);
+
+  /** When a machine card is selected, always scope issued qty (null id → 0 issued, never whole PO). */
+  const machineIssuedQtyFilter = useMemo((): MachineFilter => {
+    if (!selectedMachineAssignment) return undefined;
+    return selectedMachineId;
+  }, [selectedMachineAssignment, selectedMachineId]);
+
   // Issued qty for the selected order only (abort in-flight when order changes)
   useEffect(() => {
     if (!hasPermission || !selectedOrder?.id || !selectedOrder.orderNumber) {
@@ -793,7 +724,9 @@ const YarnIssuePage = () => {
 
     const loadIssued = async () => {
       try {
-        const txs = await fetchYarnIssuedByOrder(orderRef.orderNumber, getAccessToken());
+        const txs = await fetchYarnIssuedByOrder(orderRef.orderNumber, getAccessToken(), {
+          machineId: selectedMachineId,
+        });
         if (cancelled) return;
         setAllYarnTransactions(txs.filter((t) => transactionMatchesOrder(t, orderRef)));
       } catch (error) {
@@ -806,7 +739,7 @@ const YarnIssuePage = () => {
     return () => {
       cancelled = true;
     };
-  }, [hasPermission, selectedOrder?.id, selectedOrder?.orderNumber]);
+  }, [hasPermission, selectedOrder?.id, selectedOrder?.orderNumber, selectedMachineId]);
 
   // Debug: Log when selectedOrder changes (removed to prevent console spam)
   // useEffect(() => {
@@ -866,12 +799,12 @@ const YarnIssuePage = () => {
           bValue = b.requiredQty;
           break;
         case "issuedQty":
-          aValue = getIssuedQty(a, allYarnTransactions, selectedOrder, getArticleFilterForRequirement(a, selectedArticleId, selectedOrder));
-          bValue = getIssuedQty(b, allYarnTransactions, selectedOrder, getArticleFilterForRequirement(b, selectedArticleId, selectedOrder));
+          aValue = getIssuedQty(a, allYarnTransactions, selectedOrder, getArticleFilterForRequirement(a, selectedArticleId, selectedOrder), machineIssuedQtyFilter);
+          bValue = getIssuedQty(b, allYarnTransactions, selectedOrder, getArticleFilterForRequirement(b, selectedArticleId, selectedOrder), machineIssuedQtyFilter);
           break;
         case "status":
-          aValue = getRequirementStatus(a, allYarnTransactions, selectedOrder, getArticleFilterForRequirement(a, selectedArticleId, selectedOrder));
-          bValue = getRequirementStatus(b, allYarnTransactions, selectedOrder, getArticleFilterForRequirement(b, selectedArticleId, selectedOrder));
+          aValue = getRequirementStatus(a, allYarnTransactions, selectedOrder, getArticleFilterForRequirement(a, selectedArticleId, selectedOrder), machineIssuedQtyFilter);
+          bValue = getRequirementStatus(b, allYarnTransactions, selectedOrder, getArticleFilterForRequirement(b, selectedArticleId, selectedOrder), machineIssuedQtyFilter);
           break;
         default:
           aValue = 0;
@@ -888,15 +821,15 @@ const YarnIssuePage = () => {
     });
 
     return data;
-  }, [selectedOrder, selectedArticleId, sortField, sortDirection, allYarnTransactions]);
+  }, [selectedOrder, selectedArticleId, sortField, sortDirection, allYarnTransactions, machineIssuedQtyFilter]);
 
   /** True when a single article is selected and every BOM requirement for it is fully issued. */
   const allBomIssuedForCurrentArticle = useMemo(() => {
     if (!selectedOrder || !selectedArticleId || selectedArticleId === "all" || !selectedOrder.bom?.length) return false;
     return selectedOrder.bom.every((r) =>
-      getRequirementStatus(r, allYarnTransactions, selectedOrder, getArticleFilterForRequirement(r, selectedArticleId, selectedOrder)) === "Issued"
+      getRequirementStatus(r, allYarnTransactions, selectedOrder, getArticleFilterForRequirement(r, selectedArticleId, selectedOrder), machineIssuedQtyFilter) === "Issued"
     );
-  }, [selectedOrder, selectedArticleId, allYarnTransactions]);
+  }, [selectedOrder, selectedArticleId, allYarnTransactions, machineIssuedQtyFilter]);
 
   /** Assignment item id for current order+article (for PATCH yarn-issue-status). */
   const assignmentItemIdForCurrent = useMemo(() => {
@@ -1017,9 +950,23 @@ const YarnIssuePage = () => {
     setBarcodeLoading(true);
     try {
       const token = getAccessToken();
-      const response = await fetch(
-        `${API_BASE_URL}/yarn-management/yarn-cones/barcode/${barcodeInput.trim()}`,
-        {
+      let issueArticleId: string | null = null;
+      if (selectedArticleId && selectedArticleId !== "all") {
+        issueArticleId = selectedArticleId;
+      } else if (activeRequirement?.id && selectedOrder?.articles) {
+        const firstPart = activeRequirement.id.split("-")[0];
+        const hasArticle = selectedOrder.articles.some(
+          (a) => String(a.id || a._id) === String(firstPart)
+        );
+        if (hasArticle) issueArticleId = firstPart;
+      }
+      const barcodeQuery = new URLSearchParams();
+      if (selectedOrder?.id) barcodeQuery.set("expected_order_id", selectedOrder.id);
+      if (issueArticleId) barcodeQuery.set("expected_article_id", issueArticleId);
+      const barcodeUrl = `${API_BASE_URL}/yarn-management/yarn-cones/barcode/${encodeURIComponent(barcodeInput.trim())}${
+        barcodeQuery.toString() ? `?${barcodeQuery.toString()}` : ""
+      }`;
+      const response = await fetch(barcodeUrl, {
           headers: {
             "Content-Type": "application/json",
             ...(token && { Authorization: `Bearer ${token}` }),
@@ -1033,7 +980,20 @@ const YarnIssuePage = () => {
 
       const coneDetails = await response.json();
 
-      if (coneDetails.issueStatus === "issued") {
+      const issueCtx = coneDetails.issueTransactionContext as
+        | { orderId?: string; articleId?: string }
+        | undefined;
+      const issuedForThisOrderArticle =
+        coneDetails.issueStatus === "issued" &&
+        (coneDetails.matchesExpectedReturnContext === true ||
+          (issueCtx?.orderId &&
+            issueCtx?.articleId &&
+            selectedOrder?.id &&
+            issueArticleId &&
+            String(issueCtx.orderId) === String(selectedOrder.id) &&
+            String(issueCtx.articleId) === String(issueArticleId)));
+
+      if (issuedForThisOrderArticle) {
         const msg = "This cone is already issued. Not available right now.";
         setScanYarnMismatchError(msg);
         toast.error(msg);
@@ -1127,23 +1087,20 @@ const YarnIssuePage = () => {
     // For now, we'll use the yarnCode which should be the yarnCatalogId
     const yarnCatalogId = activeRequirement.yarnCode;
 
+    if (!selectedMachineId) {
+      toast.error("Select a machine before issuing yarn.");
+      return;
+    }
+
     const activeArticleFilter = getArticleFilterForRequirement(activeRequirement, selectedArticleId, selectedOrder);
-    const currentIssued = getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder, activeArticleFilter);
+    const currentIssued = getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder, activeArticleFilter, machineIssuedQtyFilter);
     const currentIssuedInGrams = currentIssued * 1000;
 
     setSubmittingTransaction(true);
     try {
       const token = getAccessToken();
       const transactionDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
-
-      // Backend schema: transactionNetWeight, transactionTotalWeight, transactionTearWeight, transactionConeCount; orderId, orderno, articleId, articleNumber, machineId
-      const machine = selectedMachineAssignment?.machine;
-      const machineId =
-        typeof machine === "object" && machine
-          ? (machine as { _id?: string; id?: string })._id ?? (machine as { id?: string }).id
-          : typeof machine === "string"
-            ? machine
-            : undefined;
+      const machineId = selectedMachineId;
 
       const transactionData = {
         yarn: yarnCatalogId,
@@ -1161,7 +1118,7 @@ const YarnIssuePage = () => {
           articleNumber: selectedArticle.articleNumber,
           articleId: selectedArticle._id ?? selectedArticle.id,
         }),
-        ...(machineId && { machineId }),
+        machineId,
       };
 
       const response = await fetch(`${API_BASE_URL}/yarn-management/yarn-transactions`, {
@@ -1214,7 +1171,9 @@ const YarnIssuePage = () => {
 
       // Refresh issued rows for this order after successful issue
       try {
-        const refreshed = await fetchYarnIssuedByOrder(selectedOrder.orderNumber, token);
+        const refreshed = await fetchYarnIssuedByOrder(selectedOrder.orderNumber, token, {
+          machineId: selectedMachineId,
+        });
         setAllYarnTransactions(
           refreshed.filter((t) => transactionMatchesOrder(t, selectedOrder))
         );
@@ -1558,7 +1517,7 @@ const YarnIssuePage = () => {
                               const totals = sortedRequirements.reduce(
                                 (acc, req) => {
                                   const articleFilter = getArticleFilterForRequirement(req, selectedArticleId, selectedOrder);
-                                  const issuedKg = getIssuedQty(req, allYarnTransactions, selectedOrder!, articleFilter);
+                                  const issuedKg = getIssuedQty(req, allYarnTransactions, selectedOrder!, articleFilter, machineIssuedQtyFilter);
                                   acc.requiredGrams += req.requiredQty;
                                   acc.issuedGrams += issuedKg * 1000;
                                   return acc;
@@ -1596,10 +1555,10 @@ const YarnIssuePage = () => {
                             <tbody>
                               {sortedRequirements.map((requirement) => {
                                 const articleFilter = getArticleFilterForRequirement(requirement, selectedArticleId, selectedOrder);
-                                const issuedQty = getIssuedQty(requirement, allYarnTransactions, selectedOrder, articleFilter);
+                                const issuedQty = getIssuedQty(requirement, allYarnTransactions, selectedOrder, articleFilter, machineIssuedQtyFilter);
                                 const issuedQtyInGrams = issuedQty * 1000;
                                 const remaining = Math.max(requirement.requiredQty - issuedQtyInGrams, 0);
-                                const status = getRequirementStatus(requirement, allYarnTransactions, selectedOrder, articleFilter);
+                                const status = getRequirementStatus(requirement, allYarnTransactions, selectedOrder, articleFilter, machineIssuedQtyFilter);
                                 const isActive = activeRequirementId === requirement.id;
                                 const issueDisabled = isIssueDisabledForRequirement(requirement);
                                 return (
@@ -1691,10 +1650,10 @@ const YarnIssuePage = () => {
                         <tbody>
                           {sortedRequirements.map((requirement) => {
                             const articleFilter = getArticleFilterForRequirement(requirement, selectedArticleId, selectedOrder);
-                            const issuedQty = getIssuedQty(requirement, allYarnTransactions, selectedOrder, articleFilter);
+                            const issuedQty = getIssuedQty(requirement, allYarnTransactions, selectedOrder, articleFilter, machineIssuedQtyFilter);
                             const issuedQtyInGrams = issuedQty * 1000;
                             const remaining = Math.max(requirement.requiredQty - issuedQtyInGrams, 0);
-                            const status = getRequirementStatus(requirement, allYarnTransactions, selectedOrder, articleFilter);
+                            const status = getRequirementStatus(requirement, allYarnTransactions, selectedOrder, articleFilter, machineIssuedQtyFilter);
                             const isActive = activeRequirementId === requirement.id;
                             const issueDisabled = isIssueDisabledForRequirement(requirement);
                             return (
@@ -1788,10 +1747,10 @@ const YarnIssuePage = () => {
                         </div>
                         <span
                           className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${requirementStatusBadge(
-                            getRequirementStatus(activeRequirement, allYarnTransactions, selectedOrder ?? { id: "", orderNumber: "" }, getArticleFilterForRequirement(activeRequirement, selectedArticleId, selectedOrder))
+                            getRequirementStatus(activeRequirement, allYarnTransactions, selectedOrder ?? { id: "", orderNumber: "" }, getArticleFilterForRequirement(activeRequirement, selectedArticleId, selectedOrder), machineIssuedQtyFilter)
                           )}`}
                         >
-                          {getRequirementStatus(activeRequirement, allYarnTransactions, selectedOrder ?? { id: "", orderNumber: "" }, getArticleFilterForRequirement(activeRequirement, selectedArticleId, selectedOrder))}
+                          {getRequirementStatus(activeRequirement, allYarnTransactions, selectedOrder ?? { id: "", orderNumber: "" }, getArticleFilterForRequirement(activeRequirement, selectedArticleId, selectedOrder), machineIssuedQtyFilter)}
                         </span>
                       </div>
                       <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
@@ -1804,7 +1763,7 @@ const YarnIssuePage = () => {
                         <div className="bg-white rounded p-3 border border-gray-100">
                           <p className="text-gray-500">Issued</p>
                           <p className="text-sm font-medium text-blue-600">
-                            {formatKgDisplay(getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder ?? { id: "", orderNumber: "" }, getArticleFilterForRequirement(activeRequirement, selectedArticleId, selectedOrder)) * 1000)}
+                            {formatKgDisplay(getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder ?? { id: "", orderNumber: "" }, getArticleFilterForRequirement(activeRequirement, selectedArticleId, selectedOrder), machineIssuedQtyFilter) * 1000)}
                           </p>
                         </div>
                       </div>
@@ -2023,9 +1982,9 @@ const YarnIssuePage = () => {
                     </p>
                     <p className="text-xs text-gray-600 mt-1">
                       <span className="font-semibold">Required:</span> {formatKgDisplay(activeRequirement.requiredQty)} |{" "}
-                      <span className="font-semibold">Issued:</span> {formatKgDisplay(getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder, getArticleFilterForRequirement(activeRequirement, selectedArticleId, selectedOrder)) * 1000)} |{" "}
+                      <span className="font-semibold">Issued:</span> {formatKgDisplay(getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder, getArticleFilterForRequirement(activeRequirement, selectedArticleId, selectedOrder), machineIssuedQtyFilter) * 1000)} |{" "}
                       <span className="font-semibold">Remaining:</span>{" "}
-                      {formatKgDisplay(Math.max(activeRequirement.requiredQty - (getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder, getArticleFilterForRequirement(activeRequirement, selectedArticleId, selectedOrder)) * 1000), 0))}
+                      {formatKgDisplay(Math.max(activeRequirement.requiredQty - (getIssuedQty(activeRequirement, allYarnTransactions, selectedOrder, getArticleFilterForRequirement(activeRequirement, selectedArticleId, selectedOrder), machineIssuedQtyFilter) * 1000), 0))}
                     </p>
                   </div>
                 )}

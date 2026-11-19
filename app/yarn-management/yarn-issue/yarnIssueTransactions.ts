@@ -26,10 +26,16 @@ export function flattenIssuedByOrderPayload(data: unknown): IssuedQtyTransaction
  */
 export async function fetchYarnIssuedByOrder(
   orderNumber: string,
-  token: string | null
+  token: string | null,
+  options?: { machineId?: string | null }
 ): Promise<IssuedQtyTransaction[]> {
+  const params = new URLSearchParams();
+  if (options?.machineId) {
+    params.set("machine_id", options.machineId);
+  }
+  const qs = params.toString();
   const response = await fetch(
-    `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued-by-order/${encodeURIComponent(orderNumber)}`,
+    `${API_BASE_URL}/yarn-management/yarn-transactions/yarn-issued-by-order/${encodeURIComponent(orderNumber)}${qs ? `?${qs}` : ""}`,
     {
       headers: {
         "Content-Type": "application/json",
