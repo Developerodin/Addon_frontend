@@ -149,6 +149,31 @@ export function getRequirementStatus(
 }
 
 /**
+ * Article id embedded in yarn-requirement row id (`req-{bomId}-{articleKey}-{index}`).
+ */
+export function articleKeyFromRequirementId(requirementId: string): string | null {
+  const m = String(requirementId).match(/^req-[0-9a-fA-F]{24}-(.+)-\d+$/);
+  return m?.[1] ?? null;
+}
+
+/**
+ * Mongo `_id` for APIs that store `articleId` as ObjectId (e.g. yarn issue submit, cone barcode).
+ * UI selection uses business `article.id` (ART…); resolve via `articles[]` when possible.
+ */
+export function resolveArticleMongoId(
+  articleKey: string | null | undefined,
+  articles?: ArticleRef[] | null
+): string | null {
+  if (!articleKey || articleKey === "all") return null;
+  const article = articles?.find((a) => String(a.id || a._id) === String(articleKey));
+  const mongo = article?._id ? String(article._id).trim() : "";
+  if (/^[0-9a-fA-F]{24}$/.test(mongo)) return mongo;
+  const key = String(articleKey).trim();
+  if (/^[0-9a-fA-F]{24}$/.test(key)) return key;
+  return null;
+}
+
+/**
  * Build unique article ids used when matching issue transactions.
  */
 function articleFilterIds(article: ArticleRef, extraId?: string): string[] {

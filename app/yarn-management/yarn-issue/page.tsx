@@ -24,6 +24,8 @@ import {
   getRequirementStatus,
   getArticleFilterForRequirement,
   resolveDisplayedBom,
+  resolveArticleMongoId,
+  articleKeyFromRequirementId,
   transactionMatchesOrder,
   type IssuedQtyTransaction,
   type MachineFilter,
@@ -950,19 +952,18 @@ const YarnIssuePage = () => {
     setBarcodeLoading(true);
     try {
       const token = getAccessToken();
-      let issueArticleId: string | null = null;
+      let issueArticleKey: string | null = null;
       if (selectedArticleId && selectedArticleId !== "all") {
-        issueArticleId = selectedArticleId;
-      } else if (activeRequirement?.id && selectedOrder?.articles) {
-        const firstPart = activeRequirement.id.split("-")[0];
-        const hasArticle = selectedOrder.articles.some(
-          (a) => String(a.id || a._id) === String(firstPart)
-        );
-        if (hasArticle) issueArticleId = firstPart;
+        issueArticleKey = selectedArticleId;
+      } else if (activeRequirement?.id) {
+        issueArticleKey = articleKeyFromRequirementId(activeRequirement.id);
       }
+      const expectedArticleMongoId = resolveArticleMongoId(issueArticleKey, selectedOrder?.articles);
       const barcodeQuery = new URLSearchParams();
       if (selectedOrder?.id) barcodeQuery.set("expected_order_id", selectedOrder.id);
-      if (issueArticleId) barcodeQuery.set("expected_article_id", issueArticleId);
+      if (expectedArticleMongoId) {
+        barcodeQuery.set("expected_article_id", expectedArticleMongoId);
+      }
       const barcodeUrl = `${API_BASE_URL}/yarn-management/yarn-cones/barcode/${encodeURIComponent(barcodeInput.trim())}${
         barcodeQuery.toString() ? `?${barcodeQuery.toString()}` : ""
       }`;
@@ -983,15 +984,27 @@ const YarnIssuePage = () => {
       const issueCtx = coneDetails.issueTransactionContext as
         | { orderId?: string; articleId?: string }
         | undefined;
+      const issueArticle = selectedOrder?.articles?.find(
+        (a) => String(a.id || a._id) === String(issueArticleKey)
+      );
+      const issueArticleMatchIds = new Set(
+        [issueArticleKey, issueArticle?.id, issueArticle?._id, expectedArticleMongoId]
+          .filter(Boolean)
+          .map(String)
+      );
       const issuedForThisOrderArticle =
         coneDetails.issueStatus === "issued" &&
         (coneDetails.matchesExpectedReturnContext === true ||
           (issueCtx?.orderId &&
             issueCtx?.articleId &&
             selectedOrder?.id &&
-            issueArticleId &&
+            issueArticleKey &&
             String(issueCtx.orderId) === String(selectedOrder.id) &&
-            String(issueCtx.articleId) === String(issueArticleId)));
+            (issueArticleMatchIds.has(String(issueCtx.articleId)) ||
+              (issueCtx.articleNumber &&
+                issueArticle?.articleNumber &&
+                String(issueCtx.articleNumber).trim().toLowerCase() ===
+                  String(issueArticle.articleNumber).trim().toLowerCase()))));
 
       if (issuedForThisOrderArticle) {
         const msg = "This cone is already issued. Not available right now.";
